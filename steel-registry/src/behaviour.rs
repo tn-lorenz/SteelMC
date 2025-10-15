@@ -62,6 +62,13 @@ pub struct BlockBehaviourProperties {
     pub offset_type: OffsetType,
 }
 
+impl std::fmt::Debug for BlockBehaviourProperties {
+    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        write!(f, "BlockBehaviourProperties")?;
+        Ok(())
+    }
+}
+
 impl Default for BlockBehaviourProperties {
     /// Creates the default set of properties for a block.
     fn default() -> Self {

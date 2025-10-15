@@ -1,10 +1,23 @@
 use steel_registry::{
     behaviour::BlockBehaviourProperties,
     blocks::{Block, BlockRegistry},
-    properties::{self, BlockStateProperties},
+    properties::BlockStateProperties,
 };
 
 #[tokio::main]
 async fn main() {
-    println!("{:?}", BlockStateProperties::HORIZONTAL_AXIS);
+    let mut registry = BlockRegistry::new();
+    registry.register(Box::leak(Box::new(Block::new(
+        "test",
+        BlockBehaviourProperties::default(),
+        &[
+            &BlockStateProperties::ATTACHED,
+            &BlockStateProperties::FACING,
+        ],
+    ))));
+
+    registry.freeze();
+
+    println!("{:?}", registry.by_id(0));
+    println!("{:#?}", registry.state_to_block_lookup.len());
 }

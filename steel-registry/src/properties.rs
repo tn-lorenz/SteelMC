@@ -6,14 +6,23 @@ pub trait Property<T> {
     fn get_internal_index(&self, value: &T) -> usize;
 }
 
+pub trait DynProperty: Debug {
+    fn get_possible_values(&self) -> Vec<String>;
+}
+
 #[derive(Debug, Clone)]
 pub struct BooleanProperty {
     pub name: &'static str,
 }
-
 impl BooleanProperty {
     pub const fn new(name: &'static str) -> Self {
         Self { name }
+    }
+}
+
+impl DynProperty for BooleanProperty {
+    fn get_possible_values(&self) -> Vec<String> {
+        vec!["true".to_string(), "false".to_string()]
     }
 }
 
@@ -50,6 +59,12 @@ impl IntProperty {
     }
 }
 
+impl DynProperty for IntProperty {
+    fn get_possible_values(&self) -> Vec<String> {
+        (self.min..=self.max).map(|v| v.to_string()).collect()
+    }
+}
+
 impl Property<u8> for IntProperty {
     fn get_value(&self, value: &str) -> Option<u8> {
         value
@@ -75,6 +90,12 @@ impl Property<u8> for IntProperty {
 pub struct EnumProperty<T: ToString + PartialEq + Clone + Debug + 'static> {
     pub name: &'static str,
     pub possible_values: &'static [T],
+}
+
+impl<T: ToString + PartialEq + Clone + Debug + 'static> DynProperty for EnumProperty<T> {
+    fn get_possible_values(&self) -> Vec<String> {
+        self.possible_values.iter().map(|v| v.to_string()).collect()
+    }
 }
 
 impl<T: ToString + PartialEq + Clone + Debug> EnumProperty<T> {

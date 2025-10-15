@@ -1,15 +1,25 @@
 use std::collections::HashMap;
 
-use crate::behaviour::BlockBehaviourProperties;
+use crate::{behaviour::BlockBehaviourProperties, properties::DynProperty};
 
+#[derive(Debug)]
 pub struct Block {
     pub name: &'static str,
-    pub properties: BlockBehaviourProperties,
+    pub behaviour: BlockBehaviourProperties,
+    pub properties: &'static [&'static dyn DynProperty],
 }
 
 impl Block {
-    pub fn new(name: &'static str, properties: BlockBehaviourProperties) -> Self {
-        Self { name, properties }
+    pub fn new(
+        name: &'static str,
+        behaviour: BlockBehaviourProperties,
+        properties: &'static [&'static dyn DynProperty],
+    ) -> Self {
+        Self {
+            name,
+            behaviour,
+            properties,
+        }
     }
 }
 
@@ -20,6 +30,7 @@ pub struct BlockRegistry {
     blocks_by_id: Vec<BlockRef>,
     blocks_by_name: HashMap<&'static str, usize>,
     allows_registering: bool,
+    pub state_to_block_lookup: Vec<BlockRef>,
 }
 
 impl BlockRegistry {
@@ -29,6 +40,7 @@ impl BlockRegistry {
             blocks_by_id: Vec::new(),
             blocks_by_name: HashMap::new(),
             allows_registering: true,
+            state_to_block_lookup: Vec::new(),
         }
     }
 
@@ -46,6 +58,16 @@ impl BlockRegistry {
         let id = self.blocks_by_id.len();
         self.blocks_by_name.insert(block.name, id);
         self.blocks_by_id.push(&block);
+
+        let mut state_count = 1;
+        //TODO: Fix
+        for property in block.properties {
+            state_count *= property.get_possible_values().len();
+        }
+        for _ in 0..state_count {
+            self.state_to_block_lookup.push(block);
+        }
+
         id
     }
 
