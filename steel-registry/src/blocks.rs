@@ -1,14 +1,14 @@
 use std::collections::HashMap;
 
-use crate::properties::BlockProperties;
+use crate::behaviour::BlockBehaviourProperties;
 
 pub struct Block {
     pub name: &'static str,
-    pub properties: BlockProperties,
+    pub properties: BlockBehaviourProperties,
 }
 
 impl Block {
-    pub fn new(name: &'static str, properties: BlockProperties) -> Self {
+    pub fn new(name: &'static str, properties: BlockBehaviourProperties) -> Self {
         Self { name, properties }
     }
 }
