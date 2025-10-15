@@ -1,9 +1,16 @@
 use std::collections::HashMap;
 
-#[derive(Debug)]
+use crate::properties::BlockProperties;
+
 pub struct Block {
     pub name: &'static str,
-    pub hardness: f32,
+    pub properties: BlockProperties,
+}
+
+impl Block {
+    pub fn new(name: &'static str, properties: BlockProperties) -> Self {
+        Self { name, properties }
+    }
 }
 
 pub type BlockRef = &'static Block;
