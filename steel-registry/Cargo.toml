@@ -1,0 +1,6 @@
+[package]
+name = "steel-registry"
+version.workspace = true
+edition.workspace = true
+
+[dependencies]

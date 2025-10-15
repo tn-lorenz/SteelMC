@@ -7,5 +7,6 @@ edition.workspace = true
 [dependencies]
 steel-utils = { path = "../steel-utils" }
 steel-world = { path = "../steel-world" }
+steel-registry = { path = "../steel-registry" }
 tokio.workspace = true
 papaya.workspace = true

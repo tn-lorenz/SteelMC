@@ -99,10 +99,15 @@ name = "steel"
 version = "0.0.0"
 dependencies = [
  "papaya",
+ "steel-registry",
  "steel-utils",
  "steel-world",
  "tokio",
 ]
+
+[[package]]
+name = "steel-registry"
+version = "0.0.0"
 
 [[package]]
 name = "steel-utils"

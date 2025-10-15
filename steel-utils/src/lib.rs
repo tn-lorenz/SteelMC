@@ -1,5 +1,7 @@
 use tokio::sync::{RwLock, RwLockReadGuard, RwLockWriteGuard};
 
+use crate::math::vector2::Vector2;
+
 pub mod math;
 
 // A wrapper that allows us to do debug checks on the lock. To prevent deadlocks.
@@ -23,3 +25,11 @@ impl<T> SteelRwLock<T> {
         self.inner.write().await
     }
 }
+
+// Wrapper types making it harder to accidentaly use the wrong underlying type.
+
+// A raw block state id. Using the registry this id can be derived into a block and it's current properties.
+pub struct BlockStateId(pub u16);
+
+// A chunk position.
+pub struct ChunkPos(pub Vector2<i32>);

@@ -6,9 +6,6 @@ use crate::section::ChunkSections;
 
 pub mod section;
 
-// A raw block state id. Using the registry this id can be derived into a block and it's current properties.
-pub struct BlockStateId(pub u16);
-
 #[derive(Debug)]
 pub struct ChunkData {
     pub sections: ChunkSections,
