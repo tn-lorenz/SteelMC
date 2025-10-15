@@ -1,6 +1,6 @@
 use tokio::sync::{RwLock, RwLockReadGuard, RwLockWriteGuard};
 
-use crate::math::vector2::Vector2;
+use crate::math::{vector2::Vector2, vector3::Vector3};
 
 pub mod math;
 
@@ -33,3 +33,6 @@ pub struct BlockStateId(pub u16);
 
 // A chunk position.
 pub struct ChunkPos(pub Vector2<i32>);
+
+// A block position.
+pub struct BlockPos(pub Vector3<i32>);

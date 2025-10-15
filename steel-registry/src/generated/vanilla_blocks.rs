@@ -1,0 +1,1 @@
+pub fn register_blocks (registry : & mut BlockRegistry) { for block in block_assets . blocks { registry . register (& block) ; } }

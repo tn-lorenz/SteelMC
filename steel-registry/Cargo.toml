@@ -2,5 +2,13 @@
 name = "steel-registry"
 version.workspace = true
 edition.workspace = true
+build = "build/build.rs"
 
 [dependencies]
+
+[build-dependencies]
+proc-macro2 = "1.0.101"
+quote = "1.0.41"
+serde_json.workspace = true
+serde.workspace = true
+steel-utils = { path = "../steel-utils" }
