@@ -1,0 +1,22 @@
+[workspace]
+resolver = "2"
+members = ["steel", "steel-utils", "steel-world"]
+
+[workspace.package]
+version = "0.0.0"
+edition = "2024"
+
+
+[workspace.dependencies]
+tokio = { version = "1.48", features = [
+    "macros",
+    "net",
+    "rt-multi-thread",
+    "sync",
+    "io-std",
+    "signal",
+    "fs",
+    "io-util",
+    "time",
+] }
+papaya = { version = "0.2.3" }

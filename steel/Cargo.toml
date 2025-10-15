@@ -1,0 +1,11 @@
+[package]
+name = "steel"
+version.workspace = true
+edition.workspace = true
+
+
+[dependencies]
+steel-utils = { path = "../steel-utils" }
+steel-world = { path = "../steel-world" }
+tokio.workspace = true
+papaya.workspace = true

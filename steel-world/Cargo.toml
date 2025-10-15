@@ -1,0 +1,8 @@
+[package]
+name = "steel-world"
+version.workspace = true
+edition.workspace = true
+
+[dependencies]
+steel-utils = { path = "../steel-utils" }
+papaya.workspace = true
