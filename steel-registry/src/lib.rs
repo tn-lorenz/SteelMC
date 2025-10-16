@@ -1,3 +1,11 @@
+#![feature(
+    const_trait_impl,
+    const_slice_make_iter,
+    const_cmp,
+    derive_const,
+    core_intrinsics
+)]
+#![allow(internal_features)]
 pub mod behaviour;
 pub mod blocks;
 pub mod generated;

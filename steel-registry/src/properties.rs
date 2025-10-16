@@ -70,6 +70,12 @@ impl Property<bool> for BooleanProperty {
     }
 }
 
+impl BooleanProperty {
+    pub const fn get_internal_index_const(self, value: bool) -> usize {
+        if value { 0 } else { 1 }
+    }
+}
+
 #[derive(Debug, Clone)]
 pub struct IntProperty {
     pub min: u8,
@@ -123,6 +129,16 @@ impl Property<u8> for IntProperty {
 
     fn as_dyn(&self) -> &dyn DynProperty {
         self
+    }
+}
+
+impl IntProperty {
+    pub const fn get_internal_index_const(self, value: &u8) -> usize {
+        return if *value <= self.max {
+            (*value - self.min) as usize
+        } else {
+            0
+        };
     }
 }
 
@@ -183,7 +199,21 @@ impl<T: ToString + PartialEq + Clone + Debug> Property<T> for EnumProperty<T> {
     }
 }
 
-#[derive(Clone, PartialEq, Debug)]
+impl<T: const PartialEq + Clone + Debug + ToString + 'static> EnumProperty<T> {
+    pub const fn get_internal_index_const(&self, value: &T) -> usize {
+        let mut i = 0;
+        while i < self.possible_values.len() {
+            if &self.possible_values[i] == value {
+                return i;
+            }
+            i += 1;
+        }
+        panic!("value not found in possible_values");
+    }
+}
+
+#[derive(Clone, Debug)]
+#[derive_const(PartialEq)]
 pub enum Axis {
     X,
     Y,
@@ -200,7 +230,8 @@ impl ToString for Axis {
     }
 }
 
-#[derive(Clone, PartialEq, Debug)]
+#[derive(Clone, Debug)]
+#[derive_const(PartialEq)]
 pub enum Direction {
     Down,
     Up,
@@ -224,7 +255,8 @@ impl ToString for Direction {
 }
 
 // Additional enum types for properties
-#[derive(Clone, PartialEq, Debug)]
+#[derive(Clone, Debug)]
+#[derive_const(PartialEq)]
 pub enum FrontAndTop {
     NorthUp,
     EastUp,
@@ -259,7 +291,8 @@ impl ToString for FrontAndTop {
     }
 }
 
-#[derive(Clone, PartialEq, Debug)]
+#[derive(Clone, Debug)]
+#[derive_const(PartialEq)]
 pub enum AttachFace {
     Floor,
     Wall,
@@ -276,7 +309,8 @@ impl ToString for AttachFace {
     }
 }
 
-#[derive(Clone, PartialEq, Debug)]
+#[derive(Clone, Debug)]
+#[derive_const(PartialEq)]
 pub enum BellAttachType {
     Floor,
     Ceiling,
@@ -295,7 +329,8 @@ impl ToString for BellAttachType {
     }
 }
 
-#[derive(Clone, PartialEq, Debug)]
+#[derive(Clone, Debug)]
+#[derive_const(PartialEq)]
 pub enum WallSide {
     None,
     Low,
@@ -312,7 +347,8 @@ impl ToString for WallSide {
     }
 }
 
-#[derive(Clone, PartialEq, Debug)]
+#[derive(Clone, Debug)]
+#[derive_const(PartialEq)]
 pub enum RedstoneSide {
     Up,
     Side,
@@ -329,7 +365,8 @@ impl ToString for RedstoneSide {
     }
 }
 
-#[derive(Clone, PartialEq, Debug)]
+#[derive(Clone, Debug)]
+#[derive_const(PartialEq)]
 pub enum DoubleBlockHalf {
     Upper,
     Lower,
@@ -344,7 +381,8 @@ impl ToString for DoubleBlockHalf {
     }
 }
 
-#[derive(Clone, PartialEq, Debug)]
+#[derive(Clone, Debug)]
+#[derive_const(PartialEq)]
 pub enum Half {
     Top,
     Bottom,
@@ -359,7 +397,8 @@ impl ToString for Half {
     }
 }
 
-#[derive(Clone, PartialEq, Debug)]
+#[derive(Clone, Debug)]
+#[derive_const(PartialEq)]
 pub enum SideChainPart {
     Unconnected,
     Right,
@@ -378,7 +417,8 @@ impl ToString for SideChainPart {
     }
 }
 
-#[derive(Clone, PartialEq, Debug)]
+#[derive(Clone, Debug)]
+#[derive_const(PartialEq)]
 pub enum RailShape {
     NorthSouth,
     EastWest,
@@ -409,7 +449,8 @@ impl ToString for RailShape {
     }
 }
 
-#[derive(Clone, PartialEq, Debug)]
+#[derive(Clone, Debug)]
+#[derive_const(PartialEq)]
 pub enum BedPart {
     Head,
     Foot,
@@ -424,7 +465,8 @@ impl ToString for BedPart {
     }
 }
 
-#[derive(Clone, PartialEq, Debug)]
+#[derive(Clone, Debug)]
+#[derive_const(PartialEq)]
 pub enum ChestType {
     Single,
     Left,
@@ -441,7 +483,8 @@ impl ToString for ChestType {
     }
 }
 
-#[derive(Clone, PartialEq, Debug)]
+#[derive(Clone, Debug)]
+#[derive_const(PartialEq)]
 pub enum ComparatorMode {
     Compare,
     Subtract,
@@ -456,7 +499,8 @@ impl ToString for ComparatorMode {
     }
 }
 
-#[derive(Clone, PartialEq, Debug)]
+#[derive(Clone, Debug)]
+#[derive_const(PartialEq)]
 pub enum DoorHingeSide {
     Left,
     Right,
@@ -471,7 +515,8 @@ impl ToString for DoorHingeSide {
     }
 }
 
-#[derive(Clone, PartialEq, Debug)]
+#[derive(Clone, Debug)]
+#[derive_const(PartialEq)]
 pub enum NoteBlockInstrument {
     Harp,
     Basedrum,
@@ -528,7 +573,8 @@ impl ToString for NoteBlockInstrument {
     }
 }
 
-#[derive(Clone, PartialEq, Debug)]
+#[derive(Clone, Debug)]
+#[derive_const(PartialEq)]
 pub enum PistonType {
     Normal,
     Sticky,
@@ -543,7 +589,8 @@ impl ToString for PistonType {
     }
 }
 
-#[derive(Clone, PartialEq, Debug)]
+#[derive(Clone, Debug)]
+#[derive_const(PartialEq)]
 pub enum SlabType {
     Bottom,
     Top,
@@ -560,7 +607,8 @@ impl ToString for SlabType {
     }
 }
 
-#[derive(Clone, PartialEq, Debug)]
+#[derive(Clone, Debug)]
+#[derive_const(PartialEq)]
 pub enum StairsShape {
     Straight,
     InnerLeft,
@@ -581,7 +629,8 @@ impl ToString for StairsShape {
     }
 }
 
-#[derive(Clone, PartialEq, Debug)]
+#[derive(Clone, Debug)]
+#[derive_const(PartialEq)]
 pub enum StructureMode {
     Save,
     Load,
@@ -600,7 +649,8 @@ impl ToString for StructureMode {
     }
 }
 
-#[derive(Clone, PartialEq, Debug)]
+#[derive(Clone, Debug)]
+#[derive_const(PartialEq)]
 pub enum BambooLeaves {
     None,
     Small,
@@ -617,7 +667,8 @@ impl ToString for BambooLeaves {
     }
 }
 
-#[derive(Clone, PartialEq, Debug)]
+#[derive(Clone, Debug)]
+#[derive_const(PartialEq)]
 pub enum Tilt {
     None,
     Unstable,
@@ -636,7 +687,8 @@ impl ToString for Tilt {
     }
 }
 
-#[derive(Clone, PartialEq, Debug)]
+#[derive(Clone, Debug)]
+#[derive_const(PartialEq)]
 pub enum DripstoneThickness {
     TipMerge,
     Tip,
@@ -657,7 +709,8 @@ impl ToString for DripstoneThickness {
     }
 }
 
-#[derive(Clone, PartialEq, Debug)]
+#[derive(Clone, Debug)]
+#[derive_const(PartialEq)]
 pub enum SculkSensorPhase {
     Inactive,
     Active,
@@ -674,7 +727,8 @@ impl ToString for SculkSensorPhase {
     }
 }
 
-#[derive(Clone, PartialEq, Debug)]
+#[derive(Clone, Debug)]
+#[derive_const(PartialEq)]
 pub enum TrialSpawnerState {
     Inactive,
     WaitingForPlayers,
@@ -699,7 +753,8 @@ impl ToString for TrialSpawnerState {
     }
 }
 
-#[derive(Clone, PartialEq, Debug)]
+#[derive(Clone, Debug)]
+#[derive_const(PartialEq)]
 pub enum VaultState {
     Inactive,
     Active,
@@ -718,7 +773,8 @@ impl ToString for VaultState {
     }
 }
 
-#[derive(Clone, PartialEq, Debug)]
+#[derive(Clone, Debug)]
+#[derive_const(PartialEq)]
 pub enum CreakingHeartState {
     Uprooted,
     Dormant,
@@ -735,7 +791,8 @@ impl ToString for CreakingHeartState {
     }
 }
 
-#[derive(Clone, PartialEq, Debug)]
+#[derive(Clone, Debug)]
+#[derive_const(PartialEq)]
 pub enum TestBlockMode {
     Start,
     Log,
@@ -754,7 +811,8 @@ impl ToString for TestBlockMode {
     }
 }
 
-#[derive(Clone, PartialEq, Debug)]
+#[derive(Clone, Debug)]
+#[derive_const(PartialEq)]
 pub enum Pose {
     Standing,
     Sitting,

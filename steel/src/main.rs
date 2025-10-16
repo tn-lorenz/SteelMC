@@ -1,8 +1,7 @@
 use steel_registry::{
-    behaviour::BlockBehaviourProperties,
-    blocks::{Block, BlockRegistry, offset},
+    blocks::BlockRegistry,
     generated::vanilla_blocks,
-    properties::{BlockStateProperties, RedstoneSide},
+    properties::{BlockStateProperties, Direction},
 };
 
 #[tokio::main]
@@ -14,8 +13,14 @@ async fn main() {
     println!("Time taken: {:?}", start.elapsed());
     registry.freeze();
 
-    let block = registry.by_name("redstone_wire").unwrap();
+    println!(
+        "{}",
+        BlockStateProperties::HORIZONTAL_FACING.get_internal_index_const(&Direction::North)
+    );
+
+    let block = registry.by_name("blast_furnace").unwrap();
     let default_state_id = registry.get_default_state_id(block);
+
     println!(
         "default_state_id: {:?}",
         registry.get_properties(default_state_id)

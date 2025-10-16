@@ -4,7 +4,6 @@ use heck::{ToShoutySnakeCase, ToUpperCamelCase};
 use proc_macro2::{Ident, Span, TokenStream};
 use quote::quote;
 use serde::Deserialize;
-use steel_utils::math::vector3::Vector3;
 
 #[derive(Deserialize, Clone, Debug)]
 pub struct Block {
@@ -91,7 +90,7 @@ pub(crate) fn build() -> TokenStream {
                             let variant_ident =
                                 Ident::new(&variant_name.to_upper_camel_case(), Span::call_site());
 
-                            quote! { crate::properties::#enum_type_ident::#variant_ident as usize }
+                            quote! { BlockStateProperties::#property_ident.get_internal_index_const(&crate::properties::#enum_type_ident::#variant_ident) }
                         } else {
                             // Fallback if format is unexpected
                             quote! { 0 }
