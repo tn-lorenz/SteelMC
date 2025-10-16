@@ -14,6 +14,11 @@ async fn main() {
     println!("Time taken: {:?}", start.elapsed());
     registry.freeze();
 
-    let block = registry.by_name("redstone_wire");
-    println!("{:#?}", block);
+    let block = registry.by_name("redstone_wire").unwrap();
+    println!("id: {:?}", registry.get_id(block));
+    println!(
+        "{:#?} {}",
+        registry.get_properties(BlockStateId(4970)),
+        registry.get_base_state_id(block).0
+    );
 }

@@ -117,6 +117,41 @@ impl BlockRegistry {
         self.blocks_by_name.get(name).and_then(|id| self.by_id(*id))
     }
 
+    pub fn get_properties(&self, id: BlockStateId) -> Vec<(String, String)> {
+        let block = self.by_state_id(id).expect("Invalid state ID");
+
+        // If block has no properties, return empty vec
+        if block.properties.is_empty() {
+            return Vec::new();
+        }
+
+        // Get the base state ID for this block (O(1) lookup)
+        let block_id = self.state_to_block_id[id.0 as usize];
+        let base_state_id = self.block_to_base_state[block_id];
+
+        // Calculate the relative state index
+        let relative_index = id.0 - base_state_id;
+
+        // Decode the property indices from the relative state index
+        let mut index = relative_index;
+        let mut property_values = Vec::with_capacity(block.properties.len());
+
+        for prop in block.properties.iter() {
+            let count = prop.get_possible_values().len() as u16;
+            let current_index = (index % count) as usize;
+
+            let possible_values = prop.get_possible_values();
+            property_values.push((
+                prop.get_name().to_string(),
+                possible_values[current_index].clone(),
+            ));
+
+            index /= count;
+        }
+
+        property_values
+    }
+
     // Panics if that property isn't supposed to be on this block.
     pub fn get_property<T, P: Property<T>>(&self, id: BlockStateId, property: &P) -> T {
         let block = self.by_state_id(id).expect("Invalid state ID");

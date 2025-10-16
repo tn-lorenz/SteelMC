@@ -297,9 +297,9 @@ impl ToString for WallSide {
 
 #[derive(Clone, PartialEq, Debug)]
 pub enum RedstoneSide {
-    None,
-    Side,
     Up,
+    Side,
+    None,
 }
 
 impl ToString for RedstoneSide {
@@ -344,17 +344,19 @@ impl ToString for Half {
 
 #[derive(Clone, PartialEq, Debug)]
 pub enum SideChainPart {
-    None,
-    Left,
+    Unconnected,
     Right,
+    Center,
+    Left,
 }
 
 impl ToString for SideChainPart {
     fn to_string(&self) -> String {
         match self {
-            SideChainPart::None => "none".to_string(),
-            SideChainPart::Left => "left".to_string(),
+            SideChainPart::Unconnected => "unconnected".to_string(),
             SideChainPart::Right => "right".to_string(),
+            SideChainPart::Center => "center".to_string(),
+            SideChainPart::Left => "left".to_string(),
         }
     }
 }
@@ -518,7 +520,7 @@ pub enum PistonType {
 impl ToString for PistonType {
     fn to_string(&self) -> String {
         match self {
-            PistonType::Default => "default".to_string(),
+            PistonType::Default => "normal".to_string(),
             PistonType::Sticky => "sticky".to_string(),
         }
     }
@@ -701,30 +703,36 @@ impl ToString for VaultState {
 
 #[derive(Clone, PartialEq, Debug)]
 pub enum CreakingHeartState {
-    Inactive,
-    Active,
+    Uprooted,
+    Dormant,
+    Awake,
 }
 
 impl ToString for CreakingHeartState {
     fn to_string(&self) -> String {
         match self {
-            CreakingHeartState::Inactive => "inactive".to_string(),
-            CreakingHeartState::Active => "active".to_string(),
+            CreakingHeartState::Uprooted => "uprooted".to_string(),
+            CreakingHeartState::Dormant => "dormant".to_string(),
+            CreakingHeartState::Awake => "awake".to_string(),
         }
     }
 }
 
 #[derive(Clone, PartialEq, Debug)]
 pub enum TestBlockMode {
-    Off,
-    On,
+    Start,
+    Log,
+    Fail,
+    Accept,
 }
 
 impl ToString for TestBlockMode {
     fn to_string(&self) -> String {
         match self {
-            TestBlockMode::Off => "off".to_string(),
-            TestBlockMode::On => "on".to_string(),
+            TestBlockMode::Start => "start".to_string(),
+            TestBlockMode::Log => "log".to_string(),
+            TestBlockMode::Fail => "fail".to_string(),
+            TestBlockMode::Accept => "accept".to_string(),
         }
     }
 }
@@ -869,19 +877,19 @@ impl BlockStateProperties {
         EnumProperty::new("west", &[WallSide::None, WallSide::Low, WallSide::Tall]);
     pub const EAST_REDSTONE: EnumProperty<RedstoneSide> = EnumProperty::new(
         "east",
-        &[RedstoneSide::None, RedstoneSide::Side, RedstoneSide::Up],
+        &[RedstoneSide::Up, RedstoneSide::Side, RedstoneSide::None],
     );
     pub const NORTH_REDSTONE: EnumProperty<RedstoneSide> = EnumProperty::new(
         "north",
-        &[RedstoneSide::None, RedstoneSide::Side, RedstoneSide::Up],
+        &[RedstoneSide::Up, RedstoneSide::Side, RedstoneSide::None],
     );
     pub const SOUTH_REDSTONE: EnumProperty<RedstoneSide> = EnumProperty::new(
         "south",
-        &[RedstoneSide::None, RedstoneSide::Side, RedstoneSide::Up],
+        &[RedstoneSide::Up, RedstoneSide::Side, RedstoneSide::None],
     );
     pub const WEST_REDSTONE: EnumProperty<RedstoneSide> = EnumProperty::new(
         "west",
-        &[RedstoneSide::None, RedstoneSide::Side, RedstoneSide::Up],
+        &[RedstoneSide::Up, RedstoneSide::Side, RedstoneSide::None],
     );
     pub const DOUBLE_BLOCK_HALF: EnumProperty<DoubleBlockHalf> =
         EnumProperty::new("half", &[DoubleBlockHalf::Upper, DoubleBlockHalf::Lower]);
@@ -889,9 +897,10 @@ impl BlockStateProperties {
     pub const SIDE_CHAIN_PART: EnumProperty<SideChainPart> = EnumProperty::new(
         "side_chain",
         &[
-            SideChainPart::None,
-            SideChainPart::Left,
+            SideChainPart::Unconnected,
             SideChainPart::Right,
+            SideChainPart::Center,
+            SideChainPart::Left,
         ],
     );
     pub const RAIL_SHAPE: EnumProperty<RailShape> = EnumProperty::new(
@@ -997,7 +1006,7 @@ impl BlockStateProperties {
     pub const PISTON_TYPE: EnumProperty<PistonType> =
         EnumProperty::new("type", &[PistonType::Default, PistonType::Sticky]);
     pub const SLAB_TYPE: EnumProperty<SlabType> =
-        EnumProperty::new("type", &[SlabType::Bottom, SlabType::Top, SlabType::Double]);
+        EnumProperty::new("type", &[SlabType::Top, SlabType::Bottom, SlabType::Double]);
     pub const STAIRS_SHAPE: EnumProperty<StairsShape> = EnumProperty::new(
         "shape",
         &[
@@ -1066,11 +1075,22 @@ impl BlockStateProperties {
         ],
     );
     pub const CREAKING_HEART_STATE: EnumProperty<CreakingHeartState> = EnumProperty::new(
-        "creaking_heart_state",
-        &[CreakingHeartState::Inactive, CreakingHeartState::Active],
+        "creaking",
+        &[
+            CreakingHeartState::Uprooted,
+            CreakingHeartState::Dormant,
+            CreakingHeartState::Awake,
+        ],
     );
-    pub const TEST_BLOCK_MODE: EnumProperty<TestBlockMode> =
-        EnumProperty::new("mode", &[TestBlockMode::Off, TestBlockMode::On]);
+    pub const TEST_BLOCK_MODE: EnumProperty<TestBlockMode> = EnumProperty::new(
+        "mode",
+        &[
+            TestBlockMode::Start,
+            TestBlockMode::Log,
+            TestBlockMode::Fail,
+            TestBlockMode::Accept,
+        ],
+    );
     pub const COPPER_GOLEM_POSE: EnumProperty<CopperGolemPose> = EnumProperty::new(
         "copper_golem_pose",
         &[
