@@ -37,11 +37,11 @@ pub struct BlockRegistry {
     allows_registering: bool,
     pub state_to_block_lookup: Vec<BlockRef>,
     /// Maps state IDs to block IDs (parallel to state_to_block_lookup for O(1) lookup)
-    state_to_block_id: Vec<usize>,
+    pub state_to_block_id: Vec<usize>,
     /// Maps block IDs to their base state ID
-    block_to_base_state: Vec<u16>,
+    pub block_to_base_state: Vec<u16>,
     /// The next state ID to be allocated
-    next_state_id: u16,
+    pub next_state_id: u16,
 }
 
 impl BlockRegistry {
@@ -91,9 +91,19 @@ impl BlockRegistry {
         id
     }
 
+    pub fn get_base_state_id(&self, block: BlockRef) -> BlockStateId {
+        BlockStateId(self.block_to_base_state[*self.get_id(block)])
+    }
+
     // Retrieves a block by its ID.
     pub fn by_id(&self, id: usize) -> Option<BlockRef> {
         self.blocks_by_id.get(id).map(|b| *b)
+    }
+
+    pub fn get_id(&self, block: BlockRef) -> &usize {
+        self.blocks_by_name
+            .get(block.name)
+            .expect("Block not found")
     }
 
     pub fn by_state_id(&self, state_id: BlockStateId) -> Option<BlockRef> {
