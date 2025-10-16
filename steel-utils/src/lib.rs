@@ -29,6 +29,7 @@ impl<T> SteelRwLock<T> {
 // Wrapper types making it harder to accidentaly use the wrong underlying type.
 
 // A raw block state id. Using the registry this id can be derived into a block and it's current properties.
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Hash)]
 pub struct BlockStateId(pub u16);
 
 // A chunk position.

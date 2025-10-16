@@ -4,10 +4,13 @@ pub trait Property<T> {
     fn get_value(&self, value: &str) -> Option<T>;
     fn get_possible_values(&self) -> Vec<T>;
     fn get_internal_index(&self, value: &T) -> usize;
+    fn value_from_index(&self, index: usize) -> T;
+    fn as_dyn(&self) -> &dyn DynProperty;
 }
 
 pub trait DynProperty: Debug {
     fn get_possible_values(&self) -> Vec<String>;
+    fn get_name(&self) -> &'static str;
 }
 
 #[derive(Debug, Clone)]
@@ -23,6 +26,10 @@ impl BooleanProperty {
 impl DynProperty for BooleanProperty {
     fn get_possible_values(&self) -> Vec<String> {
         vec!["true".to_string(), "false".to_string()]
+    }
+
+    fn get_name(&self) -> &'static str {
+        self.name
     }
 }
 
@@ -44,6 +51,14 @@ impl Property<bool> for BooleanProperty {
     fn get_internal_index(&self, value: &bool) -> usize {
         if *value { 0 } else { 1 }
     }
+
+    fn value_from_index(&self, index: usize) -> bool {
+        index == 0
+    }
+
+    fn as_dyn(&self) -> &dyn DynProperty {
+        self
+    }
 }
 
 #[derive(Debug, Clone)]
@@ -62,6 +77,10 @@ impl IntProperty {
 impl DynProperty for IntProperty {
     fn get_possible_values(&self) -> Vec<String> {
         (self.min..=self.max).map(|v| v.to_string()).collect()
+    }
+
+    fn get_name(&self) -> &'static str {
+        self.name
     }
 }
 
@@ -84,6 +103,14 @@ impl Property<u8> for IntProperty {
             0
         };
     }
+
+    fn value_from_index(&self, index: usize) -> u8 {
+        self.min + (index as u8)
+    }
+
+    fn as_dyn(&self) -> &dyn DynProperty {
+        self
+    }
 }
 
 #[derive(Debug, Clone)]
@@ -95,6 +122,10 @@ pub struct EnumProperty<T: ToString + PartialEq + Clone + Debug + 'static> {
 impl<T: ToString + PartialEq + Clone + Debug + 'static> DynProperty for EnumProperty<T> {
     fn get_possible_values(&self) -> Vec<String> {
         self.possible_values.iter().map(|v| v.to_string()).collect()
+    }
+
+    fn get_name(&self) -> &'static str {
+        self.name
     }
 }
 
@@ -124,6 +155,14 @@ impl<T: ToString + PartialEq + Clone + Debug> Property<T> for EnumProperty<T> {
             .iter()
             .position(|v| v == value)
             .unwrap()
+    }
+
+    fn value_from_index(&self, index: usize) -> T {
+        self.possible_values[index].clone()
+    }
+
+    fn as_dyn(&self) -> &dyn DynProperty {
+        self
     }
 }
 
