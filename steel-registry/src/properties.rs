@@ -21,6 +21,15 @@ impl BooleanProperty {
     pub const fn new(name: &'static str) -> Self {
         Self { name }
     }
+
+    pub const fn value_count(&self) -> usize {
+        2
+    }
+
+    /// Convert a boolean value to its internal index (true=0, false=1 for Java compatibility)
+    pub const fn index_of(&self, value: bool) -> usize {
+        if value { 0 } else { 1 }
+    }
 }
 
 impl DynProperty for BooleanProperty {
@@ -71,6 +80,10 @@ pub struct IntProperty {
 impl IntProperty {
     pub const fn new(name: &'static str, min: u8, max: u8) -> Self {
         Self { name, min, max }
+    }
+
+    pub const fn value_count(&self) -> usize {
+        (self.max - self.min + 1) as usize
     }
 }
 
@@ -135,6 +148,10 @@ impl<T: ToString + PartialEq + Clone + Debug> EnumProperty<T> {
             name,
             possible_values,
         }
+    }
+
+    pub const fn value_count(&self) -> usize {
+        self.possible_values.len()
     }
 }
 
@@ -513,14 +530,14 @@ impl ToString for NoteBlockInstrument {
 
 #[derive(Clone, PartialEq, Debug)]
 pub enum PistonType {
-    Default,
+    Normal,
     Sticky,
 }
 
 impl ToString for PistonType {
     fn to_string(&self) -> String {
         match self {
-            PistonType::Default => "normal".to_string(),
+            PistonType::Normal => "normal".to_string(),
             PistonType::Sticky => "sticky".to_string(),
         }
     }
@@ -738,20 +755,20 @@ impl ToString for TestBlockMode {
 }
 
 #[derive(Clone, PartialEq, Debug)]
-pub enum CopperGolemPose {
+pub enum Pose {
     Standing,
     Sitting,
     Running,
     Star,
 }
 
-impl ToString for CopperGolemPose {
+impl ToString for Pose {
     fn to_string(&self) -> String {
         match self {
-            CopperGolemPose::Standing => "standing".to_string(),
-            CopperGolemPose::Sitting => "sitting".to_string(),
-            CopperGolemPose::Running => "running".to_string(),
-            CopperGolemPose::Star => "star".to_string(),
+            Pose::Standing => "standing".to_string(),
+            Pose::Sitting => "sitting".to_string(),
+            Pose::Running => "running".to_string(),
+            Pose::Star => "star".to_string(),
         }
     }
 }
@@ -1004,7 +1021,7 @@ impl BlockStateProperties {
         ],
     );
     pub const PISTON_TYPE: EnumProperty<PistonType> =
-        EnumProperty::new("type", &[PistonType::Default, PistonType::Sticky]);
+        EnumProperty::new("type", &[PistonType::Normal, PistonType::Sticky]);
     pub const SLAB_TYPE: EnumProperty<SlabType> =
         EnumProperty::new("type", &[SlabType::Top, SlabType::Bottom, SlabType::Double]);
     pub const STAIRS_SHAPE: EnumProperty<StairsShape> = EnumProperty::new(
@@ -1091,14 +1108,9 @@ impl BlockStateProperties {
             TestBlockMode::Accept,
         ],
     );
-    pub const COPPER_GOLEM_POSE: EnumProperty<CopperGolemPose> = EnumProperty::new(
+    pub const COPPER_GOLEM_POSE: EnumProperty<Pose> = EnumProperty::new(
         "copper_golem_pose",
-        &[
-            CopperGolemPose::Standing,
-            CopperGolemPose::Sitting,
-            CopperGolemPose::Running,
-            CopperGolemPose::Star,
-        ],
+        &[Pose::Standing, Pose::Sitting, Pose::Running, Pose::Star],
     );
 
     // Additional boolean properties

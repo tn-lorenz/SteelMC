@@ -12,6 +12,7 @@ pub struct Block {
     pub name: &'static str,
     pub behaviour: BlockBehaviourProperties,
     pub properties: &'static [&'static dyn DynProperty],
+    pub default_state_offset: u16,
 }
 
 impl Block {
@@ -24,7 +25,40 @@ impl Block {
             name,
             behaviour,
             properties,
+            default_state_offset: 0,
         }
+    }
+
+    /// Sets the default state offset for this block.
+    /// The offset is relative to the block's base state ID.
+    ///
+    /// For easier usage, consider using `with_default_state_from_indices` or the
+    /// `default_state!` macro instead of calculating the offset manually.
+    ///
+    /// # Example
+    /// ```ignore
+    /// const REPEATER: Block = Block::new("repeater", props, &[...])
+    ///     .with_default_state(4);
+    /// ```
+    pub const fn with_default_state(mut self, offset: u16) -> Self {
+        self.default_state_offset = offset;
+
+        self
+    }
+
+    /// Const helper to calculate state offset from property indices and counts
+    pub const fn calculate_offset(property_indices: &[usize], property_counts: &[usize]) -> u16 {
+        let mut offset = 0u16;
+        let mut multiplier = 1u16;
+        let mut i = 0;
+
+        while i < property_indices.len() {
+            offset += property_indices[i] as u16 * multiplier;
+            multiplier *= property_counts[i] as u16;
+            i += 1;
+        }
+
+        offset
     }
 }
 
@@ -93,6 +127,12 @@ impl BlockRegistry {
 
     pub fn get_base_state_id(&self, block: BlockRef) -> BlockStateId {
         BlockStateId(self.block_to_base_state[*self.get_id(block)])
+    }
+
+    /// Gets the default state ID for a block (base state + default offset)
+    pub fn get_default_state_id(&self, block: BlockRef) -> BlockStateId {
+        let base = self.block_to_base_state[*self.get_id(block)];
+        BlockStateId(base + block.default_state_offset)
     }
 
     // Retrieves a block by its ID.
@@ -245,3 +285,36 @@ impl BlockRegistry {
         BlockStateId(base_state_id + new_relative_index)
     }
 }
+
+/// Macro to generate offset calculation from property values in all positions.
+///
+/// Takes property objects and their values, automatically converts to indices.
+/// All properties must be specified in order.
+///
+/// # Note
+/// For boolean properties, use `.index_of(value)` to handle the inverted encoding
+/// (true=0, false=1 for Java compatibility).
+///
+/// # Example
+/// ```ignore
+/// use steel_registry::{offset, properties::{BlockStateProperties as Props, RedstoneSide}};
+///
+/// const WIRE: Block = Block::new("wire", behaviour, PROPS)
+///     .with_default_state(offset!(
+///         Props::EAST_REDSTONE => RedstoneSide::Up,
+///         Props::NORTH_REDSTONE => RedstoneSide::None,
+///         Props::POWER => 10,
+///         Props::ATTACHED => Props::ATTACHED.index_of(false)  // Bools need .index_of()
+///     ));
+/// ```
+#[macro_export]
+macro_rules! offset {
+    ($($prop:expr => $value:expr),* $(,)?) => {{
+        const INDICES: &[usize] = &[$($value as usize),*];
+        const COUNTS: &[usize] = &[$($prop.value_count()),*];
+        $crate::blocks::Block::calculate_offset(INDICES, COUNTS)
+    }};
+}
+
+/// Re-export for easier access
+pub use offset;
