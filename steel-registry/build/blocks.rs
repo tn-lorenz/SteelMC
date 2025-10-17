@@ -7,6 +7,7 @@ use serde::Deserialize;
 
 #[derive(Deserialize, Clone, Debug)]
 pub struct Block {
+    #[allow(dead_code)]
     pub id: u16,
     pub name: String,
     pub properties: Vec<String>,
@@ -17,6 +18,7 @@ pub struct Block {
 #[derive(Deserialize, Clone, Debug)]
 pub struct BlockAssets {
     pub blocks: Vec<Block>,
+    #[allow(dead_code)]
     pub block_entity_types: Vec<String>,
 }
 
@@ -29,9 +31,8 @@ pub(crate) fn build() -> TokenStream {
 
     stream.extend(quote! {
         use crate::{
-            behaviour::BlockBehaviourProperties,
-            blocks::{Block, BlockRegistry},
-            properties::BlockStateProperties,
+            blocks::{behaviour::BlockBehaviourProperties, blocks::Block, blocks::BlockRegistry},
+            blocks::properties::BlockStateProperties,
         };
     });
 
@@ -90,7 +91,7 @@ pub(crate) fn build() -> TokenStream {
                             let variant_ident =
                                 Ident::new(&variant_name.to_upper_camel_case(), Span::call_site());
 
-                            quote! { BlockStateProperties::#property_ident.get_internal_index_const(&crate::properties::#enum_type_ident::#variant_ident) }
+                            quote! { BlockStateProperties::#property_ident.get_internal_index_const(&crate::blocks::properties::#enum_type_ident::#variant_ident) }
                         } else {
                             // Fallback if format is unexpected
                             quote! { 0 }
@@ -107,7 +108,7 @@ pub(crate) fn build() -> TokenStream {
                 .collect::<Vec<_>>();
 
             quote! {
-                .with_default_state(crate::blocks::offset!(
+                .with_default_state(crate::blocks::blocks::offset!(
                     #(#property_values),*
                 ))
             }

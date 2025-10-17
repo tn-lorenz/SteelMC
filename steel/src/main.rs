@@ -1,8 +1,4 @@
-use steel_registry::{
-    blocks::BlockRegistry,
-    generated::vanilla_blocks,
-    properties::{BlockStateProperties, Direction},
-};
+use steel_registry::{blocks::blocks::BlockRegistry, generated::vanilla_blocks};
 
 #[tokio::main]
 async fn main() {
@@ -13,16 +9,13 @@ async fn main() {
     println!("Time taken: {:?}", start.elapsed());
     registry.freeze();
 
-    println!(
-        "{}",
-        BlockStateProperties::HORIZONTAL_FACING.get_internal_index_const(&Direction::North)
-    );
-
-    let block = registry.by_name("blast_furnace").unwrap();
+    let block = registry.by_name("waxed_copper_door").unwrap();
     let default_state_id = registry.get_default_state_id(block);
 
     println!(
         "default_state_id: {:?}",
         registry.get_properties(default_state_id)
     );
+
+    std::thread::sleep(std::time::Duration::from_secs(10));
 }

@@ -2,10 +2,8 @@ use std::collections::HashMap;
 
 use steel_utils::BlockStateId;
 
-use crate::{
-    behaviour::BlockBehaviourProperties,
-    properties::{DynProperty, Property},
-};
+use crate::blocks::behaviour::BlockBehaviourProperties;
+use crate::blocks::properties::{DynProperty, Property};
 
 #[derive(Debug)]
 pub struct Block {
@@ -312,7 +310,7 @@ macro_rules! offset {
     ($($prop:expr => $value:expr),* $(,)?) => {{
         const INDICES: &[usize] = &[$($value as usize),*];
         const COUNTS: &[usize] = &[$($prop.value_count()),*];
-        $crate::blocks::Block::calculate_offset(INDICES, COUNTS)
+        $crate::blocks::blocks::Block::calculate_offset(INDICES, COUNTS)
     }};
 }
 
