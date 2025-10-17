@@ -16,9 +16,7 @@ pub struct Vector3<T> {
 #[derive_const(PartialEq)]
 pub enum Axis {
     X,
-
     Y,
-
     Z,
 }
 

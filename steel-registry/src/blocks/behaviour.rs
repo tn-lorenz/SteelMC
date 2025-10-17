@@ -1,20 +1,4 @@
-use steel_utils::BlockStateId;
-
-#[derive(Debug, Clone, Copy)]
-pub enum MapColor {
-    Stone,
-    Dirt,
-    Wood,
-    None,
-}
-
-#[derive(Debug, Clone, Copy)]
-pub enum SoundType {
-    Stone,
-    Wood,
-    Gravel,
-    Grass,
-}
+pub use crate::blocks::properties::NoteBlockInstrument;
 
 #[derive(Debug, Clone, Copy)]
 pub enum PushReaction {
@@ -22,87 +6,88 @@ pub enum PushReaction {
     Destroy,
     Block,
     Ignore,
-}
-
-#[derive(Debug, Clone, Copy)]
-pub enum NoteBlockInstrument {
-    Harp,
-    Bass,
-    Snare,
-}
-
-#[derive(Debug, Clone, Copy)]
-pub enum OffsetType {
-    None,
-    Xz,
-    Xyz,
+    PushOnly,
 }
 
 #[derive(Debug)]
 pub struct BlockBehaviourProperties {
-    pub map_color: MapColor,
     pub has_collision: bool,
-    pub sound_type: SoundType,
-    // A closure to determine light level, potentially based on block state.
-    pub light_emission: fn(BlockStateId) -> u8,
+    pub can_occlude: bool,
     pub explosion_resistance: f32,
-    pub destroy_time: f32,
-    pub requires_correct_tool_for_drops: bool,
     pub is_randomly_ticking: bool,
+    pub force_solid_off: bool,
+    pub force_solid_on: bool,
+    pub push_reaction: PushReaction,
     pub friction: f32,
     pub speed_factor: f32,
     pub jump_factor: f32,
-    pub can_occlude: bool,
-    pub is_air: bool,
+    pub dynamic_shape: bool,
+    pub destroy_time: f32,
     pub ignited_by_lava: bool,
-    pub push_reaction: PushReaction,
-    pub spawn_terrain_particles: bool,
+    pub liquid: bool,
+    pub is_air: bool,
+    pub requires_correct_tool_for_drops: bool,
     pub instrument: NoteBlockInstrument,
     pub replaceable: bool,
-    pub dynamic_shape: bool,
-    pub offset_type: OffsetType,
 }
 
 impl BlockBehaviourProperties {
     /// Starts building a new set of block properties.
     pub const fn new() -> Self {
         Self {
-            map_color: MapColor::None,
             has_collision: true,
-            sound_type: SoundType::Stone,
-            light_emission: |_| 0,
+            can_occlude: true,
             explosion_resistance: 0.0,
-            destroy_time: 0.0,
-            requires_correct_tool_for_drops: false,
             is_randomly_ticking: false,
+            force_solid_off: false,
+            force_solid_on: false,
+            push_reaction: PushReaction::Normal,
             friction: 0.6,
             speed_factor: 1.0,
             jump_factor: 1.0,
-            can_occlude: true,
-            is_air: false,
+            dynamic_shape: false,
+            destroy_time: 0.0,
             ignited_by_lava: false,
-            push_reaction: PushReaction::Normal,
-            spawn_terrain_particles: true,
+            liquid: false,
+            is_air: false,
+            requires_correct_tool_for_drops: false,
             instrument: NoteBlockInstrument::Harp,
             replaceable: false,
-            dynamic_shape: false,
-            offset_type: OffsetType::None,
         }
     }
 
-    pub const fn map_color(mut self, color: MapColor) -> Self {
-        self.map_color = color;
+    pub const fn has_collision(mut self, has_collision: bool) -> Self {
+        self.has_collision = has_collision;
         self
     }
 
-    pub const fn no_collision(mut self) -> Self {
-        self.has_collision = false;
-        self.can_occlude = false;
+    pub const fn can_occlude(mut self, can_occlude: bool) -> Self {
+        self.can_occlude = can_occlude;
         self
     }
 
-    pub const fn no_occlusion(mut self) -> Self {
-        self.can_occlude = false;
+    pub const fn explosion_resistance(mut self, resistance: f32) -> Self {
+        self.explosion_resistance = resistance;
+        self
+    }
+
+    pub const fn is_randomly_ticking(mut self, ticking: bool) -> Self {
+        self.is_randomly_ticking = ticking;
+        self
+    }
+
+    pub const fn force_solid_off(mut self, force: bool) -> Self {
+        self.force_solid_off = force;
+        self
+    }
+
+    pub const fn force_solid_on(mut self, force: bool) -> Self {
+        self.force_solid_on = force;
+        self
+    }
+
+    pub const fn push_reaction(mut self, reaction: PushReaction) -> Self {
+        self.push_reaction = reaction;
         self
     }
 
@@ -121,65 +106,33 @@ impl BlockBehaviourProperties {
         self
     }
 
-    pub const fn sound(mut self, sound: SoundType) -> Self {
-        self.sound_type = sound;
+    pub const fn dynamic_shape(mut self, dynamic: bool) -> Self {
+        self.dynamic_shape = dynamic;
         self
     }
 
-    pub const fn light_level(mut self, light_fn: fn(BlockStateId) -> u8) -> Self {
-        self.light_emission = light_fn;
+    pub const fn destroy_time(mut self, time: f32) -> Self {
+        self.destroy_time = time;
         self
     }
 
-    /// Sets destroy time and explosion resistance.
-    pub const fn strength(mut self, destroy_time: f32, explosion_resistance: f32) -> Self {
-        self.destroy_time = destroy_time;
-        self.explosion_resistance = explosion_resistance.max(0.0);
+    pub const fn ignited_by_lava(mut self, ignited: bool) -> Self {
+        self.ignited_by_lava = ignited;
         self
     }
 
-    /// A shortcut for blocks that break instantly.
-    pub const fn instabreak(self) -> Self {
-        self.strength(0.0, 0.0)
-    }
-
-    pub const fn random_ticks(mut self) -> Self {
-        self.is_randomly_ticking = true;
+    pub const fn liquid(mut self, liquid: bool) -> Self {
+        self.liquid = liquid;
         self
     }
 
-    pub const fn dynamic_shape(mut self) -> Self {
-        self.dynamic_shape = true;
+    pub const fn is_air(mut self, is_air: bool) -> Self {
+        self.is_air = is_air;
         self
     }
 
-    pub const fn ignited_by_lava(mut self) -> Self {
-        self.ignited_by_lava = true;
-        self
-    }
-
-    pub const fn push_reaction(mut self, reaction: PushReaction) -> Self {
-        self.push_reaction = reaction;
-        self
-    }
-
-    pub const fn air(mut self) -> Self {
-        self.is_air = true;
-        self
-    }
-
-    pub const fn requires_correct_tool_for_drops(mut self) -> Self {
-        self.requires_correct_tool_for_drops = true;
-        self
-    }
-
-    pub const fn offset(mut self, offset_type: OffsetType) -> Self {
-        self.offset_type = offset_type;
-        self
-    }
-
-    pub const fn no_terrain_particles(mut self) -> Self {
-        self.spawn_terrain_particles = false;
+    pub const fn requires_correct_tool_for_drops(mut self, requires: bool) -> Self {
+        self.requires_correct_tool_for_drops = requires;
         self
     }
 
@@ -188,8 +141,8 @@ impl BlockBehaviourProperties {
         self
     }
 
-    pub const fn replaceable(mut self) -> Self {
-        self.replaceable = true;
+    pub const fn replaceable(mut self, replaceable: bool) -> Self {
+        self.replaceable = replaceable;
         self
     }
 }
