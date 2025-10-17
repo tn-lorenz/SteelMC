@@ -1,3 +1,11 @@
+#![feature(
+    const_trait_impl,
+    const_slice_make_iter,
+    const_cmp,
+    derive_const,
+    core_intrinsics
+)]
+#![allow(internal_features)]
 use tokio::sync::{RwLock, RwLockReadGuard, RwLockWriteGuard};
 
 use crate::math::{vector2::Vector2, vector3::Vector3};

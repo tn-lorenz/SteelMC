@@ -1,5 +1,7 @@
 use std::fmt::Debug;
 
+pub use steel_utils::math::vector3::Axis;
+
 pub trait Property<T> {
     fn get_value(&self, value: &str) -> Option<T>;
     fn get_possible_values(&self) -> Vec<T>;
@@ -209,24 +211,6 @@ impl<T: const PartialEq + Clone + Debug + ToString + 'static> EnumProperty<T> {
             i += 1;
         }
         panic!("value not found in possible_values");
-    }
-}
-
-#[derive(Clone, Debug)]
-#[derive_const(PartialEq)]
-pub enum Axis {
-    X,
-    Y,
-    Z,
-}
-
-impl ToString for Axis {
-    fn to_string(&self) -> String {
-        match self {
-            Axis::X => "x".to_string(),
-            Axis::Y => "y".to_string(),
-            Axis::Z => "z".to_string(),
-        }
     }
 }
 

@@ -12,14 +12,24 @@ pub struct Vector3<T> {
     pub z: T,
 }
 
-#[derive(Copy, Clone, Debug, PartialEq, Eq)]
-
+#[derive(Copy, Clone, Debug, Eq)]
+#[derive_const(PartialEq)]
 pub enum Axis {
     X,
 
     Y,
 
     Z,
+}
+
+impl ToString for Axis {
+    fn to_string(&self) -> String {
+        match self {
+            Axis::X => "x".to_string(),
+            Axis::Y => "y".to_string(),
+            Axis::Z => "z".to_string(),
+        }
+    }
 }
 
 impl<T: Math + PartialOrd + Copy> Vector3<T> {
