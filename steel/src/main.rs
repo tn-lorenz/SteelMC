@@ -11,7 +11,7 @@ async fn main() {
     registry.freeze();
 
     let block = registry
-        .by_key(&ResourceLocation::vanilla("oak_log".to_string()))
+        .by_key(&ResourceLocation::vanilla("stone".to_string()))
         .unwrap();
 
     println!("block: {:#?}", block);
