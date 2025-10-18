@@ -1,4 +1,5 @@
 use steel_registry::{blocks::blocks::BlockRegistry, generated::vanilla_blocks};
+use steel_utils::ResourceLocation;
 
 #[tokio::main]
 async fn main() {
@@ -9,9 +10,9 @@ async fn main() {
     println!("Time taken: {:?}", start.elapsed());
     registry.freeze();
 
-    let block = registry.by_name("slime_block").unwrap();
+    let block = registry
+        .by_key(&ResourceLocation::vanilla("oak_log".to_string()))
+        .unwrap();
 
-    println!("behaviour: {:?}", block.behaviour);
-
-    std::thread::sleep(std::time::Duration::from_secs(10));
+    println!("block: {:#?}", block);
 }

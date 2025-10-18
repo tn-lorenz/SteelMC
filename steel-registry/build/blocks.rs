@@ -301,6 +301,7 @@ pub(crate) fn build() -> TokenStream {
             blocks::{behaviour::BlockBehaviourProperties, blocks::Block, blocks::BlockRegistry},
             blocks::properties::BlockStateProperties,
         };
+        use steel_utils::ResourceLocation;
     });
 
     // Create default properties for comparison
@@ -327,8 +328,8 @@ pub(crate) fn build() -> TokenStream {
         let default_state = generate_default_state(block);
 
         stream.extend(quote! {
-            pub const #block_name: Block = Block::new(
-                #block_name_str,
+            pub const #block_name: &'static Block = &Block::new(
+                ResourceLocation::vanilla_static(#block_name_str),
                 BlockBehaviourProperties::new()#(#builder_calls)*,
                 &[
                     #(#properties),*
@@ -341,7 +342,7 @@ pub(crate) fn build() -> TokenStream {
     for block in &block_assets.blocks {
         let block_name = Ident::new(&block.name.to_shouty_snake_case(), Span::call_site());
         register_stream.extend(quote! {
-            registry.register(&#block_name);
+            registry.register(#block_name);
         });
     }
 

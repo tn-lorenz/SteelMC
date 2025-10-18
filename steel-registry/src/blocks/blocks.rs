@@ -1,13 +1,13 @@
 use std::collections::HashMap;
 
-use steel_utils::BlockStateId;
+use steel_utils::{BlockStateId, ResourceLocation};
 
 use crate::blocks::behaviour::BlockBehaviourProperties;
 use crate::blocks::properties::{DynProperty, Property};
 
 #[derive(Debug)]
 pub struct Block {
-    pub name: &'static str,
+    pub key: ResourceLocation,
     pub behaviour: BlockBehaviourProperties,
     pub properties: &'static [&'static dyn DynProperty],
     pub default_state_offset: u16,
@@ -15,12 +15,12 @@ pub struct Block {
 
 impl Block {
     pub const fn new(
-        name: &'static str,
+        key: ResourceLocation,
         behaviour: BlockBehaviourProperties,
         properties: &'static [&'static dyn DynProperty],
     ) -> Self {
         Self {
-            name,
+            key,
             behaviour,
             properties,
             default_state_offset: 0,
@@ -65,7 +65,7 @@ pub type BlockRef = &'static Block;
 // The central registry for all blocks.
 pub struct BlockRegistry {
     blocks_by_id: Vec<BlockRef>,
-    blocks_by_name: HashMap<&'static str, usize>,
+    blocks_by_key: HashMap<ResourceLocation, usize>,
     allows_registering: bool,
     pub state_to_block_lookup: Vec<BlockRef>,
     /// Maps state IDs to block IDs (parallel to state_to_block_lookup for O(1) lookup)
@@ -81,7 +81,7 @@ impl BlockRegistry {
     pub fn new() -> Self {
         Self {
             blocks_by_id: Vec::new(),
-            blocks_by_name: HashMap::new(),
+            blocks_by_key: HashMap::new(),
             allows_registering: true,
             state_to_block_lookup: Vec::new(),
             state_to_block_id: Vec::new(),
@@ -104,7 +104,7 @@ impl BlockRegistry {
         let id = self.blocks_by_id.len();
         let base_state_id = self.next_state_id;
 
-        self.blocks_by_name.insert(block.name, id);
+        self.blocks_by_key.insert(block.key.clone(), id);
         self.blocks_by_id.push(&block);
         self.block_to_base_state.push(base_state_id);
 
@@ -139,9 +139,7 @@ impl BlockRegistry {
     }
 
     pub fn get_id(&self, block: BlockRef) -> &usize {
-        self.blocks_by_name
-            .get(block.name)
-            .expect("Block not found")
+        self.blocks_by_key.get(&block.key).expect("Block not found")
     }
 
     pub fn by_state_id(&self, state_id: BlockStateId) -> Option<BlockRef> {
@@ -151,8 +149,8 @@ impl BlockRegistry {
     }
 
     // Retrieves a block by its name.
-    pub fn by_name(&self, name: &str) -> Option<BlockRef> {
-        self.blocks_by_name.get(name).and_then(|id| self.by_id(*id))
+    pub fn by_key(&self, key: &ResourceLocation) -> Option<BlockRef> {
+        self.blocks_by_key.get(key).and_then(|id| self.by_id(*id))
     }
 
     pub fn get_properties(&self, id: BlockStateId) -> Vec<(String, String)> {
@@ -244,7 +242,7 @@ impl BlockRegistry {
             .expect(&format!(
                 "Property {} not found on block {}",
                 property.as_dyn().get_name(),
-                block.name
+                block.key.to_string()
             ));
 
         // Get the base state ID for this block (O(1) lookup)

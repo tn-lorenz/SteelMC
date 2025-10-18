@@ -6,6 +6,8 @@
     core_intrinsics
 )]
 #![allow(internal_features)]
+use std::{borrow::Cow, str::FromStr};
+
 use tokio::sync::{RwLock, RwLockReadGuard, RwLockWriteGuard};
 
 use crate::math::{vector2::Vector2, vector3::Vector3};
@@ -45,3 +47,86 @@ pub struct ChunkPos(pub Vector2<i32>);
 
 // A block position.
 pub struct BlockPos(pub Vector3<i32>);
+
+#[derive(Debug, Clone, PartialEq, Eq, Hash)]
+pub struct ResourceLocation {
+    pub namespace: Cow<'static, str>,
+    pub path: Cow<'static, str>,
+}
+
+impl ResourceLocation {
+    pub const VANILLA_NAMESPACE: &'static str = "minecraft";
+
+    pub fn vanilla(path: String) -> Self {
+        ResourceLocation {
+            namespace: Cow::Borrowed(Self::VANILLA_NAMESPACE),
+            path: Cow::Owned(path),
+        }
+    }
+
+    pub const fn vanilla_static(path: &'static str) -> Self {
+        ResourceLocation {
+            namespace: Cow::Borrowed(Self::VANILLA_NAMESPACE),
+            path: Cow::Borrowed(path),
+        }
+    }
+
+    pub fn valid_namespace_char(namespace_char: char) -> bool {
+        namespace_char == '_'
+            || namespace_char == '-'
+            || namespace_char >= 'a' && namespace_char <= 'z'
+            || namespace_char >= '0' && namespace_char <= '9'
+            || namespace_char == '.'
+    }
+
+    pub fn valid_path_char(path_char: char) -> bool {
+        path_char == '_'
+            || path_char == '-'
+            || path_char >= 'a' && path_char <= 'z'
+            || path_char >= '0' && path_char <= '9'
+            || path_char == '/'
+            || path_char == '.'
+    }
+
+    pub fn validate_namespace(namespace: &str) -> bool {
+        namespace.chars().all(|c| Self::valid_namespace_char(c))
+    }
+
+    pub fn validate_path(path: &str) -> bool {
+        path.chars().all(|c| Self::valid_path_char(c))
+    }
+
+    pub fn validate(namespace: &str, path: &str) -> bool {
+        Self::validate_namespace(namespace) && Self::validate_path(path)
+    }
+}
+
+impl ToString for ResourceLocation {
+    fn to_string(&self) -> String {
+        format!("{}:{}", self.namespace, self.path)
+    }
+}
+
+impl FromStr for ResourceLocation {
+    type Err = String;
+
+    fn from_str(s: &str) -> Result<Self, Self::Err> {
+        let parts: Vec<&str> = s.split(':').collect();
+        if parts.len() != 2 {
+            return Err(format!("Invalid resource location: {}", s));
+        }
+
+        if !ResourceLocation::validate_namespace(parts[0]) {
+            return Err(format!("Invalid namespace: {}", parts[0]));
+        }
+
+        if !ResourceLocation::validate_path(parts[1]) {
+            return Err(format!("Invalid path: {}", parts[1]));
+        }
+
+        Ok(ResourceLocation {
+            namespace: Cow::Owned(parts[0].to_string()),
+            path: Cow::Owned(parts[1].to_string()),
+        })
+    }
+}
