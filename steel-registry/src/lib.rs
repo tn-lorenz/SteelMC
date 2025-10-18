@@ -7,4 +7,5 @@
 )]
 #![allow(internal_features)]
 pub mod blocks;
+pub mod data_components;
 pub mod generated;
