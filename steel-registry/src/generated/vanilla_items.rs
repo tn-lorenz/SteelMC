@@ -1,0 +1,5599 @@
+use crate::{
+    data_components::{DataComponentMap, vanilla_components},
+    generated::vanilla_blocks,
+    items::items::{Item, ItemRef, ItemRegistry},
+};
+use std::sync::LazyLock;
+use steel_utils::ResourceLocation;
+pub static AIR: LazyLock<Item> = LazyLock::new(|| Item {
+    key: ResourceLocation::vanilla_static("air"),
+    components: DataComponentMap::common_item_components(),
+});
+pub static STONE: LazyLock<Item> = LazyLock::new(|| Item::from_block(vanilla_blocks::STONE));
+pub static GRANITE: LazyLock<Item> = LazyLock::new(|| Item::from_block(vanilla_blocks::GRANITE));
+pub static POLISHED_GRANITE: LazyLock<Item> =
+    LazyLock::new(|| Item::from_block(vanilla_blocks::POLISHED_GRANITE));
+pub static DIORITE: LazyLock<Item> = LazyLock::new(|| Item::from_block(vanilla_blocks::DIORITE));
+pub static POLISHED_DIORITE: LazyLock<Item> =
+    LazyLock::new(|| Item::from_block(vanilla_blocks::POLISHED_DIORITE));
+pub static ANDESITE: LazyLock<Item> = LazyLock::new(|| Item::from_block(vanilla_blocks::ANDESITE));
+pub static POLISHED_ANDESITE: LazyLock<Item> =
+    LazyLock::new(|| Item::from_block(vanilla_blocks::POLISHED_ANDESITE));
+pub static DEEPSLATE: LazyLock<Item> =
+    LazyLock::new(|| Item::from_block(vanilla_blocks::DEEPSLATE));
+pub static COBBLED_DEEPSLATE: LazyLock<Item> =
+    LazyLock::new(|| Item::from_block(vanilla_blocks::COBBLED_DEEPSLATE));
+pub static POLISHED_DEEPSLATE: LazyLock<Item> =
+    LazyLock::new(|| Item::from_block(vanilla_blocks::POLISHED_DEEPSLATE));
+pub static CALCITE: LazyLock<Item> = LazyLock::new(|| Item::from_block(vanilla_blocks::CALCITE));
+pub static TUFF: LazyLock<Item> = LazyLock::new(|| Item::from_block(vanilla_blocks::TUFF));
+pub static TUFF_SLAB: LazyLock<Item> =
+    LazyLock::new(|| Item::from_block(vanilla_blocks::TUFF_SLAB));
+pub static TUFF_STAIRS: LazyLock<Item> =
+    LazyLock::new(|| Item::from_block(vanilla_blocks::TUFF_STAIRS));
+pub static TUFF_WALL: LazyLock<Item> =
+    LazyLock::new(|| Item::from_block(vanilla_blocks::TUFF_WALL));
+pub static CHISELED_TUFF: LazyLock<Item> =
+    LazyLock::new(|| Item::from_block(vanilla_blocks::CHISELED_TUFF));
+pub static POLISHED_TUFF: LazyLock<Item> =
+    LazyLock::new(|| Item::from_block(vanilla_blocks::POLISHED_TUFF));
+pub static POLISHED_TUFF_SLAB: LazyLock<Item> =
+    LazyLock::new(|| Item::from_block(vanilla_blocks::POLISHED_TUFF_SLAB));
+pub static POLISHED_TUFF_STAIRS: LazyLock<Item> =
+    LazyLock::new(|| Item::from_block(vanilla_blocks::POLISHED_TUFF_STAIRS));
+pub static POLISHED_TUFF_WALL: LazyLock<Item> =
+    LazyLock::new(|| Item::from_block(vanilla_blocks::POLISHED_TUFF_WALL));
+pub static TUFF_BRICKS: LazyLock<Item> =
+    LazyLock::new(|| Item::from_block(vanilla_blocks::TUFF_BRICKS));
+pub static TUFF_BRICK_SLAB: LazyLock<Item> =
+    LazyLock::new(|| Item::from_block(vanilla_blocks::TUFF_BRICK_SLAB));
+pub static TUFF_BRICK_STAIRS: LazyLock<Item> =
+    LazyLock::new(|| Item::from_block(vanilla_blocks::TUFF_BRICK_STAIRS));
+pub static TUFF_BRICK_WALL: LazyLock<Item> =
+    LazyLock::new(|| Item::from_block(vanilla_blocks::TUFF_BRICK_WALL));
+pub static CHISELED_TUFF_BRICKS: LazyLock<Item> =
+    LazyLock::new(|| Item::from_block(vanilla_blocks::CHISELED_TUFF_BRICKS));
+pub static DRIPSTONE_BLOCK: LazyLock<Item> =
+    LazyLock::new(|| Item::from_block(vanilla_blocks::DRIPSTONE_BLOCK));
+pub static GRASS_BLOCK: LazyLock<Item> =
+    LazyLock::new(|| Item::from_block(vanilla_blocks::GRASS_BLOCK));
+pub static DIRT: LazyLock<Item> = LazyLock::new(|| Item::from_block(vanilla_blocks::DIRT));
+pub static COARSE_DIRT: LazyLock<Item> =
+    LazyLock::new(|| Item::from_block(vanilla_blocks::COARSE_DIRT));
+pub static PODZOL: LazyLock<Item> = LazyLock::new(|| Item::from_block(vanilla_blocks::PODZOL));
+pub static ROOTED_DIRT: LazyLock<Item> =
+    LazyLock::new(|| Item::from_block(vanilla_blocks::ROOTED_DIRT));
+pub static MUD: LazyLock<Item> = LazyLock::new(|| Item::from_block(vanilla_blocks::MUD));
+pub static CRIMSON_NYLIUM: LazyLock<Item> =
+    LazyLock::new(|| Item::from_block(vanilla_blocks::CRIMSON_NYLIUM));
+pub static WARPED_NYLIUM: LazyLock<Item> =
+    LazyLock::new(|| Item::from_block(vanilla_blocks::WARPED_NYLIUM));
+pub static COBBLESTONE: LazyLock<Item> =
+    LazyLock::new(|| Item::from_block(vanilla_blocks::COBBLESTONE));
+pub static OAK_PLANKS: LazyLock<Item> =
+    LazyLock::new(|| Item::from_block(vanilla_blocks::OAK_PLANKS));
+pub static SPRUCE_PLANKS: LazyLock<Item> =
+    LazyLock::new(|| Item::from_block(vanilla_blocks::SPRUCE_PLANKS));
+pub static BIRCH_PLANKS: LazyLock<Item> =
+    LazyLock::new(|| Item::from_block(vanilla_blocks::BIRCH_PLANKS));
+pub static JUNGLE_PLANKS: LazyLock<Item> =
+    LazyLock::new(|| Item::from_block(vanilla_blocks::JUNGLE_PLANKS));
+pub static ACACIA_PLANKS: LazyLock<Item> =
+    LazyLock::new(|| Item::from_block(vanilla_blocks::ACACIA_PLANKS));
+pub static CHERRY_PLANKS: LazyLock<Item> =
+    LazyLock::new(|| Item::from_block(vanilla_blocks::CHERRY_PLANKS));
+pub static DARK_OAK_PLANKS: LazyLock<Item> =
+    LazyLock::new(|| Item::from_block(vanilla_blocks::DARK_OAK_PLANKS));
+pub static PALE_OAK_PLANKS: LazyLock<Item> =
+    LazyLock::new(|| Item::from_block(vanilla_blocks::PALE_OAK_PLANKS));
+pub static MANGROVE_PLANKS: LazyLock<Item> =
+    LazyLock::new(|| Item::from_block(vanilla_blocks::MANGROVE_PLANKS));
+pub static BAMBOO_PLANKS: LazyLock<Item> =
+    LazyLock::new(|| Item::from_block(vanilla_blocks::BAMBOO_PLANKS));
+pub static CRIMSON_PLANKS: LazyLock<Item> =
+    LazyLock::new(|| Item::from_block(vanilla_blocks::CRIMSON_PLANKS));
+pub static WARPED_PLANKS: LazyLock<Item> =
+    LazyLock::new(|| Item::from_block(vanilla_blocks::WARPED_PLANKS));
+pub static BAMBOO_MOSAIC: LazyLock<Item> =
+    LazyLock::new(|| Item::from_block(vanilla_blocks::BAMBOO_MOSAIC));
+pub static OAK_SAPLING: LazyLock<Item> =
+    LazyLock::new(|| Item::from_block(vanilla_blocks::OAK_SAPLING));
+pub static SPRUCE_SAPLING: LazyLock<Item> =
+    LazyLock::new(|| Item::from_block(vanilla_blocks::SPRUCE_SAPLING));
+pub static BIRCH_SAPLING: LazyLock<Item> =
+    LazyLock::new(|| Item::from_block(vanilla_blocks::BIRCH_SAPLING));
+pub static JUNGLE_SAPLING: LazyLock<Item> =
+    LazyLock::new(|| Item::from_block(vanilla_blocks::JUNGLE_SAPLING));
+pub static ACACIA_SAPLING: LazyLock<Item> =
+    LazyLock::new(|| Item::from_block(vanilla_blocks::ACACIA_SAPLING));
+pub static CHERRY_SAPLING: LazyLock<Item> =
+    LazyLock::new(|| Item::from_block(vanilla_blocks::CHERRY_SAPLING));
+pub static DARK_OAK_SAPLING: LazyLock<Item> =
+    LazyLock::new(|| Item::from_block(vanilla_blocks::DARK_OAK_SAPLING));
+pub static PALE_OAK_SAPLING: LazyLock<Item> =
+    LazyLock::new(|| Item::from_block(vanilla_blocks::PALE_OAK_SAPLING));
+pub static MANGROVE_PROPAGULE: LazyLock<Item> =
+    LazyLock::new(|| Item::from_block(vanilla_blocks::MANGROVE_PROPAGULE));
+pub static BEDROCK: LazyLock<Item> = LazyLock::new(|| Item::from_block(vanilla_blocks::BEDROCK));
+pub static SAND: LazyLock<Item> = LazyLock::new(|| Item::from_block(vanilla_blocks::SAND));
+pub static SUSPICIOUS_SAND: LazyLock<Item> =
+    LazyLock::new(|| Item::from_block(vanilla_blocks::SUSPICIOUS_SAND));
+pub static SUSPICIOUS_GRAVEL: LazyLock<Item> =
+    LazyLock::new(|| Item::from_block(vanilla_blocks::SUSPICIOUS_GRAVEL));
+pub static RED_SAND: LazyLock<Item> = LazyLock::new(|| Item::from_block(vanilla_blocks::RED_SAND));
+pub static GRAVEL: LazyLock<Item> = LazyLock::new(|| Item::from_block(vanilla_blocks::GRAVEL));
+pub static COAL_ORE: LazyLock<Item> = LazyLock::new(|| Item::from_block(vanilla_blocks::COAL_ORE));
+pub static DEEPSLATE_COAL_ORE: LazyLock<Item> =
+    LazyLock::new(|| Item::from_block(vanilla_blocks::DEEPSLATE_COAL_ORE));
+pub static IRON_ORE: LazyLock<Item> = LazyLock::new(|| Item::from_block(vanilla_blocks::IRON_ORE));
+pub static DEEPSLATE_IRON_ORE: LazyLock<Item> =
+    LazyLock::new(|| Item::from_block(vanilla_blocks::DEEPSLATE_IRON_ORE));
+pub static COPPER_ORE: LazyLock<Item> =
+    LazyLock::new(|| Item::from_block(vanilla_blocks::COPPER_ORE));
+pub static DEEPSLATE_COPPER_ORE: LazyLock<Item> =
+    LazyLock::new(|| Item::from_block(vanilla_blocks::DEEPSLATE_COPPER_ORE));
+pub static GOLD_ORE: LazyLock<Item> = LazyLock::new(|| Item::from_block(vanilla_blocks::GOLD_ORE));
+pub static DEEPSLATE_GOLD_ORE: LazyLock<Item> =
+    LazyLock::new(|| Item::from_block(vanilla_blocks::DEEPSLATE_GOLD_ORE));
+pub static REDSTONE_ORE: LazyLock<Item> =
+    LazyLock::new(|| Item::from_block(vanilla_blocks::REDSTONE_ORE));
+pub static DEEPSLATE_REDSTONE_ORE: LazyLock<Item> =
+    LazyLock::new(|| Item::from_block(vanilla_blocks::DEEPSLATE_REDSTONE_ORE));
+pub static EMERALD_ORE: LazyLock<Item> =
+    LazyLock::new(|| Item::from_block(vanilla_blocks::EMERALD_ORE));
+pub static DEEPSLATE_EMERALD_ORE: LazyLock<Item> =
+    LazyLock::new(|| Item::from_block(vanilla_blocks::DEEPSLATE_EMERALD_ORE));
+pub static LAPIS_ORE: LazyLock<Item> =
+    LazyLock::new(|| Item::from_block(vanilla_blocks::LAPIS_ORE));
+pub static DEEPSLATE_LAPIS_ORE: LazyLock<Item> =
+    LazyLock::new(|| Item::from_block(vanilla_blocks::DEEPSLATE_LAPIS_ORE));
+pub static DIAMOND_ORE: LazyLock<Item> =
+    LazyLock::new(|| Item::from_block(vanilla_blocks::DIAMOND_ORE));
+pub static DEEPSLATE_DIAMOND_ORE: LazyLock<Item> =
+    LazyLock::new(|| Item::from_block(vanilla_blocks::DEEPSLATE_DIAMOND_ORE));
+pub static NETHER_GOLD_ORE: LazyLock<Item> =
+    LazyLock::new(|| Item::from_block(vanilla_blocks::NETHER_GOLD_ORE));
+pub static NETHER_QUARTZ_ORE: LazyLock<Item> =
+    LazyLock::new(|| Item::from_block(vanilla_blocks::NETHER_QUARTZ_ORE));
+pub static ANCIENT_DEBRIS: LazyLock<Item> =
+    LazyLock::new(|| Item::from_block(vanilla_blocks::ANCIENT_DEBRIS));
+pub static COAL_BLOCK: LazyLock<Item> =
+    LazyLock::new(|| Item::from_block(vanilla_blocks::COAL_BLOCK));
+pub static RAW_IRON_BLOCK: LazyLock<Item> =
+    LazyLock::new(|| Item::from_block(vanilla_blocks::RAW_IRON_BLOCK));
+pub static RAW_COPPER_BLOCK: LazyLock<Item> =
+    LazyLock::new(|| Item::from_block(vanilla_blocks::RAW_COPPER_BLOCK));
+pub static RAW_GOLD_BLOCK: LazyLock<Item> =
+    LazyLock::new(|| Item::from_block(vanilla_blocks::RAW_GOLD_BLOCK));
+pub static HEAVY_CORE: LazyLock<Item> =
+    LazyLock::new(|| Item::from_block(vanilla_blocks::HEAVY_CORE));
+pub static AMETHYST_BLOCK: LazyLock<Item> =
+    LazyLock::new(|| Item::from_block(vanilla_blocks::AMETHYST_BLOCK));
+pub static BUDDING_AMETHYST: LazyLock<Item> =
+    LazyLock::new(|| Item::from_block(vanilla_blocks::BUDDING_AMETHYST));
+pub static IRON_BLOCK: LazyLock<Item> =
+    LazyLock::new(|| Item::from_block(vanilla_blocks::IRON_BLOCK));
+pub static COPPER_BLOCK: LazyLock<Item> =
+    LazyLock::new(|| Item::from_block(vanilla_blocks::COPPER_BLOCK));
+pub static GOLD_BLOCK: LazyLock<Item> =
+    LazyLock::new(|| Item::from_block(vanilla_blocks::GOLD_BLOCK));
+pub static DIAMOND_BLOCK: LazyLock<Item> =
+    LazyLock::new(|| Item::from_block(vanilla_blocks::DIAMOND_BLOCK));
+pub static NETHERITE_BLOCK: LazyLock<Item> =
+    LazyLock::new(|| Item::from_block(vanilla_blocks::NETHERITE_BLOCK));
+pub static EXPOSED_COPPER: LazyLock<Item> =
+    LazyLock::new(|| Item::from_block(vanilla_blocks::EXPOSED_COPPER));
+pub static WEATHERED_COPPER: LazyLock<Item> =
+    LazyLock::new(|| Item::from_block(vanilla_blocks::WEATHERED_COPPER));
+pub static OXIDIZED_COPPER: LazyLock<Item> =
+    LazyLock::new(|| Item::from_block(vanilla_blocks::OXIDIZED_COPPER));
+pub static CHISELED_COPPER: LazyLock<Item> =
+    LazyLock::new(|| Item::from_block(vanilla_blocks::CHISELED_COPPER));
+pub static EXPOSED_CHISELED_COPPER: LazyLock<Item> =
+    LazyLock::new(|| Item::from_block(vanilla_blocks::EXPOSED_CHISELED_COPPER));
+pub static WEATHERED_CHISELED_COPPER: LazyLock<Item> =
+    LazyLock::new(|| Item::from_block(vanilla_blocks::WEATHERED_CHISELED_COPPER));
+pub static OXIDIZED_CHISELED_COPPER: LazyLock<Item> =
+    LazyLock::new(|| Item::from_block(vanilla_blocks::OXIDIZED_CHISELED_COPPER));
+pub static CUT_COPPER: LazyLock<Item> =
+    LazyLock::new(|| Item::from_block(vanilla_blocks::CUT_COPPER));
+pub static EXPOSED_CUT_COPPER: LazyLock<Item> =
+    LazyLock::new(|| Item::from_block(vanilla_blocks::EXPOSED_CUT_COPPER));
+pub static WEATHERED_CUT_COPPER: LazyLock<Item> =
+    LazyLock::new(|| Item::from_block(vanilla_blocks::WEATHERED_CUT_COPPER));
+pub static OXIDIZED_CUT_COPPER: LazyLock<Item> =
+    LazyLock::new(|| Item::from_block(vanilla_blocks::OXIDIZED_CUT_COPPER));
+pub static CUT_COPPER_STAIRS: LazyLock<Item> =
+    LazyLock::new(|| Item::from_block(vanilla_blocks::CUT_COPPER_STAIRS));
+pub static EXPOSED_CUT_COPPER_STAIRS: LazyLock<Item> =
+    LazyLock::new(|| Item::from_block(vanilla_blocks::EXPOSED_CUT_COPPER_STAIRS));
+pub static WEATHERED_CUT_COPPER_STAIRS: LazyLock<Item> =
+    LazyLock::new(|| Item::from_block(vanilla_blocks::WEATHERED_CUT_COPPER_STAIRS));
+pub static OXIDIZED_CUT_COPPER_STAIRS: LazyLock<Item> =
+    LazyLock::new(|| Item::from_block(vanilla_blocks::OXIDIZED_CUT_COPPER_STAIRS));
+pub static CUT_COPPER_SLAB: LazyLock<Item> =
+    LazyLock::new(|| Item::from_block(vanilla_blocks::CUT_COPPER_SLAB));
+pub static EXPOSED_CUT_COPPER_SLAB: LazyLock<Item> =
+    LazyLock::new(|| Item::from_block(vanilla_blocks::EXPOSED_CUT_COPPER_SLAB));
+pub static WEATHERED_CUT_COPPER_SLAB: LazyLock<Item> =
+    LazyLock::new(|| Item::from_block(vanilla_blocks::WEATHERED_CUT_COPPER_SLAB));
+pub static OXIDIZED_CUT_COPPER_SLAB: LazyLock<Item> =
+    LazyLock::new(|| Item::from_block(vanilla_blocks::OXIDIZED_CUT_COPPER_SLAB));
+pub static WAXED_COPPER_BLOCK: LazyLock<Item> =
+    LazyLock::new(|| Item::from_block(vanilla_blocks::WAXED_COPPER_BLOCK));
+pub static WAXED_EXPOSED_COPPER: LazyLock<Item> =
+    LazyLock::new(|| Item::from_block(vanilla_blocks::WAXED_EXPOSED_COPPER));
+pub static WAXED_WEATHERED_COPPER: LazyLock<Item> =
+    LazyLock::new(|| Item::from_block(vanilla_blocks::WAXED_WEATHERED_COPPER));
+pub static WAXED_OXIDIZED_COPPER: LazyLock<Item> =
+    LazyLock::new(|| Item::from_block(vanilla_blocks::WAXED_OXIDIZED_COPPER));
+pub static WAXED_CHISELED_COPPER: LazyLock<Item> =
+    LazyLock::new(|| Item::from_block(vanilla_blocks::WAXED_CHISELED_COPPER));
+pub static WAXED_EXPOSED_CHISELED_COPPER: LazyLock<Item> =
+    LazyLock::new(|| Item::from_block(vanilla_blocks::WAXED_EXPOSED_CHISELED_COPPER));
+pub static WAXED_WEATHERED_CHISELED_COPPER: LazyLock<Item> =
+    LazyLock::new(|| Item::from_block(vanilla_blocks::WAXED_WEATHERED_CHISELED_COPPER));
+pub static WAXED_OXIDIZED_CHISELED_COPPER: LazyLock<Item> =
+    LazyLock::new(|| Item::from_block(vanilla_blocks::WAXED_OXIDIZED_CHISELED_COPPER));
+pub static WAXED_CUT_COPPER: LazyLock<Item> =
+    LazyLock::new(|| Item::from_block(vanilla_blocks::WAXED_CUT_COPPER));
+pub static WAXED_EXPOSED_CUT_COPPER: LazyLock<Item> =
+    LazyLock::new(|| Item::from_block(vanilla_blocks::WAXED_EXPOSED_CUT_COPPER));
+pub static WAXED_WEATHERED_CUT_COPPER: LazyLock<Item> =
+    LazyLock::new(|| Item::from_block(vanilla_blocks::WAXED_WEATHERED_CUT_COPPER));
+pub static WAXED_OXIDIZED_CUT_COPPER: LazyLock<Item> =
+    LazyLock::new(|| Item::from_block(vanilla_blocks::WAXED_OXIDIZED_CUT_COPPER));
+pub static WAXED_CUT_COPPER_STAIRS: LazyLock<Item> =
+    LazyLock::new(|| Item::from_block(vanilla_blocks::WAXED_CUT_COPPER_STAIRS));
+pub static WAXED_EXPOSED_CUT_COPPER_STAIRS: LazyLock<Item> =
+    LazyLock::new(|| Item::from_block(vanilla_blocks::WAXED_EXPOSED_CUT_COPPER_STAIRS));
+pub static WAXED_WEATHERED_CUT_COPPER_STAIRS: LazyLock<Item> =
+    LazyLock::new(|| Item::from_block(vanilla_blocks::WAXED_WEATHERED_CUT_COPPER_STAIRS));
+pub static WAXED_OXIDIZED_CUT_COPPER_STAIRS: LazyLock<Item> =
+    LazyLock::new(|| Item::from_block(vanilla_blocks::WAXED_OXIDIZED_CUT_COPPER_STAIRS));
+pub static WAXED_CUT_COPPER_SLAB: LazyLock<Item> =
+    LazyLock::new(|| Item::from_block(vanilla_blocks::WAXED_CUT_COPPER_SLAB));
+pub static WAXED_EXPOSED_CUT_COPPER_SLAB: LazyLock<Item> =
+    LazyLock::new(|| Item::from_block(vanilla_blocks::WAXED_EXPOSED_CUT_COPPER_SLAB));
+pub static WAXED_WEATHERED_CUT_COPPER_SLAB: LazyLock<Item> =
+    LazyLock::new(|| Item::from_block(vanilla_blocks::WAXED_WEATHERED_CUT_COPPER_SLAB));
+pub static WAXED_OXIDIZED_CUT_COPPER_SLAB: LazyLock<Item> =
+    LazyLock::new(|| Item::from_block(vanilla_blocks::WAXED_OXIDIZED_CUT_COPPER_SLAB));
+pub static OAK_LOG: LazyLock<Item> = LazyLock::new(|| Item::from_block(vanilla_blocks::OAK_LOG));
+pub static SPRUCE_LOG: LazyLock<Item> =
+    LazyLock::new(|| Item::from_block(vanilla_blocks::SPRUCE_LOG));
+pub static BIRCH_LOG: LazyLock<Item> =
+    LazyLock::new(|| Item::from_block(vanilla_blocks::BIRCH_LOG));
+pub static JUNGLE_LOG: LazyLock<Item> =
+    LazyLock::new(|| Item::from_block(vanilla_blocks::JUNGLE_LOG));
+pub static ACACIA_LOG: LazyLock<Item> =
+    LazyLock::new(|| Item::from_block(vanilla_blocks::ACACIA_LOG));
+pub static CHERRY_LOG: LazyLock<Item> =
+    LazyLock::new(|| Item::from_block(vanilla_blocks::CHERRY_LOG));
+pub static PALE_OAK_LOG: LazyLock<Item> =
+    LazyLock::new(|| Item::from_block(vanilla_blocks::PALE_OAK_LOG));
+pub static DARK_OAK_LOG: LazyLock<Item> =
+    LazyLock::new(|| Item::from_block(vanilla_blocks::DARK_OAK_LOG));
+pub static MANGROVE_LOG: LazyLock<Item> =
+    LazyLock::new(|| Item::from_block(vanilla_blocks::MANGROVE_LOG));
+pub static MANGROVE_ROOTS: LazyLock<Item> =
+    LazyLock::new(|| Item::from_block(vanilla_blocks::MANGROVE_ROOTS));
+pub static MUDDY_MANGROVE_ROOTS: LazyLock<Item> =
+    LazyLock::new(|| Item::from_block(vanilla_blocks::MUDDY_MANGROVE_ROOTS));
+pub static CRIMSON_STEM: LazyLock<Item> =
+    LazyLock::new(|| Item::from_block(vanilla_blocks::CRIMSON_STEM));
+pub static WARPED_STEM: LazyLock<Item> =
+    LazyLock::new(|| Item::from_block(vanilla_blocks::WARPED_STEM));
+pub static BAMBOO_BLOCK: LazyLock<Item> =
+    LazyLock::new(|| Item::from_block(vanilla_blocks::BAMBOO_BLOCK));
+pub static STRIPPED_OAK_LOG: LazyLock<Item> =
+    LazyLock::new(|| Item::from_block(vanilla_blocks::STRIPPED_OAK_LOG));
+pub static STRIPPED_SPRUCE_LOG: LazyLock<Item> =
+    LazyLock::new(|| Item::from_block(vanilla_blocks::STRIPPED_SPRUCE_LOG));
+pub static STRIPPED_BIRCH_LOG: LazyLock<Item> =
+    LazyLock::new(|| Item::from_block(vanilla_blocks::STRIPPED_BIRCH_LOG));
+pub static STRIPPED_JUNGLE_LOG: LazyLock<Item> =
+    LazyLock::new(|| Item::from_block(vanilla_blocks::STRIPPED_JUNGLE_LOG));
+pub static STRIPPED_ACACIA_LOG: LazyLock<Item> =
+    LazyLock::new(|| Item::from_block(vanilla_blocks::STRIPPED_ACACIA_LOG));
+pub static STRIPPED_CHERRY_LOG: LazyLock<Item> =
+    LazyLock::new(|| Item::from_block(vanilla_blocks::STRIPPED_CHERRY_LOG));
+pub static STRIPPED_DARK_OAK_LOG: LazyLock<Item> =
+    LazyLock::new(|| Item::from_block(vanilla_blocks::STRIPPED_DARK_OAK_LOG));
+pub static STRIPPED_PALE_OAK_LOG: LazyLock<Item> =
+    LazyLock::new(|| Item::from_block(vanilla_blocks::STRIPPED_PALE_OAK_LOG));
+pub static STRIPPED_MANGROVE_LOG: LazyLock<Item> =
+    LazyLock::new(|| Item::from_block(vanilla_blocks::STRIPPED_MANGROVE_LOG));
+pub static STRIPPED_CRIMSON_STEM: LazyLock<Item> =
+    LazyLock::new(|| Item::from_block(vanilla_blocks::STRIPPED_CRIMSON_STEM));
+pub static STRIPPED_WARPED_STEM: LazyLock<Item> =
+    LazyLock::new(|| Item::from_block(vanilla_blocks::STRIPPED_WARPED_STEM));
+pub static STRIPPED_OAK_WOOD: LazyLock<Item> =
+    LazyLock::new(|| Item::from_block(vanilla_blocks::STRIPPED_OAK_WOOD));
+pub static STRIPPED_SPRUCE_WOOD: LazyLock<Item> =
+    LazyLock::new(|| Item::from_block(vanilla_blocks::STRIPPED_SPRUCE_WOOD));
+pub static STRIPPED_BIRCH_WOOD: LazyLock<Item> =
+    LazyLock::new(|| Item::from_block(vanilla_blocks::STRIPPED_BIRCH_WOOD));
+pub static STRIPPED_JUNGLE_WOOD: LazyLock<Item> =
+    LazyLock::new(|| Item::from_block(vanilla_blocks::STRIPPED_JUNGLE_WOOD));
+pub static STRIPPED_ACACIA_WOOD: LazyLock<Item> =
+    LazyLock::new(|| Item::from_block(vanilla_blocks::STRIPPED_ACACIA_WOOD));
+pub static STRIPPED_CHERRY_WOOD: LazyLock<Item> =
+    LazyLock::new(|| Item::from_block(vanilla_blocks::STRIPPED_CHERRY_WOOD));
+pub static STRIPPED_DARK_OAK_WOOD: LazyLock<Item> =
+    LazyLock::new(|| Item::from_block(vanilla_blocks::STRIPPED_DARK_OAK_WOOD));
+pub static STRIPPED_PALE_OAK_WOOD: LazyLock<Item> =
+    LazyLock::new(|| Item::from_block(vanilla_blocks::STRIPPED_PALE_OAK_WOOD));
+pub static STRIPPED_MANGROVE_WOOD: LazyLock<Item> =
+    LazyLock::new(|| Item::from_block(vanilla_blocks::STRIPPED_MANGROVE_WOOD));
+pub static STRIPPED_CRIMSON_HYPHAE: LazyLock<Item> =
+    LazyLock::new(|| Item::from_block(vanilla_blocks::STRIPPED_CRIMSON_HYPHAE));
+pub static STRIPPED_WARPED_HYPHAE: LazyLock<Item> =
+    LazyLock::new(|| Item::from_block(vanilla_blocks::STRIPPED_WARPED_HYPHAE));
+pub static STRIPPED_BAMBOO_BLOCK: LazyLock<Item> =
+    LazyLock::new(|| Item::from_block(vanilla_blocks::STRIPPED_BAMBOO_BLOCK));
+pub static OAK_WOOD: LazyLock<Item> = LazyLock::new(|| Item::from_block(vanilla_blocks::OAK_WOOD));
+pub static SPRUCE_WOOD: LazyLock<Item> =
+    LazyLock::new(|| Item::from_block(vanilla_blocks::SPRUCE_WOOD));
+pub static BIRCH_WOOD: LazyLock<Item> =
+    LazyLock::new(|| Item::from_block(vanilla_blocks::BIRCH_WOOD));
+pub static JUNGLE_WOOD: LazyLock<Item> =
+    LazyLock::new(|| Item::from_block(vanilla_blocks::JUNGLE_WOOD));
+pub static ACACIA_WOOD: LazyLock<Item> =
+    LazyLock::new(|| Item::from_block(vanilla_blocks::ACACIA_WOOD));
+pub static CHERRY_WOOD: LazyLock<Item> =
+    LazyLock::new(|| Item::from_block(vanilla_blocks::CHERRY_WOOD));
+pub static PALE_OAK_WOOD: LazyLock<Item> =
+    LazyLock::new(|| Item::from_block(vanilla_blocks::PALE_OAK_WOOD));
+pub static DARK_OAK_WOOD: LazyLock<Item> =
+    LazyLock::new(|| Item::from_block(vanilla_blocks::DARK_OAK_WOOD));
+pub static MANGROVE_WOOD: LazyLock<Item> =
+    LazyLock::new(|| Item::from_block(vanilla_blocks::MANGROVE_WOOD));
+pub static CRIMSON_HYPHAE: LazyLock<Item> =
+    LazyLock::new(|| Item::from_block(vanilla_blocks::CRIMSON_HYPHAE));
+pub static WARPED_HYPHAE: LazyLock<Item> =
+    LazyLock::new(|| Item::from_block(vanilla_blocks::WARPED_HYPHAE));
+pub static OAK_LEAVES: LazyLock<Item> =
+    LazyLock::new(|| Item::from_block(vanilla_blocks::OAK_LEAVES));
+pub static SPRUCE_LEAVES: LazyLock<Item> =
+    LazyLock::new(|| Item::from_block(vanilla_blocks::SPRUCE_LEAVES));
+pub static BIRCH_LEAVES: LazyLock<Item> =
+    LazyLock::new(|| Item::from_block(vanilla_blocks::BIRCH_LEAVES));
+pub static JUNGLE_LEAVES: LazyLock<Item> =
+    LazyLock::new(|| Item::from_block(vanilla_blocks::JUNGLE_LEAVES));
+pub static ACACIA_LEAVES: LazyLock<Item> =
+    LazyLock::new(|| Item::from_block(vanilla_blocks::ACACIA_LEAVES));
+pub static CHERRY_LEAVES: LazyLock<Item> =
+    LazyLock::new(|| Item::from_block(vanilla_blocks::CHERRY_LEAVES));
+pub static DARK_OAK_LEAVES: LazyLock<Item> =
+    LazyLock::new(|| Item::from_block(vanilla_blocks::DARK_OAK_LEAVES));
+pub static PALE_OAK_LEAVES: LazyLock<Item> =
+    LazyLock::new(|| Item::from_block(vanilla_blocks::PALE_OAK_LEAVES));
+pub static MANGROVE_LEAVES: LazyLock<Item> =
+    LazyLock::new(|| Item::from_block(vanilla_blocks::MANGROVE_LEAVES));
+pub static AZALEA_LEAVES: LazyLock<Item> =
+    LazyLock::new(|| Item::from_block(vanilla_blocks::AZALEA_LEAVES));
+pub static FLOWERING_AZALEA_LEAVES: LazyLock<Item> =
+    LazyLock::new(|| Item::from_block(vanilla_blocks::FLOWERING_AZALEA_LEAVES));
+pub static SPONGE: LazyLock<Item> = LazyLock::new(|| Item::from_block(vanilla_blocks::SPONGE));
+pub static WET_SPONGE: LazyLock<Item> =
+    LazyLock::new(|| Item::from_block(vanilla_blocks::WET_SPONGE));
+pub static GLASS: LazyLock<Item> = LazyLock::new(|| Item::from_block(vanilla_blocks::GLASS));
+pub static TINTED_GLASS: LazyLock<Item> =
+    LazyLock::new(|| Item::from_block(vanilla_blocks::TINTED_GLASS));
+pub static LAPIS_BLOCK: LazyLock<Item> =
+    LazyLock::new(|| Item::from_block(vanilla_blocks::LAPIS_BLOCK));
+pub static SANDSTONE: LazyLock<Item> =
+    LazyLock::new(|| Item::from_block(vanilla_blocks::SANDSTONE));
+pub static CHISELED_SANDSTONE: LazyLock<Item> =
+    LazyLock::new(|| Item::from_block(vanilla_blocks::CHISELED_SANDSTONE));
+pub static CUT_SANDSTONE: LazyLock<Item> =
+    LazyLock::new(|| Item::from_block(vanilla_blocks::CUT_SANDSTONE));
+pub static COBWEB: LazyLock<Item> = LazyLock::new(|| Item::from_block(vanilla_blocks::COBWEB));
+pub static SHORT_GRASS: LazyLock<Item> =
+    LazyLock::new(|| Item::from_block(vanilla_blocks::SHORT_GRASS));
+pub static FERN: LazyLock<Item> = LazyLock::new(|| Item::from_block(vanilla_blocks::FERN));
+pub static BUSH: LazyLock<Item> = LazyLock::new(|| Item::from_block(vanilla_blocks::BUSH));
+pub static AZALEA: LazyLock<Item> = LazyLock::new(|| Item::from_block(vanilla_blocks::AZALEA));
+pub static FLOWERING_AZALEA: LazyLock<Item> =
+    LazyLock::new(|| Item::from_block(vanilla_blocks::FLOWERING_AZALEA));
+pub static DEAD_BUSH: LazyLock<Item> =
+    LazyLock::new(|| Item::from_block(vanilla_blocks::DEAD_BUSH));
+pub static FIREFLY_BUSH: LazyLock<Item> =
+    LazyLock::new(|| Item::from_block(vanilla_blocks::FIREFLY_BUSH));
+pub static SHORT_DRY_GRASS: LazyLock<Item> =
+    LazyLock::new(|| Item::from_block(vanilla_blocks::SHORT_DRY_GRASS));
+pub static TALL_DRY_GRASS: LazyLock<Item> =
+    LazyLock::new(|| Item::from_block(vanilla_blocks::TALL_DRY_GRASS));
+pub static SEAGRASS: LazyLock<Item> = LazyLock::new(|| Item::from_block(vanilla_blocks::SEAGRASS));
+pub static SEA_PICKLE: LazyLock<Item> =
+    LazyLock::new(|| Item::from_block(vanilla_blocks::SEA_PICKLE));
+pub static WHITE_WOOL: LazyLock<Item> =
+    LazyLock::new(|| Item::from_block(vanilla_blocks::WHITE_WOOL));
+pub static ORANGE_WOOL: LazyLock<Item> =
+    LazyLock::new(|| Item::from_block(vanilla_blocks::ORANGE_WOOL));
+pub static MAGENTA_WOOL: LazyLock<Item> =
+    LazyLock::new(|| Item::from_block(vanilla_blocks::MAGENTA_WOOL));
+pub static LIGHT_BLUE_WOOL: LazyLock<Item> =
+    LazyLock::new(|| Item::from_block(vanilla_blocks::LIGHT_BLUE_WOOL));
+pub static YELLOW_WOOL: LazyLock<Item> =
+    LazyLock::new(|| Item::from_block(vanilla_blocks::YELLOW_WOOL));
+pub static LIME_WOOL: LazyLock<Item> =
+    LazyLock::new(|| Item::from_block(vanilla_blocks::LIME_WOOL));
+pub static PINK_WOOL: LazyLock<Item> =
+    LazyLock::new(|| Item::from_block(vanilla_blocks::PINK_WOOL));
+pub static GRAY_WOOL: LazyLock<Item> =
+    LazyLock::new(|| Item::from_block(vanilla_blocks::GRAY_WOOL));
+pub static LIGHT_GRAY_WOOL: LazyLock<Item> =
+    LazyLock::new(|| Item::from_block(vanilla_blocks::LIGHT_GRAY_WOOL));
+pub static CYAN_WOOL: LazyLock<Item> =
+    LazyLock::new(|| Item::from_block(vanilla_blocks::CYAN_WOOL));
+pub static PURPLE_WOOL: LazyLock<Item> =
+    LazyLock::new(|| Item::from_block(vanilla_blocks::PURPLE_WOOL));
+pub static BLUE_WOOL: LazyLock<Item> =
+    LazyLock::new(|| Item::from_block(vanilla_blocks::BLUE_WOOL));
+pub static BROWN_WOOL: LazyLock<Item> =
+    LazyLock::new(|| Item::from_block(vanilla_blocks::BROWN_WOOL));
+pub static GREEN_WOOL: LazyLock<Item> =
+    LazyLock::new(|| Item::from_block(vanilla_blocks::GREEN_WOOL));
+pub static RED_WOOL: LazyLock<Item> = LazyLock::new(|| Item::from_block(vanilla_blocks::RED_WOOL));
+pub static BLACK_WOOL: LazyLock<Item> =
+    LazyLock::new(|| Item::from_block(vanilla_blocks::BLACK_WOOL));
+pub static DANDELION: LazyLock<Item> =
+    LazyLock::new(|| Item::from_block(vanilla_blocks::DANDELION));
+pub static OPEN_EYEBLOSSOM: LazyLock<Item> =
+    LazyLock::new(|| Item::from_block(vanilla_blocks::OPEN_EYEBLOSSOM));
+pub static CLOSED_EYEBLOSSOM: LazyLock<Item> =
+    LazyLock::new(|| Item::from_block(vanilla_blocks::CLOSED_EYEBLOSSOM));
+pub static POPPY: LazyLock<Item> = LazyLock::new(|| Item::from_block(vanilla_blocks::POPPY));
+pub static BLUE_ORCHID: LazyLock<Item> =
+    LazyLock::new(|| Item::from_block(vanilla_blocks::BLUE_ORCHID));
+pub static ALLIUM: LazyLock<Item> = LazyLock::new(|| Item::from_block(vanilla_blocks::ALLIUM));
+pub static AZURE_BLUET: LazyLock<Item> =
+    LazyLock::new(|| Item::from_block(vanilla_blocks::AZURE_BLUET));
+pub static RED_TULIP: LazyLock<Item> =
+    LazyLock::new(|| Item::from_block(vanilla_blocks::RED_TULIP));
+pub static ORANGE_TULIP: LazyLock<Item> =
+    LazyLock::new(|| Item::from_block(vanilla_blocks::ORANGE_TULIP));
+pub static WHITE_TULIP: LazyLock<Item> =
+    LazyLock::new(|| Item::from_block(vanilla_blocks::WHITE_TULIP));
+pub static PINK_TULIP: LazyLock<Item> =
+    LazyLock::new(|| Item::from_block(vanilla_blocks::PINK_TULIP));
+pub static OXEYE_DAISY: LazyLock<Item> =
+    LazyLock::new(|| Item::from_block(vanilla_blocks::OXEYE_DAISY));
+pub static CORNFLOWER: LazyLock<Item> =
+    LazyLock::new(|| Item::from_block(vanilla_blocks::CORNFLOWER));
+pub static LILY_OF_THE_VALLEY: LazyLock<Item> =
+    LazyLock::new(|| Item::from_block(vanilla_blocks::LILY_OF_THE_VALLEY));
+pub static WITHER_ROSE: LazyLock<Item> =
+    LazyLock::new(|| Item::from_block(vanilla_blocks::WITHER_ROSE));
+pub static TORCHFLOWER: LazyLock<Item> =
+    LazyLock::new(|| Item::from_block(vanilla_blocks::TORCHFLOWER));
+pub static PITCHER_PLANT: LazyLock<Item> =
+    LazyLock::new(|| Item::from_block(vanilla_blocks::PITCHER_PLANT));
+pub static SPORE_BLOSSOM: LazyLock<Item> =
+    LazyLock::new(|| Item::from_block(vanilla_blocks::SPORE_BLOSSOM));
+pub static BROWN_MUSHROOM: LazyLock<Item> =
+    LazyLock::new(|| Item::from_block(vanilla_blocks::BROWN_MUSHROOM));
+pub static RED_MUSHROOM: LazyLock<Item> =
+    LazyLock::new(|| Item::from_block(vanilla_blocks::RED_MUSHROOM));
+pub static CRIMSON_FUNGUS: LazyLock<Item> =
+    LazyLock::new(|| Item::from_block(vanilla_blocks::CRIMSON_FUNGUS));
+pub static WARPED_FUNGUS: LazyLock<Item> =
+    LazyLock::new(|| Item::from_block(vanilla_blocks::WARPED_FUNGUS));
+pub static CRIMSON_ROOTS: LazyLock<Item> =
+    LazyLock::new(|| Item::from_block(vanilla_blocks::CRIMSON_ROOTS));
+pub static WARPED_ROOTS: LazyLock<Item> =
+    LazyLock::new(|| Item::from_block(vanilla_blocks::WARPED_ROOTS));
+pub static NETHER_SPROUTS: LazyLock<Item> =
+    LazyLock::new(|| Item::from_block(vanilla_blocks::NETHER_SPROUTS));
+pub static WEEPING_VINES: LazyLock<Item> =
+    LazyLock::new(|| Item::from_block(vanilla_blocks::WEEPING_VINES));
+pub static TWISTING_VINES: LazyLock<Item> =
+    LazyLock::new(|| Item::from_block(vanilla_blocks::TWISTING_VINES));
+pub static SUGAR_CANE: LazyLock<Item> =
+    LazyLock::new(|| Item::from_block(vanilla_blocks::SUGAR_CANE));
+pub static KELP: LazyLock<Item> = LazyLock::new(|| Item::from_block(vanilla_blocks::KELP));
+pub static PINK_PETALS: LazyLock<Item> =
+    LazyLock::new(|| Item::from_block(vanilla_blocks::PINK_PETALS));
+pub static WILDFLOWERS: LazyLock<Item> =
+    LazyLock::new(|| Item::from_block(vanilla_blocks::WILDFLOWERS));
+pub static LEAF_LITTER: LazyLock<Item> =
+    LazyLock::new(|| Item::from_block(vanilla_blocks::LEAF_LITTER));
+pub static MOSS_CARPET: LazyLock<Item> =
+    LazyLock::new(|| Item::from_block(vanilla_blocks::MOSS_CARPET));
+pub static MOSS_BLOCK: LazyLock<Item> =
+    LazyLock::new(|| Item::from_block(vanilla_blocks::MOSS_BLOCK));
+pub static PALE_MOSS_CARPET: LazyLock<Item> =
+    LazyLock::new(|| Item::from_block(vanilla_blocks::PALE_MOSS_CARPET));
+pub static PALE_HANGING_MOSS: LazyLock<Item> =
+    LazyLock::new(|| Item::from_block(vanilla_blocks::PALE_HANGING_MOSS));
+pub static PALE_MOSS_BLOCK: LazyLock<Item> =
+    LazyLock::new(|| Item::from_block(vanilla_blocks::PALE_MOSS_BLOCK));
+pub static HANGING_ROOTS: LazyLock<Item> =
+    LazyLock::new(|| Item::from_block(vanilla_blocks::HANGING_ROOTS));
+pub static BIG_DRIPLEAF: LazyLock<Item> =
+    LazyLock::new(|| Item::from_block(vanilla_blocks::BIG_DRIPLEAF));
+pub static SMALL_DRIPLEAF: LazyLock<Item> =
+    LazyLock::new(|| Item::from_block(vanilla_blocks::SMALL_DRIPLEAF));
+pub static BAMBOO: LazyLock<Item> = LazyLock::new(|| Item::from_block(vanilla_blocks::BAMBOO));
+pub static OAK_SLAB: LazyLock<Item> = LazyLock::new(|| Item::from_block(vanilla_blocks::OAK_SLAB));
+pub static SPRUCE_SLAB: LazyLock<Item> =
+    LazyLock::new(|| Item::from_block(vanilla_blocks::SPRUCE_SLAB));
+pub static BIRCH_SLAB: LazyLock<Item> =
+    LazyLock::new(|| Item::from_block(vanilla_blocks::BIRCH_SLAB));
+pub static JUNGLE_SLAB: LazyLock<Item> =
+    LazyLock::new(|| Item::from_block(vanilla_blocks::JUNGLE_SLAB));
+pub static ACACIA_SLAB: LazyLock<Item> =
+    LazyLock::new(|| Item::from_block(vanilla_blocks::ACACIA_SLAB));
+pub static CHERRY_SLAB: LazyLock<Item> =
+    LazyLock::new(|| Item::from_block(vanilla_blocks::CHERRY_SLAB));
+pub static DARK_OAK_SLAB: LazyLock<Item> =
+    LazyLock::new(|| Item::from_block(vanilla_blocks::DARK_OAK_SLAB));
+pub static PALE_OAK_SLAB: LazyLock<Item> =
+    LazyLock::new(|| Item::from_block(vanilla_blocks::PALE_OAK_SLAB));
+pub static MANGROVE_SLAB: LazyLock<Item> =
+    LazyLock::new(|| Item::from_block(vanilla_blocks::MANGROVE_SLAB));
+pub static BAMBOO_SLAB: LazyLock<Item> =
+    LazyLock::new(|| Item::from_block(vanilla_blocks::BAMBOO_SLAB));
+pub static BAMBOO_MOSAIC_SLAB: LazyLock<Item> =
+    LazyLock::new(|| Item::from_block(vanilla_blocks::BAMBOO_MOSAIC_SLAB));
+pub static CRIMSON_SLAB: LazyLock<Item> =
+    LazyLock::new(|| Item::from_block(vanilla_blocks::CRIMSON_SLAB));
+pub static WARPED_SLAB: LazyLock<Item> =
+    LazyLock::new(|| Item::from_block(vanilla_blocks::WARPED_SLAB));
+pub static STONE_SLAB: LazyLock<Item> =
+    LazyLock::new(|| Item::from_block(vanilla_blocks::STONE_SLAB));
+pub static SMOOTH_STONE_SLAB: LazyLock<Item> =
+    LazyLock::new(|| Item::from_block(vanilla_blocks::SMOOTH_STONE_SLAB));
+pub static SANDSTONE_SLAB: LazyLock<Item> =
+    LazyLock::new(|| Item::from_block(vanilla_blocks::SANDSTONE_SLAB));
+pub static CUT_SANDSTONE_SLAB: LazyLock<Item> =
+    LazyLock::new(|| Item::from_block(vanilla_blocks::CUT_SANDSTONE_SLAB));
+pub static PETRIFIED_OAK_SLAB: LazyLock<Item> =
+    LazyLock::new(|| Item::from_block(vanilla_blocks::PETRIFIED_OAK_SLAB));
+pub static COBBLESTONE_SLAB: LazyLock<Item> =
+    LazyLock::new(|| Item::from_block(vanilla_blocks::COBBLESTONE_SLAB));
+pub static BRICK_SLAB: LazyLock<Item> =
+    LazyLock::new(|| Item::from_block(vanilla_blocks::BRICK_SLAB));
+pub static STONE_BRICK_SLAB: LazyLock<Item> =
+    LazyLock::new(|| Item::from_block(vanilla_blocks::STONE_BRICK_SLAB));
+pub static MUD_BRICK_SLAB: LazyLock<Item> =
+    LazyLock::new(|| Item::from_block(vanilla_blocks::MUD_BRICK_SLAB));
+pub static NETHER_BRICK_SLAB: LazyLock<Item> =
+    LazyLock::new(|| Item::from_block(vanilla_blocks::NETHER_BRICK_SLAB));
+pub static QUARTZ_SLAB: LazyLock<Item> =
+    LazyLock::new(|| Item::from_block(vanilla_blocks::QUARTZ_SLAB));
+pub static RED_SANDSTONE_SLAB: LazyLock<Item> =
+    LazyLock::new(|| Item::from_block(vanilla_blocks::RED_SANDSTONE_SLAB));
+pub static CUT_RED_SANDSTONE_SLAB: LazyLock<Item> =
+    LazyLock::new(|| Item::from_block(vanilla_blocks::CUT_RED_SANDSTONE_SLAB));
+pub static PURPUR_SLAB: LazyLock<Item> =
+    LazyLock::new(|| Item::from_block(vanilla_blocks::PURPUR_SLAB));
+pub static PRISMARINE_SLAB: LazyLock<Item> =
+    LazyLock::new(|| Item::from_block(vanilla_blocks::PRISMARINE_SLAB));
+pub static PRISMARINE_BRICK_SLAB: LazyLock<Item> =
+    LazyLock::new(|| Item::from_block(vanilla_blocks::PRISMARINE_BRICK_SLAB));
+pub static DARK_PRISMARINE_SLAB: LazyLock<Item> =
+    LazyLock::new(|| Item::from_block(vanilla_blocks::DARK_PRISMARINE_SLAB));
+pub static SMOOTH_QUARTZ: LazyLock<Item> =
+    LazyLock::new(|| Item::from_block(vanilla_blocks::SMOOTH_QUARTZ));
+pub static SMOOTH_RED_SANDSTONE: LazyLock<Item> =
+    LazyLock::new(|| Item::from_block(vanilla_blocks::SMOOTH_RED_SANDSTONE));
+pub static SMOOTH_SANDSTONE: LazyLock<Item> =
+    LazyLock::new(|| Item::from_block(vanilla_blocks::SMOOTH_SANDSTONE));
+pub static SMOOTH_STONE: LazyLock<Item> =
+    LazyLock::new(|| Item::from_block(vanilla_blocks::SMOOTH_STONE));
+pub static BRICKS: LazyLock<Item> = LazyLock::new(|| Item::from_block(vanilla_blocks::BRICKS));
+pub static ACACIA_SHELF: LazyLock<Item> =
+    LazyLock::new(|| Item::from_block(vanilla_blocks::ACACIA_SHELF));
+pub static BAMBOO_SHELF: LazyLock<Item> =
+    LazyLock::new(|| Item::from_block(vanilla_blocks::BAMBOO_SHELF));
+pub static BIRCH_SHELF: LazyLock<Item> =
+    LazyLock::new(|| Item::from_block(vanilla_blocks::BIRCH_SHELF));
+pub static CHERRY_SHELF: LazyLock<Item> =
+    LazyLock::new(|| Item::from_block(vanilla_blocks::CHERRY_SHELF));
+pub static CRIMSON_SHELF: LazyLock<Item> =
+    LazyLock::new(|| Item::from_block(vanilla_blocks::CRIMSON_SHELF));
+pub static DARK_OAK_SHELF: LazyLock<Item> =
+    LazyLock::new(|| Item::from_block(vanilla_blocks::DARK_OAK_SHELF));
+pub static JUNGLE_SHELF: LazyLock<Item> =
+    LazyLock::new(|| Item::from_block(vanilla_blocks::JUNGLE_SHELF));
+pub static MANGROVE_SHELF: LazyLock<Item> =
+    LazyLock::new(|| Item::from_block(vanilla_blocks::MANGROVE_SHELF));
+pub static OAK_SHELF: LazyLock<Item> =
+    LazyLock::new(|| Item::from_block(vanilla_blocks::OAK_SHELF));
+pub static PALE_OAK_SHELF: LazyLock<Item> =
+    LazyLock::new(|| Item::from_block(vanilla_blocks::PALE_OAK_SHELF));
+pub static SPRUCE_SHELF: LazyLock<Item> =
+    LazyLock::new(|| Item::from_block(vanilla_blocks::SPRUCE_SHELF));
+pub static WARPED_SHELF: LazyLock<Item> =
+    LazyLock::new(|| Item::from_block(vanilla_blocks::WARPED_SHELF));
+pub static BOOKSHELF: LazyLock<Item> =
+    LazyLock::new(|| Item::from_block(vanilla_blocks::BOOKSHELF));
+pub static CHISELED_BOOKSHELF: LazyLock<Item> =
+    LazyLock::new(|| Item::from_block(vanilla_blocks::CHISELED_BOOKSHELF));
+pub static DECORATED_POT: LazyLock<Item> =
+    LazyLock::new(|| Item::from_block(vanilla_blocks::DECORATED_POT));
+pub static MOSSY_COBBLESTONE: LazyLock<Item> =
+    LazyLock::new(|| Item::from_block(vanilla_blocks::MOSSY_COBBLESTONE));
+pub static OBSIDIAN: LazyLock<Item> = LazyLock::new(|| Item::from_block(vanilla_blocks::OBSIDIAN));
+pub static TORCH: LazyLock<Item> = LazyLock::new(|| Item::from_block(vanilla_blocks::TORCH));
+pub static END_ROD: LazyLock<Item> = LazyLock::new(|| Item::from_block(vanilla_blocks::END_ROD));
+pub static CHORUS_PLANT: LazyLock<Item> =
+    LazyLock::new(|| Item::from_block(vanilla_blocks::CHORUS_PLANT));
+pub static CHORUS_FLOWER: LazyLock<Item> =
+    LazyLock::new(|| Item::from_block(vanilla_blocks::CHORUS_FLOWER));
+pub static PURPUR_BLOCK: LazyLock<Item> =
+    LazyLock::new(|| Item::from_block(vanilla_blocks::PURPUR_BLOCK));
+pub static PURPUR_PILLAR: LazyLock<Item> =
+    LazyLock::new(|| Item::from_block(vanilla_blocks::PURPUR_PILLAR));
+pub static PURPUR_STAIRS: LazyLock<Item> =
+    LazyLock::new(|| Item::from_block(vanilla_blocks::PURPUR_STAIRS));
+pub static SPAWNER: LazyLock<Item> = LazyLock::new(|| Item::from_block(vanilla_blocks::SPAWNER));
+pub static CREAKING_HEART: LazyLock<Item> =
+    LazyLock::new(|| Item::from_block(vanilla_blocks::CREAKING_HEART));
+pub static CHEST: LazyLock<Item> = LazyLock::new(|| Item::from_block(vanilla_blocks::CHEST));
+pub static CRAFTING_TABLE: LazyLock<Item> =
+    LazyLock::new(|| Item::from_block(vanilla_blocks::CRAFTING_TABLE));
+pub static FARMLAND: LazyLock<Item> = LazyLock::new(|| Item::from_block(vanilla_blocks::FARMLAND));
+pub static FURNACE: LazyLock<Item> = LazyLock::new(|| Item::from_block(vanilla_blocks::FURNACE));
+pub static LADDER: LazyLock<Item> = LazyLock::new(|| Item::from_block(vanilla_blocks::LADDER));
+pub static COBBLESTONE_STAIRS: LazyLock<Item> =
+    LazyLock::new(|| Item::from_block(vanilla_blocks::COBBLESTONE_STAIRS));
+pub static SNOW: LazyLock<Item> = LazyLock::new(|| Item::from_block(vanilla_blocks::SNOW));
+pub static ICE: LazyLock<Item> = LazyLock::new(|| Item::from_block(vanilla_blocks::ICE));
+pub static SNOW_BLOCK: LazyLock<Item> =
+    LazyLock::new(|| Item::from_block(vanilla_blocks::SNOW_BLOCK));
+pub static CACTUS: LazyLock<Item> = LazyLock::new(|| Item::from_block(vanilla_blocks::CACTUS));
+pub static CACTUS_FLOWER: LazyLock<Item> =
+    LazyLock::new(|| Item::from_block(vanilla_blocks::CACTUS_FLOWER));
+pub static CLAY: LazyLock<Item> = LazyLock::new(|| Item::from_block(vanilla_blocks::CLAY));
+pub static JUKEBOX: LazyLock<Item> = LazyLock::new(|| Item::from_block(vanilla_blocks::JUKEBOX));
+pub static OAK_FENCE: LazyLock<Item> =
+    LazyLock::new(|| Item::from_block(vanilla_blocks::OAK_FENCE));
+pub static SPRUCE_FENCE: LazyLock<Item> =
+    LazyLock::new(|| Item::from_block(vanilla_blocks::SPRUCE_FENCE));
+pub static BIRCH_FENCE: LazyLock<Item> =
+    LazyLock::new(|| Item::from_block(vanilla_blocks::BIRCH_FENCE));
+pub static JUNGLE_FENCE: LazyLock<Item> =
+    LazyLock::new(|| Item::from_block(vanilla_blocks::JUNGLE_FENCE));
+pub static ACACIA_FENCE: LazyLock<Item> =
+    LazyLock::new(|| Item::from_block(vanilla_blocks::ACACIA_FENCE));
+pub static CHERRY_FENCE: LazyLock<Item> =
+    LazyLock::new(|| Item::from_block(vanilla_blocks::CHERRY_FENCE));
+pub static DARK_OAK_FENCE: LazyLock<Item> =
+    LazyLock::new(|| Item::from_block(vanilla_blocks::DARK_OAK_FENCE));
+pub static PALE_OAK_FENCE: LazyLock<Item> =
+    LazyLock::new(|| Item::from_block(vanilla_blocks::PALE_OAK_FENCE));
+pub static MANGROVE_FENCE: LazyLock<Item> =
+    LazyLock::new(|| Item::from_block(vanilla_blocks::MANGROVE_FENCE));
+pub static BAMBOO_FENCE: LazyLock<Item> =
+    LazyLock::new(|| Item::from_block(vanilla_blocks::BAMBOO_FENCE));
+pub static CRIMSON_FENCE: LazyLock<Item> =
+    LazyLock::new(|| Item::from_block(vanilla_blocks::CRIMSON_FENCE));
+pub static WARPED_FENCE: LazyLock<Item> =
+    LazyLock::new(|| Item::from_block(vanilla_blocks::WARPED_FENCE));
+pub static PUMPKIN: LazyLock<Item> = LazyLock::new(|| Item::from_block(vanilla_blocks::PUMPKIN));
+pub static CARVED_PUMPKIN: LazyLock<Item> =
+    LazyLock::new(|| Item::from_block(vanilla_blocks::CARVED_PUMPKIN));
+pub static JACK_O_LANTERN: LazyLock<Item> =
+    LazyLock::new(|| Item::from_block(vanilla_blocks::JACK_O_LANTERN));
+pub static NETHERRACK: LazyLock<Item> =
+    LazyLock::new(|| Item::from_block(vanilla_blocks::NETHERRACK));
+pub static SOUL_SAND: LazyLock<Item> =
+    LazyLock::new(|| Item::from_block(vanilla_blocks::SOUL_SAND));
+pub static SOUL_SOIL: LazyLock<Item> =
+    LazyLock::new(|| Item::from_block(vanilla_blocks::SOUL_SOIL));
+pub static BASALT: LazyLock<Item> = LazyLock::new(|| Item::from_block(vanilla_blocks::BASALT));
+pub static POLISHED_BASALT: LazyLock<Item> =
+    LazyLock::new(|| Item::from_block(vanilla_blocks::POLISHED_BASALT));
+pub static SMOOTH_BASALT: LazyLock<Item> =
+    LazyLock::new(|| Item::from_block(vanilla_blocks::SMOOTH_BASALT));
+pub static SOUL_TORCH: LazyLock<Item> =
+    LazyLock::new(|| Item::from_block(vanilla_blocks::SOUL_TORCH));
+pub static COPPER_TORCH: LazyLock<Item> =
+    LazyLock::new(|| Item::from_block(vanilla_blocks::COPPER_TORCH));
+pub static GLOWSTONE: LazyLock<Item> =
+    LazyLock::new(|| Item::from_block(vanilla_blocks::GLOWSTONE));
+pub static INFESTED_STONE: LazyLock<Item> =
+    LazyLock::new(|| Item::from_block(vanilla_blocks::INFESTED_STONE));
+pub static INFESTED_COBBLESTONE: LazyLock<Item> =
+    LazyLock::new(|| Item::from_block(vanilla_blocks::INFESTED_COBBLESTONE));
+pub static INFESTED_STONE_BRICKS: LazyLock<Item> =
+    LazyLock::new(|| Item::from_block(vanilla_blocks::INFESTED_STONE_BRICKS));
+pub static INFESTED_MOSSY_STONE_BRICKS: LazyLock<Item> =
+    LazyLock::new(|| Item::from_block(vanilla_blocks::INFESTED_MOSSY_STONE_BRICKS));
+pub static INFESTED_CRACKED_STONE_BRICKS: LazyLock<Item> =
+    LazyLock::new(|| Item::from_block(vanilla_blocks::INFESTED_CRACKED_STONE_BRICKS));
+pub static INFESTED_CHISELED_STONE_BRICKS: LazyLock<Item> =
+    LazyLock::new(|| Item::from_block(vanilla_blocks::INFESTED_CHISELED_STONE_BRICKS));
+pub static INFESTED_DEEPSLATE: LazyLock<Item> =
+    LazyLock::new(|| Item::from_block(vanilla_blocks::INFESTED_DEEPSLATE));
+pub static STONE_BRICKS: LazyLock<Item> =
+    LazyLock::new(|| Item::from_block(vanilla_blocks::STONE_BRICKS));
+pub static MOSSY_STONE_BRICKS: LazyLock<Item> =
+    LazyLock::new(|| Item::from_block(vanilla_blocks::MOSSY_STONE_BRICKS));
+pub static CRACKED_STONE_BRICKS: LazyLock<Item> =
+    LazyLock::new(|| Item::from_block(vanilla_blocks::CRACKED_STONE_BRICKS));
+pub static CHISELED_STONE_BRICKS: LazyLock<Item> =
+    LazyLock::new(|| Item::from_block(vanilla_blocks::CHISELED_STONE_BRICKS));
+pub static PACKED_MUD: LazyLock<Item> =
+    LazyLock::new(|| Item::from_block(vanilla_blocks::PACKED_MUD));
+pub static MUD_BRICKS: LazyLock<Item> =
+    LazyLock::new(|| Item::from_block(vanilla_blocks::MUD_BRICKS));
+pub static DEEPSLATE_BRICKS: LazyLock<Item> =
+    LazyLock::new(|| Item::from_block(vanilla_blocks::DEEPSLATE_BRICKS));
+pub static CRACKED_DEEPSLATE_BRICKS: LazyLock<Item> =
+    LazyLock::new(|| Item::from_block(vanilla_blocks::CRACKED_DEEPSLATE_BRICKS));
+pub static DEEPSLATE_TILES: LazyLock<Item> =
+    LazyLock::new(|| Item::from_block(vanilla_blocks::DEEPSLATE_TILES));
+pub static CRACKED_DEEPSLATE_TILES: LazyLock<Item> =
+    LazyLock::new(|| Item::from_block(vanilla_blocks::CRACKED_DEEPSLATE_TILES));
+pub static CHISELED_DEEPSLATE: LazyLock<Item> =
+    LazyLock::new(|| Item::from_block(vanilla_blocks::CHISELED_DEEPSLATE));
+pub static REINFORCED_DEEPSLATE: LazyLock<Item> =
+    LazyLock::new(|| Item::from_block(vanilla_blocks::REINFORCED_DEEPSLATE));
+pub static BROWN_MUSHROOM_BLOCK: LazyLock<Item> =
+    LazyLock::new(|| Item::from_block(vanilla_blocks::BROWN_MUSHROOM_BLOCK));
+pub static RED_MUSHROOM_BLOCK: LazyLock<Item> =
+    LazyLock::new(|| Item::from_block(vanilla_blocks::RED_MUSHROOM_BLOCK));
+pub static MUSHROOM_STEM: LazyLock<Item> =
+    LazyLock::new(|| Item::from_block(vanilla_blocks::MUSHROOM_STEM));
+pub static IRON_BARS: LazyLock<Item> =
+    LazyLock::new(|| Item::from_block(vanilla_blocks::IRON_BARS));
+pub static COPPER_BARS: LazyLock<Item> =
+    LazyLock::new(|| Item::from_block(vanilla_blocks::COPPER_BARS));
+pub static EXPOSED_COPPER_BARS: LazyLock<Item> =
+    LazyLock::new(|| Item::from_block(vanilla_blocks::EXPOSED_COPPER_BARS));
+pub static WEATHERED_COPPER_BARS: LazyLock<Item> =
+    LazyLock::new(|| Item::from_block(vanilla_blocks::WEATHERED_COPPER_BARS));
+pub static OXIDIZED_COPPER_BARS: LazyLock<Item> =
+    LazyLock::new(|| Item::from_block(vanilla_blocks::OXIDIZED_COPPER_BARS));
+pub static WAXED_COPPER_BARS: LazyLock<Item> =
+    LazyLock::new(|| Item::from_block(vanilla_blocks::WAXED_COPPER_BARS));
+pub static WAXED_EXPOSED_COPPER_BARS: LazyLock<Item> =
+    LazyLock::new(|| Item::from_block(vanilla_blocks::WAXED_EXPOSED_COPPER_BARS));
+pub static WAXED_WEATHERED_COPPER_BARS: LazyLock<Item> =
+    LazyLock::new(|| Item::from_block(vanilla_blocks::WAXED_WEATHERED_COPPER_BARS));
+pub static WAXED_OXIDIZED_COPPER_BARS: LazyLock<Item> =
+    LazyLock::new(|| Item::from_block(vanilla_blocks::WAXED_OXIDIZED_COPPER_BARS));
+pub static IRON_CHAIN: LazyLock<Item> =
+    LazyLock::new(|| Item::from_block(vanilla_blocks::IRON_CHAIN));
+pub static COPPER_CHAIN: LazyLock<Item> =
+    LazyLock::new(|| Item::from_block(vanilla_blocks::COPPER_CHAIN));
+pub static EXPOSED_COPPER_CHAIN: LazyLock<Item> =
+    LazyLock::new(|| Item::from_block(vanilla_blocks::EXPOSED_COPPER_CHAIN));
+pub static WEATHERED_COPPER_CHAIN: LazyLock<Item> =
+    LazyLock::new(|| Item::from_block(vanilla_blocks::WEATHERED_COPPER_CHAIN));
+pub static OXIDIZED_COPPER_CHAIN: LazyLock<Item> =
+    LazyLock::new(|| Item::from_block(vanilla_blocks::OXIDIZED_COPPER_CHAIN));
+pub static WAXED_COPPER_CHAIN: LazyLock<Item> =
+    LazyLock::new(|| Item::from_block(vanilla_blocks::WAXED_COPPER_CHAIN));
+pub static WAXED_EXPOSED_COPPER_CHAIN: LazyLock<Item> =
+    LazyLock::new(|| Item::from_block(vanilla_blocks::WAXED_EXPOSED_COPPER_CHAIN));
+pub static WAXED_WEATHERED_COPPER_CHAIN: LazyLock<Item> =
+    LazyLock::new(|| Item::from_block(vanilla_blocks::WAXED_WEATHERED_COPPER_CHAIN));
+pub static WAXED_OXIDIZED_COPPER_CHAIN: LazyLock<Item> =
+    LazyLock::new(|| Item::from_block(vanilla_blocks::WAXED_OXIDIZED_COPPER_CHAIN));
+pub static GLASS_PANE: LazyLock<Item> =
+    LazyLock::new(|| Item::from_block(vanilla_blocks::GLASS_PANE));
+pub static MELON: LazyLock<Item> = LazyLock::new(|| Item::from_block(vanilla_blocks::MELON));
+pub static VINE: LazyLock<Item> = LazyLock::new(|| Item::from_block(vanilla_blocks::VINE));
+pub static GLOW_LICHEN: LazyLock<Item> =
+    LazyLock::new(|| Item::from_block(vanilla_blocks::GLOW_LICHEN));
+pub static RESIN_CLUMP: LazyLock<Item> =
+    LazyLock::new(|| Item::from_block(vanilla_blocks::RESIN_CLUMP));
+pub static RESIN_BLOCK: LazyLock<Item> =
+    LazyLock::new(|| Item::from_block(vanilla_blocks::RESIN_BLOCK));
+pub static RESIN_BRICKS: LazyLock<Item> =
+    LazyLock::new(|| Item::from_block(vanilla_blocks::RESIN_BRICKS));
+pub static RESIN_BRICK_STAIRS: LazyLock<Item> =
+    LazyLock::new(|| Item::from_block(vanilla_blocks::RESIN_BRICK_STAIRS));
+pub static RESIN_BRICK_SLAB: LazyLock<Item> =
+    LazyLock::new(|| Item::from_block(vanilla_blocks::RESIN_BRICK_SLAB));
+pub static RESIN_BRICK_WALL: LazyLock<Item> =
+    LazyLock::new(|| Item::from_block(vanilla_blocks::RESIN_BRICK_WALL));
+pub static CHISELED_RESIN_BRICKS: LazyLock<Item> =
+    LazyLock::new(|| Item::from_block(vanilla_blocks::CHISELED_RESIN_BRICKS));
+pub static BRICK_STAIRS: LazyLock<Item> =
+    LazyLock::new(|| Item::from_block(vanilla_blocks::BRICK_STAIRS));
+pub static STONE_BRICK_STAIRS: LazyLock<Item> =
+    LazyLock::new(|| Item::from_block(vanilla_blocks::STONE_BRICK_STAIRS));
+pub static MUD_BRICK_STAIRS: LazyLock<Item> =
+    LazyLock::new(|| Item::from_block(vanilla_blocks::MUD_BRICK_STAIRS));
+pub static MYCELIUM: LazyLock<Item> = LazyLock::new(|| Item::from_block(vanilla_blocks::MYCELIUM));
+pub static LILY_PAD: LazyLock<Item> = LazyLock::new(|| Item::from_block(vanilla_blocks::LILY_PAD));
+pub static NETHER_BRICKS: LazyLock<Item> =
+    LazyLock::new(|| Item::from_block(vanilla_blocks::NETHER_BRICKS));
+pub static CRACKED_NETHER_BRICKS: LazyLock<Item> =
+    LazyLock::new(|| Item::from_block(vanilla_blocks::CRACKED_NETHER_BRICKS));
+pub static CHISELED_NETHER_BRICKS: LazyLock<Item> =
+    LazyLock::new(|| Item::from_block(vanilla_blocks::CHISELED_NETHER_BRICKS));
+pub static NETHER_BRICK_FENCE: LazyLock<Item> =
+    LazyLock::new(|| Item::from_block(vanilla_blocks::NETHER_BRICK_FENCE));
+pub static NETHER_BRICK_STAIRS: LazyLock<Item> =
+    LazyLock::new(|| Item::from_block(vanilla_blocks::NETHER_BRICK_STAIRS));
+pub static SCULK: LazyLock<Item> = LazyLock::new(|| Item::from_block(vanilla_blocks::SCULK));
+pub static SCULK_VEIN: LazyLock<Item> =
+    LazyLock::new(|| Item::from_block(vanilla_blocks::SCULK_VEIN));
+pub static SCULK_CATALYST: LazyLock<Item> =
+    LazyLock::new(|| Item::from_block(vanilla_blocks::SCULK_CATALYST));
+pub static SCULK_SHRIEKER: LazyLock<Item> =
+    LazyLock::new(|| Item::from_block(vanilla_blocks::SCULK_SHRIEKER));
+pub static ENCHANTING_TABLE: LazyLock<Item> =
+    LazyLock::new(|| Item::from_block(vanilla_blocks::ENCHANTING_TABLE));
+pub static END_PORTAL_FRAME: LazyLock<Item> =
+    LazyLock::new(|| Item::from_block(vanilla_blocks::END_PORTAL_FRAME));
+pub static END_STONE: LazyLock<Item> =
+    LazyLock::new(|| Item::from_block(vanilla_blocks::END_STONE));
+pub static END_STONE_BRICKS: LazyLock<Item> =
+    LazyLock::new(|| Item::from_block(vanilla_blocks::END_STONE_BRICKS));
+pub static DRAGON_EGG: LazyLock<Item> =
+    LazyLock::new(|| Item::from_block(vanilla_blocks::DRAGON_EGG));
+pub static SANDSTONE_STAIRS: LazyLock<Item> =
+    LazyLock::new(|| Item::from_block(vanilla_blocks::SANDSTONE_STAIRS));
+pub static ENDER_CHEST: LazyLock<Item> =
+    LazyLock::new(|| Item::from_block(vanilla_blocks::ENDER_CHEST));
+pub static EMERALD_BLOCK: LazyLock<Item> =
+    LazyLock::new(|| Item::from_block(vanilla_blocks::EMERALD_BLOCK));
+pub static OAK_STAIRS: LazyLock<Item> =
+    LazyLock::new(|| Item::from_block(vanilla_blocks::OAK_STAIRS));
+pub static SPRUCE_STAIRS: LazyLock<Item> =
+    LazyLock::new(|| Item::from_block(vanilla_blocks::SPRUCE_STAIRS));
+pub static BIRCH_STAIRS: LazyLock<Item> =
+    LazyLock::new(|| Item::from_block(vanilla_blocks::BIRCH_STAIRS));
+pub static JUNGLE_STAIRS: LazyLock<Item> =
+    LazyLock::new(|| Item::from_block(vanilla_blocks::JUNGLE_STAIRS));
+pub static ACACIA_STAIRS: LazyLock<Item> =
+    LazyLock::new(|| Item::from_block(vanilla_blocks::ACACIA_STAIRS));
+pub static CHERRY_STAIRS: LazyLock<Item> =
+    LazyLock::new(|| Item::from_block(vanilla_blocks::CHERRY_STAIRS));
+pub static DARK_OAK_STAIRS: LazyLock<Item> =
+    LazyLock::new(|| Item::from_block(vanilla_blocks::DARK_OAK_STAIRS));
+pub static PALE_OAK_STAIRS: LazyLock<Item> =
+    LazyLock::new(|| Item::from_block(vanilla_blocks::PALE_OAK_STAIRS));
+pub static MANGROVE_STAIRS: LazyLock<Item> =
+    LazyLock::new(|| Item::from_block(vanilla_blocks::MANGROVE_STAIRS));
+pub static BAMBOO_STAIRS: LazyLock<Item> =
+    LazyLock::new(|| Item::from_block(vanilla_blocks::BAMBOO_STAIRS));
+pub static BAMBOO_MOSAIC_STAIRS: LazyLock<Item> =
+    LazyLock::new(|| Item::from_block(vanilla_blocks::BAMBOO_MOSAIC_STAIRS));
+pub static CRIMSON_STAIRS: LazyLock<Item> =
+    LazyLock::new(|| Item::from_block(vanilla_blocks::CRIMSON_STAIRS));
+pub static WARPED_STAIRS: LazyLock<Item> =
+    LazyLock::new(|| Item::from_block(vanilla_blocks::WARPED_STAIRS));
+pub static COMMAND_BLOCK: LazyLock<Item> =
+    LazyLock::new(|| Item::from_block(vanilla_blocks::COMMAND_BLOCK));
+pub static BEACON: LazyLock<Item> = LazyLock::new(|| Item::from_block(vanilla_blocks::BEACON));
+pub static COBBLESTONE_WALL: LazyLock<Item> =
+    LazyLock::new(|| Item::from_block(vanilla_blocks::COBBLESTONE_WALL));
+pub static MOSSY_COBBLESTONE_WALL: LazyLock<Item> =
+    LazyLock::new(|| Item::from_block(vanilla_blocks::MOSSY_COBBLESTONE_WALL));
+pub static BRICK_WALL: LazyLock<Item> =
+    LazyLock::new(|| Item::from_block(vanilla_blocks::BRICK_WALL));
+pub static PRISMARINE_WALL: LazyLock<Item> =
+    LazyLock::new(|| Item::from_block(vanilla_blocks::PRISMARINE_WALL));
+pub static RED_SANDSTONE_WALL: LazyLock<Item> =
+    LazyLock::new(|| Item::from_block(vanilla_blocks::RED_SANDSTONE_WALL));
+pub static MOSSY_STONE_BRICK_WALL: LazyLock<Item> =
+    LazyLock::new(|| Item::from_block(vanilla_blocks::MOSSY_STONE_BRICK_WALL));
+pub static GRANITE_WALL: LazyLock<Item> =
+    LazyLock::new(|| Item::from_block(vanilla_blocks::GRANITE_WALL));
+pub static STONE_BRICK_WALL: LazyLock<Item> =
+    LazyLock::new(|| Item::from_block(vanilla_blocks::STONE_BRICK_WALL));
+pub static MUD_BRICK_WALL: LazyLock<Item> =
+    LazyLock::new(|| Item::from_block(vanilla_blocks::MUD_BRICK_WALL));
+pub static NETHER_BRICK_WALL: LazyLock<Item> =
+    LazyLock::new(|| Item::from_block(vanilla_blocks::NETHER_BRICK_WALL));
+pub static ANDESITE_WALL: LazyLock<Item> =
+    LazyLock::new(|| Item::from_block(vanilla_blocks::ANDESITE_WALL));
+pub static RED_NETHER_BRICK_WALL: LazyLock<Item> =
+    LazyLock::new(|| Item::from_block(vanilla_blocks::RED_NETHER_BRICK_WALL));
+pub static SANDSTONE_WALL: LazyLock<Item> =
+    LazyLock::new(|| Item::from_block(vanilla_blocks::SANDSTONE_WALL));
+pub static END_STONE_BRICK_WALL: LazyLock<Item> =
+    LazyLock::new(|| Item::from_block(vanilla_blocks::END_STONE_BRICK_WALL));
+pub static DIORITE_WALL: LazyLock<Item> =
+    LazyLock::new(|| Item::from_block(vanilla_blocks::DIORITE_WALL));
+pub static BLACKSTONE_WALL: LazyLock<Item> =
+    LazyLock::new(|| Item::from_block(vanilla_blocks::BLACKSTONE_WALL));
+pub static POLISHED_BLACKSTONE_WALL: LazyLock<Item> =
+    LazyLock::new(|| Item::from_block(vanilla_blocks::POLISHED_BLACKSTONE_WALL));
+pub static POLISHED_BLACKSTONE_BRICK_WALL: LazyLock<Item> =
+    LazyLock::new(|| Item::from_block(vanilla_blocks::POLISHED_BLACKSTONE_BRICK_WALL));
+pub static COBBLED_DEEPSLATE_WALL: LazyLock<Item> =
+    LazyLock::new(|| Item::from_block(vanilla_blocks::COBBLED_DEEPSLATE_WALL));
+pub static POLISHED_DEEPSLATE_WALL: LazyLock<Item> =
+    LazyLock::new(|| Item::from_block(vanilla_blocks::POLISHED_DEEPSLATE_WALL));
+pub static DEEPSLATE_BRICK_WALL: LazyLock<Item> =
+    LazyLock::new(|| Item::from_block(vanilla_blocks::DEEPSLATE_BRICK_WALL));
+pub static DEEPSLATE_TILE_WALL: LazyLock<Item> =
+    LazyLock::new(|| Item::from_block(vanilla_blocks::DEEPSLATE_TILE_WALL));
+pub static ANVIL: LazyLock<Item> = LazyLock::new(|| Item::from_block(vanilla_blocks::ANVIL));
+pub static CHIPPED_ANVIL: LazyLock<Item> =
+    LazyLock::new(|| Item::from_block(vanilla_blocks::CHIPPED_ANVIL));
+pub static DAMAGED_ANVIL: LazyLock<Item> =
+    LazyLock::new(|| Item::from_block(vanilla_blocks::DAMAGED_ANVIL));
+pub static CHISELED_QUARTZ_BLOCK: LazyLock<Item> =
+    LazyLock::new(|| Item::from_block(vanilla_blocks::CHISELED_QUARTZ_BLOCK));
+pub static QUARTZ_BLOCK: LazyLock<Item> =
+    LazyLock::new(|| Item::from_block(vanilla_blocks::QUARTZ_BLOCK));
+pub static QUARTZ_BRICKS: LazyLock<Item> =
+    LazyLock::new(|| Item::from_block(vanilla_blocks::QUARTZ_BRICKS));
+pub static QUARTZ_PILLAR: LazyLock<Item> =
+    LazyLock::new(|| Item::from_block(vanilla_blocks::QUARTZ_PILLAR));
+pub static QUARTZ_STAIRS: LazyLock<Item> =
+    LazyLock::new(|| Item::from_block(vanilla_blocks::QUARTZ_STAIRS));
+pub static WHITE_TERRACOTTA: LazyLock<Item> =
+    LazyLock::new(|| Item::from_block(vanilla_blocks::WHITE_TERRACOTTA));
+pub static ORANGE_TERRACOTTA: LazyLock<Item> =
+    LazyLock::new(|| Item::from_block(vanilla_blocks::ORANGE_TERRACOTTA));
+pub static MAGENTA_TERRACOTTA: LazyLock<Item> =
+    LazyLock::new(|| Item::from_block(vanilla_blocks::MAGENTA_TERRACOTTA));
+pub static LIGHT_BLUE_TERRACOTTA: LazyLock<Item> =
+    LazyLock::new(|| Item::from_block(vanilla_blocks::LIGHT_BLUE_TERRACOTTA));
+pub static YELLOW_TERRACOTTA: LazyLock<Item> =
+    LazyLock::new(|| Item::from_block(vanilla_blocks::YELLOW_TERRACOTTA));
+pub static LIME_TERRACOTTA: LazyLock<Item> =
+    LazyLock::new(|| Item::from_block(vanilla_blocks::LIME_TERRACOTTA));
+pub static PINK_TERRACOTTA: LazyLock<Item> =
+    LazyLock::new(|| Item::from_block(vanilla_blocks::PINK_TERRACOTTA));
+pub static GRAY_TERRACOTTA: LazyLock<Item> =
+    LazyLock::new(|| Item::from_block(vanilla_blocks::GRAY_TERRACOTTA));
+pub static LIGHT_GRAY_TERRACOTTA: LazyLock<Item> =
+    LazyLock::new(|| Item::from_block(vanilla_blocks::LIGHT_GRAY_TERRACOTTA));
+pub static CYAN_TERRACOTTA: LazyLock<Item> =
+    LazyLock::new(|| Item::from_block(vanilla_blocks::CYAN_TERRACOTTA));
+pub static PURPLE_TERRACOTTA: LazyLock<Item> =
+    LazyLock::new(|| Item::from_block(vanilla_blocks::PURPLE_TERRACOTTA));
+pub static BLUE_TERRACOTTA: LazyLock<Item> =
+    LazyLock::new(|| Item::from_block(vanilla_blocks::BLUE_TERRACOTTA));
+pub static BROWN_TERRACOTTA: LazyLock<Item> =
+    LazyLock::new(|| Item::from_block(vanilla_blocks::BROWN_TERRACOTTA));
+pub static GREEN_TERRACOTTA: LazyLock<Item> =
+    LazyLock::new(|| Item::from_block(vanilla_blocks::GREEN_TERRACOTTA));
+pub static RED_TERRACOTTA: LazyLock<Item> =
+    LazyLock::new(|| Item::from_block(vanilla_blocks::RED_TERRACOTTA));
+pub static BLACK_TERRACOTTA: LazyLock<Item> =
+    LazyLock::new(|| Item::from_block(vanilla_blocks::BLACK_TERRACOTTA));
+pub static BARRIER: LazyLock<Item> = LazyLock::new(|| Item::from_block(vanilla_blocks::BARRIER));
+pub static LIGHT: LazyLock<Item> = LazyLock::new(|| Item::from_block(vanilla_blocks::LIGHT));
+pub static HAY_BLOCK: LazyLock<Item> =
+    LazyLock::new(|| Item::from_block(vanilla_blocks::HAY_BLOCK));
+pub static WHITE_CARPET: LazyLock<Item> =
+    LazyLock::new(|| Item::from_block(vanilla_blocks::WHITE_CARPET));
+pub static ORANGE_CARPET: LazyLock<Item> =
+    LazyLock::new(|| Item::from_block(vanilla_blocks::ORANGE_CARPET));
+pub static MAGENTA_CARPET: LazyLock<Item> =
+    LazyLock::new(|| Item::from_block(vanilla_blocks::MAGENTA_CARPET));
+pub static LIGHT_BLUE_CARPET: LazyLock<Item> =
+    LazyLock::new(|| Item::from_block(vanilla_blocks::LIGHT_BLUE_CARPET));
+pub static YELLOW_CARPET: LazyLock<Item> =
+    LazyLock::new(|| Item::from_block(vanilla_blocks::YELLOW_CARPET));
+pub static LIME_CARPET: LazyLock<Item> =
+    LazyLock::new(|| Item::from_block(vanilla_blocks::LIME_CARPET));
+pub static PINK_CARPET: LazyLock<Item> =
+    LazyLock::new(|| Item::from_block(vanilla_blocks::PINK_CARPET));
+pub static GRAY_CARPET: LazyLock<Item> =
+    LazyLock::new(|| Item::from_block(vanilla_blocks::GRAY_CARPET));
+pub static LIGHT_GRAY_CARPET: LazyLock<Item> =
+    LazyLock::new(|| Item::from_block(vanilla_blocks::LIGHT_GRAY_CARPET));
+pub static CYAN_CARPET: LazyLock<Item> =
+    LazyLock::new(|| Item::from_block(vanilla_blocks::CYAN_CARPET));
+pub static PURPLE_CARPET: LazyLock<Item> =
+    LazyLock::new(|| Item::from_block(vanilla_blocks::PURPLE_CARPET));
+pub static BLUE_CARPET: LazyLock<Item> =
+    LazyLock::new(|| Item::from_block(vanilla_blocks::BLUE_CARPET));
+pub static BROWN_CARPET: LazyLock<Item> =
+    LazyLock::new(|| Item::from_block(vanilla_blocks::BROWN_CARPET));
+pub static GREEN_CARPET: LazyLock<Item> =
+    LazyLock::new(|| Item::from_block(vanilla_blocks::GREEN_CARPET));
+pub static RED_CARPET: LazyLock<Item> =
+    LazyLock::new(|| Item::from_block(vanilla_blocks::RED_CARPET));
+pub static BLACK_CARPET: LazyLock<Item> =
+    LazyLock::new(|| Item::from_block(vanilla_blocks::BLACK_CARPET));
+pub static TERRACOTTA: LazyLock<Item> =
+    LazyLock::new(|| Item::from_block(vanilla_blocks::TERRACOTTA));
+pub static PACKED_ICE: LazyLock<Item> =
+    LazyLock::new(|| Item::from_block(vanilla_blocks::PACKED_ICE));
+pub static DIRT_PATH: LazyLock<Item> =
+    LazyLock::new(|| Item::from_block(vanilla_blocks::DIRT_PATH));
+pub static SUNFLOWER: LazyLock<Item> =
+    LazyLock::new(|| Item::from_block(vanilla_blocks::SUNFLOWER));
+pub static LILAC: LazyLock<Item> = LazyLock::new(|| Item::from_block(vanilla_blocks::LILAC));
+pub static ROSE_BUSH: LazyLock<Item> =
+    LazyLock::new(|| Item::from_block(vanilla_blocks::ROSE_BUSH));
+pub static PEONY: LazyLock<Item> = LazyLock::new(|| Item::from_block(vanilla_blocks::PEONY));
+pub static TALL_GRASS: LazyLock<Item> =
+    LazyLock::new(|| Item::from_block(vanilla_blocks::TALL_GRASS));
+pub static LARGE_FERN: LazyLock<Item> =
+    LazyLock::new(|| Item::from_block(vanilla_blocks::LARGE_FERN));
+pub static WHITE_STAINED_GLASS: LazyLock<Item> =
+    LazyLock::new(|| Item::from_block(vanilla_blocks::WHITE_STAINED_GLASS));
+pub static ORANGE_STAINED_GLASS: LazyLock<Item> =
+    LazyLock::new(|| Item::from_block(vanilla_blocks::ORANGE_STAINED_GLASS));
+pub static MAGENTA_STAINED_GLASS: LazyLock<Item> =
+    LazyLock::new(|| Item::from_block(vanilla_blocks::MAGENTA_STAINED_GLASS));
+pub static LIGHT_BLUE_STAINED_GLASS: LazyLock<Item> =
+    LazyLock::new(|| Item::from_block(vanilla_blocks::LIGHT_BLUE_STAINED_GLASS));
+pub static YELLOW_STAINED_GLASS: LazyLock<Item> =
+    LazyLock::new(|| Item::from_block(vanilla_blocks::YELLOW_STAINED_GLASS));
+pub static LIME_STAINED_GLASS: LazyLock<Item> =
+    LazyLock::new(|| Item::from_block(vanilla_blocks::LIME_STAINED_GLASS));
+pub static PINK_STAINED_GLASS: LazyLock<Item> =
+    LazyLock::new(|| Item::from_block(vanilla_blocks::PINK_STAINED_GLASS));
+pub static GRAY_STAINED_GLASS: LazyLock<Item> =
+    LazyLock::new(|| Item::from_block(vanilla_blocks::GRAY_STAINED_GLASS));
+pub static LIGHT_GRAY_STAINED_GLASS: LazyLock<Item> =
+    LazyLock::new(|| Item::from_block(vanilla_blocks::LIGHT_GRAY_STAINED_GLASS));
+pub static CYAN_STAINED_GLASS: LazyLock<Item> =
+    LazyLock::new(|| Item::from_block(vanilla_blocks::CYAN_STAINED_GLASS));
+pub static PURPLE_STAINED_GLASS: LazyLock<Item> =
+    LazyLock::new(|| Item::from_block(vanilla_blocks::PURPLE_STAINED_GLASS));
+pub static BLUE_STAINED_GLASS: LazyLock<Item> =
+    LazyLock::new(|| Item::from_block(vanilla_blocks::BLUE_STAINED_GLASS));
+pub static BROWN_STAINED_GLASS: LazyLock<Item> =
+    LazyLock::new(|| Item::from_block(vanilla_blocks::BROWN_STAINED_GLASS));
+pub static GREEN_STAINED_GLASS: LazyLock<Item> =
+    LazyLock::new(|| Item::from_block(vanilla_blocks::GREEN_STAINED_GLASS));
+pub static RED_STAINED_GLASS: LazyLock<Item> =
+    LazyLock::new(|| Item::from_block(vanilla_blocks::RED_STAINED_GLASS));
+pub static BLACK_STAINED_GLASS: LazyLock<Item> =
+    LazyLock::new(|| Item::from_block(vanilla_blocks::BLACK_STAINED_GLASS));
+pub static WHITE_STAINED_GLASS_PANE: LazyLock<Item> =
+    LazyLock::new(|| Item::from_block(vanilla_blocks::WHITE_STAINED_GLASS_PANE));
+pub static ORANGE_STAINED_GLASS_PANE: LazyLock<Item> =
+    LazyLock::new(|| Item::from_block(vanilla_blocks::ORANGE_STAINED_GLASS_PANE));
+pub static MAGENTA_STAINED_GLASS_PANE: LazyLock<Item> =
+    LazyLock::new(|| Item::from_block(vanilla_blocks::MAGENTA_STAINED_GLASS_PANE));
+pub static LIGHT_BLUE_STAINED_GLASS_PANE: LazyLock<Item> =
+    LazyLock::new(|| Item::from_block(vanilla_blocks::LIGHT_BLUE_STAINED_GLASS_PANE));
+pub static YELLOW_STAINED_GLASS_PANE: LazyLock<Item> =
+    LazyLock::new(|| Item::from_block(vanilla_blocks::YELLOW_STAINED_GLASS_PANE));
+pub static LIME_STAINED_GLASS_PANE: LazyLock<Item> =
+    LazyLock::new(|| Item::from_block(vanilla_blocks::LIME_STAINED_GLASS_PANE));
+pub static PINK_STAINED_GLASS_PANE: LazyLock<Item> =
+    LazyLock::new(|| Item::from_block(vanilla_blocks::PINK_STAINED_GLASS_PANE));
+pub static GRAY_STAINED_GLASS_PANE: LazyLock<Item> =
+    LazyLock::new(|| Item::from_block(vanilla_blocks::GRAY_STAINED_GLASS_PANE));
+pub static LIGHT_GRAY_STAINED_GLASS_PANE: LazyLock<Item> =
+    LazyLock::new(|| Item::from_block(vanilla_blocks::LIGHT_GRAY_STAINED_GLASS_PANE));
+pub static CYAN_STAINED_GLASS_PANE: LazyLock<Item> =
+    LazyLock::new(|| Item::from_block(vanilla_blocks::CYAN_STAINED_GLASS_PANE));
+pub static PURPLE_STAINED_GLASS_PANE: LazyLock<Item> =
+    LazyLock::new(|| Item::from_block(vanilla_blocks::PURPLE_STAINED_GLASS_PANE));
+pub static BLUE_STAINED_GLASS_PANE: LazyLock<Item> =
+    LazyLock::new(|| Item::from_block(vanilla_blocks::BLUE_STAINED_GLASS_PANE));
+pub static BROWN_STAINED_GLASS_PANE: LazyLock<Item> =
+    LazyLock::new(|| Item::from_block(vanilla_blocks::BROWN_STAINED_GLASS_PANE));
+pub static GREEN_STAINED_GLASS_PANE: LazyLock<Item> =
+    LazyLock::new(|| Item::from_block(vanilla_blocks::GREEN_STAINED_GLASS_PANE));
+pub static RED_STAINED_GLASS_PANE: LazyLock<Item> =
+    LazyLock::new(|| Item::from_block(vanilla_blocks::RED_STAINED_GLASS_PANE));
+pub static BLACK_STAINED_GLASS_PANE: LazyLock<Item> =
+    LazyLock::new(|| Item::from_block(vanilla_blocks::BLACK_STAINED_GLASS_PANE));
+pub static PRISMARINE: LazyLock<Item> =
+    LazyLock::new(|| Item::from_block(vanilla_blocks::PRISMARINE));
+pub static PRISMARINE_BRICKS: LazyLock<Item> =
+    LazyLock::new(|| Item::from_block(vanilla_blocks::PRISMARINE_BRICKS));
+pub static DARK_PRISMARINE: LazyLock<Item> =
+    LazyLock::new(|| Item::from_block(vanilla_blocks::DARK_PRISMARINE));
+pub static PRISMARINE_STAIRS: LazyLock<Item> =
+    LazyLock::new(|| Item::from_block(vanilla_blocks::PRISMARINE_STAIRS));
+pub static PRISMARINE_BRICK_STAIRS: LazyLock<Item> =
+    LazyLock::new(|| Item::from_block(vanilla_blocks::PRISMARINE_BRICK_STAIRS));
+pub static DARK_PRISMARINE_STAIRS: LazyLock<Item> =
+    LazyLock::new(|| Item::from_block(vanilla_blocks::DARK_PRISMARINE_STAIRS));
+pub static SEA_LANTERN: LazyLock<Item> =
+    LazyLock::new(|| Item::from_block(vanilla_blocks::SEA_LANTERN));
+pub static RED_SANDSTONE: LazyLock<Item> =
+    LazyLock::new(|| Item::from_block(vanilla_blocks::RED_SANDSTONE));
+pub static CHISELED_RED_SANDSTONE: LazyLock<Item> =
+    LazyLock::new(|| Item::from_block(vanilla_blocks::CHISELED_RED_SANDSTONE));
+pub static CUT_RED_SANDSTONE: LazyLock<Item> =
+    LazyLock::new(|| Item::from_block(vanilla_blocks::CUT_RED_SANDSTONE));
+pub static RED_SANDSTONE_STAIRS: LazyLock<Item> =
+    LazyLock::new(|| Item::from_block(vanilla_blocks::RED_SANDSTONE_STAIRS));
+pub static REPEATING_COMMAND_BLOCK: LazyLock<Item> =
+    LazyLock::new(|| Item::from_block(vanilla_blocks::REPEATING_COMMAND_BLOCK));
+pub static CHAIN_COMMAND_BLOCK: LazyLock<Item> =
+    LazyLock::new(|| Item::from_block(vanilla_blocks::CHAIN_COMMAND_BLOCK));
+pub static MAGMA_BLOCK: LazyLock<Item> =
+    LazyLock::new(|| Item::from_block(vanilla_blocks::MAGMA_BLOCK));
+pub static NETHER_WART_BLOCK: LazyLock<Item> =
+    LazyLock::new(|| Item::from_block(vanilla_blocks::NETHER_WART_BLOCK));
+pub static WARPED_WART_BLOCK: LazyLock<Item> =
+    LazyLock::new(|| Item::from_block(vanilla_blocks::WARPED_WART_BLOCK));
+pub static RED_NETHER_BRICKS: LazyLock<Item> =
+    LazyLock::new(|| Item::from_block(vanilla_blocks::RED_NETHER_BRICKS));
+pub static BONE_BLOCK: LazyLock<Item> =
+    LazyLock::new(|| Item::from_block(vanilla_blocks::BONE_BLOCK));
+pub static STRUCTURE_VOID: LazyLock<Item> =
+    LazyLock::new(|| Item::from_block(vanilla_blocks::STRUCTURE_VOID));
+pub static SHULKER_BOX: LazyLock<Item> =
+    LazyLock::new(|| Item::from_block(vanilla_blocks::SHULKER_BOX));
+pub static WHITE_SHULKER_BOX: LazyLock<Item> =
+    LazyLock::new(|| Item::from_block(vanilla_blocks::WHITE_SHULKER_BOX));
+pub static ORANGE_SHULKER_BOX: LazyLock<Item> =
+    LazyLock::new(|| Item::from_block(vanilla_blocks::ORANGE_SHULKER_BOX));
+pub static MAGENTA_SHULKER_BOX: LazyLock<Item> =
+    LazyLock::new(|| Item::from_block(vanilla_blocks::MAGENTA_SHULKER_BOX));
+pub static LIGHT_BLUE_SHULKER_BOX: LazyLock<Item> =
+    LazyLock::new(|| Item::from_block(vanilla_blocks::LIGHT_BLUE_SHULKER_BOX));
+pub static YELLOW_SHULKER_BOX: LazyLock<Item> =
+    LazyLock::new(|| Item::from_block(vanilla_blocks::YELLOW_SHULKER_BOX));
+pub static LIME_SHULKER_BOX: LazyLock<Item> =
+    LazyLock::new(|| Item::from_block(vanilla_blocks::LIME_SHULKER_BOX));
+pub static PINK_SHULKER_BOX: LazyLock<Item> =
+    LazyLock::new(|| Item::from_block(vanilla_blocks::PINK_SHULKER_BOX));
+pub static GRAY_SHULKER_BOX: LazyLock<Item> =
+    LazyLock::new(|| Item::from_block(vanilla_blocks::GRAY_SHULKER_BOX));
+pub static LIGHT_GRAY_SHULKER_BOX: LazyLock<Item> =
+    LazyLock::new(|| Item::from_block(vanilla_blocks::LIGHT_GRAY_SHULKER_BOX));
+pub static CYAN_SHULKER_BOX: LazyLock<Item> =
+    LazyLock::new(|| Item::from_block(vanilla_blocks::CYAN_SHULKER_BOX));
+pub static PURPLE_SHULKER_BOX: LazyLock<Item> =
+    LazyLock::new(|| Item::from_block(vanilla_blocks::PURPLE_SHULKER_BOX));
+pub static BLUE_SHULKER_BOX: LazyLock<Item> =
+    LazyLock::new(|| Item::from_block(vanilla_blocks::BLUE_SHULKER_BOX));
+pub static BROWN_SHULKER_BOX: LazyLock<Item> =
+    LazyLock::new(|| Item::from_block(vanilla_blocks::BROWN_SHULKER_BOX));
+pub static GREEN_SHULKER_BOX: LazyLock<Item> =
+    LazyLock::new(|| Item::from_block(vanilla_blocks::GREEN_SHULKER_BOX));
+pub static RED_SHULKER_BOX: LazyLock<Item> =
+    LazyLock::new(|| Item::from_block(vanilla_blocks::RED_SHULKER_BOX));
+pub static BLACK_SHULKER_BOX: LazyLock<Item> =
+    LazyLock::new(|| Item::from_block(vanilla_blocks::BLACK_SHULKER_BOX));
+pub static WHITE_GLAZED_TERRACOTTA: LazyLock<Item> =
+    LazyLock::new(|| Item::from_block(vanilla_blocks::WHITE_GLAZED_TERRACOTTA));
+pub static ORANGE_GLAZED_TERRACOTTA: LazyLock<Item> =
+    LazyLock::new(|| Item::from_block(vanilla_blocks::ORANGE_GLAZED_TERRACOTTA));
+pub static MAGENTA_GLAZED_TERRACOTTA: LazyLock<Item> =
+    LazyLock::new(|| Item::from_block(vanilla_blocks::MAGENTA_GLAZED_TERRACOTTA));
+pub static LIGHT_BLUE_GLAZED_TERRACOTTA: LazyLock<Item> =
+    LazyLock::new(|| Item::from_block(vanilla_blocks::LIGHT_BLUE_GLAZED_TERRACOTTA));
+pub static YELLOW_GLAZED_TERRACOTTA: LazyLock<Item> =
+    LazyLock::new(|| Item::from_block(vanilla_blocks::YELLOW_GLAZED_TERRACOTTA));
+pub static LIME_GLAZED_TERRACOTTA: LazyLock<Item> =
+    LazyLock::new(|| Item::from_block(vanilla_blocks::LIME_GLAZED_TERRACOTTA));
+pub static PINK_GLAZED_TERRACOTTA: LazyLock<Item> =
+    LazyLock::new(|| Item::from_block(vanilla_blocks::PINK_GLAZED_TERRACOTTA));
+pub static GRAY_GLAZED_TERRACOTTA: LazyLock<Item> =
+    LazyLock::new(|| Item::from_block(vanilla_blocks::GRAY_GLAZED_TERRACOTTA));
+pub static LIGHT_GRAY_GLAZED_TERRACOTTA: LazyLock<Item> =
+    LazyLock::new(|| Item::from_block(vanilla_blocks::LIGHT_GRAY_GLAZED_TERRACOTTA));
+pub static CYAN_GLAZED_TERRACOTTA: LazyLock<Item> =
+    LazyLock::new(|| Item::from_block(vanilla_blocks::CYAN_GLAZED_TERRACOTTA));
+pub static PURPLE_GLAZED_TERRACOTTA: LazyLock<Item> =
+    LazyLock::new(|| Item::from_block(vanilla_blocks::PURPLE_GLAZED_TERRACOTTA));
+pub static BLUE_GLAZED_TERRACOTTA: LazyLock<Item> =
+    LazyLock::new(|| Item::from_block(vanilla_blocks::BLUE_GLAZED_TERRACOTTA));
+pub static BROWN_GLAZED_TERRACOTTA: LazyLock<Item> =
+    LazyLock::new(|| Item::from_block(vanilla_blocks::BROWN_GLAZED_TERRACOTTA));
+pub static GREEN_GLAZED_TERRACOTTA: LazyLock<Item> =
+    LazyLock::new(|| Item::from_block(vanilla_blocks::GREEN_GLAZED_TERRACOTTA));
+pub static RED_GLAZED_TERRACOTTA: LazyLock<Item> =
+    LazyLock::new(|| Item::from_block(vanilla_blocks::RED_GLAZED_TERRACOTTA));
+pub static BLACK_GLAZED_TERRACOTTA: LazyLock<Item> =
+    LazyLock::new(|| Item::from_block(vanilla_blocks::BLACK_GLAZED_TERRACOTTA));
+pub static WHITE_CONCRETE: LazyLock<Item> =
+    LazyLock::new(|| Item::from_block(vanilla_blocks::WHITE_CONCRETE));
+pub static ORANGE_CONCRETE: LazyLock<Item> =
+    LazyLock::new(|| Item::from_block(vanilla_blocks::ORANGE_CONCRETE));
+pub static MAGENTA_CONCRETE: LazyLock<Item> =
+    LazyLock::new(|| Item::from_block(vanilla_blocks::MAGENTA_CONCRETE));
+pub static LIGHT_BLUE_CONCRETE: LazyLock<Item> =
+    LazyLock::new(|| Item::from_block(vanilla_blocks::LIGHT_BLUE_CONCRETE));
+pub static YELLOW_CONCRETE: LazyLock<Item> =
+    LazyLock::new(|| Item::from_block(vanilla_blocks::YELLOW_CONCRETE));
+pub static LIME_CONCRETE: LazyLock<Item> =
+    LazyLock::new(|| Item::from_block(vanilla_blocks::LIME_CONCRETE));
+pub static PINK_CONCRETE: LazyLock<Item> =
+    LazyLock::new(|| Item::from_block(vanilla_blocks::PINK_CONCRETE));
+pub static GRAY_CONCRETE: LazyLock<Item> =
+    LazyLock::new(|| Item::from_block(vanilla_blocks::GRAY_CONCRETE));
+pub static LIGHT_GRAY_CONCRETE: LazyLock<Item> =
+    LazyLock::new(|| Item::from_block(vanilla_blocks::LIGHT_GRAY_CONCRETE));
+pub static CYAN_CONCRETE: LazyLock<Item> =
+    LazyLock::new(|| Item::from_block(vanilla_blocks::CYAN_CONCRETE));
+pub static PURPLE_CONCRETE: LazyLock<Item> =
+    LazyLock::new(|| Item::from_block(vanilla_blocks::PURPLE_CONCRETE));
+pub static BLUE_CONCRETE: LazyLock<Item> =
+    LazyLock::new(|| Item::from_block(vanilla_blocks::BLUE_CONCRETE));
+pub static BROWN_CONCRETE: LazyLock<Item> =
+    LazyLock::new(|| Item::from_block(vanilla_blocks::BROWN_CONCRETE));
+pub static GREEN_CONCRETE: LazyLock<Item> =
+    LazyLock::new(|| Item::from_block(vanilla_blocks::GREEN_CONCRETE));
+pub static RED_CONCRETE: LazyLock<Item> =
+    LazyLock::new(|| Item::from_block(vanilla_blocks::RED_CONCRETE));
+pub static BLACK_CONCRETE: LazyLock<Item> =
+    LazyLock::new(|| Item::from_block(vanilla_blocks::BLACK_CONCRETE));
+pub static WHITE_CONCRETE_POWDER: LazyLock<Item> =
+    LazyLock::new(|| Item::from_block(vanilla_blocks::WHITE_CONCRETE_POWDER));
+pub static ORANGE_CONCRETE_POWDER: LazyLock<Item> =
+    LazyLock::new(|| Item::from_block(vanilla_blocks::ORANGE_CONCRETE_POWDER));
+pub static MAGENTA_CONCRETE_POWDER: LazyLock<Item> =
+    LazyLock::new(|| Item::from_block(vanilla_blocks::MAGENTA_CONCRETE_POWDER));
+pub static LIGHT_BLUE_CONCRETE_POWDER: LazyLock<Item> =
+    LazyLock::new(|| Item::from_block(vanilla_blocks::LIGHT_BLUE_CONCRETE_POWDER));
+pub static YELLOW_CONCRETE_POWDER: LazyLock<Item> =
+    LazyLock::new(|| Item::from_block(vanilla_blocks::YELLOW_CONCRETE_POWDER));
+pub static LIME_CONCRETE_POWDER: LazyLock<Item> =
+    LazyLock::new(|| Item::from_block(vanilla_blocks::LIME_CONCRETE_POWDER));
+pub static PINK_CONCRETE_POWDER: LazyLock<Item> =
+    LazyLock::new(|| Item::from_block(vanilla_blocks::PINK_CONCRETE_POWDER));
+pub static GRAY_CONCRETE_POWDER: LazyLock<Item> =
+    LazyLock::new(|| Item::from_block(vanilla_blocks::GRAY_CONCRETE_POWDER));
+pub static LIGHT_GRAY_CONCRETE_POWDER: LazyLock<Item> =
+    LazyLock::new(|| Item::from_block(vanilla_blocks::LIGHT_GRAY_CONCRETE_POWDER));
+pub static CYAN_CONCRETE_POWDER: LazyLock<Item> =
+    LazyLock::new(|| Item::from_block(vanilla_blocks::CYAN_CONCRETE_POWDER));
+pub static PURPLE_CONCRETE_POWDER: LazyLock<Item> =
+    LazyLock::new(|| Item::from_block(vanilla_blocks::PURPLE_CONCRETE_POWDER));
+pub static BLUE_CONCRETE_POWDER: LazyLock<Item> =
+    LazyLock::new(|| Item::from_block(vanilla_blocks::BLUE_CONCRETE_POWDER));
+pub static BROWN_CONCRETE_POWDER: LazyLock<Item> =
+    LazyLock::new(|| Item::from_block(vanilla_blocks::BROWN_CONCRETE_POWDER));
+pub static GREEN_CONCRETE_POWDER: LazyLock<Item> =
+    LazyLock::new(|| Item::from_block(vanilla_blocks::GREEN_CONCRETE_POWDER));
+pub static RED_CONCRETE_POWDER: LazyLock<Item> =
+    LazyLock::new(|| Item::from_block(vanilla_blocks::RED_CONCRETE_POWDER));
+pub static BLACK_CONCRETE_POWDER: LazyLock<Item> =
+    LazyLock::new(|| Item::from_block(vanilla_blocks::BLACK_CONCRETE_POWDER));
+pub static TURTLE_EGG: LazyLock<Item> =
+    LazyLock::new(|| Item::from_block(vanilla_blocks::TURTLE_EGG));
+pub static SNIFFER_EGG: LazyLock<Item> =
+    LazyLock::new(|| Item::from_block(vanilla_blocks::SNIFFER_EGG));
+pub static DRIED_GHAST: LazyLock<Item> =
+    LazyLock::new(|| Item::from_block(vanilla_blocks::DRIED_GHAST));
+pub static DEAD_TUBE_CORAL_BLOCK: LazyLock<Item> =
+    LazyLock::new(|| Item::from_block(vanilla_blocks::DEAD_TUBE_CORAL_BLOCK));
+pub static DEAD_BRAIN_CORAL_BLOCK: LazyLock<Item> =
+    LazyLock::new(|| Item::from_block(vanilla_blocks::DEAD_BRAIN_CORAL_BLOCK));
+pub static DEAD_BUBBLE_CORAL_BLOCK: LazyLock<Item> =
+    LazyLock::new(|| Item::from_block(vanilla_blocks::DEAD_BUBBLE_CORAL_BLOCK));
+pub static DEAD_FIRE_CORAL_BLOCK: LazyLock<Item> =
+    LazyLock::new(|| Item::from_block(vanilla_blocks::DEAD_FIRE_CORAL_BLOCK));
+pub static DEAD_HORN_CORAL_BLOCK: LazyLock<Item> =
+    LazyLock::new(|| Item::from_block(vanilla_blocks::DEAD_HORN_CORAL_BLOCK));
+pub static TUBE_CORAL_BLOCK: LazyLock<Item> =
+    LazyLock::new(|| Item::from_block(vanilla_blocks::TUBE_CORAL_BLOCK));
+pub static BRAIN_CORAL_BLOCK: LazyLock<Item> =
+    LazyLock::new(|| Item::from_block(vanilla_blocks::BRAIN_CORAL_BLOCK));
+pub static BUBBLE_CORAL_BLOCK: LazyLock<Item> =
+    LazyLock::new(|| Item::from_block(vanilla_blocks::BUBBLE_CORAL_BLOCK));
+pub static FIRE_CORAL_BLOCK: LazyLock<Item> =
+    LazyLock::new(|| Item::from_block(vanilla_blocks::FIRE_CORAL_BLOCK));
+pub static HORN_CORAL_BLOCK: LazyLock<Item> =
+    LazyLock::new(|| Item::from_block(vanilla_blocks::HORN_CORAL_BLOCK));
+pub static TUBE_CORAL: LazyLock<Item> =
+    LazyLock::new(|| Item::from_block(vanilla_blocks::TUBE_CORAL));
+pub static BRAIN_CORAL: LazyLock<Item> =
+    LazyLock::new(|| Item::from_block(vanilla_blocks::BRAIN_CORAL));
+pub static BUBBLE_CORAL: LazyLock<Item> =
+    LazyLock::new(|| Item::from_block(vanilla_blocks::BUBBLE_CORAL));
+pub static FIRE_CORAL: LazyLock<Item> =
+    LazyLock::new(|| Item::from_block(vanilla_blocks::FIRE_CORAL));
+pub static HORN_CORAL: LazyLock<Item> =
+    LazyLock::new(|| Item::from_block(vanilla_blocks::HORN_CORAL));
+pub static DEAD_BRAIN_CORAL: LazyLock<Item> =
+    LazyLock::new(|| Item::from_block(vanilla_blocks::DEAD_BRAIN_CORAL));
+pub static DEAD_BUBBLE_CORAL: LazyLock<Item> =
+    LazyLock::new(|| Item::from_block(vanilla_blocks::DEAD_BUBBLE_CORAL));
+pub static DEAD_FIRE_CORAL: LazyLock<Item> =
+    LazyLock::new(|| Item::from_block(vanilla_blocks::DEAD_FIRE_CORAL));
+pub static DEAD_HORN_CORAL: LazyLock<Item> =
+    LazyLock::new(|| Item::from_block(vanilla_blocks::DEAD_HORN_CORAL));
+pub static DEAD_TUBE_CORAL: LazyLock<Item> =
+    LazyLock::new(|| Item::from_block(vanilla_blocks::DEAD_TUBE_CORAL));
+pub static TUBE_CORAL_FAN: LazyLock<Item> =
+    LazyLock::new(|| Item::from_block(vanilla_blocks::TUBE_CORAL_FAN));
+pub static BRAIN_CORAL_FAN: LazyLock<Item> =
+    LazyLock::new(|| Item::from_block(vanilla_blocks::BRAIN_CORAL_FAN));
+pub static BUBBLE_CORAL_FAN: LazyLock<Item> =
+    LazyLock::new(|| Item::from_block(vanilla_blocks::BUBBLE_CORAL_FAN));
+pub static FIRE_CORAL_FAN: LazyLock<Item> =
+    LazyLock::new(|| Item::from_block(vanilla_blocks::FIRE_CORAL_FAN));
+pub static HORN_CORAL_FAN: LazyLock<Item> =
+    LazyLock::new(|| Item::from_block(vanilla_blocks::HORN_CORAL_FAN));
+pub static DEAD_TUBE_CORAL_FAN: LazyLock<Item> =
+    LazyLock::new(|| Item::from_block(vanilla_blocks::DEAD_TUBE_CORAL_FAN));
+pub static DEAD_BRAIN_CORAL_FAN: LazyLock<Item> =
+    LazyLock::new(|| Item::from_block(vanilla_blocks::DEAD_BRAIN_CORAL_FAN));
+pub static DEAD_BUBBLE_CORAL_FAN: LazyLock<Item> =
+    LazyLock::new(|| Item::from_block(vanilla_blocks::DEAD_BUBBLE_CORAL_FAN));
+pub static DEAD_FIRE_CORAL_FAN: LazyLock<Item> =
+    LazyLock::new(|| Item::from_block(vanilla_blocks::DEAD_FIRE_CORAL_FAN));
+pub static DEAD_HORN_CORAL_FAN: LazyLock<Item> =
+    LazyLock::new(|| Item::from_block(vanilla_blocks::DEAD_HORN_CORAL_FAN));
+pub static BLUE_ICE: LazyLock<Item> = LazyLock::new(|| Item::from_block(vanilla_blocks::BLUE_ICE));
+pub static CONDUIT: LazyLock<Item> = LazyLock::new(|| Item::from_block(vanilla_blocks::CONDUIT));
+pub static POLISHED_GRANITE_STAIRS: LazyLock<Item> =
+    LazyLock::new(|| Item::from_block(vanilla_blocks::POLISHED_GRANITE_STAIRS));
+pub static SMOOTH_RED_SANDSTONE_STAIRS: LazyLock<Item> =
+    LazyLock::new(|| Item::from_block(vanilla_blocks::SMOOTH_RED_SANDSTONE_STAIRS));
+pub static MOSSY_STONE_BRICK_STAIRS: LazyLock<Item> =
+    LazyLock::new(|| Item::from_block(vanilla_blocks::MOSSY_STONE_BRICK_STAIRS));
+pub static POLISHED_DIORITE_STAIRS: LazyLock<Item> =
+    LazyLock::new(|| Item::from_block(vanilla_blocks::POLISHED_DIORITE_STAIRS));
+pub static MOSSY_COBBLESTONE_STAIRS: LazyLock<Item> =
+    LazyLock::new(|| Item::from_block(vanilla_blocks::MOSSY_COBBLESTONE_STAIRS));
+pub static END_STONE_BRICK_STAIRS: LazyLock<Item> =
+    LazyLock::new(|| Item::from_block(vanilla_blocks::END_STONE_BRICK_STAIRS));
+pub static STONE_STAIRS: LazyLock<Item> =
+    LazyLock::new(|| Item::from_block(vanilla_blocks::STONE_STAIRS));
+pub static SMOOTH_SANDSTONE_STAIRS: LazyLock<Item> =
+    LazyLock::new(|| Item::from_block(vanilla_blocks::SMOOTH_SANDSTONE_STAIRS));
+pub static SMOOTH_QUARTZ_STAIRS: LazyLock<Item> =
+    LazyLock::new(|| Item::from_block(vanilla_blocks::SMOOTH_QUARTZ_STAIRS));
+pub static GRANITE_STAIRS: LazyLock<Item> =
+    LazyLock::new(|| Item::from_block(vanilla_blocks::GRANITE_STAIRS));
+pub static ANDESITE_STAIRS: LazyLock<Item> =
+    LazyLock::new(|| Item::from_block(vanilla_blocks::ANDESITE_STAIRS));
+pub static RED_NETHER_BRICK_STAIRS: LazyLock<Item> =
+    LazyLock::new(|| Item::from_block(vanilla_blocks::RED_NETHER_BRICK_STAIRS));
+pub static POLISHED_ANDESITE_STAIRS: LazyLock<Item> =
+    LazyLock::new(|| Item::from_block(vanilla_blocks::POLISHED_ANDESITE_STAIRS));
+pub static DIORITE_STAIRS: LazyLock<Item> =
+    LazyLock::new(|| Item::from_block(vanilla_blocks::DIORITE_STAIRS));
+pub static COBBLED_DEEPSLATE_STAIRS: LazyLock<Item> =
+    LazyLock::new(|| Item::from_block(vanilla_blocks::COBBLED_DEEPSLATE_STAIRS));
+pub static POLISHED_DEEPSLATE_STAIRS: LazyLock<Item> =
+    LazyLock::new(|| Item::from_block(vanilla_blocks::POLISHED_DEEPSLATE_STAIRS));
+pub static DEEPSLATE_BRICK_STAIRS: LazyLock<Item> =
+    LazyLock::new(|| Item::from_block(vanilla_blocks::DEEPSLATE_BRICK_STAIRS));
+pub static DEEPSLATE_TILE_STAIRS: LazyLock<Item> =
+    LazyLock::new(|| Item::from_block(vanilla_blocks::DEEPSLATE_TILE_STAIRS));
+pub static POLISHED_GRANITE_SLAB: LazyLock<Item> =
+    LazyLock::new(|| Item::from_block(vanilla_blocks::POLISHED_GRANITE_SLAB));
+pub static SMOOTH_RED_SANDSTONE_SLAB: LazyLock<Item> =
+    LazyLock::new(|| Item::from_block(vanilla_blocks::SMOOTH_RED_SANDSTONE_SLAB));
+pub static MOSSY_STONE_BRICK_SLAB: LazyLock<Item> =
+    LazyLock::new(|| Item::from_block(vanilla_blocks::MOSSY_STONE_BRICK_SLAB));
+pub static POLISHED_DIORITE_SLAB: LazyLock<Item> =
+    LazyLock::new(|| Item::from_block(vanilla_blocks::POLISHED_DIORITE_SLAB));
+pub static MOSSY_COBBLESTONE_SLAB: LazyLock<Item> =
+    LazyLock::new(|| Item::from_block(vanilla_blocks::MOSSY_COBBLESTONE_SLAB));
+pub static END_STONE_BRICK_SLAB: LazyLock<Item> =
+    LazyLock::new(|| Item::from_block(vanilla_blocks::END_STONE_BRICK_SLAB));
+pub static SMOOTH_SANDSTONE_SLAB: LazyLock<Item> =
+    LazyLock::new(|| Item::from_block(vanilla_blocks::SMOOTH_SANDSTONE_SLAB));
+pub static SMOOTH_QUARTZ_SLAB: LazyLock<Item> =
+    LazyLock::new(|| Item::from_block(vanilla_blocks::SMOOTH_QUARTZ_SLAB));
+pub static GRANITE_SLAB: LazyLock<Item> =
+    LazyLock::new(|| Item::from_block(vanilla_blocks::GRANITE_SLAB));
+pub static ANDESITE_SLAB: LazyLock<Item> =
+    LazyLock::new(|| Item::from_block(vanilla_blocks::ANDESITE_SLAB));
+pub static RED_NETHER_BRICK_SLAB: LazyLock<Item> =
+    LazyLock::new(|| Item::from_block(vanilla_blocks::RED_NETHER_BRICK_SLAB));
+pub static POLISHED_ANDESITE_SLAB: LazyLock<Item> =
+    LazyLock::new(|| Item::from_block(vanilla_blocks::POLISHED_ANDESITE_SLAB));
+pub static DIORITE_SLAB: LazyLock<Item> =
+    LazyLock::new(|| Item::from_block(vanilla_blocks::DIORITE_SLAB));
+pub static COBBLED_DEEPSLATE_SLAB: LazyLock<Item> =
+    LazyLock::new(|| Item::from_block(vanilla_blocks::COBBLED_DEEPSLATE_SLAB));
+pub static POLISHED_DEEPSLATE_SLAB: LazyLock<Item> =
+    LazyLock::new(|| Item::from_block(vanilla_blocks::POLISHED_DEEPSLATE_SLAB));
+pub static DEEPSLATE_BRICK_SLAB: LazyLock<Item> =
+    LazyLock::new(|| Item::from_block(vanilla_blocks::DEEPSLATE_BRICK_SLAB));
+pub static DEEPSLATE_TILE_SLAB: LazyLock<Item> =
+    LazyLock::new(|| Item::from_block(vanilla_blocks::DEEPSLATE_TILE_SLAB));
+pub static SCAFFOLDING: LazyLock<Item> =
+    LazyLock::new(|| Item::from_block(vanilla_blocks::SCAFFOLDING));
+pub static REDSTONE: LazyLock<Item> =
+    LazyLock::new(|| Item::from_block_custom_name(vanilla_blocks::REDSTONE_WIRE, "redstone"));
+pub static REDSTONE_TORCH: LazyLock<Item> =
+    LazyLock::new(|| Item::from_block(vanilla_blocks::REDSTONE_TORCH));
+pub static REDSTONE_BLOCK: LazyLock<Item> =
+    LazyLock::new(|| Item::from_block(vanilla_blocks::REDSTONE_BLOCK));
+pub static REPEATER: LazyLock<Item> = LazyLock::new(|| Item::from_block(vanilla_blocks::REPEATER));
+pub static COMPARATOR: LazyLock<Item> =
+    LazyLock::new(|| Item::from_block(vanilla_blocks::COMPARATOR));
+pub static PISTON: LazyLock<Item> = LazyLock::new(|| Item::from_block(vanilla_blocks::PISTON));
+pub static STICKY_PISTON: LazyLock<Item> =
+    LazyLock::new(|| Item::from_block(vanilla_blocks::STICKY_PISTON));
+pub static SLIME_BLOCK: LazyLock<Item> =
+    LazyLock::new(|| Item::from_block(vanilla_blocks::SLIME_BLOCK));
+pub static HONEY_BLOCK: LazyLock<Item> =
+    LazyLock::new(|| Item::from_block(vanilla_blocks::HONEY_BLOCK));
+pub static OBSERVER: LazyLock<Item> = LazyLock::new(|| Item::from_block(vanilla_blocks::OBSERVER));
+pub static HOPPER: LazyLock<Item> = LazyLock::new(|| Item::from_block(vanilla_blocks::HOPPER));
+pub static DISPENSER: LazyLock<Item> =
+    LazyLock::new(|| Item::from_block(vanilla_blocks::DISPENSER));
+pub static DROPPER: LazyLock<Item> = LazyLock::new(|| Item::from_block(vanilla_blocks::DROPPER));
+pub static LECTERN: LazyLock<Item> = LazyLock::new(|| Item::from_block(vanilla_blocks::LECTERN));
+pub static TARGET: LazyLock<Item> = LazyLock::new(|| Item::from_block(vanilla_blocks::TARGET));
+pub static LEVER: LazyLock<Item> = LazyLock::new(|| Item::from_block(vanilla_blocks::LEVER));
+pub static LIGHTNING_ROD: LazyLock<Item> =
+    LazyLock::new(|| Item::from_block(vanilla_blocks::LIGHTNING_ROD));
+pub static EXPOSED_LIGHTNING_ROD: LazyLock<Item> =
+    LazyLock::new(|| Item::from_block(vanilla_blocks::EXPOSED_LIGHTNING_ROD));
+pub static WEATHERED_LIGHTNING_ROD: LazyLock<Item> =
+    LazyLock::new(|| Item::from_block(vanilla_blocks::WEATHERED_LIGHTNING_ROD));
+pub static OXIDIZED_LIGHTNING_ROD: LazyLock<Item> =
+    LazyLock::new(|| Item::from_block(vanilla_blocks::OXIDIZED_LIGHTNING_ROD));
+pub static WAXED_LIGHTNING_ROD: LazyLock<Item> =
+    LazyLock::new(|| Item::from_block(vanilla_blocks::WAXED_LIGHTNING_ROD));
+pub static WAXED_EXPOSED_LIGHTNING_ROD: LazyLock<Item> =
+    LazyLock::new(|| Item::from_block(vanilla_blocks::WAXED_EXPOSED_LIGHTNING_ROD));
+pub static WAXED_WEATHERED_LIGHTNING_ROD: LazyLock<Item> =
+    LazyLock::new(|| Item::from_block(vanilla_blocks::WAXED_WEATHERED_LIGHTNING_ROD));
+pub static WAXED_OXIDIZED_LIGHTNING_ROD: LazyLock<Item> =
+    LazyLock::new(|| Item::from_block(vanilla_blocks::WAXED_OXIDIZED_LIGHTNING_ROD));
+pub static DAYLIGHT_DETECTOR: LazyLock<Item> =
+    LazyLock::new(|| Item::from_block(vanilla_blocks::DAYLIGHT_DETECTOR));
+pub static SCULK_SENSOR: LazyLock<Item> =
+    LazyLock::new(|| Item::from_block(vanilla_blocks::SCULK_SENSOR));
+pub static CALIBRATED_SCULK_SENSOR: LazyLock<Item> =
+    LazyLock::new(|| Item::from_block(vanilla_blocks::CALIBRATED_SCULK_SENSOR));
+pub static TRIPWIRE_HOOK: LazyLock<Item> =
+    LazyLock::new(|| Item::from_block(vanilla_blocks::TRIPWIRE_HOOK));
+pub static TRAPPED_CHEST: LazyLock<Item> =
+    LazyLock::new(|| Item::from_block(vanilla_blocks::TRAPPED_CHEST));
+pub static TNT: LazyLock<Item> = LazyLock::new(|| Item::from_block(vanilla_blocks::TNT));
+pub static REDSTONE_LAMP: LazyLock<Item> =
+    LazyLock::new(|| Item::from_block(vanilla_blocks::REDSTONE_LAMP));
+pub static NOTE_BLOCK: LazyLock<Item> =
+    LazyLock::new(|| Item::from_block(vanilla_blocks::NOTE_BLOCK));
+pub static STONE_BUTTON: LazyLock<Item> =
+    LazyLock::new(|| Item::from_block(vanilla_blocks::STONE_BUTTON));
+pub static POLISHED_BLACKSTONE_BUTTON: LazyLock<Item> =
+    LazyLock::new(|| Item::from_block(vanilla_blocks::POLISHED_BLACKSTONE_BUTTON));
+pub static OAK_BUTTON: LazyLock<Item> =
+    LazyLock::new(|| Item::from_block(vanilla_blocks::OAK_BUTTON));
+pub static SPRUCE_BUTTON: LazyLock<Item> =
+    LazyLock::new(|| Item::from_block(vanilla_blocks::SPRUCE_BUTTON));
+pub static BIRCH_BUTTON: LazyLock<Item> =
+    LazyLock::new(|| Item::from_block(vanilla_blocks::BIRCH_BUTTON));
+pub static JUNGLE_BUTTON: LazyLock<Item> =
+    LazyLock::new(|| Item::from_block(vanilla_blocks::JUNGLE_BUTTON));
+pub static ACACIA_BUTTON: LazyLock<Item> =
+    LazyLock::new(|| Item::from_block(vanilla_blocks::ACACIA_BUTTON));
+pub static CHERRY_BUTTON: LazyLock<Item> =
+    LazyLock::new(|| Item::from_block(vanilla_blocks::CHERRY_BUTTON));
+pub static DARK_OAK_BUTTON: LazyLock<Item> =
+    LazyLock::new(|| Item::from_block(vanilla_blocks::DARK_OAK_BUTTON));
+pub static PALE_OAK_BUTTON: LazyLock<Item> =
+    LazyLock::new(|| Item::from_block(vanilla_blocks::PALE_OAK_BUTTON));
+pub static MANGROVE_BUTTON: LazyLock<Item> =
+    LazyLock::new(|| Item::from_block(vanilla_blocks::MANGROVE_BUTTON));
+pub static BAMBOO_BUTTON: LazyLock<Item> =
+    LazyLock::new(|| Item::from_block(vanilla_blocks::BAMBOO_BUTTON));
+pub static CRIMSON_BUTTON: LazyLock<Item> =
+    LazyLock::new(|| Item::from_block(vanilla_blocks::CRIMSON_BUTTON));
+pub static WARPED_BUTTON: LazyLock<Item> =
+    LazyLock::new(|| Item::from_block(vanilla_blocks::WARPED_BUTTON));
+pub static STONE_PRESSURE_PLATE: LazyLock<Item> =
+    LazyLock::new(|| Item::from_block(vanilla_blocks::STONE_PRESSURE_PLATE));
+pub static POLISHED_BLACKSTONE_PRESSURE_PLATE: LazyLock<Item> =
+    LazyLock::new(|| Item::from_block(vanilla_blocks::POLISHED_BLACKSTONE_PRESSURE_PLATE));
+pub static LIGHT_WEIGHTED_PRESSURE_PLATE: LazyLock<Item> =
+    LazyLock::new(|| Item::from_block(vanilla_blocks::LIGHT_WEIGHTED_PRESSURE_PLATE));
+pub static HEAVY_WEIGHTED_PRESSURE_PLATE: LazyLock<Item> =
+    LazyLock::new(|| Item::from_block(vanilla_blocks::HEAVY_WEIGHTED_PRESSURE_PLATE));
+pub static OAK_PRESSURE_PLATE: LazyLock<Item> =
+    LazyLock::new(|| Item::from_block(vanilla_blocks::OAK_PRESSURE_PLATE));
+pub static SPRUCE_PRESSURE_PLATE: LazyLock<Item> =
+    LazyLock::new(|| Item::from_block(vanilla_blocks::SPRUCE_PRESSURE_PLATE));
+pub static BIRCH_PRESSURE_PLATE: LazyLock<Item> =
+    LazyLock::new(|| Item::from_block(vanilla_blocks::BIRCH_PRESSURE_PLATE));
+pub static JUNGLE_PRESSURE_PLATE: LazyLock<Item> =
+    LazyLock::new(|| Item::from_block(vanilla_blocks::JUNGLE_PRESSURE_PLATE));
+pub static ACACIA_PRESSURE_PLATE: LazyLock<Item> =
+    LazyLock::new(|| Item::from_block(vanilla_blocks::ACACIA_PRESSURE_PLATE));
+pub static CHERRY_PRESSURE_PLATE: LazyLock<Item> =
+    LazyLock::new(|| Item::from_block(vanilla_blocks::CHERRY_PRESSURE_PLATE));
+pub static DARK_OAK_PRESSURE_PLATE: LazyLock<Item> =
+    LazyLock::new(|| Item::from_block(vanilla_blocks::DARK_OAK_PRESSURE_PLATE));
+pub static PALE_OAK_PRESSURE_PLATE: LazyLock<Item> =
+    LazyLock::new(|| Item::from_block(vanilla_blocks::PALE_OAK_PRESSURE_PLATE));
+pub static MANGROVE_PRESSURE_PLATE: LazyLock<Item> =
+    LazyLock::new(|| Item::from_block(vanilla_blocks::MANGROVE_PRESSURE_PLATE));
+pub static BAMBOO_PRESSURE_PLATE: LazyLock<Item> =
+    LazyLock::new(|| Item::from_block(vanilla_blocks::BAMBOO_PRESSURE_PLATE));
+pub static CRIMSON_PRESSURE_PLATE: LazyLock<Item> =
+    LazyLock::new(|| Item::from_block(vanilla_blocks::CRIMSON_PRESSURE_PLATE));
+pub static WARPED_PRESSURE_PLATE: LazyLock<Item> =
+    LazyLock::new(|| Item::from_block(vanilla_blocks::WARPED_PRESSURE_PLATE));
+pub static IRON_DOOR: LazyLock<Item> =
+    LazyLock::new(|| Item::from_block(vanilla_blocks::IRON_DOOR));
+pub static OAK_DOOR: LazyLock<Item> = LazyLock::new(|| Item::from_block(vanilla_blocks::OAK_DOOR));
+pub static SPRUCE_DOOR: LazyLock<Item> =
+    LazyLock::new(|| Item::from_block(vanilla_blocks::SPRUCE_DOOR));
+pub static BIRCH_DOOR: LazyLock<Item> =
+    LazyLock::new(|| Item::from_block(vanilla_blocks::BIRCH_DOOR));
+pub static JUNGLE_DOOR: LazyLock<Item> =
+    LazyLock::new(|| Item::from_block(vanilla_blocks::JUNGLE_DOOR));
+pub static ACACIA_DOOR: LazyLock<Item> =
+    LazyLock::new(|| Item::from_block(vanilla_blocks::ACACIA_DOOR));
+pub static CHERRY_DOOR: LazyLock<Item> =
+    LazyLock::new(|| Item::from_block(vanilla_blocks::CHERRY_DOOR));
+pub static DARK_OAK_DOOR: LazyLock<Item> =
+    LazyLock::new(|| Item::from_block(vanilla_blocks::DARK_OAK_DOOR));
+pub static PALE_OAK_DOOR: LazyLock<Item> =
+    LazyLock::new(|| Item::from_block(vanilla_blocks::PALE_OAK_DOOR));
+pub static MANGROVE_DOOR: LazyLock<Item> =
+    LazyLock::new(|| Item::from_block(vanilla_blocks::MANGROVE_DOOR));
+pub static BAMBOO_DOOR: LazyLock<Item> =
+    LazyLock::new(|| Item::from_block(vanilla_blocks::BAMBOO_DOOR));
+pub static CRIMSON_DOOR: LazyLock<Item> =
+    LazyLock::new(|| Item::from_block(vanilla_blocks::CRIMSON_DOOR));
+pub static WARPED_DOOR: LazyLock<Item> =
+    LazyLock::new(|| Item::from_block(vanilla_blocks::WARPED_DOOR));
+pub static COPPER_DOOR: LazyLock<Item> =
+    LazyLock::new(|| Item::from_block(vanilla_blocks::COPPER_DOOR));
+pub static EXPOSED_COPPER_DOOR: LazyLock<Item> =
+    LazyLock::new(|| Item::from_block(vanilla_blocks::EXPOSED_COPPER_DOOR));
+pub static WEATHERED_COPPER_DOOR: LazyLock<Item> =
+    LazyLock::new(|| Item::from_block(vanilla_blocks::WEATHERED_COPPER_DOOR));
+pub static OXIDIZED_COPPER_DOOR: LazyLock<Item> =
+    LazyLock::new(|| Item::from_block(vanilla_blocks::OXIDIZED_COPPER_DOOR));
+pub static WAXED_COPPER_DOOR: LazyLock<Item> =
+    LazyLock::new(|| Item::from_block(vanilla_blocks::WAXED_COPPER_DOOR));
+pub static WAXED_EXPOSED_COPPER_DOOR: LazyLock<Item> =
+    LazyLock::new(|| Item::from_block(vanilla_blocks::WAXED_EXPOSED_COPPER_DOOR));
+pub static WAXED_WEATHERED_COPPER_DOOR: LazyLock<Item> =
+    LazyLock::new(|| Item::from_block(vanilla_blocks::WAXED_WEATHERED_COPPER_DOOR));
+pub static WAXED_OXIDIZED_COPPER_DOOR: LazyLock<Item> =
+    LazyLock::new(|| Item::from_block(vanilla_blocks::WAXED_OXIDIZED_COPPER_DOOR));
+pub static IRON_TRAPDOOR: LazyLock<Item> =
+    LazyLock::new(|| Item::from_block(vanilla_blocks::IRON_TRAPDOOR));
+pub static OAK_TRAPDOOR: LazyLock<Item> =
+    LazyLock::new(|| Item::from_block(vanilla_blocks::OAK_TRAPDOOR));
+pub static SPRUCE_TRAPDOOR: LazyLock<Item> =
+    LazyLock::new(|| Item::from_block(vanilla_blocks::SPRUCE_TRAPDOOR));
+pub static BIRCH_TRAPDOOR: LazyLock<Item> =
+    LazyLock::new(|| Item::from_block(vanilla_blocks::BIRCH_TRAPDOOR));
+pub static JUNGLE_TRAPDOOR: LazyLock<Item> =
+    LazyLock::new(|| Item::from_block(vanilla_blocks::JUNGLE_TRAPDOOR));
+pub static ACACIA_TRAPDOOR: LazyLock<Item> =
+    LazyLock::new(|| Item::from_block(vanilla_blocks::ACACIA_TRAPDOOR));
+pub static CHERRY_TRAPDOOR: LazyLock<Item> =
+    LazyLock::new(|| Item::from_block(vanilla_blocks::CHERRY_TRAPDOOR));
+pub static DARK_OAK_TRAPDOOR: LazyLock<Item> =
+    LazyLock::new(|| Item::from_block(vanilla_blocks::DARK_OAK_TRAPDOOR));
+pub static PALE_OAK_TRAPDOOR: LazyLock<Item> =
+    LazyLock::new(|| Item::from_block(vanilla_blocks::PALE_OAK_TRAPDOOR));
+pub static MANGROVE_TRAPDOOR: LazyLock<Item> =
+    LazyLock::new(|| Item::from_block(vanilla_blocks::MANGROVE_TRAPDOOR));
+pub static BAMBOO_TRAPDOOR: LazyLock<Item> =
+    LazyLock::new(|| Item::from_block(vanilla_blocks::BAMBOO_TRAPDOOR));
+pub static CRIMSON_TRAPDOOR: LazyLock<Item> =
+    LazyLock::new(|| Item::from_block(vanilla_blocks::CRIMSON_TRAPDOOR));
+pub static WARPED_TRAPDOOR: LazyLock<Item> =
+    LazyLock::new(|| Item::from_block(vanilla_blocks::WARPED_TRAPDOOR));
+pub static COPPER_TRAPDOOR: LazyLock<Item> =
+    LazyLock::new(|| Item::from_block(vanilla_blocks::COPPER_TRAPDOOR));
+pub static EXPOSED_COPPER_TRAPDOOR: LazyLock<Item> =
+    LazyLock::new(|| Item::from_block(vanilla_blocks::EXPOSED_COPPER_TRAPDOOR));
+pub static WEATHERED_COPPER_TRAPDOOR: LazyLock<Item> =
+    LazyLock::new(|| Item::from_block(vanilla_blocks::WEATHERED_COPPER_TRAPDOOR));
+pub static OXIDIZED_COPPER_TRAPDOOR: LazyLock<Item> =
+    LazyLock::new(|| Item::from_block(vanilla_blocks::OXIDIZED_COPPER_TRAPDOOR));
+pub static WAXED_COPPER_TRAPDOOR: LazyLock<Item> =
+    LazyLock::new(|| Item::from_block(vanilla_blocks::WAXED_COPPER_TRAPDOOR));
+pub static WAXED_EXPOSED_COPPER_TRAPDOOR: LazyLock<Item> =
+    LazyLock::new(|| Item::from_block(vanilla_blocks::WAXED_EXPOSED_COPPER_TRAPDOOR));
+pub static WAXED_WEATHERED_COPPER_TRAPDOOR: LazyLock<Item> =
+    LazyLock::new(|| Item::from_block(vanilla_blocks::WAXED_WEATHERED_COPPER_TRAPDOOR));
+pub static WAXED_OXIDIZED_COPPER_TRAPDOOR: LazyLock<Item> =
+    LazyLock::new(|| Item::from_block(vanilla_blocks::WAXED_OXIDIZED_COPPER_TRAPDOOR));
+pub static OAK_FENCE_GATE: LazyLock<Item> =
+    LazyLock::new(|| Item::from_block(vanilla_blocks::OAK_FENCE_GATE));
+pub static SPRUCE_FENCE_GATE: LazyLock<Item> =
+    LazyLock::new(|| Item::from_block(vanilla_blocks::SPRUCE_FENCE_GATE));
+pub static BIRCH_FENCE_GATE: LazyLock<Item> =
+    LazyLock::new(|| Item::from_block(vanilla_blocks::BIRCH_FENCE_GATE));
+pub static JUNGLE_FENCE_GATE: LazyLock<Item> =
+    LazyLock::new(|| Item::from_block(vanilla_blocks::JUNGLE_FENCE_GATE));
+pub static ACACIA_FENCE_GATE: LazyLock<Item> =
+    LazyLock::new(|| Item::from_block(vanilla_blocks::ACACIA_FENCE_GATE));
+pub static CHERRY_FENCE_GATE: LazyLock<Item> =
+    LazyLock::new(|| Item::from_block(vanilla_blocks::CHERRY_FENCE_GATE));
+pub static DARK_OAK_FENCE_GATE: LazyLock<Item> =
+    LazyLock::new(|| Item::from_block(vanilla_blocks::DARK_OAK_FENCE_GATE));
+pub static PALE_OAK_FENCE_GATE: LazyLock<Item> =
+    LazyLock::new(|| Item::from_block(vanilla_blocks::PALE_OAK_FENCE_GATE));
+pub static MANGROVE_FENCE_GATE: LazyLock<Item> =
+    LazyLock::new(|| Item::from_block(vanilla_blocks::MANGROVE_FENCE_GATE));
+pub static BAMBOO_FENCE_GATE: LazyLock<Item> =
+    LazyLock::new(|| Item::from_block(vanilla_blocks::BAMBOO_FENCE_GATE));
+pub static CRIMSON_FENCE_GATE: LazyLock<Item> =
+    LazyLock::new(|| Item::from_block(vanilla_blocks::CRIMSON_FENCE_GATE));
+pub static WARPED_FENCE_GATE: LazyLock<Item> =
+    LazyLock::new(|| Item::from_block(vanilla_blocks::WARPED_FENCE_GATE));
+pub static POWERED_RAIL: LazyLock<Item> =
+    LazyLock::new(|| Item::from_block(vanilla_blocks::POWERED_RAIL));
+pub static DETECTOR_RAIL: LazyLock<Item> =
+    LazyLock::new(|| Item::from_block(vanilla_blocks::DETECTOR_RAIL));
+pub static RAIL: LazyLock<Item> = LazyLock::new(|| Item::from_block(vanilla_blocks::RAIL));
+pub static ACTIVATOR_RAIL: LazyLock<Item> =
+    LazyLock::new(|| Item::from_block(vanilla_blocks::ACTIVATOR_RAIL));
+pub static SADDLE: LazyLock<Item> = LazyLock::new(|| Item {
+    key: ResourceLocation::vanilla_static("saddle"),
+    components: DataComponentMap::common_item_components()
+        .builder_set(vanilla_components::MAX_STACK_SIZE, Some(1i32)),
+});
+pub static WHITE_HARNESS: LazyLock<Item> = LazyLock::new(|| Item {
+    key: ResourceLocation::vanilla_static("white_harness"),
+    components: DataComponentMap::common_item_components()
+        .builder_set(vanilla_components::MAX_STACK_SIZE, Some(1i32)),
+});
+pub static ORANGE_HARNESS: LazyLock<Item> = LazyLock::new(|| Item {
+    key: ResourceLocation::vanilla_static("orange_harness"),
+    components: DataComponentMap::common_item_components()
+        .builder_set(vanilla_components::MAX_STACK_SIZE, Some(1i32)),
+});
+pub static MAGENTA_HARNESS: LazyLock<Item> = LazyLock::new(|| Item {
+    key: ResourceLocation::vanilla_static("magenta_harness"),
+    components: DataComponentMap::common_item_components()
+        .builder_set(vanilla_components::MAX_STACK_SIZE, Some(1i32)),
+});
+pub static LIGHT_BLUE_HARNESS: LazyLock<Item> = LazyLock::new(|| Item {
+    key: ResourceLocation::vanilla_static("light_blue_harness"),
+    components: DataComponentMap::common_item_components()
+        .builder_set(vanilla_components::MAX_STACK_SIZE, Some(1i32)),
+});
+pub static YELLOW_HARNESS: LazyLock<Item> = LazyLock::new(|| Item {
+    key: ResourceLocation::vanilla_static("yellow_harness"),
+    components: DataComponentMap::common_item_components()
+        .builder_set(vanilla_components::MAX_STACK_SIZE, Some(1i32)),
+});
+pub static LIME_HARNESS: LazyLock<Item> = LazyLock::new(|| Item {
+    key: ResourceLocation::vanilla_static("lime_harness"),
+    components: DataComponentMap::common_item_components()
+        .builder_set(vanilla_components::MAX_STACK_SIZE, Some(1i32)),
+});
+pub static PINK_HARNESS: LazyLock<Item> = LazyLock::new(|| Item {
+    key: ResourceLocation::vanilla_static("pink_harness"),
+    components: DataComponentMap::common_item_components()
+        .builder_set(vanilla_components::MAX_STACK_SIZE, Some(1i32)),
+});
+pub static GRAY_HARNESS: LazyLock<Item> = LazyLock::new(|| Item {
+    key: ResourceLocation::vanilla_static("gray_harness"),
+    components: DataComponentMap::common_item_components()
+        .builder_set(vanilla_components::MAX_STACK_SIZE, Some(1i32)),
+});
+pub static LIGHT_GRAY_HARNESS: LazyLock<Item> = LazyLock::new(|| Item {
+    key: ResourceLocation::vanilla_static("light_gray_harness"),
+    components: DataComponentMap::common_item_components()
+        .builder_set(vanilla_components::MAX_STACK_SIZE, Some(1i32)),
+});
+pub static CYAN_HARNESS: LazyLock<Item> = LazyLock::new(|| Item {
+    key: ResourceLocation::vanilla_static("cyan_harness"),
+    components: DataComponentMap::common_item_components()
+        .builder_set(vanilla_components::MAX_STACK_SIZE, Some(1i32)),
+});
+pub static PURPLE_HARNESS: LazyLock<Item> = LazyLock::new(|| Item {
+    key: ResourceLocation::vanilla_static("purple_harness"),
+    components: DataComponentMap::common_item_components()
+        .builder_set(vanilla_components::MAX_STACK_SIZE, Some(1i32)),
+});
+pub static BLUE_HARNESS: LazyLock<Item> = LazyLock::new(|| Item {
+    key: ResourceLocation::vanilla_static("blue_harness"),
+    components: DataComponentMap::common_item_components()
+        .builder_set(vanilla_components::MAX_STACK_SIZE, Some(1i32)),
+});
+pub static BROWN_HARNESS: LazyLock<Item> = LazyLock::new(|| Item {
+    key: ResourceLocation::vanilla_static("brown_harness"),
+    components: DataComponentMap::common_item_components()
+        .builder_set(vanilla_components::MAX_STACK_SIZE, Some(1i32)),
+});
+pub static GREEN_HARNESS: LazyLock<Item> = LazyLock::new(|| Item {
+    key: ResourceLocation::vanilla_static("green_harness"),
+    components: DataComponentMap::common_item_components()
+        .builder_set(vanilla_components::MAX_STACK_SIZE, Some(1i32)),
+});
+pub static RED_HARNESS: LazyLock<Item> = LazyLock::new(|| Item {
+    key: ResourceLocation::vanilla_static("red_harness"),
+    components: DataComponentMap::common_item_components()
+        .builder_set(vanilla_components::MAX_STACK_SIZE, Some(1i32)),
+});
+pub static BLACK_HARNESS: LazyLock<Item> = LazyLock::new(|| Item {
+    key: ResourceLocation::vanilla_static("black_harness"),
+    components: DataComponentMap::common_item_components()
+        .builder_set(vanilla_components::MAX_STACK_SIZE, Some(1i32)),
+});
+pub static MINECART: LazyLock<Item> = LazyLock::new(|| Item {
+    key: ResourceLocation::vanilla_static("minecart"),
+    components: DataComponentMap::common_item_components()
+        .builder_set(vanilla_components::MAX_STACK_SIZE, Some(1i32)),
+});
+pub static CHEST_MINECART: LazyLock<Item> = LazyLock::new(|| Item {
+    key: ResourceLocation::vanilla_static("chest_minecart"),
+    components: DataComponentMap::common_item_components()
+        .builder_set(vanilla_components::MAX_STACK_SIZE, Some(1i32)),
+});
+pub static FURNACE_MINECART: LazyLock<Item> = LazyLock::new(|| Item {
+    key: ResourceLocation::vanilla_static("furnace_minecart"),
+    components: DataComponentMap::common_item_components()
+        .builder_set(vanilla_components::MAX_STACK_SIZE, Some(1i32)),
+});
+pub static TNT_MINECART: LazyLock<Item> = LazyLock::new(|| Item {
+    key: ResourceLocation::vanilla_static("tnt_minecart"),
+    components: DataComponentMap::common_item_components()
+        .builder_set(vanilla_components::MAX_STACK_SIZE, Some(1i32)),
+});
+pub static HOPPER_MINECART: LazyLock<Item> = LazyLock::new(|| Item {
+    key: ResourceLocation::vanilla_static("hopper_minecart"),
+    components: DataComponentMap::common_item_components()
+        .builder_set(vanilla_components::MAX_STACK_SIZE, Some(1i32)),
+});
+pub static CARROT_ON_A_STICK: LazyLock<Item> = LazyLock::new(|| Item {
+    key: ResourceLocation::vanilla_static("carrot_on_a_stick"),
+    components: DataComponentMap::common_item_components()
+        .builder_set(vanilla_components::MAX_DAMAGE, Some(25i32))
+        .builder_set(vanilla_components::MAX_STACK_SIZE, Some(1i32)),
+});
+pub static WARPED_FUNGUS_ON_A_STICK: LazyLock<Item> = LazyLock::new(|| Item {
+    key: ResourceLocation::vanilla_static("warped_fungus_on_a_stick"),
+    components: DataComponentMap::common_item_components()
+        .builder_set(vanilla_components::MAX_DAMAGE, Some(100i32))
+        .builder_set(vanilla_components::MAX_STACK_SIZE, Some(1i32)),
+});
+pub static PHANTOM_MEMBRANE: LazyLock<Item> = LazyLock::new(|| Item {
+    key: ResourceLocation::vanilla_static("phantom_membrane"),
+    components: DataComponentMap::common_item_components(),
+});
+pub static ELYTRA: LazyLock<Item> = LazyLock::new(|| Item {
+    key: ResourceLocation::vanilla_static("elytra"),
+    components: DataComponentMap::common_item_components()
+        .builder_set(vanilla_components::MAX_DAMAGE, Some(432i32))
+        .builder_set(vanilla_components::MAX_STACK_SIZE, Some(1i32)),
+});
+pub static OAK_BOAT: LazyLock<Item> = LazyLock::new(|| Item {
+    key: ResourceLocation::vanilla_static("oak_boat"),
+    components: DataComponentMap::common_item_components()
+        .builder_set(vanilla_components::MAX_STACK_SIZE, Some(1i32)),
+});
+pub static OAK_CHEST_BOAT: LazyLock<Item> = LazyLock::new(|| Item {
+    key: ResourceLocation::vanilla_static("oak_chest_boat"),
+    components: DataComponentMap::common_item_components()
+        .builder_set(vanilla_components::MAX_STACK_SIZE, Some(1i32)),
+});
+pub static SPRUCE_BOAT: LazyLock<Item> = LazyLock::new(|| Item {
+    key: ResourceLocation::vanilla_static("spruce_boat"),
+    components: DataComponentMap::common_item_components()
+        .builder_set(vanilla_components::MAX_STACK_SIZE, Some(1i32)),
+});
+pub static SPRUCE_CHEST_BOAT: LazyLock<Item> = LazyLock::new(|| Item {
+    key: ResourceLocation::vanilla_static("spruce_chest_boat"),
+    components: DataComponentMap::common_item_components()
+        .builder_set(vanilla_components::MAX_STACK_SIZE, Some(1i32)),
+});
+pub static BIRCH_BOAT: LazyLock<Item> = LazyLock::new(|| Item {
+    key: ResourceLocation::vanilla_static("birch_boat"),
+    components: DataComponentMap::common_item_components()
+        .builder_set(vanilla_components::MAX_STACK_SIZE, Some(1i32)),
+});
+pub static BIRCH_CHEST_BOAT: LazyLock<Item> = LazyLock::new(|| Item {
+    key: ResourceLocation::vanilla_static("birch_chest_boat"),
+    components: DataComponentMap::common_item_components()
+        .builder_set(vanilla_components::MAX_STACK_SIZE, Some(1i32)),
+});
+pub static JUNGLE_BOAT: LazyLock<Item> = LazyLock::new(|| Item {
+    key: ResourceLocation::vanilla_static("jungle_boat"),
+    components: DataComponentMap::common_item_components()
+        .builder_set(vanilla_components::MAX_STACK_SIZE, Some(1i32)),
+});
+pub static JUNGLE_CHEST_BOAT: LazyLock<Item> = LazyLock::new(|| Item {
+    key: ResourceLocation::vanilla_static("jungle_chest_boat"),
+    components: DataComponentMap::common_item_components()
+        .builder_set(vanilla_components::MAX_STACK_SIZE, Some(1i32)),
+});
+pub static ACACIA_BOAT: LazyLock<Item> = LazyLock::new(|| Item {
+    key: ResourceLocation::vanilla_static("acacia_boat"),
+    components: DataComponentMap::common_item_components()
+        .builder_set(vanilla_components::MAX_STACK_SIZE, Some(1i32)),
+});
+pub static ACACIA_CHEST_BOAT: LazyLock<Item> = LazyLock::new(|| Item {
+    key: ResourceLocation::vanilla_static("acacia_chest_boat"),
+    components: DataComponentMap::common_item_components()
+        .builder_set(vanilla_components::MAX_STACK_SIZE, Some(1i32)),
+});
+pub static CHERRY_BOAT: LazyLock<Item> = LazyLock::new(|| Item {
+    key: ResourceLocation::vanilla_static("cherry_boat"),
+    components: DataComponentMap::common_item_components()
+        .builder_set(vanilla_components::MAX_STACK_SIZE, Some(1i32)),
+});
+pub static CHERRY_CHEST_BOAT: LazyLock<Item> = LazyLock::new(|| Item {
+    key: ResourceLocation::vanilla_static("cherry_chest_boat"),
+    components: DataComponentMap::common_item_components()
+        .builder_set(vanilla_components::MAX_STACK_SIZE, Some(1i32)),
+});
+pub static DARK_OAK_BOAT: LazyLock<Item> = LazyLock::new(|| Item {
+    key: ResourceLocation::vanilla_static("dark_oak_boat"),
+    components: DataComponentMap::common_item_components()
+        .builder_set(vanilla_components::MAX_STACK_SIZE, Some(1i32)),
+});
+pub static DARK_OAK_CHEST_BOAT: LazyLock<Item> = LazyLock::new(|| Item {
+    key: ResourceLocation::vanilla_static("dark_oak_chest_boat"),
+    components: DataComponentMap::common_item_components()
+        .builder_set(vanilla_components::MAX_STACK_SIZE, Some(1i32)),
+});
+pub static PALE_OAK_BOAT: LazyLock<Item> = LazyLock::new(|| Item {
+    key: ResourceLocation::vanilla_static("pale_oak_boat"),
+    components: DataComponentMap::common_item_components()
+        .builder_set(vanilla_components::MAX_STACK_SIZE, Some(1i32)),
+});
+pub static PALE_OAK_CHEST_BOAT: LazyLock<Item> = LazyLock::new(|| Item {
+    key: ResourceLocation::vanilla_static("pale_oak_chest_boat"),
+    components: DataComponentMap::common_item_components()
+        .builder_set(vanilla_components::MAX_STACK_SIZE, Some(1i32)),
+});
+pub static MANGROVE_BOAT: LazyLock<Item> = LazyLock::new(|| Item {
+    key: ResourceLocation::vanilla_static("mangrove_boat"),
+    components: DataComponentMap::common_item_components()
+        .builder_set(vanilla_components::MAX_STACK_SIZE, Some(1i32)),
+});
+pub static MANGROVE_CHEST_BOAT: LazyLock<Item> = LazyLock::new(|| Item {
+    key: ResourceLocation::vanilla_static("mangrove_chest_boat"),
+    components: DataComponentMap::common_item_components()
+        .builder_set(vanilla_components::MAX_STACK_SIZE, Some(1i32)),
+});
+pub static BAMBOO_RAFT: LazyLock<Item> = LazyLock::new(|| Item {
+    key: ResourceLocation::vanilla_static("bamboo_raft"),
+    components: DataComponentMap::common_item_components()
+        .builder_set(vanilla_components::MAX_STACK_SIZE, Some(1i32)),
+});
+pub static BAMBOO_CHEST_RAFT: LazyLock<Item> = LazyLock::new(|| Item {
+    key: ResourceLocation::vanilla_static("bamboo_chest_raft"),
+    components: DataComponentMap::common_item_components()
+        .builder_set(vanilla_components::MAX_STACK_SIZE, Some(1i32)),
+});
+pub static STRUCTURE_BLOCK: LazyLock<Item> =
+    LazyLock::new(|| Item::from_block(vanilla_blocks::STRUCTURE_BLOCK));
+pub static JIGSAW: LazyLock<Item> = LazyLock::new(|| Item::from_block(vanilla_blocks::JIGSAW));
+pub static TEST_BLOCK: LazyLock<Item> =
+    LazyLock::new(|| Item::from_block(vanilla_blocks::TEST_BLOCK));
+pub static TEST_INSTANCE_BLOCK: LazyLock<Item> =
+    LazyLock::new(|| Item::from_block(vanilla_blocks::TEST_INSTANCE_BLOCK));
+pub static TURTLE_HELMET: LazyLock<Item> = LazyLock::new(|| Item {
+    key: ResourceLocation::vanilla_static("turtle_helmet"),
+    components: DataComponentMap::common_item_components()
+        .builder_set(vanilla_components::MAX_DAMAGE, Some(275i32))
+        .builder_set(vanilla_components::MAX_STACK_SIZE, Some(1i32)),
+});
+pub static TURTLE_SCUTE: LazyLock<Item> = LazyLock::new(|| Item {
+    key: ResourceLocation::vanilla_static("turtle_scute"),
+    components: DataComponentMap::common_item_components(),
+});
+pub static ARMADILLO_SCUTE: LazyLock<Item> = LazyLock::new(|| Item {
+    key: ResourceLocation::vanilla_static("armadillo_scute"),
+    components: DataComponentMap::common_item_components(),
+});
+pub static WOLF_ARMOR: LazyLock<Item> = LazyLock::new(|| Item {
+    key: ResourceLocation::vanilla_static("wolf_armor"),
+    components: DataComponentMap::common_item_components()
+        .builder_set(vanilla_components::MAX_DAMAGE, Some(64i32))
+        .builder_set(vanilla_components::MAX_STACK_SIZE, Some(1i32)),
+});
+pub static FLINT_AND_STEEL: LazyLock<Item> = LazyLock::new(|| Item {
+    key: ResourceLocation::vanilla_static("flint_and_steel"),
+    components: DataComponentMap::common_item_components()
+        .builder_set(vanilla_components::MAX_DAMAGE, Some(64i32))
+        .builder_set(vanilla_components::MAX_STACK_SIZE, Some(1i32)),
+});
+pub static BOWL: LazyLock<Item> = LazyLock::new(|| Item {
+    key: ResourceLocation::vanilla_static("bowl"),
+    components: DataComponentMap::common_item_components(),
+});
+pub static APPLE: LazyLock<Item> = LazyLock::new(|| Item {
+    key: ResourceLocation::vanilla_static("apple"),
+    components: DataComponentMap::common_item_components(),
+});
+pub static BOW: LazyLock<Item> = LazyLock::new(|| Item {
+    key: ResourceLocation::vanilla_static("bow"),
+    components: DataComponentMap::common_item_components()
+        .builder_set(vanilla_components::MAX_DAMAGE, Some(384i32))
+        .builder_set(vanilla_components::MAX_STACK_SIZE, Some(1i32)),
+});
+pub static ARROW: LazyLock<Item> = LazyLock::new(|| Item {
+    key: ResourceLocation::vanilla_static("arrow"),
+    components: DataComponentMap::common_item_components(),
+});
+pub static COAL: LazyLock<Item> = LazyLock::new(|| Item {
+    key: ResourceLocation::vanilla_static("coal"),
+    components: DataComponentMap::common_item_components(),
+});
+pub static CHARCOAL: LazyLock<Item> = LazyLock::new(|| Item {
+    key: ResourceLocation::vanilla_static("charcoal"),
+    components: DataComponentMap::common_item_components(),
+});
+pub static DIAMOND: LazyLock<Item> = LazyLock::new(|| Item {
+    key: ResourceLocation::vanilla_static("diamond"),
+    components: DataComponentMap::common_item_components(),
+});
+pub static EMERALD: LazyLock<Item> = LazyLock::new(|| Item {
+    key: ResourceLocation::vanilla_static("emerald"),
+    components: DataComponentMap::common_item_components(),
+});
+pub static LAPIS_LAZULI: LazyLock<Item> = LazyLock::new(|| Item {
+    key: ResourceLocation::vanilla_static("lapis_lazuli"),
+    components: DataComponentMap::common_item_components(),
+});
+pub static QUARTZ: LazyLock<Item> = LazyLock::new(|| Item {
+    key: ResourceLocation::vanilla_static("quartz"),
+    components: DataComponentMap::common_item_components(),
+});
+pub static AMETHYST_SHARD: LazyLock<Item> = LazyLock::new(|| Item {
+    key: ResourceLocation::vanilla_static("amethyst_shard"),
+    components: DataComponentMap::common_item_components(),
+});
+pub static RAW_IRON: LazyLock<Item> = LazyLock::new(|| Item {
+    key: ResourceLocation::vanilla_static("raw_iron"),
+    components: DataComponentMap::common_item_components(),
+});
+pub static IRON_INGOT: LazyLock<Item> = LazyLock::new(|| Item {
+    key: ResourceLocation::vanilla_static("iron_ingot"),
+    components: DataComponentMap::common_item_components(),
+});
+pub static RAW_COPPER: LazyLock<Item> = LazyLock::new(|| Item {
+    key: ResourceLocation::vanilla_static("raw_copper"),
+    components: DataComponentMap::common_item_components(),
+});
+pub static COPPER_INGOT: LazyLock<Item> = LazyLock::new(|| Item {
+    key: ResourceLocation::vanilla_static("copper_ingot"),
+    components: DataComponentMap::common_item_components(),
+});
+pub static RAW_GOLD: LazyLock<Item> = LazyLock::new(|| Item {
+    key: ResourceLocation::vanilla_static("raw_gold"),
+    components: DataComponentMap::common_item_components(),
+});
+pub static GOLD_INGOT: LazyLock<Item> = LazyLock::new(|| Item {
+    key: ResourceLocation::vanilla_static("gold_ingot"),
+    components: DataComponentMap::common_item_components(),
+});
+pub static NETHERITE_INGOT: LazyLock<Item> = LazyLock::new(|| Item {
+    key: ResourceLocation::vanilla_static("netherite_ingot"),
+    components: DataComponentMap::common_item_components(),
+});
+pub static NETHERITE_SCRAP: LazyLock<Item> = LazyLock::new(|| Item {
+    key: ResourceLocation::vanilla_static("netherite_scrap"),
+    components: DataComponentMap::common_item_components(),
+});
+pub static WOODEN_SWORD: LazyLock<Item> = LazyLock::new(|| Item {
+    key: ResourceLocation::vanilla_static("wooden_sword"),
+    components: DataComponentMap::common_item_components()
+        .builder_set(vanilla_components::MAX_DAMAGE, Some(59i32))
+        .builder_set(vanilla_components::MAX_STACK_SIZE, Some(1i32)),
+});
+pub static WOODEN_SHOVEL: LazyLock<Item> = LazyLock::new(|| Item {
+    key: ResourceLocation::vanilla_static("wooden_shovel"),
+    components: DataComponentMap::common_item_components()
+        .builder_set(vanilla_components::MAX_DAMAGE, Some(59i32))
+        .builder_set(vanilla_components::MAX_STACK_SIZE, Some(1i32)),
+});
+pub static WOODEN_PICKAXE: LazyLock<Item> = LazyLock::new(|| Item {
+    key: ResourceLocation::vanilla_static("wooden_pickaxe"),
+    components: DataComponentMap::common_item_components()
+        .builder_set(vanilla_components::MAX_DAMAGE, Some(59i32))
+        .builder_set(vanilla_components::MAX_STACK_SIZE, Some(1i32)),
+});
+pub static WOODEN_AXE: LazyLock<Item> = LazyLock::new(|| Item {
+    key: ResourceLocation::vanilla_static("wooden_axe"),
+    components: DataComponentMap::common_item_components()
+        .builder_set(vanilla_components::MAX_DAMAGE, Some(59i32))
+        .builder_set(vanilla_components::MAX_STACK_SIZE, Some(1i32)),
+});
+pub static WOODEN_HOE: LazyLock<Item> = LazyLock::new(|| Item {
+    key: ResourceLocation::vanilla_static("wooden_hoe"),
+    components: DataComponentMap::common_item_components()
+        .builder_set(vanilla_components::MAX_DAMAGE, Some(59i32))
+        .builder_set(vanilla_components::MAX_STACK_SIZE, Some(1i32)),
+});
+pub static COPPER_SWORD: LazyLock<Item> = LazyLock::new(|| Item {
+    key: ResourceLocation::vanilla_static("copper_sword"),
+    components: DataComponentMap::common_item_components()
+        .builder_set(vanilla_components::MAX_DAMAGE, Some(190i32))
+        .builder_set(vanilla_components::MAX_STACK_SIZE, Some(1i32)),
+});
+pub static COPPER_SHOVEL: LazyLock<Item> = LazyLock::new(|| Item {
+    key: ResourceLocation::vanilla_static("copper_shovel"),
+    components: DataComponentMap::common_item_components()
+        .builder_set(vanilla_components::MAX_DAMAGE, Some(190i32))
+        .builder_set(vanilla_components::MAX_STACK_SIZE, Some(1i32)),
+});
+pub static COPPER_PICKAXE: LazyLock<Item> = LazyLock::new(|| Item {
+    key: ResourceLocation::vanilla_static("copper_pickaxe"),
+    components: DataComponentMap::common_item_components()
+        .builder_set(vanilla_components::MAX_DAMAGE, Some(190i32))
+        .builder_set(vanilla_components::MAX_STACK_SIZE, Some(1i32)),
+});
+pub static COPPER_AXE: LazyLock<Item> = LazyLock::new(|| Item {
+    key: ResourceLocation::vanilla_static("copper_axe"),
+    components: DataComponentMap::common_item_components()
+        .builder_set(vanilla_components::MAX_DAMAGE, Some(190i32))
+        .builder_set(vanilla_components::MAX_STACK_SIZE, Some(1i32)),
+});
+pub static COPPER_HOE: LazyLock<Item> = LazyLock::new(|| Item {
+    key: ResourceLocation::vanilla_static("copper_hoe"),
+    components: DataComponentMap::common_item_components()
+        .builder_set(vanilla_components::MAX_DAMAGE, Some(190i32))
+        .builder_set(vanilla_components::MAX_STACK_SIZE, Some(1i32)),
+});
+pub static STONE_SWORD: LazyLock<Item> = LazyLock::new(|| Item {
+    key: ResourceLocation::vanilla_static("stone_sword"),
+    components: DataComponentMap::common_item_components()
+        .builder_set(vanilla_components::MAX_DAMAGE, Some(131i32))
+        .builder_set(vanilla_components::MAX_STACK_SIZE, Some(1i32)),
+});
+pub static STONE_SHOVEL: LazyLock<Item> = LazyLock::new(|| Item {
+    key: ResourceLocation::vanilla_static("stone_shovel"),
+    components: DataComponentMap::common_item_components()
+        .builder_set(vanilla_components::MAX_DAMAGE, Some(131i32))
+        .builder_set(vanilla_components::MAX_STACK_SIZE, Some(1i32)),
+});
+pub static STONE_PICKAXE: LazyLock<Item> = LazyLock::new(|| Item {
+    key: ResourceLocation::vanilla_static("stone_pickaxe"),
+    components: DataComponentMap::common_item_components()
+        .builder_set(vanilla_components::MAX_DAMAGE, Some(131i32))
+        .builder_set(vanilla_components::MAX_STACK_SIZE, Some(1i32)),
+});
+pub static STONE_AXE: LazyLock<Item> = LazyLock::new(|| Item {
+    key: ResourceLocation::vanilla_static("stone_axe"),
+    components: DataComponentMap::common_item_components()
+        .builder_set(vanilla_components::MAX_DAMAGE, Some(131i32))
+        .builder_set(vanilla_components::MAX_STACK_SIZE, Some(1i32)),
+});
+pub static STONE_HOE: LazyLock<Item> = LazyLock::new(|| Item {
+    key: ResourceLocation::vanilla_static("stone_hoe"),
+    components: DataComponentMap::common_item_components()
+        .builder_set(vanilla_components::MAX_DAMAGE, Some(131i32))
+        .builder_set(vanilla_components::MAX_STACK_SIZE, Some(1i32)),
+});
+pub static GOLDEN_SWORD: LazyLock<Item> = LazyLock::new(|| Item {
+    key: ResourceLocation::vanilla_static("golden_sword"),
+    components: DataComponentMap::common_item_components()
+        .builder_set(vanilla_components::MAX_DAMAGE, Some(32i32))
+        .builder_set(vanilla_components::MAX_STACK_SIZE, Some(1i32)),
+});
+pub static GOLDEN_SHOVEL: LazyLock<Item> = LazyLock::new(|| Item {
+    key: ResourceLocation::vanilla_static("golden_shovel"),
+    components: DataComponentMap::common_item_components()
+        .builder_set(vanilla_components::MAX_DAMAGE, Some(32i32))
+        .builder_set(vanilla_components::MAX_STACK_SIZE, Some(1i32)),
+});
+pub static GOLDEN_PICKAXE: LazyLock<Item> = LazyLock::new(|| Item {
+    key: ResourceLocation::vanilla_static("golden_pickaxe"),
+    components: DataComponentMap::common_item_components()
+        .builder_set(vanilla_components::MAX_DAMAGE, Some(32i32))
+        .builder_set(vanilla_components::MAX_STACK_SIZE, Some(1i32)),
+});
+pub static GOLDEN_AXE: LazyLock<Item> = LazyLock::new(|| Item {
+    key: ResourceLocation::vanilla_static("golden_axe"),
+    components: DataComponentMap::common_item_components()
+        .builder_set(vanilla_components::MAX_DAMAGE, Some(32i32))
+        .builder_set(vanilla_components::MAX_STACK_SIZE, Some(1i32)),
+});
+pub static GOLDEN_HOE: LazyLock<Item> = LazyLock::new(|| Item {
+    key: ResourceLocation::vanilla_static("golden_hoe"),
+    components: DataComponentMap::common_item_components()
+        .builder_set(vanilla_components::MAX_DAMAGE, Some(32i32))
+        .builder_set(vanilla_components::MAX_STACK_SIZE, Some(1i32)),
+});
+pub static IRON_SWORD: LazyLock<Item> = LazyLock::new(|| Item {
+    key: ResourceLocation::vanilla_static("iron_sword"),
+    components: DataComponentMap::common_item_components()
+        .builder_set(vanilla_components::MAX_DAMAGE, Some(250i32))
+        .builder_set(vanilla_components::MAX_STACK_SIZE, Some(1i32)),
+});
+pub static IRON_SHOVEL: LazyLock<Item> = LazyLock::new(|| Item {
+    key: ResourceLocation::vanilla_static("iron_shovel"),
+    components: DataComponentMap::common_item_components()
+        .builder_set(vanilla_components::MAX_DAMAGE, Some(250i32))
+        .builder_set(vanilla_components::MAX_STACK_SIZE, Some(1i32)),
+});
+pub static IRON_PICKAXE: LazyLock<Item> = LazyLock::new(|| Item {
+    key: ResourceLocation::vanilla_static("iron_pickaxe"),
+    components: DataComponentMap::common_item_components()
+        .builder_set(vanilla_components::MAX_DAMAGE, Some(250i32))
+        .builder_set(vanilla_components::MAX_STACK_SIZE, Some(1i32)),
+});
+pub static IRON_AXE: LazyLock<Item> = LazyLock::new(|| Item {
+    key: ResourceLocation::vanilla_static("iron_axe"),
+    components: DataComponentMap::common_item_components()
+        .builder_set(vanilla_components::MAX_DAMAGE, Some(250i32))
+        .builder_set(vanilla_components::MAX_STACK_SIZE, Some(1i32)),
+});
+pub static IRON_HOE: LazyLock<Item> = LazyLock::new(|| Item {
+    key: ResourceLocation::vanilla_static("iron_hoe"),
+    components: DataComponentMap::common_item_components()
+        .builder_set(vanilla_components::MAX_DAMAGE, Some(250i32))
+        .builder_set(vanilla_components::MAX_STACK_SIZE, Some(1i32)),
+});
+pub static DIAMOND_SWORD: LazyLock<Item> = LazyLock::new(|| Item {
+    key: ResourceLocation::vanilla_static("diamond_sword"),
+    components: DataComponentMap::common_item_components()
+        .builder_set(vanilla_components::MAX_DAMAGE, Some(1561i32))
+        .builder_set(vanilla_components::MAX_STACK_SIZE, Some(1i32)),
+});
+pub static DIAMOND_SHOVEL: LazyLock<Item> = LazyLock::new(|| Item {
+    key: ResourceLocation::vanilla_static("diamond_shovel"),
+    components: DataComponentMap::common_item_components()
+        .builder_set(vanilla_components::MAX_DAMAGE, Some(1561i32))
+        .builder_set(vanilla_components::MAX_STACK_SIZE, Some(1i32)),
+});
+pub static DIAMOND_PICKAXE: LazyLock<Item> = LazyLock::new(|| Item {
+    key: ResourceLocation::vanilla_static("diamond_pickaxe"),
+    components: DataComponentMap::common_item_components()
+        .builder_set(vanilla_components::MAX_DAMAGE, Some(1561i32))
+        .builder_set(vanilla_components::MAX_STACK_SIZE, Some(1i32)),
+});
+pub static DIAMOND_AXE: LazyLock<Item> = LazyLock::new(|| Item {
+    key: ResourceLocation::vanilla_static("diamond_axe"),
+    components: DataComponentMap::common_item_components()
+        .builder_set(vanilla_components::MAX_DAMAGE, Some(1561i32))
+        .builder_set(vanilla_components::MAX_STACK_SIZE, Some(1i32)),
+});
+pub static DIAMOND_HOE: LazyLock<Item> = LazyLock::new(|| Item {
+    key: ResourceLocation::vanilla_static("diamond_hoe"),
+    components: DataComponentMap::common_item_components()
+        .builder_set(vanilla_components::MAX_DAMAGE, Some(1561i32))
+        .builder_set(vanilla_components::MAX_STACK_SIZE, Some(1i32)),
+});
+pub static NETHERITE_SWORD: LazyLock<Item> = LazyLock::new(|| Item {
+    key: ResourceLocation::vanilla_static("netherite_sword"),
+    components: DataComponentMap::common_item_components()
+        .builder_set(vanilla_components::MAX_DAMAGE, Some(2031i32))
+        .builder_set(vanilla_components::MAX_STACK_SIZE, Some(1i32)),
+});
+pub static NETHERITE_SHOVEL: LazyLock<Item> = LazyLock::new(|| Item {
+    key: ResourceLocation::vanilla_static("netherite_shovel"),
+    components: DataComponentMap::common_item_components()
+        .builder_set(vanilla_components::MAX_DAMAGE, Some(2031i32))
+        .builder_set(vanilla_components::MAX_STACK_SIZE, Some(1i32)),
+});
+pub static NETHERITE_PICKAXE: LazyLock<Item> = LazyLock::new(|| Item {
+    key: ResourceLocation::vanilla_static("netherite_pickaxe"),
+    components: DataComponentMap::common_item_components()
+        .builder_set(vanilla_components::MAX_DAMAGE, Some(2031i32))
+        .builder_set(vanilla_components::MAX_STACK_SIZE, Some(1i32)),
+});
+pub static NETHERITE_AXE: LazyLock<Item> = LazyLock::new(|| Item {
+    key: ResourceLocation::vanilla_static("netherite_axe"),
+    components: DataComponentMap::common_item_components()
+        .builder_set(vanilla_components::MAX_DAMAGE, Some(2031i32))
+        .builder_set(vanilla_components::MAX_STACK_SIZE, Some(1i32)),
+});
+pub static NETHERITE_HOE: LazyLock<Item> = LazyLock::new(|| Item {
+    key: ResourceLocation::vanilla_static("netherite_hoe"),
+    components: DataComponentMap::common_item_components()
+        .builder_set(vanilla_components::MAX_DAMAGE, Some(2031i32))
+        .builder_set(vanilla_components::MAX_STACK_SIZE, Some(1i32)),
+});
+pub static STICK: LazyLock<Item> = LazyLock::new(|| Item {
+    key: ResourceLocation::vanilla_static("stick"),
+    components: DataComponentMap::common_item_components(),
+});
+pub static MUSHROOM_STEW: LazyLock<Item> = LazyLock::new(|| Item {
+    key: ResourceLocation::vanilla_static("mushroom_stew"),
+    components: DataComponentMap::common_item_components()
+        .builder_set(vanilla_components::MAX_STACK_SIZE, Some(1i32)),
+});
+pub static STRING: LazyLock<Item> =
+    LazyLock::new(|| Item::from_block_custom_name(vanilla_blocks::TRIPWIRE, "string"));
+pub static FEATHER: LazyLock<Item> = LazyLock::new(|| Item {
+    key: ResourceLocation::vanilla_static("feather"),
+    components: DataComponentMap::common_item_components(),
+});
+pub static GUNPOWDER: LazyLock<Item> = LazyLock::new(|| Item {
+    key: ResourceLocation::vanilla_static("gunpowder"),
+    components: DataComponentMap::common_item_components(),
+});
+pub static WHEAT_SEEDS: LazyLock<Item> =
+    LazyLock::new(|| Item::from_block_custom_name(vanilla_blocks::WHEAT, "wheat_seeds"));
+pub static WHEAT: LazyLock<Item> = LazyLock::new(|| Item {
+    key: ResourceLocation::vanilla_static("wheat"),
+    components: DataComponentMap::common_item_components(),
+});
+pub static BREAD: LazyLock<Item> = LazyLock::new(|| Item {
+    key: ResourceLocation::vanilla_static("bread"),
+    components: DataComponentMap::common_item_components(),
+});
+pub static LEATHER_HELMET: LazyLock<Item> = LazyLock::new(|| Item {
+    key: ResourceLocation::vanilla_static("leather_helmet"),
+    components: DataComponentMap::common_item_components()
+        .builder_set(vanilla_components::MAX_DAMAGE, Some(55i32))
+        .builder_set(vanilla_components::MAX_STACK_SIZE, Some(1i32)),
+});
+pub static LEATHER_CHESTPLATE: LazyLock<Item> = LazyLock::new(|| Item {
+    key: ResourceLocation::vanilla_static("leather_chestplate"),
+    components: DataComponentMap::common_item_components()
+        .builder_set(vanilla_components::MAX_DAMAGE, Some(80i32))
+        .builder_set(vanilla_components::MAX_STACK_SIZE, Some(1i32)),
+});
+pub static LEATHER_LEGGINGS: LazyLock<Item> = LazyLock::new(|| Item {
+    key: ResourceLocation::vanilla_static("leather_leggings"),
+    components: DataComponentMap::common_item_components()
+        .builder_set(vanilla_components::MAX_DAMAGE, Some(75i32))
+        .builder_set(vanilla_components::MAX_STACK_SIZE, Some(1i32)),
+});
+pub static LEATHER_BOOTS: LazyLock<Item> = LazyLock::new(|| Item {
+    key: ResourceLocation::vanilla_static("leather_boots"),
+    components: DataComponentMap::common_item_components()
+        .builder_set(vanilla_components::MAX_DAMAGE, Some(65i32))
+        .builder_set(vanilla_components::MAX_STACK_SIZE, Some(1i32)),
+});
+pub static COPPER_HELMET: LazyLock<Item> = LazyLock::new(|| Item {
+    key: ResourceLocation::vanilla_static("copper_helmet"),
+    components: DataComponentMap::common_item_components()
+        .builder_set(vanilla_components::MAX_DAMAGE, Some(121i32))
+        .builder_set(vanilla_components::MAX_STACK_SIZE, Some(1i32)),
+});
+pub static COPPER_CHESTPLATE: LazyLock<Item> = LazyLock::new(|| Item {
+    key: ResourceLocation::vanilla_static("copper_chestplate"),
+    components: DataComponentMap::common_item_components()
+        .builder_set(vanilla_components::MAX_DAMAGE, Some(176i32))
+        .builder_set(vanilla_components::MAX_STACK_SIZE, Some(1i32)),
+});
+pub static COPPER_LEGGINGS: LazyLock<Item> = LazyLock::new(|| Item {
+    key: ResourceLocation::vanilla_static("copper_leggings"),
+    components: DataComponentMap::common_item_components()
+        .builder_set(vanilla_components::MAX_DAMAGE, Some(165i32))
+        .builder_set(vanilla_components::MAX_STACK_SIZE, Some(1i32)),
+});
+pub static COPPER_BOOTS: LazyLock<Item> = LazyLock::new(|| Item {
+    key: ResourceLocation::vanilla_static("copper_boots"),
+    components: DataComponentMap::common_item_components()
+        .builder_set(vanilla_components::MAX_DAMAGE, Some(143i32))
+        .builder_set(vanilla_components::MAX_STACK_SIZE, Some(1i32)),
+});
+pub static CHAINMAIL_HELMET: LazyLock<Item> = LazyLock::new(|| Item {
+    key: ResourceLocation::vanilla_static("chainmail_helmet"),
+    components: DataComponentMap::common_item_components()
+        .builder_set(vanilla_components::MAX_DAMAGE, Some(165i32))
+        .builder_set(vanilla_components::MAX_STACK_SIZE, Some(1i32)),
+});
+pub static CHAINMAIL_CHESTPLATE: LazyLock<Item> = LazyLock::new(|| Item {
+    key: ResourceLocation::vanilla_static("chainmail_chestplate"),
+    components: DataComponentMap::common_item_components()
+        .builder_set(vanilla_components::MAX_DAMAGE, Some(240i32))
+        .builder_set(vanilla_components::MAX_STACK_SIZE, Some(1i32)),
+});
+pub static CHAINMAIL_LEGGINGS: LazyLock<Item> = LazyLock::new(|| Item {
+    key: ResourceLocation::vanilla_static("chainmail_leggings"),
+    components: DataComponentMap::common_item_components()
+        .builder_set(vanilla_components::MAX_DAMAGE, Some(225i32))
+        .builder_set(vanilla_components::MAX_STACK_SIZE, Some(1i32)),
+});
+pub static CHAINMAIL_BOOTS: LazyLock<Item> = LazyLock::new(|| Item {
+    key: ResourceLocation::vanilla_static("chainmail_boots"),
+    components: DataComponentMap::common_item_components()
+        .builder_set(vanilla_components::MAX_DAMAGE, Some(195i32))
+        .builder_set(vanilla_components::MAX_STACK_SIZE, Some(1i32)),
+});
+pub static IRON_HELMET: LazyLock<Item> = LazyLock::new(|| Item {
+    key: ResourceLocation::vanilla_static("iron_helmet"),
+    components: DataComponentMap::common_item_components()
+        .builder_set(vanilla_components::MAX_DAMAGE, Some(165i32))
+        .builder_set(vanilla_components::MAX_STACK_SIZE, Some(1i32)),
+});
+pub static IRON_CHESTPLATE: LazyLock<Item> = LazyLock::new(|| Item {
+    key: ResourceLocation::vanilla_static("iron_chestplate"),
+    components: DataComponentMap::common_item_components()
+        .builder_set(vanilla_components::MAX_DAMAGE, Some(240i32))
+        .builder_set(vanilla_components::MAX_STACK_SIZE, Some(1i32)),
+});
+pub static IRON_LEGGINGS: LazyLock<Item> = LazyLock::new(|| Item {
+    key: ResourceLocation::vanilla_static("iron_leggings"),
+    components: DataComponentMap::common_item_components()
+        .builder_set(vanilla_components::MAX_DAMAGE, Some(225i32))
+        .builder_set(vanilla_components::MAX_STACK_SIZE, Some(1i32)),
+});
+pub static IRON_BOOTS: LazyLock<Item> = LazyLock::new(|| Item {
+    key: ResourceLocation::vanilla_static("iron_boots"),
+    components: DataComponentMap::common_item_components()
+        .builder_set(vanilla_components::MAX_DAMAGE, Some(195i32))
+        .builder_set(vanilla_components::MAX_STACK_SIZE, Some(1i32)),
+});
+pub static DIAMOND_HELMET: LazyLock<Item> = LazyLock::new(|| Item {
+    key: ResourceLocation::vanilla_static("diamond_helmet"),
+    components: DataComponentMap::common_item_components()
+        .builder_set(vanilla_components::MAX_DAMAGE, Some(363i32))
+        .builder_set(vanilla_components::MAX_STACK_SIZE, Some(1i32)),
+});
+pub static DIAMOND_CHESTPLATE: LazyLock<Item> = LazyLock::new(|| Item {
+    key: ResourceLocation::vanilla_static("diamond_chestplate"),
+    components: DataComponentMap::common_item_components()
+        .builder_set(vanilla_components::MAX_DAMAGE, Some(528i32))
+        .builder_set(vanilla_components::MAX_STACK_SIZE, Some(1i32)),
+});
+pub static DIAMOND_LEGGINGS: LazyLock<Item> = LazyLock::new(|| Item {
+    key: ResourceLocation::vanilla_static("diamond_leggings"),
+    components: DataComponentMap::common_item_components()
+        .builder_set(vanilla_components::MAX_DAMAGE, Some(495i32))
+        .builder_set(vanilla_components::MAX_STACK_SIZE, Some(1i32)),
+});
+pub static DIAMOND_BOOTS: LazyLock<Item> = LazyLock::new(|| Item {
+    key: ResourceLocation::vanilla_static("diamond_boots"),
+    components: DataComponentMap::common_item_components()
+        .builder_set(vanilla_components::MAX_DAMAGE, Some(429i32))
+        .builder_set(vanilla_components::MAX_STACK_SIZE, Some(1i32)),
+});
+pub static GOLDEN_HELMET: LazyLock<Item> = LazyLock::new(|| Item {
+    key: ResourceLocation::vanilla_static("golden_helmet"),
+    components: DataComponentMap::common_item_components()
+        .builder_set(vanilla_components::MAX_DAMAGE, Some(77i32))
+        .builder_set(vanilla_components::MAX_STACK_SIZE, Some(1i32)),
+});
+pub static GOLDEN_CHESTPLATE: LazyLock<Item> = LazyLock::new(|| Item {
+    key: ResourceLocation::vanilla_static("golden_chestplate"),
+    components: DataComponentMap::common_item_components()
+        .builder_set(vanilla_components::MAX_DAMAGE, Some(112i32))
+        .builder_set(vanilla_components::MAX_STACK_SIZE, Some(1i32)),
+});
+pub static GOLDEN_LEGGINGS: LazyLock<Item> = LazyLock::new(|| Item {
+    key: ResourceLocation::vanilla_static("golden_leggings"),
+    components: DataComponentMap::common_item_components()
+        .builder_set(vanilla_components::MAX_DAMAGE, Some(105i32))
+        .builder_set(vanilla_components::MAX_STACK_SIZE, Some(1i32)),
+});
+pub static GOLDEN_BOOTS: LazyLock<Item> = LazyLock::new(|| Item {
+    key: ResourceLocation::vanilla_static("golden_boots"),
+    components: DataComponentMap::common_item_components()
+        .builder_set(vanilla_components::MAX_DAMAGE, Some(91i32))
+        .builder_set(vanilla_components::MAX_STACK_SIZE, Some(1i32)),
+});
+pub static NETHERITE_HELMET: LazyLock<Item> = LazyLock::new(|| Item {
+    key: ResourceLocation::vanilla_static("netherite_helmet"),
+    components: DataComponentMap::common_item_components()
+        .builder_set(vanilla_components::MAX_DAMAGE, Some(407i32))
+        .builder_set(vanilla_components::MAX_STACK_SIZE, Some(1i32)),
+});
+pub static NETHERITE_CHESTPLATE: LazyLock<Item> = LazyLock::new(|| Item {
+    key: ResourceLocation::vanilla_static("netherite_chestplate"),
+    components: DataComponentMap::common_item_components()
+        .builder_set(vanilla_components::MAX_DAMAGE, Some(592i32))
+        .builder_set(vanilla_components::MAX_STACK_SIZE, Some(1i32)),
+});
+pub static NETHERITE_LEGGINGS: LazyLock<Item> = LazyLock::new(|| Item {
+    key: ResourceLocation::vanilla_static("netherite_leggings"),
+    components: DataComponentMap::common_item_components()
+        .builder_set(vanilla_components::MAX_DAMAGE, Some(555i32))
+        .builder_set(vanilla_components::MAX_STACK_SIZE, Some(1i32)),
+});
+pub static NETHERITE_BOOTS: LazyLock<Item> = LazyLock::new(|| Item {
+    key: ResourceLocation::vanilla_static("netherite_boots"),
+    components: DataComponentMap::common_item_components()
+        .builder_set(vanilla_components::MAX_DAMAGE, Some(481i32))
+        .builder_set(vanilla_components::MAX_STACK_SIZE, Some(1i32)),
+});
+pub static FLINT: LazyLock<Item> = LazyLock::new(|| Item {
+    key: ResourceLocation::vanilla_static("flint"),
+    components: DataComponentMap::common_item_components(),
+});
+pub static PORKCHOP: LazyLock<Item> = LazyLock::new(|| Item {
+    key: ResourceLocation::vanilla_static("porkchop"),
+    components: DataComponentMap::common_item_components(),
+});
+pub static COOKED_PORKCHOP: LazyLock<Item> = LazyLock::new(|| Item {
+    key: ResourceLocation::vanilla_static("cooked_porkchop"),
+    components: DataComponentMap::common_item_components(),
+});
+pub static PAINTING: LazyLock<Item> = LazyLock::new(|| Item {
+    key: ResourceLocation::vanilla_static("painting"),
+    components: DataComponentMap::common_item_components(),
+});
+pub static GOLDEN_APPLE: LazyLock<Item> = LazyLock::new(|| Item {
+    key: ResourceLocation::vanilla_static("golden_apple"),
+    components: DataComponentMap::common_item_components(),
+});
+pub static ENCHANTED_GOLDEN_APPLE: LazyLock<Item> = LazyLock::new(|| Item {
+    key: ResourceLocation::vanilla_static("enchanted_golden_apple"),
+    components: DataComponentMap::common_item_components()
+        .builder_set(vanilla_components::ENCHANTMENT_GLINT_OVERRIDE, Some(true)),
+});
+pub static OAK_SIGN: LazyLock<Item> = LazyLock::new(|| Item::from_block(vanilla_blocks::OAK_SIGN));
+pub static SPRUCE_SIGN: LazyLock<Item> =
+    LazyLock::new(|| Item::from_block(vanilla_blocks::SPRUCE_SIGN));
+pub static BIRCH_SIGN: LazyLock<Item> =
+    LazyLock::new(|| Item::from_block(vanilla_blocks::BIRCH_SIGN));
+pub static JUNGLE_SIGN: LazyLock<Item> =
+    LazyLock::new(|| Item::from_block(vanilla_blocks::JUNGLE_SIGN));
+pub static ACACIA_SIGN: LazyLock<Item> =
+    LazyLock::new(|| Item::from_block(vanilla_blocks::ACACIA_SIGN));
+pub static CHERRY_SIGN: LazyLock<Item> =
+    LazyLock::new(|| Item::from_block(vanilla_blocks::CHERRY_SIGN));
+pub static DARK_OAK_SIGN: LazyLock<Item> =
+    LazyLock::new(|| Item::from_block(vanilla_blocks::DARK_OAK_SIGN));
+pub static PALE_OAK_SIGN: LazyLock<Item> =
+    LazyLock::new(|| Item::from_block(vanilla_blocks::PALE_OAK_SIGN));
+pub static MANGROVE_SIGN: LazyLock<Item> =
+    LazyLock::new(|| Item::from_block(vanilla_blocks::MANGROVE_SIGN));
+pub static BAMBOO_SIGN: LazyLock<Item> =
+    LazyLock::new(|| Item::from_block(vanilla_blocks::BAMBOO_SIGN));
+pub static CRIMSON_SIGN: LazyLock<Item> =
+    LazyLock::new(|| Item::from_block(vanilla_blocks::CRIMSON_SIGN));
+pub static WARPED_SIGN: LazyLock<Item> =
+    LazyLock::new(|| Item::from_block(vanilla_blocks::WARPED_SIGN));
+pub static OAK_HANGING_SIGN: LazyLock<Item> =
+    LazyLock::new(|| Item::from_block(vanilla_blocks::OAK_HANGING_SIGN));
+pub static SPRUCE_HANGING_SIGN: LazyLock<Item> =
+    LazyLock::new(|| Item::from_block(vanilla_blocks::SPRUCE_HANGING_SIGN));
+pub static BIRCH_HANGING_SIGN: LazyLock<Item> =
+    LazyLock::new(|| Item::from_block(vanilla_blocks::BIRCH_HANGING_SIGN));
+pub static JUNGLE_HANGING_SIGN: LazyLock<Item> =
+    LazyLock::new(|| Item::from_block(vanilla_blocks::JUNGLE_HANGING_SIGN));
+pub static ACACIA_HANGING_SIGN: LazyLock<Item> =
+    LazyLock::new(|| Item::from_block(vanilla_blocks::ACACIA_HANGING_SIGN));
+pub static CHERRY_HANGING_SIGN: LazyLock<Item> =
+    LazyLock::new(|| Item::from_block(vanilla_blocks::CHERRY_HANGING_SIGN));
+pub static DARK_OAK_HANGING_SIGN: LazyLock<Item> =
+    LazyLock::new(|| Item::from_block(vanilla_blocks::DARK_OAK_HANGING_SIGN));
+pub static PALE_OAK_HANGING_SIGN: LazyLock<Item> =
+    LazyLock::new(|| Item::from_block(vanilla_blocks::PALE_OAK_HANGING_SIGN));
+pub static MANGROVE_HANGING_SIGN: LazyLock<Item> =
+    LazyLock::new(|| Item::from_block(vanilla_blocks::MANGROVE_HANGING_SIGN));
+pub static BAMBOO_HANGING_SIGN: LazyLock<Item> =
+    LazyLock::new(|| Item::from_block(vanilla_blocks::BAMBOO_HANGING_SIGN));
+pub static CRIMSON_HANGING_SIGN: LazyLock<Item> =
+    LazyLock::new(|| Item::from_block(vanilla_blocks::CRIMSON_HANGING_SIGN));
+pub static WARPED_HANGING_SIGN: LazyLock<Item> =
+    LazyLock::new(|| Item::from_block(vanilla_blocks::WARPED_HANGING_SIGN));
+pub static BUCKET: LazyLock<Item> = LazyLock::new(|| Item {
+    key: ResourceLocation::vanilla_static("bucket"),
+    components: DataComponentMap::common_item_components()
+        .builder_set(vanilla_components::MAX_STACK_SIZE, Some(16i32)),
+});
+pub static WATER_BUCKET: LazyLock<Item> = LazyLock::new(|| Item {
+    key: ResourceLocation::vanilla_static("water_bucket"),
+    components: DataComponentMap::common_item_components()
+        .builder_set(vanilla_components::MAX_STACK_SIZE, Some(1i32)),
+});
+pub static LAVA_BUCKET: LazyLock<Item> = LazyLock::new(|| Item {
+    key: ResourceLocation::vanilla_static("lava_bucket"),
+    components: DataComponentMap::common_item_components()
+        .builder_set(vanilla_components::MAX_STACK_SIZE, Some(1i32)),
+});
+pub static POWDER_SNOW_BUCKET: LazyLock<Item> = LazyLock::new(|| {
+    Item::from_block_custom_name(vanilla_blocks::POWDER_SNOW, "powder_snow_bucket")
+});
+pub static SNOWBALL: LazyLock<Item> = LazyLock::new(|| Item {
+    key: ResourceLocation::vanilla_static("snowball"),
+    components: DataComponentMap::common_item_components()
+        .builder_set(vanilla_components::MAX_STACK_SIZE, Some(16i32)),
+});
+pub static LEATHER: LazyLock<Item> = LazyLock::new(|| Item {
+    key: ResourceLocation::vanilla_static("leather"),
+    components: DataComponentMap::common_item_components(),
+});
+pub static MILK_BUCKET: LazyLock<Item> = LazyLock::new(|| Item {
+    key: ResourceLocation::vanilla_static("milk_bucket"),
+    components: DataComponentMap::common_item_components()
+        .builder_set(vanilla_components::MAX_STACK_SIZE, Some(1i32)),
+});
+pub static PUFFERFISH_BUCKET: LazyLock<Item> = LazyLock::new(|| Item {
+    key: ResourceLocation::vanilla_static("pufferfish_bucket"),
+    components: DataComponentMap::common_item_components()
+        .builder_set(vanilla_components::MAX_STACK_SIZE, Some(1i32)),
+});
+pub static SALMON_BUCKET: LazyLock<Item> = LazyLock::new(|| Item {
+    key: ResourceLocation::vanilla_static("salmon_bucket"),
+    components: DataComponentMap::common_item_components()
+        .builder_set(vanilla_components::MAX_STACK_SIZE, Some(1i32)),
+});
+pub static COD_BUCKET: LazyLock<Item> = LazyLock::new(|| Item {
+    key: ResourceLocation::vanilla_static("cod_bucket"),
+    components: DataComponentMap::common_item_components()
+        .builder_set(vanilla_components::MAX_STACK_SIZE, Some(1i32)),
+});
+pub static TROPICAL_FISH_BUCKET: LazyLock<Item> = LazyLock::new(|| Item {
+    key: ResourceLocation::vanilla_static("tropical_fish_bucket"),
+    components: DataComponentMap::common_item_components()
+        .builder_set(vanilla_components::MAX_STACK_SIZE, Some(1i32)),
+});
+pub static AXOLOTL_BUCKET: LazyLock<Item> = LazyLock::new(|| Item {
+    key: ResourceLocation::vanilla_static("axolotl_bucket"),
+    components: DataComponentMap::common_item_components()
+        .builder_set(vanilla_components::MAX_STACK_SIZE, Some(1i32)),
+});
+pub static TADPOLE_BUCKET: LazyLock<Item> = LazyLock::new(|| Item {
+    key: ResourceLocation::vanilla_static("tadpole_bucket"),
+    components: DataComponentMap::common_item_components()
+        .builder_set(vanilla_components::MAX_STACK_SIZE, Some(1i32)),
+});
+pub static BRICK: LazyLock<Item> = LazyLock::new(|| Item {
+    key: ResourceLocation::vanilla_static("brick"),
+    components: DataComponentMap::common_item_components(),
+});
+pub static CLAY_BALL: LazyLock<Item> = LazyLock::new(|| Item {
+    key: ResourceLocation::vanilla_static("clay_ball"),
+    components: DataComponentMap::common_item_components(),
+});
+pub static DRIED_KELP_BLOCK: LazyLock<Item> =
+    LazyLock::new(|| Item::from_block(vanilla_blocks::DRIED_KELP_BLOCK));
+pub static PAPER: LazyLock<Item> = LazyLock::new(|| Item {
+    key: ResourceLocation::vanilla_static("paper"),
+    components: DataComponentMap::common_item_components(),
+});
+pub static BOOK: LazyLock<Item> = LazyLock::new(|| Item {
+    key: ResourceLocation::vanilla_static("book"),
+    components: DataComponentMap::common_item_components(),
+});
+pub static SLIME_BALL: LazyLock<Item> = LazyLock::new(|| Item {
+    key: ResourceLocation::vanilla_static("slime_ball"),
+    components: DataComponentMap::common_item_components(),
+});
+pub static EGG: LazyLock<Item> = LazyLock::new(|| Item {
+    key: ResourceLocation::vanilla_static("egg"),
+    components: DataComponentMap::common_item_components()
+        .builder_set(vanilla_components::MAX_STACK_SIZE, Some(16i32)),
+});
+pub static BLUE_EGG: LazyLock<Item> = LazyLock::new(|| Item {
+    key: ResourceLocation::vanilla_static("blue_egg"),
+    components: DataComponentMap::common_item_components()
+        .builder_set(vanilla_components::MAX_STACK_SIZE, Some(16i32)),
+});
+pub static BROWN_EGG: LazyLock<Item> = LazyLock::new(|| Item {
+    key: ResourceLocation::vanilla_static("brown_egg"),
+    components: DataComponentMap::common_item_components()
+        .builder_set(vanilla_components::MAX_STACK_SIZE, Some(16i32)),
+});
+pub static COMPASS: LazyLock<Item> = LazyLock::new(|| Item {
+    key: ResourceLocation::vanilla_static("compass"),
+    components: DataComponentMap::common_item_components(),
+});
+pub static RECOVERY_COMPASS: LazyLock<Item> = LazyLock::new(|| Item {
+    key: ResourceLocation::vanilla_static("recovery_compass"),
+    components: DataComponentMap::common_item_components(),
+});
+pub static BUNDLE: LazyLock<Item> = LazyLock::new(|| Item {
+    key: ResourceLocation::vanilla_static("bundle"),
+    components: DataComponentMap::common_item_components()
+        .builder_set(vanilla_components::MAX_STACK_SIZE, Some(1i32)),
+});
+pub static WHITE_BUNDLE: LazyLock<Item> = LazyLock::new(|| Item {
+    key: ResourceLocation::vanilla_static("white_bundle"),
+    components: DataComponentMap::common_item_components()
+        .builder_set(vanilla_components::MAX_STACK_SIZE, Some(1i32)),
+});
+pub static ORANGE_BUNDLE: LazyLock<Item> = LazyLock::new(|| Item {
+    key: ResourceLocation::vanilla_static("orange_bundle"),
+    components: DataComponentMap::common_item_components()
+        .builder_set(vanilla_components::MAX_STACK_SIZE, Some(1i32)),
+});
+pub static MAGENTA_BUNDLE: LazyLock<Item> = LazyLock::new(|| Item {
+    key: ResourceLocation::vanilla_static("magenta_bundle"),
+    components: DataComponentMap::common_item_components()
+        .builder_set(vanilla_components::MAX_STACK_SIZE, Some(1i32)),
+});
+pub static LIGHT_BLUE_BUNDLE: LazyLock<Item> = LazyLock::new(|| Item {
+    key: ResourceLocation::vanilla_static("light_blue_bundle"),
+    components: DataComponentMap::common_item_components()
+        .builder_set(vanilla_components::MAX_STACK_SIZE, Some(1i32)),
+});
+pub static YELLOW_BUNDLE: LazyLock<Item> = LazyLock::new(|| Item {
+    key: ResourceLocation::vanilla_static("yellow_bundle"),
+    components: DataComponentMap::common_item_components()
+        .builder_set(vanilla_components::MAX_STACK_SIZE, Some(1i32)),
+});
+pub static LIME_BUNDLE: LazyLock<Item> = LazyLock::new(|| Item {
+    key: ResourceLocation::vanilla_static("lime_bundle"),
+    components: DataComponentMap::common_item_components()
+        .builder_set(vanilla_components::MAX_STACK_SIZE, Some(1i32)),
+});
+pub static PINK_BUNDLE: LazyLock<Item> = LazyLock::new(|| Item {
+    key: ResourceLocation::vanilla_static("pink_bundle"),
+    components: DataComponentMap::common_item_components()
+        .builder_set(vanilla_components::MAX_STACK_SIZE, Some(1i32)),
+});
+pub static GRAY_BUNDLE: LazyLock<Item> = LazyLock::new(|| Item {
+    key: ResourceLocation::vanilla_static("gray_bundle"),
+    components: DataComponentMap::common_item_components()
+        .builder_set(vanilla_components::MAX_STACK_SIZE, Some(1i32)),
+});
+pub static LIGHT_GRAY_BUNDLE: LazyLock<Item> = LazyLock::new(|| Item {
+    key: ResourceLocation::vanilla_static("light_gray_bundle"),
+    components: DataComponentMap::common_item_components()
+        .builder_set(vanilla_components::MAX_STACK_SIZE, Some(1i32)),
+});
+pub static CYAN_BUNDLE: LazyLock<Item> = LazyLock::new(|| Item {
+    key: ResourceLocation::vanilla_static("cyan_bundle"),
+    components: DataComponentMap::common_item_components()
+        .builder_set(vanilla_components::MAX_STACK_SIZE, Some(1i32)),
+});
+pub static PURPLE_BUNDLE: LazyLock<Item> = LazyLock::new(|| Item {
+    key: ResourceLocation::vanilla_static("purple_bundle"),
+    components: DataComponentMap::common_item_components()
+        .builder_set(vanilla_components::MAX_STACK_SIZE, Some(1i32)),
+});
+pub static BLUE_BUNDLE: LazyLock<Item> = LazyLock::new(|| Item {
+    key: ResourceLocation::vanilla_static("blue_bundle"),
+    components: DataComponentMap::common_item_components()
+        .builder_set(vanilla_components::MAX_STACK_SIZE, Some(1i32)),
+});
+pub static BROWN_BUNDLE: LazyLock<Item> = LazyLock::new(|| Item {
+    key: ResourceLocation::vanilla_static("brown_bundle"),
+    components: DataComponentMap::common_item_components()
+        .builder_set(vanilla_components::MAX_STACK_SIZE, Some(1i32)),
+});
+pub static GREEN_BUNDLE: LazyLock<Item> = LazyLock::new(|| Item {
+    key: ResourceLocation::vanilla_static("green_bundle"),
+    components: DataComponentMap::common_item_components()
+        .builder_set(vanilla_components::MAX_STACK_SIZE, Some(1i32)),
+});
+pub static RED_BUNDLE: LazyLock<Item> = LazyLock::new(|| Item {
+    key: ResourceLocation::vanilla_static("red_bundle"),
+    components: DataComponentMap::common_item_components()
+        .builder_set(vanilla_components::MAX_STACK_SIZE, Some(1i32)),
+});
+pub static BLACK_BUNDLE: LazyLock<Item> = LazyLock::new(|| Item {
+    key: ResourceLocation::vanilla_static("black_bundle"),
+    components: DataComponentMap::common_item_components()
+        .builder_set(vanilla_components::MAX_STACK_SIZE, Some(1i32)),
+});
+pub static FISHING_ROD: LazyLock<Item> = LazyLock::new(|| Item {
+    key: ResourceLocation::vanilla_static("fishing_rod"),
+    components: DataComponentMap::common_item_components()
+        .builder_set(vanilla_components::MAX_DAMAGE, Some(64i32))
+        .builder_set(vanilla_components::MAX_STACK_SIZE, Some(1i32)),
+});
+pub static CLOCK: LazyLock<Item> = LazyLock::new(|| Item {
+    key: ResourceLocation::vanilla_static("clock"),
+    components: DataComponentMap::common_item_components(),
+});
+pub static SPYGLASS: LazyLock<Item> = LazyLock::new(|| Item {
+    key: ResourceLocation::vanilla_static("spyglass"),
+    components: DataComponentMap::common_item_components()
+        .builder_set(vanilla_components::MAX_STACK_SIZE, Some(1i32)),
+});
+pub static GLOWSTONE_DUST: LazyLock<Item> = LazyLock::new(|| Item {
+    key: ResourceLocation::vanilla_static("glowstone_dust"),
+    components: DataComponentMap::common_item_components(),
+});
+pub static COD: LazyLock<Item> = LazyLock::new(|| Item {
+    key: ResourceLocation::vanilla_static("cod"),
+    components: DataComponentMap::common_item_components(),
+});
+pub static SALMON: LazyLock<Item> = LazyLock::new(|| Item {
+    key: ResourceLocation::vanilla_static("salmon"),
+    components: DataComponentMap::common_item_components(),
+});
+pub static TROPICAL_FISH: LazyLock<Item> = LazyLock::new(|| Item {
+    key: ResourceLocation::vanilla_static("tropical_fish"),
+    components: DataComponentMap::common_item_components(),
+});
+pub static PUFFERFISH: LazyLock<Item> = LazyLock::new(|| Item {
+    key: ResourceLocation::vanilla_static("pufferfish"),
+    components: DataComponentMap::common_item_components(),
+});
+pub static COOKED_COD: LazyLock<Item> = LazyLock::new(|| Item {
+    key: ResourceLocation::vanilla_static("cooked_cod"),
+    components: DataComponentMap::common_item_components(),
+});
+pub static COOKED_SALMON: LazyLock<Item> = LazyLock::new(|| Item {
+    key: ResourceLocation::vanilla_static("cooked_salmon"),
+    components: DataComponentMap::common_item_components(),
+});
+pub static INK_SAC: LazyLock<Item> = LazyLock::new(|| Item {
+    key: ResourceLocation::vanilla_static("ink_sac"),
+    components: DataComponentMap::common_item_components(),
+});
+pub static GLOW_INK_SAC: LazyLock<Item> = LazyLock::new(|| Item {
+    key: ResourceLocation::vanilla_static("glow_ink_sac"),
+    components: DataComponentMap::common_item_components(),
+});
+pub static COCOA_BEANS: LazyLock<Item> =
+    LazyLock::new(|| Item::from_block_custom_name(vanilla_blocks::COCOA, "cocoa_beans"));
+pub static WHITE_DYE: LazyLock<Item> = LazyLock::new(|| Item {
+    key: ResourceLocation::vanilla_static("white_dye"),
+    components: DataComponentMap::common_item_components(),
+});
+pub static ORANGE_DYE: LazyLock<Item> = LazyLock::new(|| Item {
+    key: ResourceLocation::vanilla_static("orange_dye"),
+    components: DataComponentMap::common_item_components(),
+});
+pub static MAGENTA_DYE: LazyLock<Item> = LazyLock::new(|| Item {
+    key: ResourceLocation::vanilla_static("magenta_dye"),
+    components: DataComponentMap::common_item_components(),
+});
+pub static LIGHT_BLUE_DYE: LazyLock<Item> = LazyLock::new(|| Item {
+    key: ResourceLocation::vanilla_static("light_blue_dye"),
+    components: DataComponentMap::common_item_components(),
+});
+pub static YELLOW_DYE: LazyLock<Item> = LazyLock::new(|| Item {
+    key: ResourceLocation::vanilla_static("yellow_dye"),
+    components: DataComponentMap::common_item_components(),
+});
+pub static LIME_DYE: LazyLock<Item> = LazyLock::new(|| Item {
+    key: ResourceLocation::vanilla_static("lime_dye"),
+    components: DataComponentMap::common_item_components(),
+});
+pub static PINK_DYE: LazyLock<Item> = LazyLock::new(|| Item {
+    key: ResourceLocation::vanilla_static("pink_dye"),
+    components: DataComponentMap::common_item_components(),
+});
+pub static GRAY_DYE: LazyLock<Item> = LazyLock::new(|| Item {
+    key: ResourceLocation::vanilla_static("gray_dye"),
+    components: DataComponentMap::common_item_components(),
+});
+pub static LIGHT_GRAY_DYE: LazyLock<Item> = LazyLock::new(|| Item {
+    key: ResourceLocation::vanilla_static("light_gray_dye"),
+    components: DataComponentMap::common_item_components(),
+});
+pub static CYAN_DYE: LazyLock<Item> = LazyLock::new(|| Item {
+    key: ResourceLocation::vanilla_static("cyan_dye"),
+    components: DataComponentMap::common_item_components(),
+});
+pub static PURPLE_DYE: LazyLock<Item> = LazyLock::new(|| Item {
+    key: ResourceLocation::vanilla_static("purple_dye"),
+    components: DataComponentMap::common_item_components(),
+});
+pub static BLUE_DYE: LazyLock<Item> = LazyLock::new(|| Item {
+    key: ResourceLocation::vanilla_static("blue_dye"),
+    components: DataComponentMap::common_item_components(),
+});
+pub static BROWN_DYE: LazyLock<Item> = LazyLock::new(|| Item {
+    key: ResourceLocation::vanilla_static("brown_dye"),
+    components: DataComponentMap::common_item_components(),
+});
+pub static GREEN_DYE: LazyLock<Item> = LazyLock::new(|| Item {
+    key: ResourceLocation::vanilla_static("green_dye"),
+    components: DataComponentMap::common_item_components(),
+});
+pub static RED_DYE: LazyLock<Item> = LazyLock::new(|| Item {
+    key: ResourceLocation::vanilla_static("red_dye"),
+    components: DataComponentMap::common_item_components(),
+});
+pub static BLACK_DYE: LazyLock<Item> = LazyLock::new(|| Item {
+    key: ResourceLocation::vanilla_static("black_dye"),
+    components: DataComponentMap::common_item_components(),
+});
+pub static BONE_MEAL: LazyLock<Item> = LazyLock::new(|| Item {
+    key: ResourceLocation::vanilla_static("bone_meal"),
+    components: DataComponentMap::common_item_components(),
+});
+pub static BONE: LazyLock<Item> = LazyLock::new(|| Item {
+    key: ResourceLocation::vanilla_static("bone"),
+    components: DataComponentMap::common_item_components(),
+});
+pub static SUGAR: LazyLock<Item> = LazyLock::new(|| Item {
+    key: ResourceLocation::vanilla_static("sugar"),
+    components: DataComponentMap::common_item_components(),
+});
+pub static CAKE: LazyLock<Item> = LazyLock::new(|| Item::from_block(vanilla_blocks::CAKE));
+pub static WHITE_BED: LazyLock<Item> =
+    LazyLock::new(|| Item::from_block(vanilla_blocks::WHITE_BED));
+pub static ORANGE_BED: LazyLock<Item> =
+    LazyLock::new(|| Item::from_block(vanilla_blocks::ORANGE_BED));
+pub static MAGENTA_BED: LazyLock<Item> =
+    LazyLock::new(|| Item::from_block(vanilla_blocks::MAGENTA_BED));
+pub static LIGHT_BLUE_BED: LazyLock<Item> =
+    LazyLock::new(|| Item::from_block(vanilla_blocks::LIGHT_BLUE_BED));
+pub static YELLOW_BED: LazyLock<Item> =
+    LazyLock::new(|| Item::from_block(vanilla_blocks::YELLOW_BED));
+pub static LIME_BED: LazyLock<Item> = LazyLock::new(|| Item::from_block(vanilla_blocks::LIME_BED));
+pub static PINK_BED: LazyLock<Item> = LazyLock::new(|| Item::from_block(vanilla_blocks::PINK_BED));
+pub static GRAY_BED: LazyLock<Item> = LazyLock::new(|| Item::from_block(vanilla_blocks::GRAY_BED));
+pub static LIGHT_GRAY_BED: LazyLock<Item> =
+    LazyLock::new(|| Item::from_block(vanilla_blocks::LIGHT_GRAY_BED));
+pub static CYAN_BED: LazyLock<Item> = LazyLock::new(|| Item::from_block(vanilla_blocks::CYAN_BED));
+pub static PURPLE_BED: LazyLock<Item> =
+    LazyLock::new(|| Item::from_block(vanilla_blocks::PURPLE_BED));
+pub static BLUE_BED: LazyLock<Item> = LazyLock::new(|| Item::from_block(vanilla_blocks::BLUE_BED));
+pub static BROWN_BED: LazyLock<Item> =
+    LazyLock::new(|| Item::from_block(vanilla_blocks::BROWN_BED));
+pub static GREEN_BED: LazyLock<Item> =
+    LazyLock::new(|| Item::from_block(vanilla_blocks::GREEN_BED));
+pub static RED_BED: LazyLock<Item> = LazyLock::new(|| Item::from_block(vanilla_blocks::RED_BED));
+pub static BLACK_BED: LazyLock<Item> =
+    LazyLock::new(|| Item::from_block(vanilla_blocks::BLACK_BED));
+pub static COOKIE: LazyLock<Item> = LazyLock::new(|| Item {
+    key: ResourceLocation::vanilla_static("cookie"),
+    components: DataComponentMap::common_item_components(),
+});
+pub static CRAFTER: LazyLock<Item> = LazyLock::new(|| Item::from_block(vanilla_blocks::CRAFTER));
+pub static FILLED_MAP: LazyLock<Item> = LazyLock::new(|| Item {
+    key: ResourceLocation::vanilla_static("filled_map"),
+    components: DataComponentMap::common_item_components(),
+});
+pub static SHEARS: LazyLock<Item> = LazyLock::new(|| Item {
+    key: ResourceLocation::vanilla_static("shears"),
+    components: DataComponentMap::common_item_components()
+        .builder_set(vanilla_components::MAX_DAMAGE, Some(238i32))
+        .builder_set(vanilla_components::MAX_STACK_SIZE, Some(1i32)),
+});
+pub static MELON_SLICE: LazyLock<Item> = LazyLock::new(|| Item {
+    key: ResourceLocation::vanilla_static("melon_slice"),
+    components: DataComponentMap::common_item_components(),
+});
+pub static DRIED_KELP: LazyLock<Item> = LazyLock::new(|| Item {
+    key: ResourceLocation::vanilla_static("dried_kelp"),
+    components: DataComponentMap::common_item_components(),
+});
+pub static PUMPKIN_SEEDS: LazyLock<Item> =
+    LazyLock::new(|| Item::from_block_custom_name(vanilla_blocks::PUMPKIN_STEM, "pumpkin_seeds"));
+pub static MELON_SEEDS: LazyLock<Item> =
+    LazyLock::new(|| Item::from_block_custom_name(vanilla_blocks::MELON_STEM, "melon_seeds"));
+pub static BEEF: LazyLock<Item> = LazyLock::new(|| Item {
+    key: ResourceLocation::vanilla_static("beef"),
+    components: DataComponentMap::common_item_components(),
+});
+pub static COOKED_BEEF: LazyLock<Item> = LazyLock::new(|| Item {
+    key: ResourceLocation::vanilla_static("cooked_beef"),
+    components: DataComponentMap::common_item_components(),
+});
+pub static CHICKEN: LazyLock<Item> = LazyLock::new(|| Item {
+    key: ResourceLocation::vanilla_static("chicken"),
+    components: DataComponentMap::common_item_components(),
+});
+pub static COOKED_CHICKEN: LazyLock<Item> = LazyLock::new(|| Item {
+    key: ResourceLocation::vanilla_static("cooked_chicken"),
+    components: DataComponentMap::common_item_components(),
+});
+pub static ROTTEN_FLESH: LazyLock<Item> = LazyLock::new(|| Item {
+    key: ResourceLocation::vanilla_static("rotten_flesh"),
+    components: DataComponentMap::common_item_components(),
+});
+pub static ENDER_PEARL: LazyLock<Item> = LazyLock::new(|| Item {
+    key: ResourceLocation::vanilla_static("ender_pearl"),
+    components: DataComponentMap::common_item_components()
+        .builder_set(vanilla_components::MAX_STACK_SIZE, Some(16i32)),
+});
+pub static BLAZE_ROD: LazyLock<Item> = LazyLock::new(|| Item {
+    key: ResourceLocation::vanilla_static("blaze_rod"),
+    components: DataComponentMap::common_item_components(),
+});
+pub static GHAST_TEAR: LazyLock<Item> = LazyLock::new(|| Item {
+    key: ResourceLocation::vanilla_static("ghast_tear"),
+    components: DataComponentMap::common_item_components(),
+});
+pub static GOLD_NUGGET: LazyLock<Item> = LazyLock::new(|| Item {
+    key: ResourceLocation::vanilla_static("gold_nugget"),
+    components: DataComponentMap::common_item_components(),
+});
+pub static NETHER_WART: LazyLock<Item> =
+    LazyLock::new(|| Item::from_block(vanilla_blocks::NETHER_WART));
+pub static GLASS_BOTTLE: LazyLock<Item> = LazyLock::new(|| Item {
+    key: ResourceLocation::vanilla_static("glass_bottle"),
+    components: DataComponentMap::common_item_components(),
+});
+pub static POTION: LazyLock<Item> = LazyLock::new(|| Item {
+    key: ResourceLocation::vanilla_static("potion"),
+    components: DataComponentMap::common_item_components()
+        .builder_set(vanilla_components::MAX_STACK_SIZE, Some(1i32)),
+});
+pub static SPIDER_EYE: LazyLock<Item> = LazyLock::new(|| Item {
+    key: ResourceLocation::vanilla_static("spider_eye"),
+    components: DataComponentMap::common_item_components(),
+});
+pub static FERMENTED_SPIDER_EYE: LazyLock<Item> = LazyLock::new(|| Item {
+    key: ResourceLocation::vanilla_static("fermented_spider_eye"),
+    components: DataComponentMap::common_item_components(),
+});
+pub static BLAZE_POWDER: LazyLock<Item> = LazyLock::new(|| Item {
+    key: ResourceLocation::vanilla_static("blaze_powder"),
+    components: DataComponentMap::common_item_components(),
+});
+pub static MAGMA_CREAM: LazyLock<Item> = LazyLock::new(|| Item {
+    key: ResourceLocation::vanilla_static("magma_cream"),
+    components: DataComponentMap::common_item_components(),
+});
+pub static BREWING_STAND: LazyLock<Item> =
+    LazyLock::new(|| Item::from_block(vanilla_blocks::BREWING_STAND));
+pub static CAULDRON: LazyLock<Item> = LazyLock::new(|| Item::from_block(vanilla_blocks::CAULDRON));
+pub static ENDER_EYE: LazyLock<Item> = LazyLock::new(|| Item {
+    key: ResourceLocation::vanilla_static("ender_eye"),
+    components: DataComponentMap::common_item_components(),
+});
+pub static GLISTERING_MELON_SLICE: LazyLock<Item> = LazyLock::new(|| Item {
+    key: ResourceLocation::vanilla_static("glistering_melon_slice"),
+    components: DataComponentMap::common_item_components(),
+});
+pub static ARMADILLO_SPAWN_EGG: LazyLock<Item> = LazyLock::new(|| Item {
+    key: ResourceLocation::vanilla_static("armadillo_spawn_egg"),
+    components: DataComponentMap::common_item_components(),
+});
+pub static ALLAY_SPAWN_EGG: LazyLock<Item> = LazyLock::new(|| Item {
+    key: ResourceLocation::vanilla_static("allay_spawn_egg"),
+    components: DataComponentMap::common_item_components(),
+});
+pub static AXOLOTL_SPAWN_EGG: LazyLock<Item> = LazyLock::new(|| Item {
+    key: ResourceLocation::vanilla_static("axolotl_spawn_egg"),
+    components: DataComponentMap::common_item_components(),
+});
+pub static BAT_SPAWN_EGG: LazyLock<Item> = LazyLock::new(|| Item {
+    key: ResourceLocation::vanilla_static("bat_spawn_egg"),
+    components: DataComponentMap::common_item_components(),
+});
+pub static BEE_SPAWN_EGG: LazyLock<Item> = LazyLock::new(|| Item {
+    key: ResourceLocation::vanilla_static("bee_spawn_egg"),
+    components: DataComponentMap::common_item_components(),
+});
+pub static BLAZE_SPAWN_EGG: LazyLock<Item> = LazyLock::new(|| Item {
+    key: ResourceLocation::vanilla_static("blaze_spawn_egg"),
+    components: DataComponentMap::common_item_components(),
+});
+pub static BOGGED_SPAWN_EGG: LazyLock<Item> = LazyLock::new(|| Item {
+    key: ResourceLocation::vanilla_static("bogged_spawn_egg"),
+    components: DataComponentMap::common_item_components(),
+});
+pub static BREEZE_SPAWN_EGG: LazyLock<Item> = LazyLock::new(|| Item {
+    key: ResourceLocation::vanilla_static("breeze_spawn_egg"),
+    components: DataComponentMap::common_item_components(),
+});
+pub static CAT_SPAWN_EGG: LazyLock<Item> = LazyLock::new(|| Item {
+    key: ResourceLocation::vanilla_static("cat_spawn_egg"),
+    components: DataComponentMap::common_item_components(),
+});
+pub static CAMEL_SPAWN_EGG: LazyLock<Item> = LazyLock::new(|| Item {
+    key: ResourceLocation::vanilla_static("camel_spawn_egg"),
+    components: DataComponentMap::common_item_components(),
+});
+pub static CAVE_SPIDER_SPAWN_EGG: LazyLock<Item> = LazyLock::new(|| Item {
+    key: ResourceLocation::vanilla_static("cave_spider_spawn_egg"),
+    components: DataComponentMap::common_item_components(),
+});
+pub static CHICKEN_SPAWN_EGG: LazyLock<Item> = LazyLock::new(|| Item {
+    key: ResourceLocation::vanilla_static("chicken_spawn_egg"),
+    components: DataComponentMap::common_item_components(),
+});
+pub static COD_SPAWN_EGG: LazyLock<Item> = LazyLock::new(|| Item {
+    key: ResourceLocation::vanilla_static("cod_spawn_egg"),
+    components: DataComponentMap::common_item_components(),
+});
+pub static COPPER_GOLEM_SPAWN_EGG: LazyLock<Item> = LazyLock::new(|| Item {
+    key: ResourceLocation::vanilla_static("copper_golem_spawn_egg"),
+    components: DataComponentMap::common_item_components(),
+});
+pub static COW_SPAWN_EGG: LazyLock<Item> = LazyLock::new(|| Item {
+    key: ResourceLocation::vanilla_static("cow_spawn_egg"),
+    components: DataComponentMap::common_item_components(),
+});
+pub static CREEPER_SPAWN_EGG: LazyLock<Item> = LazyLock::new(|| Item {
+    key: ResourceLocation::vanilla_static("creeper_spawn_egg"),
+    components: DataComponentMap::common_item_components(),
+});
+pub static DOLPHIN_SPAWN_EGG: LazyLock<Item> = LazyLock::new(|| Item {
+    key: ResourceLocation::vanilla_static("dolphin_spawn_egg"),
+    components: DataComponentMap::common_item_components(),
+});
+pub static DONKEY_SPAWN_EGG: LazyLock<Item> = LazyLock::new(|| Item {
+    key: ResourceLocation::vanilla_static("donkey_spawn_egg"),
+    components: DataComponentMap::common_item_components(),
+});
+pub static DROWNED_SPAWN_EGG: LazyLock<Item> = LazyLock::new(|| Item {
+    key: ResourceLocation::vanilla_static("drowned_spawn_egg"),
+    components: DataComponentMap::common_item_components(),
+});
+pub static ELDER_GUARDIAN_SPAWN_EGG: LazyLock<Item> = LazyLock::new(|| Item {
+    key: ResourceLocation::vanilla_static("elder_guardian_spawn_egg"),
+    components: DataComponentMap::common_item_components(),
+});
+pub static ENDER_DRAGON_SPAWN_EGG: LazyLock<Item> = LazyLock::new(|| Item {
+    key: ResourceLocation::vanilla_static("ender_dragon_spawn_egg"),
+    components: DataComponentMap::common_item_components(),
+});
+pub static ENDERMAN_SPAWN_EGG: LazyLock<Item> = LazyLock::new(|| Item {
+    key: ResourceLocation::vanilla_static("enderman_spawn_egg"),
+    components: DataComponentMap::common_item_components(),
+});
+pub static ENDERMITE_SPAWN_EGG: LazyLock<Item> = LazyLock::new(|| Item {
+    key: ResourceLocation::vanilla_static("endermite_spawn_egg"),
+    components: DataComponentMap::common_item_components(),
+});
+pub static EVOKER_SPAWN_EGG: LazyLock<Item> = LazyLock::new(|| Item {
+    key: ResourceLocation::vanilla_static("evoker_spawn_egg"),
+    components: DataComponentMap::common_item_components(),
+});
+pub static FOX_SPAWN_EGG: LazyLock<Item> = LazyLock::new(|| Item {
+    key: ResourceLocation::vanilla_static("fox_spawn_egg"),
+    components: DataComponentMap::common_item_components(),
+});
+pub static FROG_SPAWN_EGG: LazyLock<Item> = LazyLock::new(|| Item {
+    key: ResourceLocation::vanilla_static("frog_spawn_egg"),
+    components: DataComponentMap::common_item_components(),
+});
+pub static GHAST_SPAWN_EGG: LazyLock<Item> = LazyLock::new(|| Item {
+    key: ResourceLocation::vanilla_static("ghast_spawn_egg"),
+    components: DataComponentMap::common_item_components(),
+});
+pub static HAPPY_GHAST_SPAWN_EGG: LazyLock<Item> = LazyLock::new(|| Item {
+    key: ResourceLocation::vanilla_static("happy_ghast_spawn_egg"),
+    components: DataComponentMap::common_item_components(),
+});
+pub static GLOW_SQUID_SPAWN_EGG: LazyLock<Item> = LazyLock::new(|| Item {
+    key: ResourceLocation::vanilla_static("glow_squid_spawn_egg"),
+    components: DataComponentMap::common_item_components(),
+});
+pub static GOAT_SPAWN_EGG: LazyLock<Item> = LazyLock::new(|| Item {
+    key: ResourceLocation::vanilla_static("goat_spawn_egg"),
+    components: DataComponentMap::common_item_components(),
+});
+pub static GUARDIAN_SPAWN_EGG: LazyLock<Item> = LazyLock::new(|| Item {
+    key: ResourceLocation::vanilla_static("guardian_spawn_egg"),
+    components: DataComponentMap::common_item_components(),
+});
+pub static HOGLIN_SPAWN_EGG: LazyLock<Item> = LazyLock::new(|| Item {
+    key: ResourceLocation::vanilla_static("hoglin_spawn_egg"),
+    components: DataComponentMap::common_item_components(),
+});
+pub static HORSE_SPAWN_EGG: LazyLock<Item> = LazyLock::new(|| Item {
+    key: ResourceLocation::vanilla_static("horse_spawn_egg"),
+    components: DataComponentMap::common_item_components(),
+});
+pub static HUSK_SPAWN_EGG: LazyLock<Item> = LazyLock::new(|| Item {
+    key: ResourceLocation::vanilla_static("husk_spawn_egg"),
+    components: DataComponentMap::common_item_components(),
+});
+pub static IRON_GOLEM_SPAWN_EGG: LazyLock<Item> = LazyLock::new(|| Item {
+    key: ResourceLocation::vanilla_static("iron_golem_spawn_egg"),
+    components: DataComponentMap::common_item_components(),
+});
+pub static LLAMA_SPAWN_EGG: LazyLock<Item> = LazyLock::new(|| Item {
+    key: ResourceLocation::vanilla_static("llama_spawn_egg"),
+    components: DataComponentMap::common_item_components(),
+});
+pub static MAGMA_CUBE_SPAWN_EGG: LazyLock<Item> = LazyLock::new(|| Item {
+    key: ResourceLocation::vanilla_static("magma_cube_spawn_egg"),
+    components: DataComponentMap::common_item_components(),
+});
+pub static MOOSHROOM_SPAWN_EGG: LazyLock<Item> = LazyLock::new(|| Item {
+    key: ResourceLocation::vanilla_static("mooshroom_spawn_egg"),
+    components: DataComponentMap::common_item_components(),
+});
+pub static MULE_SPAWN_EGG: LazyLock<Item> = LazyLock::new(|| Item {
+    key: ResourceLocation::vanilla_static("mule_spawn_egg"),
+    components: DataComponentMap::common_item_components(),
+});
+pub static OCELOT_SPAWN_EGG: LazyLock<Item> = LazyLock::new(|| Item {
+    key: ResourceLocation::vanilla_static("ocelot_spawn_egg"),
+    components: DataComponentMap::common_item_components(),
+});
+pub static PANDA_SPAWN_EGG: LazyLock<Item> = LazyLock::new(|| Item {
+    key: ResourceLocation::vanilla_static("panda_spawn_egg"),
+    components: DataComponentMap::common_item_components(),
+});
+pub static PARROT_SPAWN_EGG: LazyLock<Item> = LazyLock::new(|| Item {
+    key: ResourceLocation::vanilla_static("parrot_spawn_egg"),
+    components: DataComponentMap::common_item_components(),
+});
+pub static PHANTOM_SPAWN_EGG: LazyLock<Item> = LazyLock::new(|| Item {
+    key: ResourceLocation::vanilla_static("phantom_spawn_egg"),
+    components: DataComponentMap::common_item_components(),
+});
+pub static PIG_SPAWN_EGG: LazyLock<Item> = LazyLock::new(|| Item {
+    key: ResourceLocation::vanilla_static("pig_spawn_egg"),
+    components: DataComponentMap::common_item_components(),
+});
+pub static PIGLIN_SPAWN_EGG: LazyLock<Item> = LazyLock::new(|| Item {
+    key: ResourceLocation::vanilla_static("piglin_spawn_egg"),
+    components: DataComponentMap::common_item_components(),
+});
+pub static PIGLIN_BRUTE_SPAWN_EGG: LazyLock<Item> = LazyLock::new(|| Item {
+    key: ResourceLocation::vanilla_static("piglin_brute_spawn_egg"),
+    components: DataComponentMap::common_item_components(),
+});
+pub static PILLAGER_SPAWN_EGG: LazyLock<Item> = LazyLock::new(|| Item {
+    key: ResourceLocation::vanilla_static("pillager_spawn_egg"),
+    components: DataComponentMap::common_item_components(),
+});
+pub static POLAR_BEAR_SPAWN_EGG: LazyLock<Item> = LazyLock::new(|| Item {
+    key: ResourceLocation::vanilla_static("polar_bear_spawn_egg"),
+    components: DataComponentMap::common_item_components(),
+});
+pub static PUFFERFISH_SPAWN_EGG: LazyLock<Item> = LazyLock::new(|| Item {
+    key: ResourceLocation::vanilla_static("pufferfish_spawn_egg"),
+    components: DataComponentMap::common_item_components(),
+});
+pub static RABBIT_SPAWN_EGG: LazyLock<Item> = LazyLock::new(|| Item {
+    key: ResourceLocation::vanilla_static("rabbit_spawn_egg"),
+    components: DataComponentMap::common_item_components(),
+});
+pub static RAVAGER_SPAWN_EGG: LazyLock<Item> = LazyLock::new(|| Item {
+    key: ResourceLocation::vanilla_static("ravager_spawn_egg"),
+    components: DataComponentMap::common_item_components(),
+});
+pub static SALMON_SPAWN_EGG: LazyLock<Item> = LazyLock::new(|| Item {
+    key: ResourceLocation::vanilla_static("salmon_spawn_egg"),
+    components: DataComponentMap::common_item_components(),
+});
+pub static SHEEP_SPAWN_EGG: LazyLock<Item> = LazyLock::new(|| Item {
+    key: ResourceLocation::vanilla_static("sheep_spawn_egg"),
+    components: DataComponentMap::common_item_components(),
+});
+pub static SHULKER_SPAWN_EGG: LazyLock<Item> = LazyLock::new(|| Item {
+    key: ResourceLocation::vanilla_static("shulker_spawn_egg"),
+    components: DataComponentMap::common_item_components(),
+});
+pub static SILVERFISH_SPAWN_EGG: LazyLock<Item> = LazyLock::new(|| Item {
+    key: ResourceLocation::vanilla_static("silverfish_spawn_egg"),
+    components: DataComponentMap::common_item_components(),
+});
+pub static SKELETON_SPAWN_EGG: LazyLock<Item> = LazyLock::new(|| Item {
+    key: ResourceLocation::vanilla_static("skeleton_spawn_egg"),
+    components: DataComponentMap::common_item_components(),
+});
+pub static SKELETON_HORSE_SPAWN_EGG: LazyLock<Item> = LazyLock::new(|| Item {
+    key: ResourceLocation::vanilla_static("skeleton_horse_spawn_egg"),
+    components: DataComponentMap::common_item_components(),
+});
+pub static SLIME_SPAWN_EGG: LazyLock<Item> = LazyLock::new(|| Item {
+    key: ResourceLocation::vanilla_static("slime_spawn_egg"),
+    components: DataComponentMap::common_item_components(),
+});
+pub static SNIFFER_SPAWN_EGG: LazyLock<Item> = LazyLock::new(|| Item {
+    key: ResourceLocation::vanilla_static("sniffer_spawn_egg"),
+    components: DataComponentMap::common_item_components(),
+});
+pub static SNOW_GOLEM_SPAWN_EGG: LazyLock<Item> = LazyLock::new(|| Item {
+    key: ResourceLocation::vanilla_static("snow_golem_spawn_egg"),
+    components: DataComponentMap::common_item_components(),
+});
+pub static SPIDER_SPAWN_EGG: LazyLock<Item> = LazyLock::new(|| Item {
+    key: ResourceLocation::vanilla_static("spider_spawn_egg"),
+    components: DataComponentMap::common_item_components(),
+});
+pub static SQUID_SPAWN_EGG: LazyLock<Item> = LazyLock::new(|| Item {
+    key: ResourceLocation::vanilla_static("squid_spawn_egg"),
+    components: DataComponentMap::common_item_components(),
+});
+pub static STRAY_SPAWN_EGG: LazyLock<Item> = LazyLock::new(|| Item {
+    key: ResourceLocation::vanilla_static("stray_spawn_egg"),
+    components: DataComponentMap::common_item_components(),
+});
+pub static STRIDER_SPAWN_EGG: LazyLock<Item> = LazyLock::new(|| Item {
+    key: ResourceLocation::vanilla_static("strider_spawn_egg"),
+    components: DataComponentMap::common_item_components(),
+});
+pub static TADPOLE_SPAWN_EGG: LazyLock<Item> = LazyLock::new(|| Item {
+    key: ResourceLocation::vanilla_static("tadpole_spawn_egg"),
+    components: DataComponentMap::common_item_components(),
+});
+pub static TRADER_LLAMA_SPAWN_EGG: LazyLock<Item> = LazyLock::new(|| Item {
+    key: ResourceLocation::vanilla_static("trader_llama_spawn_egg"),
+    components: DataComponentMap::common_item_components(),
+});
+pub static TROPICAL_FISH_SPAWN_EGG: LazyLock<Item> = LazyLock::new(|| Item {
+    key: ResourceLocation::vanilla_static("tropical_fish_spawn_egg"),
+    components: DataComponentMap::common_item_components(),
+});
+pub static TURTLE_SPAWN_EGG: LazyLock<Item> = LazyLock::new(|| Item {
+    key: ResourceLocation::vanilla_static("turtle_spawn_egg"),
+    components: DataComponentMap::common_item_components(),
+});
+pub static VEX_SPAWN_EGG: LazyLock<Item> = LazyLock::new(|| Item {
+    key: ResourceLocation::vanilla_static("vex_spawn_egg"),
+    components: DataComponentMap::common_item_components(),
+});
+pub static VILLAGER_SPAWN_EGG: LazyLock<Item> = LazyLock::new(|| Item {
+    key: ResourceLocation::vanilla_static("villager_spawn_egg"),
+    components: DataComponentMap::common_item_components(),
+});
+pub static VINDICATOR_SPAWN_EGG: LazyLock<Item> = LazyLock::new(|| Item {
+    key: ResourceLocation::vanilla_static("vindicator_spawn_egg"),
+    components: DataComponentMap::common_item_components(),
+});
+pub static WANDERING_TRADER_SPAWN_EGG: LazyLock<Item> = LazyLock::new(|| Item {
+    key: ResourceLocation::vanilla_static("wandering_trader_spawn_egg"),
+    components: DataComponentMap::common_item_components(),
+});
+pub static WARDEN_SPAWN_EGG: LazyLock<Item> = LazyLock::new(|| Item {
+    key: ResourceLocation::vanilla_static("warden_spawn_egg"),
+    components: DataComponentMap::common_item_components(),
+});
+pub static WITCH_SPAWN_EGG: LazyLock<Item> = LazyLock::new(|| Item {
+    key: ResourceLocation::vanilla_static("witch_spawn_egg"),
+    components: DataComponentMap::common_item_components(),
+});
+pub static WITHER_SPAWN_EGG: LazyLock<Item> = LazyLock::new(|| Item {
+    key: ResourceLocation::vanilla_static("wither_spawn_egg"),
+    components: DataComponentMap::common_item_components(),
+});
+pub static WITHER_SKELETON_SPAWN_EGG: LazyLock<Item> = LazyLock::new(|| Item {
+    key: ResourceLocation::vanilla_static("wither_skeleton_spawn_egg"),
+    components: DataComponentMap::common_item_components(),
+});
+pub static WOLF_SPAWN_EGG: LazyLock<Item> = LazyLock::new(|| Item {
+    key: ResourceLocation::vanilla_static("wolf_spawn_egg"),
+    components: DataComponentMap::common_item_components(),
+});
+pub static ZOGLIN_SPAWN_EGG: LazyLock<Item> = LazyLock::new(|| Item {
+    key: ResourceLocation::vanilla_static("zoglin_spawn_egg"),
+    components: DataComponentMap::common_item_components(),
+});
+pub static CREAKING_SPAWN_EGG: LazyLock<Item> = LazyLock::new(|| Item {
+    key: ResourceLocation::vanilla_static("creaking_spawn_egg"),
+    components: DataComponentMap::common_item_components(),
+});
+pub static ZOMBIE_SPAWN_EGG: LazyLock<Item> = LazyLock::new(|| Item {
+    key: ResourceLocation::vanilla_static("zombie_spawn_egg"),
+    components: DataComponentMap::common_item_components(),
+});
+pub static ZOMBIE_HORSE_SPAWN_EGG: LazyLock<Item> = LazyLock::new(|| Item {
+    key: ResourceLocation::vanilla_static("zombie_horse_spawn_egg"),
+    components: DataComponentMap::common_item_components(),
+});
+pub static ZOMBIE_VILLAGER_SPAWN_EGG: LazyLock<Item> = LazyLock::new(|| Item {
+    key: ResourceLocation::vanilla_static("zombie_villager_spawn_egg"),
+    components: DataComponentMap::common_item_components(),
+});
+pub static ZOMBIFIED_PIGLIN_SPAWN_EGG: LazyLock<Item> = LazyLock::new(|| Item {
+    key: ResourceLocation::vanilla_static("zombified_piglin_spawn_egg"),
+    components: DataComponentMap::common_item_components(),
+});
+pub static EXPERIENCE_BOTTLE: LazyLock<Item> = LazyLock::new(|| Item {
+    key: ResourceLocation::vanilla_static("experience_bottle"),
+    components: DataComponentMap::common_item_components()
+        .builder_set(vanilla_components::ENCHANTMENT_GLINT_OVERRIDE, Some(true)),
+});
+pub static FIRE_CHARGE: LazyLock<Item> = LazyLock::new(|| Item {
+    key: ResourceLocation::vanilla_static("fire_charge"),
+    components: DataComponentMap::common_item_components(),
+});
+pub static WIND_CHARGE: LazyLock<Item> = LazyLock::new(|| Item {
+    key: ResourceLocation::vanilla_static("wind_charge"),
+    components: DataComponentMap::common_item_components(),
+});
+pub static WRITABLE_BOOK: LazyLock<Item> = LazyLock::new(|| Item {
+    key: ResourceLocation::vanilla_static("writable_book"),
+    components: DataComponentMap::common_item_components()
+        .builder_set(vanilla_components::MAX_STACK_SIZE, Some(1i32)),
+});
+pub static WRITTEN_BOOK: LazyLock<Item> = LazyLock::new(|| Item {
+    key: ResourceLocation::vanilla_static("written_book"),
+    components: DataComponentMap::common_item_components()
+        .builder_set(vanilla_components::ENCHANTMENT_GLINT_OVERRIDE, Some(true))
+        .builder_set(vanilla_components::MAX_STACK_SIZE, Some(16i32)),
+});
+pub static BREEZE_ROD: LazyLock<Item> = LazyLock::new(|| Item {
+    key: ResourceLocation::vanilla_static("breeze_rod"),
+    components: DataComponentMap::common_item_components(),
+});
+pub static MACE: LazyLock<Item> = LazyLock::new(|| Item {
+    key: ResourceLocation::vanilla_static("mace"),
+    components: DataComponentMap::common_item_components()
+        .builder_set(vanilla_components::MAX_DAMAGE, Some(500i32))
+        .builder_set(vanilla_components::MAX_STACK_SIZE, Some(1i32)),
+});
+pub static ITEM_FRAME: LazyLock<Item> = LazyLock::new(|| Item {
+    key: ResourceLocation::vanilla_static("item_frame"),
+    components: DataComponentMap::common_item_components(),
+});
+pub static GLOW_ITEM_FRAME: LazyLock<Item> = LazyLock::new(|| Item {
+    key: ResourceLocation::vanilla_static("glow_item_frame"),
+    components: DataComponentMap::common_item_components(),
+});
+pub static FLOWER_POT: LazyLock<Item> =
+    LazyLock::new(|| Item::from_block(vanilla_blocks::FLOWER_POT));
+pub static CARROT: LazyLock<Item> =
+    LazyLock::new(|| Item::from_block_custom_name(vanilla_blocks::CARROTS, "carrot"));
+pub static POTATO: LazyLock<Item> =
+    LazyLock::new(|| Item::from_block_custom_name(vanilla_blocks::POTATOES, "potato"));
+pub static BAKED_POTATO: LazyLock<Item> = LazyLock::new(|| Item {
+    key: ResourceLocation::vanilla_static("baked_potato"),
+    components: DataComponentMap::common_item_components(),
+});
+pub static POISONOUS_POTATO: LazyLock<Item> = LazyLock::new(|| Item {
+    key: ResourceLocation::vanilla_static("poisonous_potato"),
+    components: DataComponentMap::common_item_components(),
+});
+pub static MAP: LazyLock<Item> = LazyLock::new(|| Item {
+    key: ResourceLocation::vanilla_static("map"),
+    components: DataComponentMap::common_item_components(),
+});
+pub static GOLDEN_CARROT: LazyLock<Item> = LazyLock::new(|| Item {
+    key: ResourceLocation::vanilla_static("golden_carrot"),
+    components: DataComponentMap::common_item_components(),
+});
+pub static SKELETON_SKULL: LazyLock<Item> =
+    LazyLock::new(|| Item::from_block(vanilla_blocks::SKELETON_SKULL));
+pub static WITHER_SKELETON_SKULL: LazyLock<Item> =
+    LazyLock::new(|| Item::from_block(vanilla_blocks::WITHER_SKELETON_SKULL));
+pub static PLAYER_HEAD: LazyLock<Item> =
+    LazyLock::new(|| Item::from_block(vanilla_blocks::PLAYER_HEAD));
+pub static ZOMBIE_HEAD: LazyLock<Item> =
+    LazyLock::new(|| Item::from_block(vanilla_blocks::ZOMBIE_HEAD));
+pub static CREEPER_HEAD: LazyLock<Item> =
+    LazyLock::new(|| Item::from_block(vanilla_blocks::CREEPER_HEAD));
+pub static DRAGON_HEAD: LazyLock<Item> =
+    LazyLock::new(|| Item::from_block(vanilla_blocks::DRAGON_HEAD));
+pub static PIGLIN_HEAD: LazyLock<Item> =
+    LazyLock::new(|| Item::from_block(vanilla_blocks::PIGLIN_HEAD));
+pub static NETHER_STAR: LazyLock<Item> = LazyLock::new(|| Item {
+    key: ResourceLocation::vanilla_static("nether_star"),
+    components: DataComponentMap::common_item_components()
+        .builder_set(vanilla_components::ENCHANTMENT_GLINT_OVERRIDE, Some(true)),
+});
+pub static PUMPKIN_PIE: LazyLock<Item> = LazyLock::new(|| Item {
+    key: ResourceLocation::vanilla_static("pumpkin_pie"),
+    components: DataComponentMap::common_item_components(),
+});
+pub static FIREWORK_ROCKET: LazyLock<Item> = LazyLock::new(|| Item {
+    key: ResourceLocation::vanilla_static("firework_rocket"),
+    components: DataComponentMap::common_item_components(),
+});
+pub static FIREWORK_STAR: LazyLock<Item> = LazyLock::new(|| Item {
+    key: ResourceLocation::vanilla_static("firework_star"),
+    components: DataComponentMap::common_item_components(),
+});
+pub static ENCHANTED_BOOK: LazyLock<Item> = LazyLock::new(|| Item {
+    key: ResourceLocation::vanilla_static("enchanted_book"),
+    components: DataComponentMap::common_item_components()
+        .builder_set(vanilla_components::ENCHANTMENT_GLINT_OVERRIDE, Some(true))
+        .builder_set(vanilla_components::MAX_STACK_SIZE, Some(1i32)),
+});
+pub static NETHER_BRICK: LazyLock<Item> = LazyLock::new(|| Item {
+    key: ResourceLocation::vanilla_static("nether_brick"),
+    components: DataComponentMap::common_item_components(),
+});
+pub static RESIN_BRICK: LazyLock<Item> = LazyLock::new(|| Item {
+    key: ResourceLocation::vanilla_static("resin_brick"),
+    components: DataComponentMap::common_item_components(),
+});
+pub static PRISMARINE_SHARD: LazyLock<Item> = LazyLock::new(|| Item {
+    key: ResourceLocation::vanilla_static("prismarine_shard"),
+    components: DataComponentMap::common_item_components(),
+});
+pub static PRISMARINE_CRYSTALS: LazyLock<Item> = LazyLock::new(|| Item {
+    key: ResourceLocation::vanilla_static("prismarine_crystals"),
+    components: DataComponentMap::common_item_components(),
+});
+pub static RABBIT: LazyLock<Item> = LazyLock::new(|| Item {
+    key: ResourceLocation::vanilla_static("rabbit"),
+    components: DataComponentMap::common_item_components(),
+});
+pub static COOKED_RABBIT: LazyLock<Item> = LazyLock::new(|| Item {
+    key: ResourceLocation::vanilla_static("cooked_rabbit"),
+    components: DataComponentMap::common_item_components(),
+});
+pub static RABBIT_STEW: LazyLock<Item> = LazyLock::new(|| Item {
+    key: ResourceLocation::vanilla_static("rabbit_stew"),
+    components: DataComponentMap::common_item_components()
+        .builder_set(vanilla_components::MAX_STACK_SIZE, Some(1i32)),
+});
+pub static RABBIT_FOOT: LazyLock<Item> = LazyLock::new(|| Item {
+    key: ResourceLocation::vanilla_static("rabbit_foot"),
+    components: DataComponentMap::common_item_components(),
+});
+pub static RABBIT_HIDE: LazyLock<Item> = LazyLock::new(|| Item {
+    key: ResourceLocation::vanilla_static("rabbit_hide"),
+    components: DataComponentMap::common_item_components(),
+});
+pub static ARMOR_STAND: LazyLock<Item> = LazyLock::new(|| Item {
+    key: ResourceLocation::vanilla_static("armor_stand"),
+    components: DataComponentMap::common_item_components()
+        .builder_set(vanilla_components::MAX_STACK_SIZE, Some(16i32)),
+});
+pub static COPPER_HORSE_ARMOR: LazyLock<Item> = LazyLock::new(|| Item {
+    key: ResourceLocation::vanilla_static("copper_horse_armor"),
+    components: DataComponentMap::common_item_components()
+        .builder_set(vanilla_components::MAX_STACK_SIZE, Some(1i32)),
+});
+pub static IRON_HORSE_ARMOR: LazyLock<Item> = LazyLock::new(|| Item {
+    key: ResourceLocation::vanilla_static("iron_horse_armor"),
+    components: DataComponentMap::common_item_components()
+        .builder_set(vanilla_components::MAX_STACK_SIZE, Some(1i32)),
+});
+pub static GOLDEN_HORSE_ARMOR: LazyLock<Item> = LazyLock::new(|| Item {
+    key: ResourceLocation::vanilla_static("golden_horse_armor"),
+    components: DataComponentMap::common_item_components()
+        .builder_set(vanilla_components::MAX_STACK_SIZE, Some(1i32)),
+});
+pub static DIAMOND_HORSE_ARMOR: LazyLock<Item> = LazyLock::new(|| Item {
+    key: ResourceLocation::vanilla_static("diamond_horse_armor"),
+    components: DataComponentMap::common_item_components()
+        .builder_set(vanilla_components::MAX_STACK_SIZE, Some(1i32)),
+});
+pub static LEATHER_HORSE_ARMOR: LazyLock<Item> = LazyLock::new(|| Item {
+    key: ResourceLocation::vanilla_static("leather_horse_armor"),
+    components: DataComponentMap::common_item_components()
+        .builder_set(vanilla_components::MAX_STACK_SIZE, Some(1i32)),
+});
+pub static LEAD: LazyLock<Item> = LazyLock::new(|| Item {
+    key: ResourceLocation::vanilla_static("lead"),
+    components: DataComponentMap::common_item_components(),
+});
+pub static NAME_TAG: LazyLock<Item> = LazyLock::new(|| Item {
+    key: ResourceLocation::vanilla_static("name_tag"),
+    components: DataComponentMap::common_item_components(),
+});
+pub static COMMAND_BLOCK_MINECART: LazyLock<Item> = LazyLock::new(|| Item {
+    key: ResourceLocation::vanilla_static("command_block_minecart"),
+    components: DataComponentMap::common_item_components()
+        .builder_set(vanilla_components::MAX_STACK_SIZE, Some(1i32)),
+});
+pub static MUTTON: LazyLock<Item> = LazyLock::new(|| Item {
+    key: ResourceLocation::vanilla_static("mutton"),
+    components: DataComponentMap::common_item_components(),
+});
+pub static COOKED_MUTTON: LazyLock<Item> = LazyLock::new(|| Item {
+    key: ResourceLocation::vanilla_static("cooked_mutton"),
+    components: DataComponentMap::common_item_components(),
+});
+pub static WHITE_BANNER: LazyLock<Item> =
+    LazyLock::new(|| Item::from_block(vanilla_blocks::WHITE_BANNER));
+pub static ORANGE_BANNER: LazyLock<Item> =
+    LazyLock::new(|| Item::from_block(vanilla_blocks::ORANGE_BANNER));
+pub static MAGENTA_BANNER: LazyLock<Item> =
+    LazyLock::new(|| Item::from_block(vanilla_blocks::MAGENTA_BANNER));
+pub static LIGHT_BLUE_BANNER: LazyLock<Item> =
+    LazyLock::new(|| Item::from_block(vanilla_blocks::LIGHT_BLUE_BANNER));
+pub static YELLOW_BANNER: LazyLock<Item> =
+    LazyLock::new(|| Item::from_block(vanilla_blocks::YELLOW_BANNER));
+pub static LIME_BANNER: LazyLock<Item> =
+    LazyLock::new(|| Item::from_block(vanilla_blocks::LIME_BANNER));
+pub static PINK_BANNER: LazyLock<Item> =
+    LazyLock::new(|| Item::from_block(vanilla_blocks::PINK_BANNER));
+pub static GRAY_BANNER: LazyLock<Item> =
+    LazyLock::new(|| Item::from_block(vanilla_blocks::GRAY_BANNER));
+pub static LIGHT_GRAY_BANNER: LazyLock<Item> =
+    LazyLock::new(|| Item::from_block(vanilla_blocks::LIGHT_GRAY_BANNER));
+pub static CYAN_BANNER: LazyLock<Item> =
+    LazyLock::new(|| Item::from_block(vanilla_blocks::CYAN_BANNER));
+pub static PURPLE_BANNER: LazyLock<Item> =
+    LazyLock::new(|| Item::from_block(vanilla_blocks::PURPLE_BANNER));
+pub static BLUE_BANNER: LazyLock<Item> =
+    LazyLock::new(|| Item::from_block(vanilla_blocks::BLUE_BANNER));
+pub static BROWN_BANNER: LazyLock<Item> =
+    LazyLock::new(|| Item::from_block(vanilla_blocks::BROWN_BANNER));
+pub static GREEN_BANNER: LazyLock<Item> =
+    LazyLock::new(|| Item::from_block(vanilla_blocks::GREEN_BANNER));
+pub static RED_BANNER: LazyLock<Item> =
+    LazyLock::new(|| Item::from_block(vanilla_blocks::RED_BANNER));
+pub static BLACK_BANNER: LazyLock<Item> =
+    LazyLock::new(|| Item::from_block(vanilla_blocks::BLACK_BANNER));
+pub static END_CRYSTAL: LazyLock<Item> = LazyLock::new(|| Item {
+    key: ResourceLocation::vanilla_static("end_crystal"),
+    components: DataComponentMap::common_item_components()
+        .builder_set(vanilla_components::ENCHANTMENT_GLINT_OVERRIDE, Some(true)),
+});
+pub static CHORUS_FRUIT: LazyLock<Item> = LazyLock::new(|| Item {
+    key: ResourceLocation::vanilla_static("chorus_fruit"),
+    components: DataComponentMap::common_item_components(),
+});
+pub static POPPED_CHORUS_FRUIT: LazyLock<Item> = LazyLock::new(|| Item {
+    key: ResourceLocation::vanilla_static("popped_chorus_fruit"),
+    components: DataComponentMap::common_item_components(),
+});
+pub static TORCHFLOWER_SEEDS: LazyLock<Item> = LazyLock::new(|| {
+    Item::from_block_custom_name(vanilla_blocks::TORCHFLOWER_CROP, "torchflower_seeds")
+});
+pub static PITCHER_POD: LazyLock<Item> =
+    LazyLock::new(|| Item::from_block_custom_name(vanilla_blocks::PITCHER_CROP, "pitcher_pod"));
+pub static BEETROOT: LazyLock<Item> = LazyLock::new(|| Item {
+    key: ResourceLocation::vanilla_static("beetroot"),
+    components: DataComponentMap::common_item_components(),
+});
+pub static BEETROOT_SEEDS: LazyLock<Item> =
+    LazyLock::new(|| Item::from_block_custom_name(vanilla_blocks::BEETROOTS, "beetroot_seeds"));
+pub static BEETROOT_SOUP: LazyLock<Item> = LazyLock::new(|| Item {
+    key: ResourceLocation::vanilla_static("beetroot_soup"),
+    components: DataComponentMap::common_item_components()
+        .builder_set(vanilla_components::MAX_STACK_SIZE, Some(1i32)),
+});
+pub static DRAGON_BREATH: LazyLock<Item> = LazyLock::new(|| Item {
+    key: ResourceLocation::vanilla_static("dragon_breath"),
+    components: DataComponentMap::common_item_components(),
+});
+pub static SPLASH_POTION: LazyLock<Item> = LazyLock::new(|| Item {
+    key: ResourceLocation::vanilla_static("splash_potion"),
+    components: DataComponentMap::common_item_components()
+        .builder_set(vanilla_components::MAX_STACK_SIZE, Some(1i32)),
+});
+pub static SPECTRAL_ARROW: LazyLock<Item> = LazyLock::new(|| Item {
+    key: ResourceLocation::vanilla_static("spectral_arrow"),
+    components: DataComponentMap::common_item_components(),
+});
+pub static TIPPED_ARROW: LazyLock<Item> = LazyLock::new(|| Item {
+    key: ResourceLocation::vanilla_static("tipped_arrow"),
+    components: DataComponentMap::common_item_components(),
+});
+pub static LINGERING_POTION: LazyLock<Item> = LazyLock::new(|| Item {
+    key: ResourceLocation::vanilla_static("lingering_potion"),
+    components: DataComponentMap::common_item_components()
+        .builder_set(vanilla_components::MAX_STACK_SIZE, Some(1i32)),
+});
+pub static SHIELD: LazyLock<Item> = LazyLock::new(|| Item {
+    key: ResourceLocation::vanilla_static("shield"),
+    components: DataComponentMap::common_item_components()
+        .builder_set(vanilla_components::MAX_DAMAGE, Some(336i32))
+        .builder_set(vanilla_components::MAX_STACK_SIZE, Some(1i32)),
+});
+pub static TOTEM_OF_UNDYING: LazyLock<Item> = LazyLock::new(|| Item {
+    key: ResourceLocation::vanilla_static("totem_of_undying"),
+    components: DataComponentMap::common_item_components()
+        .builder_set(vanilla_components::MAX_STACK_SIZE, Some(1i32)),
+});
+pub static SHULKER_SHELL: LazyLock<Item> = LazyLock::new(|| Item {
+    key: ResourceLocation::vanilla_static("shulker_shell"),
+    components: DataComponentMap::common_item_components(),
+});
+pub static IRON_NUGGET: LazyLock<Item> = LazyLock::new(|| Item {
+    key: ResourceLocation::vanilla_static("iron_nugget"),
+    components: DataComponentMap::common_item_components(),
+});
+pub static COPPER_NUGGET: LazyLock<Item> = LazyLock::new(|| Item {
+    key: ResourceLocation::vanilla_static("copper_nugget"),
+    components: DataComponentMap::common_item_components(),
+});
+pub static KNOWLEDGE_BOOK: LazyLock<Item> = LazyLock::new(|| Item {
+    key: ResourceLocation::vanilla_static("knowledge_book"),
+    components: DataComponentMap::common_item_components()
+        .builder_set(vanilla_components::MAX_STACK_SIZE, Some(1i32)),
+});
+pub static DEBUG_STICK: LazyLock<Item> = LazyLock::new(|| Item {
+    key: ResourceLocation::vanilla_static("debug_stick"),
+    components: DataComponentMap::common_item_components()
+        .builder_set(vanilla_components::ENCHANTMENT_GLINT_OVERRIDE, Some(true))
+        .builder_set(vanilla_components::MAX_STACK_SIZE, Some(1i32)),
+});
+pub static MUSIC_DISC_13: LazyLock<Item> = LazyLock::new(|| Item {
+    key: ResourceLocation::vanilla_static("music_disc_13"),
+    components: DataComponentMap::common_item_components()
+        .builder_set(vanilla_components::MAX_STACK_SIZE, Some(1i32)),
+});
+pub static MUSIC_DISC_CAT: LazyLock<Item> = LazyLock::new(|| Item {
+    key: ResourceLocation::vanilla_static("music_disc_cat"),
+    components: DataComponentMap::common_item_components()
+        .builder_set(vanilla_components::MAX_STACK_SIZE, Some(1i32)),
+});
+pub static MUSIC_DISC_BLOCKS: LazyLock<Item> = LazyLock::new(|| Item {
+    key: ResourceLocation::vanilla_static("music_disc_blocks"),
+    components: DataComponentMap::common_item_components()
+        .builder_set(vanilla_components::MAX_STACK_SIZE, Some(1i32)),
+});
+pub static MUSIC_DISC_CHIRP: LazyLock<Item> = LazyLock::new(|| Item {
+    key: ResourceLocation::vanilla_static("music_disc_chirp"),
+    components: DataComponentMap::common_item_components()
+        .builder_set(vanilla_components::MAX_STACK_SIZE, Some(1i32)),
+});
+pub static MUSIC_DISC_CREATOR: LazyLock<Item> = LazyLock::new(|| Item {
+    key: ResourceLocation::vanilla_static("music_disc_creator"),
+    components: DataComponentMap::common_item_components()
+        .builder_set(vanilla_components::MAX_STACK_SIZE, Some(1i32)),
+});
+pub static MUSIC_DISC_CREATOR_MUSIC_BOX: LazyLock<Item> = LazyLock::new(|| Item {
+    key: ResourceLocation::vanilla_static("music_disc_creator_music_box"),
+    components: DataComponentMap::common_item_components()
+        .builder_set(vanilla_components::MAX_STACK_SIZE, Some(1i32)),
+});
+pub static MUSIC_DISC_FAR: LazyLock<Item> = LazyLock::new(|| Item {
+    key: ResourceLocation::vanilla_static("music_disc_far"),
+    components: DataComponentMap::common_item_components()
+        .builder_set(vanilla_components::MAX_STACK_SIZE, Some(1i32)),
+});
+pub static MUSIC_DISC_LAVA_CHICKEN: LazyLock<Item> = LazyLock::new(|| Item {
+    key: ResourceLocation::vanilla_static("music_disc_lava_chicken"),
+    components: DataComponentMap::common_item_components()
+        .builder_set(vanilla_components::MAX_STACK_SIZE, Some(1i32)),
+});
+pub static MUSIC_DISC_MALL: LazyLock<Item> = LazyLock::new(|| Item {
+    key: ResourceLocation::vanilla_static("music_disc_mall"),
+    components: DataComponentMap::common_item_components()
+        .builder_set(vanilla_components::MAX_STACK_SIZE, Some(1i32)),
+});
+pub static MUSIC_DISC_MELLOHI: LazyLock<Item> = LazyLock::new(|| Item {
+    key: ResourceLocation::vanilla_static("music_disc_mellohi"),
+    components: DataComponentMap::common_item_components()
+        .builder_set(vanilla_components::MAX_STACK_SIZE, Some(1i32)),
+});
+pub static MUSIC_DISC_STAL: LazyLock<Item> = LazyLock::new(|| Item {
+    key: ResourceLocation::vanilla_static("music_disc_stal"),
+    components: DataComponentMap::common_item_components()
+        .builder_set(vanilla_components::MAX_STACK_SIZE, Some(1i32)),
+});
+pub static MUSIC_DISC_STRAD: LazyLock<Item> = LazyLock::new(|| Item {
+    key: ResourceLocation::vanilla_static("music_disc_strad"),
+    components: DataComponentMap::common_item_components()
+        .builder_set(vanilla_components::MAX_STACK_SIZE, Some(1i32)),
+});
+pub static MUSIC_DISC_WARD: LazyLock<Item> = LazyLock::new(|| Item {
+    key: ResourceLocation::vanilla_static("music_disc_ward"),
+    components: DataComponentMap::common_item_components()
+        .builder_set(vanilla_components::MAX_STACK_SIZE, Some(1i32)),
+});
+pub static MUSIC_DISC_11: LazyLock<Item> = LazyLock::new(|| Item {
+    key: ResourceLocation::vanilla_static("music_disc_11"),
+    components: DataComponentMap::common_item_components()
+        .builder_set(vanilla_components::MAX_STACK_SIZE, Some(1i32)),
+});
+pub static MUSIC_DISC_WAIT: LazyLock<Item> = LazyLock::new(|| Item {
+    key: ResourceLocation::vanilla_static("music_disc_wait"),
+    components: DataComponentMap::common_item_components()
+        .builder_set(vanilla_components::MAX_STACK_SIZE, Some(1i32)),
+});
+pub static MUSIC_DISC_OTHERSIDE: LazyLock<Item> = LazyLock::new(|| Item {
+    key: ResourceLocation::vanilla_static("music_disc_otherside"),
+    components: DataComponentMap::common_item_components()
+        .builder_set(vanilla_components::MAX_STACK_SIZE, Some(1i32)),
+});
+pub static MUSIC_DISC_RELIC: LazyLock<Item> = LazyLock::new(|| Item {
+    key: ResourceLocation::vanilla_static("music_disc_relic"),
+    components: DataComponentMap::common_item_components()
+        .builder_set(vanilla_components::MAX_STACK_SIZE, Some(1i32)),
+});
+pub static MUSIC_DISC_5: LazyLock<Item> = LazyLock::new(|| Item {
+    key: ResourceLocation::vanilla_static("music_disc_5"),
+    components: DataComponentMap::common_item_components()
+        .builder_set(vanilla_components::MAX_STACK_SIZE, Some(1i32)),
+});
+pub static MUSIC_DISC_PIGSTEP: LazyLock<Item> = LazyLock::new(|| Item {
+    key: ResourceLocation::vanilla_static("music_disc_pigstep"),
+    components: DataComponentMap::common_item_components()
+        .builder_set(vanilla_components::MAX_STACK_SIZE, Some(1i32)),
+});
+pub static MUSIC_DISC_PRECIPICE: LazyLock<Item> = LazyLock::new(|| Item {
+    key: ResourceLocation::vanilla_static("music_disc_precipice"),
+    components: DataComponentMap::common_item_components()
+        .builder_set(vanilla_components::MAX_STACK_SIZE, Some(1i32)),
+});
+pub static MUSIC_DISC_TEARS: LazyLock<Item> = LazyLock::new(|| Item {
+    key: ResourceLocation::vanilla_static("music_disc_tears"),
+    components: DataComponentMap::common_item_components()
+        .builder_set(vanilla_components::MAX_STACK_SIZE, Some(1i32)),
+});
+pub static DISC_FRAGMENT_5: LazyLock<Item> = LazyLock::new(|| Item {
+    key: ResourceLocation::vanilla_static("disc_fragment_5"),
+    components: DataComponentMap::common_item_components(),
+});
+pub static TRIDENT: LazyLock<Item> = LazyLock::new(|| Item {
+    key: ResourceLocation::vanilla_static("trident"),
+    components: DataComponentMap::common_item_components()
+        .builder_set(vanilla_components::MAX_DAMAGE, Some(250i32))
+        .builder_set(vanilla_components::MAX_STACK_SIZE, Some(1i32)),
+});
+pub static NAUTILUS_SHELL: LazyLock<Item> = LazyLock::new(|| Item {
+    key: ResourceLocation::vanilla_static("nautilus_shell"),
+    components: DataComponentMap::common_item_components(),
+});
+pub static HEART_OF_THE_SEA: LazyLock<Item> = LazyLock::new(|| Item {
+    key: ResourceLocation::vanilla_static("heart_of_the_sea"),
+    components: DataComponentMap::common_item_components(),
+});
+pub static CROSSBOW: LazyLock<Item> = LazyLock::new(|| Item {
+    key: ResourceLocation::vanilla_static("crossbow"),
+    components: DataComponentMap::common_item_components()
+        .builder_set(vanilla_components::MAX_DAMAGE, Some(465i32))
+        .builder_set(vanilla_components::MAX_STACK_SIZE, Some(1i32)),
+});
+pub static SUSPICIOUS_STEW: LazyLock<Item> = LazyLock::new(|| Item {
+    key: ResourceLocation::vanilla_static("suspicious_stew"),
+    components: DataComponentMap::common_item_components()
+        .builder_set(vanilla_components::MAX_STACK_SIZE, Some(1i32)),
+});
+pub static LOOM: LazyLock<Item> = LazyLock::new(|| Item::from_block(vanilla_blocks::LOOM));
+pub static FLOWER_BANNER_PATTERN: LazyLock<Item> = LazyLock::new(|| Item {
+    key: ResourceLocation::vanilla_static("flower_banner_pattern"),
+    components: DataComponentMap::common_item_components()
+        .builder_set(vanilla_components::MAX_STACK_SIZE, Some(1i32)),
+});
+pub static CREEPER_BANNER_PATTERN: LazyLock<Item> = LazyLock::new(|| Item {
+    key: ResourceLocation::vanilla_static("creeper_banner_pattern"),
+    components: DataComponentMap::common_item_components()
+        .builder_set(vanilla_components::MAX_STACK_SIZE, Some(1i32)),
+});
+pub static SKULL_BANNER_PATTERN: LazyLock<Item> = LazyLock::new(|| Item {
+    key: ResourceLocation::vanilla_static("skull_banner_pattern"),
+    components: DataComponentMap::common_item_components()
+        .builder_set(vanilla_components::MAX_STACK_SIZE, Some(1i32)),
+});
+pub static MOJANG_BANNER_PATTERN: LazyLock<Item> = LazyLock::new(|| Item {
+    key: ResourceLocation::vanilla_static("mojang_banner_pattern"),
+    components: DataComponentMap::common_item_components()
+        .builder_set(vanilla_components::MAX_STACK_SIZE, Some(1i32)),
+});
+pub static GLOBE_BANNER_PATTERN: LazyLock<Item> = LazyLock::new(|| Item {
+    key: ResourceLocation::vanilla_static("globe_banner_pattern"),
+    components: DataComponentMap::common_item_components()
+        .builder_set(vanilla_components::MAX_STACK_SIZE, Some(1i32)),
+});
+pub static PIGLIN_BANNER_PATTERN: LazyLock<Item> = LazyLock::new(|| Item {
+    key: ResourceLocation::vanilla_static("piglin_banner_pattern"),
+    components: DataComponentMap::common_item_components()
+        .builder_set(vanilla_components::MAX_STACK_SIZE, Some(1i32)),
+});
+pub static FLOW_BANNER_PATTERN: LazyLock<Item> = LazyLock::new(|| Item {
+    key: ResourceLocation::vanilla_static("flow_banner_pattern"),
+    components: DataComponentMap::common_item_components()
+        .builder_set(vanilla_components::MAX_STACK_SIZE, Some(1i32)),
+});
+pub static GUSTER_BANNER_PATTERN: LazyLock<Item> = LazyLock::new(|| Item {
+    key: ResourceLocation::vanilla_static("guster_banner_pattern"),
+    components: DataComponentMap::common_item_components()
+        .builder_set(vanilla_components::MAX_STACK_SIZE, Some(1i32)),
+});
+pub static FIELD_MASONED_BANNER_PATTERN: LazyLock<Item> = LazyLock::new(|| Item {
+    key: ResourceLocation::vanilla_static("field_masoned_banner_pattern"),
+    components: DataComponentMap::common_item_components()
+        .builder_set(vanilla_components::MAX_STACK_SIZE, Some(1i32)),
+});
+pub static BORDURE_INDENTED_BANNER_PATTERN: LazyLock<Item> = LazyLock::new(|| Item {
+    key: ResourceLocation::vanilla_static("bordure_indented_banner_pattern"),
+    components: DataComponentMap::common_item_components()
+        .builder_set(vanilla_components::MAX_STACK_SIZE, Some(1i32)),
+});
+pub static GOAT_HORN: LazyLock<Item> = LazyLock::new(|| Item {
+    key: ResourceLocation::vanilla_static("goat_horn"),
+    components: DataComponentMap::common_item_components()
+        .builder_set(vanilla_components::MAX_STACK_SIZE, Some(1i32)),
+});
+pub static COMPOSTER: LazyLock<Item> =
+    LazyLock::new(|| Item::from_block(vanilla_blocks::COMPOSTER));
+pub static BARREL: LazyLock<Item> = LazyLock::new(|| Item::from_block(vanilla_blocks::BARREL));
+pub static SMOKER: LazyLock<Item> = LazyLock::new(|| Item::from_block(vanilla_blocks::SMOKER));
+pub static BLAST_FURNACE: LazyLock<Item> =
+    LazyLock::new(|| Item::from_block(vanilla_blocks::BLAST_FURNACE));
+pub static CARTOGRAPHY_TABLE: LazyLock<Item> =
+    LazyLock::new(|| Item::from_block(vanilla_blocks::CARTOGRAPHY_TABLE));
+pub static FLETCHING_TABLE: LazyLock<Item> =
+    LazyLock::new(|| Item::from_block(vanilla_blocks::FLETCHING_TABLE));
+pub static GRINDSTONE: LazyLock<Item> =
+    LazyLock::new(|| Item::from_block(vanilla_blocks::GRINDSTONE));
+pub static SMITHING_TABLE: LazyLock<Item> =
+    LazyLock::new(|| Item::from_block(vanilla_blocks::SMITHING_TABLE));
+pub static STONECUTTER: LazyLock<Item> =
+    LazyLock::new(|| Item::from_block(vanilla_blocks::STONECUTTER));
+pub static BELL: LazyLock<Item> = LazyLock::new(|| Item::from_block(vanilla_blocks::BELL));
+pub static LANTERN: LazyLock<Item> = LazyLock::new(|| Item::from_block(vanilla_blocks::LANTERN));
+pub static SOUL_LANTERN: LazyLock<Item> =
+    LazyLock::new(|| Item::from_block(vanilla_blocks::SOUL_LANTERN));
+pub static COPPER_LANTERN: LazyLock<Item> =
+    LazyLock::new(|| Item::from_block(vanilla_blocks::COPPER_LANTERN));
+pub static EXPOSED_COPPER_LANTERN: LazyLock<Item> =
+    LazyLock::new(|| Item::from_block(vanilla_blocks::EXPOSED_COPPER_LANTERN));
+pub static WEATHERED_COPPER_LANTERN: LazyLock<Item> =
+    LazyLock::new(|| Item::from_block(vanilla_blocks::WEATHERED_COPPER_LANTERN));
+pub static OXIDIZED_COPPER_LANTERN: LazyLock<Item> =
+    LazyLock::new(|| Item::from_block(vanilla_blocks::OXIDIZED_COPPER_LANTERN));
+pub static WAXED_COPPER_LANTERN: LazyLock<Item> =
+    LazyLock::new(|| Item::from_block(vanilla_blocks::WAXED_COPPER_LANTERN));
+pub static WAXED_EXPOSED_COPPER_LANTERN: LazyLock<Item> =
+    LazyLock::new(|| Item::from_block(vanilla_blocks::WAXED_EXPOSED_COPPER_LANTERN));
+pub static WAXED_WEATHERED_COPPER_LANTERN: LazyLock<Item> =
+    LazyLock::new(|| Item::from_block(vanilla_blocks::WAXED_WEATHERED_COPPER_LANTERN));
+pub static WAXED_OXIDIZED_COPPER_LANTERN: LazyLock<Item> =
+    LazyLock::new(|| Item::from_block(vanilla_blocks::WAXED_OXIDIZED_COPPER_LANTERN));
+pub static SWEET_BERRIES: LazyLock<Item> = LazyLock::new(|| {
+    Item::from_block_custom_name(vanilla_blocks::SWEET_BERRY_BUSH, "sweet_berries")
+});
+pub static GLOW_BERRIES: LazyLock<Item> =
+    LazyLock::new(|| Item::from_block_custom_name(vanilla_blocks::CAVE_VINES, "glow_berries"));
+pub static CAMPFIRE: LazyLock<Item> = LazyLock::new(|| Item::from_block(vanilla_blocks::CAMPFIRE));
+pub static SOUL_CAMPFIRE: LazyLock<Item> =
+    LazyLock::new(|| Item::from_block(vanilla_blocks::SOUL_CAMPFIRE));
+pub static SHROOMLIGHT: LazyLock<Item> =
+    LazyLock::new(|| Item::from_block(vanilla_blocks::SHROOMLIGHT));
+pub static HONEYCOMB: LazyLock<Item> = LazyLock::new(|| Item {
+    key: ResourceLocation::vanilla_static("honeycomb"),
+    components: DataComponentMap::common_item_components(),
+});
+pub static BEE_NEST: LazyLock<Item> = LazyLock::new(|| Item::from_block(vanilla_blocks::BEE_NEST));
+pub static BEEHIVE: LazyLock<Item> = LazyLock::new(|| Item::from_block(vanilla_blocks::BEEHIVE));
+pub static HONEY_BOTTLE: LazyLock<Item> = LazyLock::new(|| Item {
+    key: ResourceLocation::vanilla_static("honey_bottle"),
+    components: DataComponentMap::common_item_components()
+        .builder_set(vanilla_components::MAX_STACK_SIZE, Some(16i32)),
+});
+pub static HONEYCOMB_BLOCK: LazyLock<Item> =
+    LazyLock::new(|| Item::from_block(vanilla_blocks::HONEYCOMB_BLOCK));
+pub static LODESTONE: LazyLock<Item> =
+    LazyLock::new(|| Item::from_block(vanilla_blocks::LODESTONE));
+pub static CRYING_OBSIDIAN: LazyLock<Item> =
+    LazyLock::new(|| Item::from_block(vanilla_blocks::CRYING_OBSIDIAN));
+pub static BLACKSTONE: LazyLock<Item> =
+    LazyLock::new(|| Item::from_block(vanilla_blocks::BLACKSTONE));
+pub static BLACKSTONE_SLAB: LazyLock<Item> =
+    LazyLock::new(|| Item::from_block(vanilla_blocks::BLACKSTONE_SLAB));
+pub static BLACKSTONE_STAIRS: LazyLock<Item> =
+    LazyLock::new(|| Item::from_block(vanilla_blocks::BLACKSTONE_STAIRS));
+pub static GILDED_BLACKSTONE: LazyLock<Item> =
+    LazyLock::new(|| Item::from_block(vanilla_blocks::GILDED_BLACKSTONE));
+pub static POLISHED_BLACKSTONE: LazyLock<Item> =
+    LazyLock::new(|| Item::from_block(vanilla_blocks::POLISHED_BLACKSTONE));
+pub static POLISHED_BLACKSTONE_SLAB: LazyLock<Item> =
+    LazyLock::new(|| Item::from_block(vanilla_blocks::POLISHED_BLACKSTONE_SLAB));
+pub static POLISHED_BLACKSTONE_STAIRS: LazyLock<Item> =
+    LazyLock::new(|| Item::from_block(vanilla_blocks::POLISHED_BLACKSTONE_STAIRS));
+pub static CHISELED_POLISHED_BLACKSTONE: LazyLock<Item> =
+    LazyLock::new(|| Item::from_block(vanilla_blocks::CHISELED_POLISHED_BLACKSTONE));
+pub static POLISHED_BLACKSTONE_BRICKS: LazyLock<Item> =
+    LazyLock::new(|| Item::from_block(vanilla_blocks::POLISHED_BLACKSTONE_BRICKS));
+pub static POLISHED_BLACKSTONE_BRICK_SLAB: LazyLock<Item> =
+    LazyLock::new(|| Item::from_block(vanilla_blocks::POLISHED_BLACKSTONE_BRICK_SLAB));
+pub static POLISHED_BLACKSTONE_BRICK_STAIRS: LazyLock<Item> =
+    LazyLock::new(|| Item::from_block(vanilla_blocks::POLISHED_BLACKSTONE_BRICK_STAIRS));
+pub static CRACKED_POLISHED_BLACKSTONE_BRICKS: LazyLock<Item> =
+    LazyLock::new(|| Item::from_block(vanilla_blocks::CRACKED_POLISHED_BLACKSTONE_BRICKS));
+pub static RESPAWN_ANCHOR: LazyLock<Item> =
+    LazyLock::new(|| Item::from_block(vanilla_blocks::RESPAWN_ANCHOR));
+pub static CANDLE: LazyLock<Item> = LazyLock::new(|| Item::from_block(vanilla_blocks::CANDLE));
+pub static WHITE_CANDLE: LazyLock<Item> =
+    LazyLock::new(|| Item::from_block(vanilla_blocks::WHITE_CANDLE));
+pub static ORANGE_CANDLE: LazyLock<Item> =
+    LazyLock::new(|| Item::from_block(vanilla_blocks::ORANGE_CANDLE));
+pub static MAGENTA_CANDLE: LazyLock<Item> =
+    LazyLock::new(|| Item::from_block(vanilla_blocks::MAGENTA_CANDLE));
+pub static LIGHT_BLUE_CANDLE: LazyLock<Item> =
+    LazyLock::new(|| Item::from_block(vanilla_blocks::LIGHT_BLUE_CANDLE));
+pub static YELLOW_CANDLE: LazyLock<Item> =
+    LazyLock::new(|| Item::from_block(vanilla_blocks::YELLOW_CANDLE));
+pub static LIME_CANDLE: LazyLock<Item> =
+    LazyLock::new(|| Item::from_block(vanilla_blocks::LIME_CANDLE));
+pub static PINK_CANDLE: LazyLock<Item> =
+    LazyLock::new(|| Item::from_block(vanilla_blocks::PINK_CANDLE));
+pub static GRAY_CANDLE: LazyLock<Item> =
+    LazyLock::new(|| Item::from_block(vanilla_blocks::GRAY_CANDLE));
+pub static LIGHT_GRAY_CANDLE: LazyLock<Item> =
+    LazyLock::new(|| Item::from_block(vanilla_blocks::LIGHT_GRAY_CANDLE));
+pub static CYAN_CANDLE: LazyLock<Item> =
+    LazyLock::new(|| Item::from_block(vanilla_blocks::CYAN_CANDLE));
+pub static PURPLE_CANDLE: LazyLock<Item> =
+    LazyLock::new(|| Item::from_block(vanilla_blocks::PURPLE_CANDLE));
+pub static BLUE_CANDLE: LazyLock<Item> =
+    LazyLock::new(|| Item::from_block(vanilla_blocks::BLUE_CANDLE));
+pub static BROWN_CANDLE: LazyLock<Item> =
+    LazyLock::new(|| Item::from_block(vanilla_blocks::BROWN_CANDLE));
+pub static GREEN_CANDLE: LazyLock<Item> =
+    LazyLock::new(|| Item::from_block(vanilla_blocks::GREEN_CANDLE));
+pub static RED_CANDLE: LazyLock<Item> =
+    LazyLock::new(|| Item::from_block(vanilla_blocks::RED_CANDLE));
+pub static BLACK_CANDLE: LazyLock<Item> =
+    LazyLock::new(|| Item::from_block(vanilla_blocks::BLACK_CANDLE));
+pub static SMALL_AMETHYST_BUD: LazyLock<Item> =
+    LazyLock::new(|| Item::from_block(vanilla_blocks::SMALL_AMETHYST_BUD));
+pub static MEDIUM_AMETHYST_BUD: LazyLock<Item> =
+    LazyLock::new(|| Item::from_block(vanilla_blocks::MEDIUM_AMETHYST_BUD));
+pub static LARGE_AMETHYST_BUD: LazyLock<Item> =
+    LazyLock::new(|| Item::from_block(vanilla_blocks::LARGE_AMETHYST_BUD));
+pub static AMETHYST_CLUSTER: LazyLock<Item> =
+    LazyLock::new(|| Item::from_block(vanilla_blocks::AMETHYST_CLUSTER));
+pub static POINTED_DRIPSTONE: LazyLock<Item> =
+    LazyLock::new(|| Item::from_block(vanilla_blocks::POINTED_DRIPSTONE));
+pub static OCHRE_FROGLIGHT: LazyLock<Item> =
+    LazyLock::new(|| Item::from_block(vanilla_blocks::OCHRE_FROGLIGHT));
+pub static VERDANT_FROGLIGHT: LazyLock<Item> =
+    LazyLock::new(|| Item::from_block(vanilla_blocks::VERDANT_FROGLIGHT));
+pub static PEARLESCENT_FROGLIGHT: LazyLock<Item> =
+    LazyLock::new(|| Item::from_block(vanilla_blocks::PEARLESCENT_FROGLIGHT));
+pub static FROGSPAWN: LazyLock<Item> =
+    LazyLock::new(|| Item::from_block(vanilla_blocks::FROGSPAWN));
+pub static ECHO_SHARD: LazyLock<Item> = LazyLock::new(|| Item {
+    key: ResourceLocation::vanilla_static("echo_shard"),
+    components: DataComponentMap::common_item_components(),
+});
+pub static BRUSH: LazyLock<Item> = LazyLock::new(|| Item {
+    key: ResourceLocation::vanilla_static("brush"),
+    components: DataComponentMap::common_item_components()
+        .builder_set(vanilla_components::MAX_DAMAGE, Some(64i32))
+        .builder_set(vanilla_components::MAX_STACK_SIZE, Some(1i32)),
+});
+pub static NETHERITE_UPGRADE_SMITHING_TEMPLATE: LazyLock<Item> = LazyLock::new(|| Item {
+    key: ResourceLocation::vanilla_static("netherite_upgrade_smithing_template"),
+    components: DataComponentMap::common_item_components(),
+});
+pub static SENTRY_ARMOR_TRIM_SMITHING_TEMPLATE: LazyLock<Item> = LazyLock::new(|| Item {
+    key: ResourceLocation::vanilla_static("sentry_armor_trim_smithing_template"),
+    components: DataComponentMap::common_item_components(),
+});
+pub static DUNE_ARMOR_TRIM_SMITHING_TEMPLATE: LazyLock<Item> = LazyLock::new(|| Item {
+    key: ResourceLocation::vanilla_static("dune_armor_trim_smithing_template"),
+    components: DataComponentMap::common_item_components(),
+});
+pub static COAST_ARMOR_TRIM_SMITHING_TEMPLATE: LazyLock<Item> = LazyLock::new(|| Item {
+    key: ResourceLocation::vanilla_static("coast_armor_trim_smithing_template"),
+    components: DataComponentMap::common_item_components(),
+});
+pub static WILD_ARMOR_TRIM_SMITHING_TEMPLATE: LazyLock<Item> = LazyLock::new(|| Item {
+    key: ResourceLocation::vanilla_static("wild_armor_trim_smithing_template"),
+    components: DataComponentMap::common_item_components(),
+});
+pub static WARD_ARMOR_TRIM_SMITHING_TEMPLATE: LazyLock<Item> = LazyLock::new(|| Item {
+    key: ResourceLocation::vanilla_static("ward_armor_trim_smithing_template"),
+    components: DataComponentMap::common_item_components(),
+});
+pub static EYE_ARMOR_TRIM_SMITHING_TEMPLATE: LazyLock<Item> = LazyLock::new(|| Item {
+    key: ResourceLocation::vanilla_static("eye_armor_trim_smithing_template"),
+    components: DataComponentMap::common_item_components(),
+});
+pub static VEX_ARMOR_TRIM_SMITHING_TEMPLATE: LazyLock<Item> = LazyLock::new(|| Item {
+    key: ResourceLocation::vanilla_static("vex_armor_trim_smithing_template"),
+    components: DataComponentMap::common_item_components(),
+});
+pub static TIDE_ARMOR_TRIM_SMITHING_TEMPLATE: LazyLock<Item> = LazyLock::new(|| Item {
+    key: ResourceLocation::vanilla_static("tide_armor_trim_smithing_template"),
+    components: DataComponentMap::common_item_components(),
+});
+pub static SNOUT_ARMOR_TRIM_SMITHING_TEMPLATE: LazyLock<Item> = LazyLock::new(|| Item {
+    key: ResourceLocation::vanilla_static("snout_armor_trim_smithing_template"),
+    components: DataComponentMap::common_item_components(),
+});
+pub static RIB_ARMOR_TRIM_SMITHING_TEMPLATE: LazyLock<Item> = LazyLock::new(|| Item {
+    key: ResourceLocation::vanilla_static("rib_armor_trim_smithing_template"),
+    components: DataComponentMap::common_item_components(),
+});
+pub static SPIRE_ARMOR_TRIM_SMITHING_TEMPLATE: LazyLock<Item> = LazyLock::new(|| Item {
+    key: ResourceLocation::vanilla_static("spire_armor_trim_smithing_template"),
+    components: DataComponentMap::common_item_components(),
+});
+pub static WAYFINDER_ARMOR_TRIM_SMITHING_TEMPLATE: LazyLock<Item> = LazyLock::new(|| Item {
+    key: ResourceLocation::vanilla_static("wayfinder_armor_trim_smithing_template"),
+    components: DataComponentMap::common_item_components(),
+});
+pub static SHAPER_ARMOR_TRIM_SMITHING_TEMPLATE: LazyLock<Item> = LazyLock::new(|| Item {
+    key: ResourceLocation::vanilla_static("shaper_armor_trim_smithing_template"),
+    components: DataComponentMap::common_item_components(),
+});
+pub static SILENCE_ARMOR_TRIM_SMITHING_TEMPLATE: LazyLock<Item> = LazyLock::new(|| Item {
+    key: ResourceLocation::vanilla_static("silence_armor_trim_smithing_template"),
+    components: DataComponentMap::common_item_components(),
+});
+pub static RAISER_ARMOR_TRIM_SMITHING_TEMPLATE: LazyLock<Item> = LazyLock::new(|| Item {
+    key: ResourceLocation::vanilla_static("raiser_armor_trim_smithing_template"),
+    components: DataComponentMap::common_item_components(),
+});
+pub static HOST_ARMOR_TRIM_SMITHING_TEMPLATE: LazyLock<Item> = LazyLock::new(|| Item {
+    key: ResourceLocation::vanilla_static("host_armor_trim_smithing_template"),
+    components: DataComponentMap::common_item_components(),
+});
+pub static FLOW_ARMOR_TRIM_SMITHING_TEMPLATE: LazyLock<Item> = LazyLock::new(|| Item {
+    key: ResourceLocation::vanilla_static("flow_armor_trim_smithing_template"),
+    components: DataComponentMap::common_item_components(),
+});
+pub static BOLT_ARMOR_TRIM_SMITHING_TEMPLATE: LazyLock<Item> = LazyLock::new(|| Item {
+    key: ResourceLocation::vanilla_static("bolt_armor_trim_smithing_template"),
+    components: DataComponentMap::common_item_components(),
+});
+pub static ANGLER_POTTERY_SHERD: LazyLock<Item> = LazyLock::new(|| Item {
+    key: ResourceLocation::vanilla_static("angler_pottery_sherd"),
+    components: DataComponentMap::common_item_components(),
+});
+pub static ARCHER_POTTERY_SHERD: LazyLock<Item> = LazyLock::new(|| Item {
+    key: ResourceLocation::vanilla_static("archer_pottery_sherd"),
+    components: DataComponentMap::common_item_components(),
+});
+pub static ARMS_UP_POTTERY_SHERD: LazyLock<Item> = LazyLock::new(|| Item {
+    key: ResourceLocation::vanilla_static("arms_up_pottery_sherd"),
+    components: DataComponentMap::common_item_components(),
+});
+pub static BLADE_POTTERY_SHERD: LazyLock<Item> = LazyLock::new(|| Item {
+    key: ResourceLocation::vanilla_static("blade_pottery_sherd"),
+    components: DataComponentMap::common_item_components(),
+});
+pub static BREWER_POTTERY_SHERD: LazyLock<Item> = LazyLock::new(|| Item {
+    key: ResourceLocation::vanilla_static("brewer_pottery_sherd"),
+    components: DataComponentMap::common_item_components(),
+});
+pub static BURN_POTTERY_SHERD: LazyLock<Item> = LazyLock::new(|| Item {
+    key: ResourceLocation::vanilla_static("burn_pottery_sherd"),
+    components: DataComponentMap::common_item_components(),
+});
+pub static DANGER_POTTERY_SHERD: LazyLock<Item> = LazyLock::new(|| Item {
+    key: ResourceLocation::vanilla_static("danger_pottery_sherd"),
+    components: DataComponentMap::common_item_components(),
+});
+pub static EXPLORER_POTTERY_SHERD: LazyLock<Item> = LazyLock::new(|| Item {
+    key: ResourceLocation::vanilla_static("explorer_pottery_sherd"),
+    components: DataComponentMap::common_item_components(),
+});
+pub static FLOW_POTTERY_SHERD: LazyLock<Item> = LazyLock::new(|| Item {
+    key: ResourceLocation::vanilla_static("flow_pottery_sherd"),
+    components: DataComponentMap::common_item_components(),
+});
+pub static FRIEND_POTTERY_SHERD: LazyLock<Item> = LazyLock::new(|| Item {
+    key: ResourceLocation::vanilla_static("friend_pottery_sherd"),
+    components: DataComponentMap::common_item_components(),
+});
+pub static GUSTER_POTTERY_SHERD: LazyLock<Item> = LazyLock::new(|| Item {
+    key: ResourceLocation::vanilla_static("guster_pottery_sherd"),
+    components: DataComponentMap::common_item_components(),
+});
+pub static HEART_POTTERY_SHERD: LazyLock<Item> = LazyLock::new(|| Item {
+    key: ResourceLocation::vanilla_static("heart_pottery_sherd"),
+    components: DataComponentMap::common_item_components(),
+});
+pub static HEARTBREAK_POTTERY_SHERD: LazyLock<Item> = LazyLock::new(|| Item {
+    key: ResourceLocation::vanilla_static("heartbreak_pottery_sherd"),
+    components: DataComponentMap::common_item_components(),
+});
+pub static HOWL_POTTERY_SHERD: LazyLock<Item> = LazyLock::new(|| Item {
+    key: ResourceLocation::vanilla_static("howl_pottery_sherd"),
+    components: DataComponentMap::common_item_components(),
+});
+pub static MINER_POTTERY_SHERD: LazyLock<Item> = LazyLock::new(|| Item {
+    key: ResourceLocation::vanilla_static("miner_pottery_sherd"),
+    components: DataComponentMap::common_item_components(),
+});
+pub static MOURNER_POTTERY_SHERD: LazyLock<Item> = LazyLock::new(|| Item {
+    key: ResourceLocation::vanilla_static("mourner_pottery_sherd"),
+    components: DataComponentMap::common_item_components(),
+});
+pub static PLENTY_POTTERY_SHERD: LazyLock<Item> = LazyLock::new(|| Item {
+    key: ResourceLocation::vanilla_static("plenty_pottery_sherd"),
+    components: DataComponentMap::common_item_components(),
+});
+pub static PRIZE_POTTERY_SHERD: LazyLock<Item> = LazyLock::new(|| Item {
+    key: ResourceLocation::vanilla_static("prize_pottery_sherd"),
+    components: DataComponentMap::common_item_components(),
+});
+pub static SCRAPE_POTTERY_SHERD: LazyLock<Item> = LazyLock::new(|| Item {
+    key: ResourceLocation::vanilla_static("scrape_pottery_sherd"),
+    components: DataComponentMap::common_item_components(),
+});
+pub static SHEAF_POTTERY_SHERD: LazyLock<Item> = LazyLock::new(|| Item {
+    key: ResourceLocation::vanilla_static("sheaf_pottery_sherd"),
+    components: DataComponentMap::common_item_components(),
+});
+pub static SHELTER_POTTERY_SHERD: LazyLock<Item> = LazyLock::new(|| Item {
+    key: ResourceLocation::vanilla_static("shelter_pottery_sherd"),
+    components: DataComponentMap::common_item_components(),
+});
+pub static SKULL_POTTERY_SHERD: LazyLock<Item> = LazyLock::new(|| Item {
+    key: ResourceLocation::vanilla_static("skull_pottery_sherd"),
+    components: DataComponentMap::common_item_components(),
+});
+pub static SNORT_POTTERY_SHERD: LazyLock<Item> = LazyLock::new(|| Item {
+    key: ResourceLocation::vanilla_static("snort_pottery_sherd"),
+    components: DataComponentMap::common_item_components(),
+});
+pub static COPPER_GRATE: LazyLock<Item> =
+    LazyLock::new(|| Item::from_block(vanilla_blocks::COPPER_GRATE));
+pub static EXPOSED_COPPER_GRATE: LazyLock<Item> =
+    LazyLock::new(|| Item::from_block(vanilla_blocks::EXPOSED_COPPER_GRATE));
+pub static WEATHERED_COPPER_GRATE: LazyLock<Item> =
+    LazyLock::new(|| Item::from_block(vanilla_blocks::WEATHERED_COPPER_GRATE));
+pub static OXIDIZED_COPPER_GRATE: LazyLock<Item> =
+    LazyLock::new(|| Item::from_block(vanilla_blocks::OXIDIZED_COPPER_GRATE));
+pub static WAXED_COPPER_GRATE: LazyLock<Item> =
+    LazyLock::new(|| Item::from_block(vanilla_blocks::WAXED_COPPER_GRATE));
+pub static WAXED_EXPOSED_COPPER_GRATE: LazyLock<Item> =
+    LazyLock::new(|| Item::from_block(vanilla_blocks::WAXED_EXPOSED_COPPER_GRATE));
+pub static WAXED_WEATHERED_COPPER_GRATE: LazyLock<Item> =
+    LazyLock::new(|| Item::from_block(vanilla_blocks::WAXED_WEATHERED_COPPER_GRATE));
+pub static WAXED_OXIDIZED_COPPER_GRATE: LazyLock<Item> =
+    LazyLock::new(|| Item::from_block(vanilla_blocks::WAXED_OXIDIZED_COPPER_GRATE));
+pub static COPPER_BULB: LazyLock<Item> =
+    LazyLock::new(|| Item::from_block(vanilla_blocks::COPPER_BULB));
+pub static EXPOSED_COPPER_BULB: LazyLock<Item> =
+    LazyLock::new(|| Item::from_block(vanilla_blocks::EXPOSED_COPPER_BULB));
+pub static WEATHERED_COPPER_BULB: LazyLock<Item> =
+    LazyLock::new(|| Item::from_block(vanilla_blocks::WEATHERED_COPPER_BULB));
+pub static OXIDIZED_COPPER_BULB: LazyLock<Item> =
+    LazyLock::new(|| Item::from_block(vanilla_blocks::OXIDIZED_COPPER_BULB));
+pub static WAXED_COPPER_BULB: LazyLock<Item> =
+    LazyLock::new(|| Item::from_block(vanilla_blocks::WAXED_COPPER_BULB));
+pub static WAXED_EXPOSED_COPPER_BULB: LazyLock<Item> =
+    LazyLock::new(|| Item::from_block(vanilla_blocks::WAXED_EXPOSED_COPPER_BULB));
+pub static WAXED_WEATHERED_COPPER_BULB: LazyLock<Item> =
+    LazyLock::new(|| Item::from_block(vanilla_blocks::WAXED_WEATHERED_COPPER_BULB));
+pub static WAXED_OXIDIZED_COPPER_BULB: LazyLock<Item> =
+    LazyLock::new(|| Item::from_block(vanilla_blocks::WAXED_OXIDIZED_COPPER_BULB));
+pub static COPPER_CHEST: LazyLock<Item> =
+    LazyLock::new(|| Item::from_block(vanilla_blocks::COPPER_CHEST));
+pub static EXPOSED_COPPER_CHEST: LazyLock<Item> =
+    LazyLock::new(|| Item::from_block(vanilla_blocks::EXPOSED_COPPER_CHEST));
+pub static WEATHERED_COPPER_CHEST: LazyLock<Item> =
+    LazyLock::new(|| Item::from_block(vanilla_blocks::WEATHERED_COPPER_CHEST));
+pub static OXIDIZED_COPPER_CHEST: LazyLock<Item> =
+    LazyLock::new(|| Item::from_block(vanilla_blocks::OXIDIZED_COPPER_CHEST));
+pub static WAXED_COPPER_CHEST: LazyLock<Item> =
+    LazyLock::new(|| Item::from_block(vanilla_blocks::WAXED_COPPER_CHEST));
+pub static WAXED_EXPOSED_COPPER_CHEST: LazyLock<Item> =
+    LazyLock::new(|| Item::from_block(vanilla_blocks::WAXED_EXPOSED_COPPER_CHEST));
+pub static WAXED_WEATHERED_COPPER_CHEST: LazyLock<Item> =
+    LazyLock::new(|| Item::from_block(vanilla_blocks::WAXED_WEATHERED_COPPER_CHEST));
+pub static WAXED_OXIDIZED_COPPER_CHEST: LazyLock<Item> =
+    LazyLock::new(|| Item::from_block(vanilla_blocks::WAXED_OXIDIZED_COPPER_CHEST));
+pub static COPPER_GOLEM_STATUE: LazyLock<Item> =
+    LazyLock::new(|| Item::from_block(vanilla_blocks::COPPER_GOLEM_STATUE));
+pub static EXPOSED_COPPER_GOLEM_STATUE: LazyLock<Item> =
+    LazyLock::new(|| Item::from_block(vanilla_blocks::EXPOSED_COPPER_GOLEM_STATUE));
+pub static WEATHERED_COPPER_GOLEM_STATUE: LazyLock<Item> =
+    LazyLock::new(|| Item::from_block(vanilla_blocks::WEATHERED_COPPER_GOLEM_STATUE));
+pub static OXIDIZED_COPPER_GOLEM_STATUE: LazyLock<Item> =
+    LazyLock::new(|| Item::from_block(vanilla_blocks::OXIDIZED_COPPER_GOLEM_STATUE));
+pub static WAXED_COPPER_GOLEM_STATUE: LazyLock<Item> =
+    LazyLock::new(|| Item::from_block(vanilla_blocks::WAXED_COPPER_GOLEM_STATUE));
+pub static WAXED_EXPOSED_COPPER_GOLEM_STATUE: LazyLock<Item> =
+    LazyLock::new(|| Item::from_block(vanilla_blocks::WAXED_EXPOSED_COPPER_GOLEM_STATUE));
+pub static WAXED_WEATHERED_COPPER_GOLEM_STATUE: LazyLock<Item> =
+    LazyLock::new(|| Item::from_block(vanilla_blocks::WAXED_WEATHERED_COPPER_GOLEM_STATUE));
+pub static WAXED_OXIDIZED_COPPER_GOLEM_STATUE: LazyLock<Item> =
+    LazyLock::new(|| Item::from_block(vanilla_blocks::WAXED_OXIDIZED_COPPER_GOLEM_STATUE));
+pub static TRIAL_SPAWNER: LazyLock<Item> =
+    LazyLock::new(|| Item::from_block(vanilla_blocks::TRIAL_SPAWNER));
+pub static TRIAL_KEY: LazyLock<Item> = LazyLock::new(|| Item {
+    key: ResourceLocation::vanilla_static("trial_key"),
+    components: DataComponentMap::common_item_components(),
+});
+pub static OMINOUS_TRIAL_KEY: LazyLock<Item> = LazyLock::new(|| Item {
+    key: ResourceLocation::vanilla_static("ominous_trial_key"),
+    components: DataComponentMap::common_item_components(),
+});
+pub static VAULT: LazyLock<Item> = LazyLock::new(|| Item::from_block(vanilla_blocks::VAULT));
+pub static OMINOUS_BOTTLE: LazyLock<Item> = LazyLock::new(|| Item {
+    key: ResourceLocation::vanilla_static("ominous_bottle"),
+    components: DataComponentMap::common_item_components(),
+});
+pub fn register_items(registry: &mut ItemRegistry) {
+    registry.register(&AIR);
+    registry.register(&STONE);
+    registry.register(&GRANITE);
+    registry.register(&POLISHED_GRANITE);
+    registry.register(&DIORITE);
+    registry.register(&POLISHED_DIORITE);
+    registry.register(&ANDESITE);
+    registry.register(&POLISHED_ANDESITE);
+    registry.register(&DEEPSLATE);
+    registry.register(&COBBLED_DEEPSLATE);
+    registry.register(&POLISHED_DEEPSLATE);
+    registry.register(&CALCITE);
+    registry.register(&TUFF);
+    registry.register(&TUFF_SLAB);
+    registry.register(&TUFF_STAIRS);
+    registry.register(&TUFF_WALL);
+    registry.register(&CHISELED_TUFF);
+    registry.register(&POLISHED_TUFF);
+    registry.register(&POLISHED_TUFF_SLAB);
+    registry.register(&POLISHED_TUFF_STAIRS);
+    registry.register(&POLISHED_TUFF_WALL);
+    registry.register(&TUFF_BRICKS);
+    registry.register(&TUFF_BRICK_SLAB);
+    registry.register(&TUFF_BRICK_STAIRS);
+    registry.register(&TUFF_BRICK_WALL);
+    registry.register(&CHISELED_TUFF_BRICKS);
+    registry.register(&DRIPSTONE_BLOCK);
+    registry.register(&GRASS_BLOCK);
+    registry.register(&DIRT);
+    registry.register(&COARSE_DIRT);
+    registry.register(&PODZOL);
+    registry.register(&ROOTED_DIRT);
+    registry.register(&MUD);
+    registry.register(&CRIMSON_NYLIUM);
+    registry.register(&WARPED_NYLIUM);
+    registry.register(&COBBLESTONE);
+    registry.register(&OAK_PLANKS);
+    registry.register(&SPRUCE_PLANKS);
+    registry.register(&BIRCH_PLANKS);
+    registry.register(&JUNGLE_PLANKS);
+    registry.register(&ACACIA_PLANKS);
+    registry.register(&CHERRY_PLANKS);
+    registry.register(&DARK_OAK_PLANKS);
+    registry.register(&PALE_OAK_PLANKS);
+    registry.register(&MANGROVE_PLANKS);
+    registry.register(&BAMBOO_PLANKS);
+    registry.register(&CRIMSON_PLANKS);
+    registry.register(&WARPED_PLANKS);
+    registry.register(&BAMBOO_MOSAIC);
+    registry.register(&OAK_SAPLING);
+    registry.register(&SPRUCE_SAPLING);
+    registry.register(&BIRCH_SAPLING);
+    registry.register(&JUNGLE_SAPLING);
+    registry.register(&ACACIA_SAPLING);
+    registry.register(&CHERRY_SAPLING);
+    registry.register(&DARK_OAK_SAPLING);
+    registry.register(&PALE_OAK_SAPLING);
+    registry.register(&MANGROVE_PROPAGULE);
+    registry.register(&BEDROCK);
+    registry.register(&SAND);
+    registry.register(&SUSPICIOUS_SAND);
+    registry.register(&SUSPICIOUS_GRAVEL);
+    registry.register(&RED_SAND);
+    registry.register(&GRAVEL);
+    registry.register(&COAL_ORE);
+    registry.register(&DEEPSLATE_COAL_ORE);
+    registry.register(&IRON_ORE);
+    registry.register(&DEEPSLATE_IRON_ORE);
+    registry.register(&COPPER_ORE);
+    registry.register(&DEEPSLATE_COPPER_ORE);
+    registry.register(&GOLD_ORE);
+    registry.register(&DEEPSLATE_GOLD_ORE);
+    registry.register(&REDSTONE_ORE);
+    registry.register(&DEEPSLATE_REDSTONE_ORE);
+    registry.register(&EMERALD_ORE);
+    registry.register(&DEEPSLATE_EMERALD_ORE);
+    registry.register(&LAPIS_ORE);
+    registry.register(&DEEPSLATE_LAPIS_ORE);
+    registry.register(&DIAMOND_ORE);
+    registry.register(&DEEPSLATE_DIAMOND_ORE);
+    registry.register(&NETHER_GOLD_ORE);
+    registry.register(&NETHER_QUARTZ_ORE);
+    registry.register(&ANCIENT_DEBRIS);
+    registry.register(&COAL_BLOCK);
+    registry.register(&RAW_IRON_BLOCK);
+    registry.register(&RAW_COPPER_BLOCK);
+    registry.register(&RAW_GOLD_BLOCK);
+    registry.register(&HEAVY_CORE);
+    registry.register(&AMETHYST_BLOCK);
+    registry.register(&BUDDING_AMETHYST);
+    registry.register(&IRON_BLOCK);
+    registry.register(&COPPER_BLOCK);
+    registry.register(&GOLD_BLOCK);
+    registry.register(&DIAMOND_BLOCK);
+    registry.register(&NETHERITE_BLOCK);
+    registry.register(&EXPOSED_COPPER);
+    registry.register(&WEATHERED_COPPER);
+    registry.register(&OXIDIZED_COPPER);
+    registry.register(&CHISELED_COPPER);
+    registry.register(&EXPOSED_CHISELED_COPPER);
+    registry.register(&WEATHERED_CHISELED_COPPER);
+    registry.register(&OXIDIZED_CHISELED_COPPER);
+    registry.register(&CUT_COPPER);
+    registry.register(&EXPOSED_CUT_COPPER);
+    registry.register(&WEATHERED_CUT_COPPER);
+    registry.register(&OXIDIZED_CUT_COPPER);
+    registry.register(&CUT_COPPER_STAIRS);
+    registry.register(&EXPOSED_CUT_COPPER_STAIRS);
+    registry.register(&WEATHERED_CUT_COPPER_STAIRS);
+    registry.register(&OXIDIZED_CUT_COPPER_STAIRS);
+    registry.register(&CUT_COPPER_SLAB);
+    registry.register(&EXPOSED_CUT_COPPER_SLAB);
+    registry.register(&WEATHERED_CUT_COPPER_SLAB);
+    registry.register(&OXIDIZED_CUT_COPPER_SLAB);
+    registry.register(&WAXED_COPPER_BLOCK);
+    registry.register(&WAXED_EXPOSED_COPPER);
+    registry.register(&WAXED_WEATHERED_COPPER);
+    registry.register(&WAXED_OXIDIZED_COPPER);
+    registry.register(&WAXED_CHISELED_COPPER);
+    registry.register(&WAXED_EXPOSED_CHISELED_COPPER);
+    registry.register(&WAXED_WEATHERED_CHISELED_COPPER);
+    registry.register(&WAXED_OXIDIZED_CHISELED_COPPER);
+    registry.register(&WAXED_CUT_COPPER);
+    registry.register(&WAXED_EXPOSED_CUT_COPPER);
+    registry.register(&WAXED_WEATHERED_CUT_COPPER);
+    registry.register(&WAXED_OXIDIZED_CUT_COPPER);
+    registry.register(&WAXED_CUT_COPPER_STAIRS);
+    registry.register(&WAXED_EXPOSED_CUT_COPPER_STAIRS);
+    registry.register(&WAXED_WEATHERED_CUT_COPPER_STAIRS);
+    registry.register(&WAXED_OXIDIZED_CUT_COPPER_STAIRS);
+    registry.register(&WAXED_CUT_COPPER_SLAB);
+    registry.register(&WAXED_EXPOSED_CUT_COPPER_SLAB);
+    registry.register(&WAXED_WEATHERED_CUT_COPPER_SLAB);
+    registry.register(&WAXED_OXIDIZED_CUT_COPPER_SLAB);
+    registry.register(&OAK_LOG);
+    registry.register(&SPRUCE_LOG);
+    registry.register(&BIRCH_LOG);
+    registry.register(&JUNGLE_LOG);
+    registry.register(&ACACIA_LOG);
+    registry.register(&CHERRY_LOG);
+    registry.register(&PALE_OAK_LOG);
+    registry.register(&DARK_OAK_LOG);
+    registry.register(&MANGROVE_LOG);
+    registry.register(&MANGROVE_ROOTS);
+    registry.register(&MUDDY_MANGROVE_ROOTS);
+    registry.register(&CRIMSON_STEM);
+    registry.register(&WARPED_STEM);
+    registry.register(&BAMBOO_BLOCK);
+    registry.register(&STRIPPED_OAK_LOG);
+    registry.register(&STRIPPED_SPRUCE_LOG);
+    registry.register(&STRIPPED_BIRCH_LOG);
+    registry.register(&STRIPPED_JUNGLE_LOG);
+    registry.register(&STRIPPED_ACACIA_LOG);
+    registry.register(&STRIPPED_CHERRY_LOG);
+    registry.register(&STRIPPED_DARK_OAK_LOG);
+    registry.register(&STRIPPED_PALE_OAK_LOG);
+    registry.register(&STRIPPED_MANGROVE_LOG);
+    registry.register(&STRIPPED_CRIMSON_STEM);
+    registry.register(&STRIPPED_WARPED_STEM);
+    registry.register(&STRIPPED_OAK_WOOD);
+    registry.register(&STRIPPED_SPRUCE_WOOD);
+    registry.register(&STRIPPED_BIRCH_WOOD);
+    registry.register(&STRIPPED_JUNGLE_WOOD);
+    registry.register(&STRIPPED_ACACIA_WOOD);
+    registry.register(&STRIPPED_CHERRY_WOOD);
+    registry.register(&STRIPPED_DARK_OAK_WOOD);
+    registry.register(&STRIPPED_PALE_OAK_WOOD);
+    registry.register(&STRIPPED_MANGROVE_WOOD);
+    registry.register(&STRIPPED_CRIMSON_HYPHAE);
+    registry.register(&STRIPPED_WARPED_HYPHAE);
+    registry.register(&STRIPPED_BAMBOO_BLOCK);
+    registry.register(&OAK_WOOD);
+    registry.register(&SPRUCE_WOOD);
+    registry.register(&BIRCH_WOOD);
+    registry.register(&JUNGLE_WOOD);
+    registry.register(&ACACIA_WOOD);
+    registry.register(&CHERRY_WOOD);
+    registry.register(&PALE_OAK_WOOD);
+    registry.register(&DARK_OAK_WOOD);
+    registry.register(&MANGROVE_WOOD);
+    registry.register(&CRIMSON_HYPHAE);
+    registry.register(&WARPED_HYPHAE);
+    registry.register(&OAK_LEAVES);
+    registry.register(&SPRUCE_LEAVES);
+    registry.register(&BIRCH_LEAVES);
+    registry.register(&JUNGLE_LEAVES);
+    registry.register(&ACACIA_LEAVES);
+    registry.register(&CHERRY_LEAVES);
+    registry.register(&DARK_OAK_LEAVES);
+    registry.register(&PALE_OAK_LEAVES);
+    registry.register(&MANGROVE_LEAVES);
+    registry.register(&AZALEA_LEAVES);
+    registry.register(&FLOWERING_AZALEA_LEAVES);
+    registry.register(&SPONGE);
+    registry.register(&WET_SPONGE);
+    registry.register(&GLASS);
+    registry.register(&TINTED_GLASS);
+    registry.register(&LAPIS_BLOCK);
+    registry.register(&SANDSTONE);
+    registry.register(&CHISELED_SANDSTONE);
+    registry.register(&CUT_SANDSTONE);
+    registry.register(&COBWEB);
+    registry.register(&SHORT_GRASS);
+    registry.register(&FERN);
+    registry.register(&BUSH);
+    registry.register(&AZALEA);
+    registry.register(&FLOWERING_AZALEA);
+    registry.register(&DEAD_BUSH);
+    registry.register(&FIREFLY_BUSH);
+    registry.register(&SHORT_DRY_GRASS);
+    registry.register(&TALL_DRY_GRASS);
+    registry.register(&SEAGRASS);
+    registry.register(&SEA_PICKLE);
+    registry.register(&WHITE_WOOL);
+    registry.register(&ORANGE_WOOL);
+    registry.register(&MAGENTA_WOOL);
+    registry.register(&LIGHT_BLUE_WOOL);
+    registry.register(&YELLOW_WOOL);
+    registry.register(&LIME_WOOL);
+    registry.register(&PINK_WOOL);
+    registry.register(&GRAY_WOOL);
+    registry.register(&LIGHT_GRAY_WOOL);
+    registry.register(&CYAN_WOOL);
+    registry.register(&PURPLE_WOOL);
+    registry.register(&BLUE_WOOL);
+    registry.register(&BROWN_WOOL);
+    registry.register(&GREEN_WOOL);
+    registry.register(&RED_WOOL);
+    registry.register(&BLACK_WOOL);
+    registry.register(&DANDELION);
+    registry.register(&OPEN_EYEBLOSSOM);
+    registry.register(&CLOSED_EYEBLOSSOM);
+    registry.register(&POPPY);
+    registry.register(&BLUE_ORCHID);
+    registry.register(&ALLIUM);
+    registry.register(&AZURE_BLUET);
+    registry.register(&RED_TULIP);
+    registry.register(&ORANGE_TULIP);
+    registry.register(&WHITE_TULIP);
+    registry.register(&PINK_TULIP);
+    registry.register(&OXEYE_DAISY);
+    registry.register(&CORNFLOWER);
+    registry.register(&LILY_OF_THE_VALLEY);
+    registry.register(&WITHER_ROSE);
+    registry.register(&TORCHFLOWER);
+    registry.register(&PITCHER_PLANT);
+    registry.register(&SPORE_BLOSSOM);
+    registry.register(&BROWN_MUSHROOM);
+    registry.register(&RED_MUSHROOM);
+    registry.register(&CRIMSON_FUNGUS);
+    registry.register(&WARPED_FUNGUS);
+    registry.register(&CRIMSON_ROOTS);
+    registry.register(&WARPED_ROOTS);
+    registry.register(&NETHER_SPROUTS);
+    registry.register(&WEEPING_VINES);
+    registry.register(&TWISTING_VINES);
+    registry.register(&SUGAR_CANE);
+    registry.register(&KELP);
+    registry.register(&PINK_PETALS);
+    registry.register(&WILDFLOWERS);
+    registry.register(&LEAF_LITTER);
+    registry.register(&MOSS_CARPET);
+    registry.register(&MOSS_BLOCK);
+    registry.register(&PALE_MOSS_CARPET);
+    registry.register(&PALE_HANGING_MOSS);
+    registry.register(&PALE_MOSS_BLOCK);
+    registry.register(&HANGING_ROOTS);
+    registry.register(&BIG_DRIPLEAF);
+    registry.register(&SMALL_DRIPLEAF);
+    registry.register(&BAMBOO);
+    registry.register(&OAK_SLAB);
+    registry.register(&SPRUCE_SLAB);
+    registry.register(&BIRCH_SLAB);
+    registry.register(&JUNGLE_SLAB);
+    registry.register(&ACACIA_SLAB);
+    registry.register(&CHERRY_SLAB);
+    registry.register(&DARK_OAK_SLAB);
+    registry.register(&PALE_OAK_SLAB);
+    registry.register(&MANGROVE_SLAB);
+    registry.register(&BAMBOO_SLAB);
+    registry.register(&BAMBOO_MOSAIC_SLAB);
+    registry.register(&CRIMSON_SLAB);
+    registry.register(&WARPED_SLAB);
+    registry.register(&STONE_SLAB);
+    registry.register(&SMOOTH_STONE_SLAB);
+    registry.register(&SANDSTONE_SLAB);
+    registry.register(&CUT_SANDSTONE_SLAB);
+    registry.register(&PETRIFIED_OAK_SLAB);
+    registry.register(&COBBLESTONE_SLAB);
+    registry.register(&BRICK_SLAB);
+    registry.register(&STONE_BRICK_SLAB);
+    registry.register(&MUD_BRICK_SLAB);
+    registry.register(&NETHER_BRICK_SLAB);
+    registry.register(&QUARTZ_SLAB);
+    registry.register(&RED_SANDSTONE_SLAB);
+    registry.register(&CUT_RED_SANDSTONE_SLAB);
+    registry.register(&PURPUR_SLAB);
+    registry.register(&PRISMARINE_SLAB);
+    registry.register(&PRISMARINE_BRICK_SLAB);
+    registry.register(&DARK_PRISMARINE_SLAB);
+    registry.register(&SMOOTH_QUARTZ);
+    registry.register(&SMOOTH_RED_SANDSTONE);
+    registry.register(&SMOOTH_SANDSTONE);
+    registry.register(&SMOOTH_STONE);
+    registry.register(&BRICKS);
+    registry.register(&ACACIA_SHELF);
+    registry.register(&BAMBOO_SHELF);
+    registry.register(&BIRCH_SHELF);
+    registry.register(&CHERRY_SHELF);
+    registry.register(&CRIMSON_SHELF);
+    registry.register(&DARK_OAK_SHELF);
+    registry.register(&JUNGLE_SHELF);
+    registry.register(&MANGROVE_SHELF);
+    registry.register(&OAK_SHELF);
+    registry.register(&PALE_OAK_SHELF);
+    registry.register(&SPRUCE_SHELF);
+    registry.register(&WARPED_SHELF);
+    registry.register(&BOOKSHELF);
+    registry.register(&CHISELED_BOOKSHELF);
+    registry.register(&DECORATED_POT);
+    registry.register(&MOSSY_COBBLESTONE);
+    registry.register(&OBSIDIAN);
+    registry.register(&TORCH);
+    registry.register(&END_ROD);
+    registry.register(&CHORUS_PLANT);
+    registry.register(&CHORUS_FLOWER);
+    registry.register(&PURPUR_BLOCK);
+    registry.register(&PURPUR_PILLAR);
+    registry.register(&PURPUR_STAIRS);
+    registry.register(&SPAWNER);
+    registry.register(&CREAKING_HEART);
+    registry.register(&CHEST);
+    registry.register(&CRAFTING_TABLE);
+    registry.register(&FARMLAND);
+    registry.register(&FURNACE);
+    registry.register(&LADDER);
+    registry.register(&COBBLESTONE_STAIRS);
+    registry.register(&SNOW);
+    registry.register(&ICE);
+    registry.register(&SNOW_BLOCK);
+    registry.register(&CACTUS);
+    registry.register(&CACTUS_FLOWER);
+    registry.register(&CLAY);
+    registry.register(&JUKEBOX);
+    registry.register(&OAK_FENCE);
+    registry.register(&SPRUCE_FENCE);
+    registry.register(&BIRCH_FENCE);
+    registry.register(&JUNGLE_FENCE);
+    registry.register(&ACACIA_FENCE);
+    registry.register(&CHERRY_FENCE);
+    registry.register(&DARK_OAK_FENCE);
+    registry.register(&PALE_OAK_FENCE);
+    registry.register(&MANGROVE_FENCE);
+    registry.register(&BAMBOO_FENCE);
+    registry.register(&CRIMSON_FENCE);
+    registry.register(&WARPED_FENCE);
+    registry.register(&PUMPKIN);
+    registry.register(&CARVED_PUMPKIN);
+    registry.register(&JACK_O_LANTERN);
+    registry.register(&NETHERRACK);
+    registry.register(&SOUL_SAND);
+    registry.register(&SOUL_SOIL);
+    registry.register(&BASALT);
+    registry.register(&POLISHED_BASALT);
+    registry.register(&SMOOTH_BASALT);
+    registry.register(&SOUL_TORCH);
+    registry.register(&COPPER_TORCH);
+    registry.register(&GLOWSTONE);
+    registry.register(&INFESTED_STONE);
+    registry.register(&INFESTED_COBBLESTONE);
+    registry.register(&INFESTED_STONE_BRICKS);
+    registry.register(&INFESTED_MOSSY_STONE_BRICKS);
+    registry.register(&INFESTED_CRACKED_STONE_BRICKS);
+    registry.register(&INFESTED_CHISELED_STONE_BRICKS);
+    registry.register(&INFESTED_DEEPSLATE);
+    registry.register(&STONE_BRICKS);
+    registry.register(&MOSSY_STONE_BRICKS);
+    registry.register(&CRACKED_STONE_BRICKS);
+    registry.register(&CHISELED_STONE_BRICKS);
+    registry.register(&PACKED_MUD);
+    registry.register(&MUD_BRICKS);
+    registry.register(&DEEPSLATE_BRICKS);
+    registry.register(&CRACKED_DEEPSLATE_BRICKS);
+    registry.register(&DEEPSLATE_TILES);
+    registry.register(&CRACKED_DEEPSLATE_TILES);
+    registry.register(&CHISELED_DEEPSLATE);
+    registry.register(&REINFORCED_DEEPSLATE);
+    registry.register(&BROWN_MUSHROOM_BLOCK);
+    registry.register(&RED_MUSHROOM_BLOCK);
+    registry.register(&MUSHROOM_STEM);
+    registry.register(&IRON_BARS);
+    registry.register(&COPPER_BARS);
+    registry.register(&EXPOSED_COPPER_BARS);
+    registry.register(&WEATHERED_COPPER_BARS);
+    registry.register(&OXIDIZED_COPPER_BARS);
+    registry.register(&WAXED_COPPER_BARS);
+    registry.register(&WAXED_EXPOSED_COPPER_BARS);
+    registry.register(&WAXED_WEATHERED_COPPER_BARS);
+    registry.register(&WAXED_OXIDIZED_COPPER_BARS);
+    registry.register(&IRON_CHAIN);
+    registry.register(&COPPER_CHAIN);
+    registry.register(&EXPOSED_COPPER_CHAIN);
+    registry.register(&WEATHERED_COPPER_CHAIN);
+    registry.register(&OXIDIZED_COPPER_CHAIN);
+    registry.register(&WAXED_COPPER_CHAIN);
+    registry.register(&WAXED_EXPOSED_COPPER_CHAIN);
+    registry.register(&WAXED_WEATHERED_COPPER_CHAIN);
+    registry.register(&WAXED_OXIDIZED_COPPER_CHAIN);
+    registry.register(&GLASS_PANE);
+    registry.register(&MELON);
+    registry.register(&VINE);
+    registry.register(&GLOW_LICHEN);
+    registry.register(&RESIN_CLUMP);
+    registry.register(&RESIN_BLOCK);
+    registry.register(&RESIN_BRICKS);
+    registry.register(&RESIN_BRICK_STAIRS);
+    registry.register(&RESIN_BRICK_SLAB);
+    registry.register(&RESIN_BRICK_WALL);
+    registry.register(&CHISELED_RESIN_BRICKS);
+    registry.register(&BRICK_STAIRS);
+    registry.register(&STONE_BRICK_STAIRS);
+    registry.register(&MUD_BRICK_STAIRS);
+    registry.register(&MYCELIUM);
+    registry.register(&LILY_PAD);
+    registry.register(&NETHER_BRICKS);
+    registry.register(&CRACKED_NETHER_BRICKS);
+    registry.register(&CHISELED_NETHER_BRICKS);
+    registry.register(&NETHER_BRICK_FENCE);
+    registry.register(&NETHER_BRICK_STAIRS);
+    registry.register(&SCULK);
+    registry.register(&SCULK_VEIN);
+    registry.register(&SCULK_CATALYST);
+    registry.register(&SCULK_SHRIEKER);
+    registry.register(&ENCHANTING_TABLE);
+    registry.register(&END_PORTAL_FRAME);
+    registry.register(&END_STONE);
+    registry.register(&END_STONE_BRICKS);
+    registry.register(&DRAGON_EGG);
+    registry.register(&SANDSTONE_STAIRS);
+    registry.register(&ENDER_CHEST);
+    registry.register(&EMERALD_BLOCK);
+    registry.register(&OAK_STAIRS);
+    registry.register(&SPRUCE_STAIRS);
+    registry.register(&BIRCH_STAIRS);
+    registry.register(&JUNGLE_STAIRS);
+    registry.register(&ACACIA_STAIRS);
+    registry.register(&CHERRY_STAIRS);
+    registry.register(&DARK_OAK_STAIRS);
+    registry.register(&PALE_OAK_STAIRS);
+    registry.register(&MANGROVE_STAIRS);
+    registry.register(&BAMBOO_STAIRS);
+    registry.register(&BAMBOO_MOSAIC_STAIRS);
+    registry.register(&CRIMSON_STAIRS);
+    registry.register(&WARPED_STAIRS);
+    registry.register(&COMMAND_BLOCK);
+    registry.register(&BEACON);
+    registry.register(&COBBLESTONE_WALL);
+    registry.register(&MOSSY_COBBLESTONE_WALL);
+    registry.register(&BRICK_WALL);
+    registry.register(&PRISMARINE_WALL);
+    registry.register(&RED_SANDSTONE_WALL);
+    registry.register(&MOSSY_STONE_BRICK_WALL);
+    registry.register(&GRANITE_WALL);
+    registry.register(&STONE_BRICK_WALL);
+    registry.register(&MUD_BRICK_WALL);
+    registry.register(&NETHER_BRICK_WALL);
+    registry.register(&ANDESITE_WALL);
+    registry.register(&RED_NETHER_BRICK_WALL);
+    registry.register(&SANDSTONE_WALL);
+    registry.register(&END_STONE_BRICK_WALL);
+    registry.register(&DIORITE_WALL);
+    registry.register(&BLACKSTONE_WALL);
+    registry.register(&POLISHED_BLACKSTONE_WALL);
+    registry.register(&POLISHED_BLACKSTONE_BRICK_WALL);
+    registry.register(&COBBLED_DEEPSLATE_WALL);
+    registry.register(&POLISHED_DEEPSLATE_WALL);
+    registry.register(&DEEPSLATE_BRICK_WALL);
+    registry.register(&DEEPSLATE_TILE_WALL);
+    registry.register(&ANVIL);
+    registry.register(&CHIPPED_ANVIL);
+    registry.register(&DAMAGED_ANVIL);
+    registry.register(&CHISELED_QUARTZ_BLOCK);
+    registry.register(&QUARTZ_BLOCK);
+    registry.register(&QUARTZ_BRICKS);
+    registry.register(&QUARTZ_PILLAR);
+    registry.register(&QUARTZ_STAIRS);
+    registry.register(&WHITE_TERRACOTTA);
+    registry.register(&ORANGE_TERRACOTTA);
+    registry.register(&MAGENTA_TERRACOTTA);
+    registry.register(&LIGHT_BLUE_TERRACOTTA);
+    registry.register(&YELLOW_TERRACOTTA);
+    registry.register(&LIME_TERRACOTTA);
+    registry.register(&PINK_TERRACOTTA);
+    registry.register(&GRAY_TERRACOTTA);
+    registry.register(&LIGHT_GRAY_TERRACOTTA);
+    registry.register(&CYAN_TERRACOTTA);
+    registry.register(&PURPLE_TERRACOTTA);
+    registry.register(&BLUE_TERRACOTTA);
+    registry.register(&BROWN_TERRACOTTA);
+    registry.register(&GREEN_TERRACOTTA);
+    registry.register(&RED_TERRACOTTA);
+    registry.register(&BLACK_TERRACOTTA);
+    registry.register(&BARRIER);
+    registry.register(&LIGHT);
+    registry.register(&HAY_BLOCK);
+    registry.register(&WHITE_CARPET);
+    registry.register(&ORANGE_CARPET);
+    registry.register(&MAGENTA_CARPET);
+    registry.register(&LIGHT_BLUE_CARPET);
+    registry.register(&YELLOW_CARPET);
+    registry.register(&LIME_CARPET);
+    registry.register(&PINK_CARPET);
+    registry.register(&GRAY_CARPET);
+    registry.register(&LIGHT_GRAY_CARPET);
+    registry.register(&CYAN_CARPET);
+    registry.register(&PURPLE_CARPET);
+    registry.register(&BLUE_CARPET);
+    registry.register(&BROWN_CARPET);
+    registry.register(&GREEN_CARPET);
+    registry.register(&RED_CARPET);
+    registry.register(&BLACK_CARPET);
+    registry.register(&TERRACOTTA);
+    registry.register(&PACKED_ICE);
+    registry.register(&DIRT_PATH);
+    registry.register(&SUNFLOWER);
+    registry.register(&LILAC);
+    registry.register(&ROSE_BUSH);
+    registry.register(&PEONY);
+    registry.register(&TALL_GRASS);
+    registry.register(&LARGE_FERN);
+    registry.register(&WHITE_STAINED_GLASS);
+    registry.register(&ORANGE_STAINED_GLASS);
+    registry.register(&MAGENTA_STAINED_GLASS);
+    registry.register(&LIGHT_BLUE_STAINED_GLASS);
+    registry.register(&YELLOW_STAINED_GLASS);
+    registry.register(&LIME_STAINED_GLASS);
+    registry.register(&PINK_STAINED_GLASS);
+    registry.register(&GRAY_STAINED_GLASS);
+    registry.register(&LIGHT_GRAY_STAINED_GLASS);
+    registry.register(&CYAN_STAINED_GLASS);
+    registry.register(&PURPLE_STAINED_GLASS);
+    registry.register(&BLUE_STAINED_GLASS);
+    registry.register(&BROWN_STAINED_GLASS);
+    registry.register(&GREEN_STAINED_GLASS);
+    registry.register(&RED_STAINED_GLASS);
+    registry.register(&BLACK_STAINED_GLASS);
+    registry.register(&WHITE_STAINED_GLASS_PANE);
+    registry.register(&ORANGE_STAINED_GLASS_PANE);
+    registry.register(&MAGENTA_STAINED_GLASS_PANE);
+    registry.register(&LIGHT_BLUE_STAINED_GLASS_PANE);
+    registry.register(&YELLOW_STAINED_GLASS_PANE);
+    registry.register(&LIME_STAINED_GLASS_PANE);
+    registry.register(&PINK_STAINED_GLASS_PANE);
+    registry.register(&GRAY_STAINED_GLASS_PANE);
+    registry.register(&LIGHT_GRAY_STAINED_GLASS_PANE);
+    registry.register(&CYAN_STAINED_GLASS_PANE);
+    registry.register(&PURPLE_STAINED_GLASS_PANE);
+    registry.register(&BLUE_STAINED_GLASS_PANE);
+    registry.register(&BROWN_STAINED_GLASS_PANE);
+    registry.register(&GREEN_STAINED_GLASS_PANE);
+    registry.register(&RED_STAINED_GLASS_PANE);
+    registry.register(&BLACK_STAINED_GLASS_PANE);
+    registry.register(&PRISMARINE);
+    registry.register(&PRISMARINE_BRICKS);
+    registry.register(&DARK_PRISMARINE);
+    registry.register(&PRISMARINE_STAIRS);
+    registry.register(&PRISMARINE_BRICK_STAIRS);
+    registry.register(&DARK_PRISMARINE_STAIRS);
+    registry.register(&SEA_LANTERN);
+    registry.register(&RED_SANDSTONE);
+    registry.register(&CHISELED_RED_SANDSTONE);
+    registry.register(&CUT_RED_SANDSTONE);
+    registry.register(&RED_SANDSTONE_STAIRS);
+    registry.register(&REPEATING_COMMAND_BLOCK);
+    registry.register(&CHAIN_COMMAND_BLOCK);
+    registry.register(&MAGMA_BLOCK);
+    registry.register(&NETHER_WART_BLOCK);
+    registry.register(&WARPED_WART_BLOCK);
+    registry.register(&RED_NETHER_BRICKS);
+    registry.register(&BONE_BLOCK);
+    registry.register(&STRUCTURE_VOID);
+    registry.register(&SHULKER_BOX);
+    registry.register(&WHITE_SHULKER_BOX);
+    registry.register(&ORANGE_SHULKER_BOX);
+    registry.register(&MAGENTA_SHULKER_BOX);
+    registry.register(&LIGHT_BLUE_SHULKER_BOX);
+    registry.register(&YELLOW_SHULKER_BOX);
+    registry.register(&LIME_SHULKER_BOX);
+    registry.register(&PINK_SHULKER_BOX);
+    registry.register(&GRAY_SHULKER_BOX);
+    registry.register(&LIGHT_GRAY_SHULKER_BOX);
+    registry.register(&CYAN_SHULKER_BOX);
+    registry.register(&PURPLE_SHULKER_BOX);
+    registry.register(&BLUE_SHULKER_BOX);
+    registry.register(&BROWN_SHULKER_BOX);
+    registry.register(&GREEN_SHULKER_BOX);
+    registry.register(&RED_SHULKER_BOX);
+    registry.register(&BLACK_SHULKER_BOX);
+    registry.register(&WHITE_GLAZED_TERRACOTTA);
+    registry.register(&ORANGE_GLAZED_TERRACOTTA);
+    registry.register(&MAGENTA_GLAZED_TERRACOTTA);
+    registry.register(&LIGHT_BLUE_GLAZED_TERRACOTTA);
+    registry.register(&YELLOW_GLAZED_TERRACOTTA);
+    registry.register(&LIME_GLAZED_TERRACOTTA);
+    registry.register(&PINK_GLAZED_TERRACOTTA);
+    registry.register(&GRAY_GLAZED_TERRACOTTA);
+    registry.register(&LIGHT_GRAY_GLAZED_TERRACOTTA);
+    registry.register(&CYAN_GLAZED_TERRACOTTA);
+    registry.register(&PURPLE_GLAZED_TERRACOTTA);
+    registry.register(&BLUE_GLAZED_TERRACOTTA);
+    registry.register(&BROWN_GLAZED_TERRACOTTA);
+    registry.register(&GREEN_GLAZED_TERRACOTTA);
+    registry.register(&RED_GLAZED_TERRACOTTA);
+    registry.register(&BLACK_GLAZED_TERRACOTTA);
+    registry.register(&WHITE_CONCRETE);
+    registry.register(&ORANGE_CONCRETE);
+    registry.register(&MAGENTA_CONCRETE);
+    registry.register(&LIGHT_BLUE_CONCRETE);
+    registry.register(&YELLOW_CONCRETE);
+    registry.register(&LIME_CONCRETE);
+    registry.register(&PINK_CONCRETE);
+    registry.register(&GRAY_CONCRETE);
+    registry.register(&LIGHT_GRAY_CONCRETE);
+    registry.register(&CYAN_CONCRETE);
+    registry.register(&PURPLE_CONCRETE);
+    registry.register(&BLUE_CONCRETE);
+    registry.register(&BROWN_CONCRETE);
+    registry.register(&GREEN_CONCRETE);
+    registry.register(&RED_CONCRETE);
+    registry.register(&BLACK_CONCRETE);
+    registry.register(&WHITE_CONCRETE_POWDER);
+    registry.register(&ORANGE_CONCRETE_POWDER);
+    registry.register(&MAGENTA_CONCRETE_POWDER);
+    registry.register(&LIGHT_BLUE_CONCRETE_POWDER);
+    registry.register(&YELLOW_CONCRETE_POWDER);
+    registry.register(&LIME_CONCRETE_POWDER);
+    registry.register(&PINK_CONCRETE_POWDER);
+    registry.register(&GRAY_CONCRETE_POWDER);
+    registry.register(&LIGHT_GRAY_CONCRETE_POWDER);
+    registry.register(&CYAN_CONCRETE_POWDER);
+    registry.register(&PURPLE_CONCRETE_POWDER);
+    registry.register(&BLUE_CONCRETE_POWDER);
+    registry.register(&BROWN_CONCRETE_POWDER);
+    registry.register(&GREEN_CONCRETE_POWDER);
+    registry.register(&RED_CONCRETE_POWDER);
+    registry.register(&BLACK_CONCRETE_POWDER);
+    registry.register(&TURTLE_EGG);
+    registry.register(&SNIFFER_EGG);
+    registry.register(&DRIED_GHAST);
+    registry.register(&DEAD_TUBE_CORAL_BLOCK);
+    registry.register(&DEAD_BRAIN_CORAL_BLOCK);
+    registry.register(&DEAD_BUBBLE_CORAL_BLOCK);
+    registry.register(&DEAD_FIRE_CORAL_BLOCK);
+    registry.register(&DEAD_HORN_CORAL_BLOCK);
+    registry.register(&TUBE_CORAL_BLOCK);
+    registry.register(&BRAIN_CORAL_BLOCK);
+    registry.register(&BUBBLE_CORAL_BLOCK);
+    registry.register(&FIRE_CORAL_BLOCK);
+    registry.register(&HORN_CORAL_BLOCK);
+    registry.register(&TUBE_CORAL);
+    registry.register(&BRAIN_CORAL);
+    registry.register(&BUBBLE_CORAL);
+    registry.register(&FIRE_CORAL);
+    registry.register(&HORN_CORAL);
+    registry.register(&DEAD_BRAIN_CORAL);
+    registry.register(&DEAD_BUBBLE_CORAL);
+    registry.register(&DEAD_FIRE_CORAL);
+    registry.register(&DEAD_HORN_CORAL);
+    registry.register(&DEAD_TUBE_CORAL);
+    registry.register(&TUBE_CORAL_FAN);
+    registry.register(&BRAIN_CORAL_FAN);
+    registry.register(&BUBBLE_CORAL_FAN);
+    registry.register(&FIRE_CORAL_FAN);
+    registry.register(&HORN_CORAL_FAN);
+    registry.register(&DEAD_TUBE_CORAL_FAN);
+    registry.register(&DEAD_BRAIN_CORAL_FAN);
+    registry.register(&DEAD_BUBBLE_CORAL_FAN);
+    registry.register(&DEAD_FIRE_CORAL_FAN);
+    registry.register(&DEAD_HORN_CORAL_FAN);
+    registry.register(&BLUE_ICE);
+    registry.register(&CONDUIT);
+    registry.register(&POLISHED_GRANITE_STAIRS);
+    registry.register(&SMOOTH_RED_SANDSTONE_STAIRS);
+    registry.register(&MOSSY_STONE_BRICK_STAIRS);
+    registry.register(&POLISHED_DIORITE_STAIRS);
+    registry.register(&MOSSY_COBBLESTONE_STAIRS);
+    registry.register(&END_STONE_BRICK_STAIRS);
+    registry.register(&STONE_STAIRS);
+    registry.register(&SMOOTH_SANDSTONE_STAIRS);
+    registry.register(&SMOOTH_QUARTZ_STAIRS);
+    registry.register(&GRANITE_STAIRS);
+    registry.register(&ANDESITE_STAIRS);
+    registry.register(&RED_NETHER_BRICK_STAIRS);
+    registry.register(&POLISHED_ANDESITE_STAIRS);
+    registry.register(&DIORITE_STAIRS);
+    registry.register(&COBBLED_DEEPSLATE_STAIRS);
+    registry.register(&POLISHED_DEEPSLATE_STAIRS);
+    registry.register(&DEEPSLATE_BRICK_STAIRS);
+    registry.register(&DEEPSLATE_TILE_STAIRS);
+    registry.register(&POLISHED_GRANITE_SLAB);
+    registry.register(&SMOOTH_RED_SANDSTONE_SLAB);
+    registry.register(&MOSSY_STONE_BRICK_SLAB);
+    registry.register(&POLISHED_DIORITE_SLAB);
+    registry.register(&MOSSY_COBBLESTONE_SLAB);
+    registry.register(&END_STONE_BRICK_SLAB);
+    registry.register(&SMOOTH_SANDSTONE_SLAB);
+    registry.register(&SMOOTH_QUARTZ_SLAB);
+    registry.register(&GRANITE_SLAB);
+    registry.register(&ANDESITE_SLAB);
+    registry.register(&RED_NETHER_BRICK_SLAB);
+    registry.register(&POLISHED_ANDESITE_SLAB);
+    registry.register(&DIORITE_SLAB);
+    registry.register(&COBBLED_DEEPSLATE_SLAB);
+    registry.register(&POLISHED_DEEPSLATE_SLAB);
+    registry.register(&DEEPSLATE_BRICK_SLAB);
+    registry.register(&DEEPSLATE_TILE_SLAB);
+    registry.register(&SCAFFOLDING);
+    registry.register(&REDSTONE);
+    registry.register(&REDSTONE_TORCH);
+    registry.register(&REDSTONE_BLOCK);
+    registry.register(&REPEATER);
+    registry.register(&COMPARATOR);
+    registry.register(&PISTON);
+    registry.register(&STICKY_PISTON);
+    registry.register(&SLIME_BLOCK);
+    registry.register(&HONEY_BLOCK);
+    registry.register(&OBSERVER);
+    registry.register(&HOPPER);
+    registry.register(&DISPENSER);
+    registry.register(&DROPPER);
+    registry.register(&LECTERN);
+    registry.register(&TARGET);
+    registry.register(&LEVER);
+    registry.register(&LIGHTNING_ROD);
+    registry.register(&EXPOSED_LIGHTNING_ROD);
+    registry.register(&WEATHERED_LIGHTNING_ROD);
+    registry.register(&OXIDIZED_LIGHTNING_ROD);
+    registry.register(&WAXED_LIGHTNING_ROD);
+    registry.register(&WAXED_EXPOSED_LIGHTNING_ROD);
+    registry.register(&WAXED_WEATHERED_LIGHTNING_ROD);
+    registry.register(&WAXED_OXIDIZED_LIGHTNING_ROD);
+    registry.register(&DAYLIGHT_DETECTOR);
+    registry.register(&SCULK_SENSOR);
+    registry.register(&CALIBRATED_SCULK_SENSOR);
+    registry.register(&TRIPWIRE_HOOK);
+    registry.register(&TRAPPED_CHEST);
+    registry.register(&TNT);
+    registry.register(&REDSTONE_LAMP);
+    registry.register(&NOTE_BLOCK);
+    registry.register(&STONE_BUTTON);
+    registry.register(&POLISHED_BLACKSTONE_BUTTON);
+    registry.register(&OAK_BUTTON);
+    registry.register(&SPRUCE_BUTTON);
+    registry.register(&BIRCH_BUTTON);
+    registry.register(&JUNGLE_BUTTON);
+    registry.register(&ACACIA_BUTTON);
+    registry.register(&CHERRY_BUTTON);
+    registry.register(&DARK_OAK_BUTTON);
+    registry.register(&PALE_OAK_BUTTON);
+    registry.register(&MANGROVE_BUTTON);
+    registry.register(&BAMBOO_BUTTON);
+    registry.register(&CRIMSON_BUTTON);
+    registry.register(&WARPED_BUTTON);
+    registry.register(&STONE_PRESSURE_PLATE);
+    registry.register(&POLISHED_BLACKSTONE_PRESSURE_PLATE);
+    registry.register(&LIGHT_WEIGHTED_PRESSURE_PLATE);
+    registry.register(&HEAVY_WEIGHTED_PRESSURE_PLATE);
+    registry.register(&OAK_PRESSURE_PLATE);
+    registry.register(&SPRUCE_PRESSURE_PLATE);
+    registry.register(&BIRCH_PRESSURE_PLATE);
+    registry.register(&JUNGLE_PRESSURE_PLATE);
+    registry.register(&ACACIA_PRESSURE_PLATE);
+    registry.register(&CHERRY_PRESSURE_PLATE);
+    registry.register(&DARK_OAK_PRESSURE_PLATE);
+    registry.register(&PALE_OAK_PRESSURE_PLATE);
+    registry.register(&MANGROVE_PRESSURE_PLATE);
+    registry.register(&BAMBOO_PRESSURE_PLATE);
+    registry.register(&CRIMSON_PRESSURE_PLATE);
+    registry.register(&WARPED_PRESSURE_PLATE);
+    registry.register(&IRON_DOOR);
+    registry.register(&OAK_DOOR);
+    registry.register(&SPRUCE_DOOR);
+    registry.register(&BIRCH_DOOR);
+    registry.register(&JUNGLE_DOOR);
+    registry.register(&ACACIA_DOOR);
+    registry.register(&CHERRY_DOOR);
+    registry.register(&DARK_OAK_DOOR);
+    registry.register(&PALE_OAK_DOOR);
+    registry.register(&MANGROVE_DOOR);
+    registry.register(&BAMBOO_DOOR);
+    registry.register(&CRIMSON_DOOR);
+    registry.register(&WARPED_DOOR);
+    registry.register(&COPPER_DOOR);
+    registry.register(&EXPOSED_COPPER_DOOR);
+    registry.register(&WEATHERED_COPPER_DOOR);
+    registry.register(&OXIDIZED_COPPER_DOOR);
+    registry.register(&WAXED_COPPER_DOOR);
+    registry.register(&WAXED_EXPOSED_COPPER_DOOR);
+    registry.register(&WAXED_WEATHERED_COPPER_DOOR);
+    registry.register(&WAXED_OXIDIZED_COPPER_DOOR);
+    registry.register(&IRON_TRAPDOOR);
+    registry.register(&OAK_TRAPDOOR);
+    registry.register(&SPRUCE_TRAPDOOR);
+    registry.register(&BIRCH_TRAPDOOR);
+    registry.register(&JUNGLE_TRAPDOOR);
+    registry.register(&ACACIA_TRAPDOOR);
+    registry.register(&CHERRY_TRAPDOOR);
+    registry.register(&DARK_OAK_TRAPDOOR);
+    registry.register(&PALE_OAK_TRAPDOOR);
+    registry.register(&MANGROVE_TRAPDOOR);
+    registry.register(&BAMBOO_TRAPDOOR);
+    registry.register(&CRIMSON_TRAPDOOR);
+    registry.register(&WARPED_TRAPDOOR);
+    registry.register(&COPPER_TRAPDOOR);
+    registry.register(&EXPOSED_COPPER_TRAPDOOR);
+    registry.register(&WEATHERED_COPPER_TRAPDOOR);
+    registry.register(&OXIDIZED_COPPER_TRAPDOOR);
+    registry.register(&WAXED_COPPER_TRAPDOOR);
+    registry.register(&WAXED_EXPOSED_COPPER_TRAPDOOR);
+    registry.register(&WAXED_WEATHERED_COPPER_TRAPDOOR);
+    registry.register(&WAXED_OXIDIZED_COPPER_TRAPDOOR);
+    registry.register(&OAK_FENCE_GATE);
+    registry.register(&SPRUCE_FENCE_GATE);
+    registry.register(&BIRCH_FENCE_GATE);
+    registry.register(&JUNGLE_FENCE_GATE);
+    registry.register(&ACACIA_FENCE_GATE);
+    registry.register(&CHERRY_FENCE_GATE);
+    registry.register(&DARK_OAK_FENCE_GATE);
+    registry.register(&PALE_OAK_FENCE_GATE);
+    registry.register(&MANGROVE_FENCE_GATE);
+    registry.register(&BAMBOO_FENCE_GATE);
+    registry.register(&CRIMSON_FENCE_GATE);
+    registry.register(&WARPED_FENCE_GATE);
+    registry.register(&POWERED_RAIL);
+    registry.register(&DETECTOR_RAIL);
+    registry.register(&RAIL);
+    registry.register(&ACTIVATOR_RAIL);
+    registry.register(&SADDLE);
+    registry.register(&WHITE_HARNESS);
+    registry.register(&ORANGE_HARNESS);
+    registry.register(&MAGENTA_HARNESS);
+    registry.register(&LIGHT_BLUE_HARNESS);
+    registry.register(&YELLOW_HARNESS);
+    registry.register(&LIME_HARNESS);
+    registry.register(&PINK_HARNESS);
+    registry.register(&GRAY_HARNESS);
+    registry.register(&LIGHT_GRAY_HARNESS);
+    registry.register(&CYAN_HARNESS);
+    registry.register(&PURPLE_HARNESS);
+    registry.register(&BLUE_HARNESS);
+    registry.register(&BROWN_HARNESS);
+    registry.register(&GREEN_HARNESS);
+    registry.register(&RED_HARNESS);
+    registry.register(&BLACK_HARNESS);
+    registry.register(&MINECART);
+    registry.register(&CHEST_MINECART);
+    registry.register(&FURNACE_MINECART);
+    registry.register(&TNT_MINECART);
+    registry.register(&HOPPER_MINECART);
+    registry.register(&CARROT_ON_A_STICK);
+    registry.register(&WARPED_FUNGUS_ON_A_STICK);
+    registry.register(&PHANTOM_MEMBRANE);
+    registry.register(&ELYTRA);
+    registry.register(&OAK_BOAT);
+    registry.register(&OAK_CHEST_BOAT);
+    registry.register(&SPRUCE_BOAT);
+    registry.register(&SPRUCE_CHEST_BOAT);
+    registry.register(&BIRCH_BOAT);
+    registry.register(&BIRCH_CHEST_BOAT);
+    registry.register(&JUNGLE_BOAT);
+    registry.register(&JUNGLE_CHEST_BOAT);
+    registry.register(&ACACIA_BOAT);
+    registry.register(&ACACIA_CHEST_BOAT);
+    registry.register(&CHERRY_BOAT);
+    registry.register(&CHERRY_CHEST_BOAT);
+    registry.register(&DARK_OAK_BOAT);
+    registry.register(&DARK_OAK_CHEST_BOAT);
+    registry.register(&PALE_OAK_BOAT);
+    registry.register(&PALE_OAK_CHEST_BOAT);
+    registry.register(&MANGROVE_BOAT);
+    registry.register(&MANGROVE_CHEST_BOAT);
+    registry.register(&BAMBOO_RAFT);
+    registry.register(&BAMBOO_CHEST_RAFT);
+    registry.register(&STRUCTURE_BLOCK);
+    registry.register(&JIGSAW);
+    registry.register(&TEST_BLOCK);
+    registry.register(&TEST_INSTANCE_BLOCK);
+    registry.register(&TURTLE_HELMET);
+    registry.register(&TURTLE_SCUTE);
+    registry.register(&ARMADILLO_SCUTE);
+    registry.register(&WOLF_ARMOR);
+    registry.register(&FLINT_AND_STEEL);
+    registry.register(&BOWL);
+    registry.register(&APPLE);
+    registry.register(&BOW);
+    registry.register(&ARROW);
+    registry.register(&COAL);
+    registry.register(&CHARCOAL);
+    registry.register(&DIAMOND);
+    registry.register(&EMERALD);
+    registry.register(&LAPIS_LAZULI);
+    registry.register(&QUARTZ);
+    registry.register(&AMETHYST_SHARD);
+    registry.register(&RAW_IRON);
+    registry.register(&IRON_INGOT);
+    registry.register(&RAW_COPPER);
+    registry.register(&COPPER_INGOT);
+    registry.register(&RAW_GOLD);
+    registry.register(&GOLD_INGOT);
+    registry.register(&NETHERITE_INGOT);
+    registry.register(&NETHERITE_SCRAP);
+    registry.register(&WOODEN_SWORD);
+    registry.register(&WOODEN_SHOVEL);
+    registry.register(&WOODEN_PICKAXE);
+    registry.register(&WOODEN_AXE);
+    registry.register(&WOODEN_HOE);
+    registry.register(&COPPER_SWORD);
+    registry.register(&COPPER_SHOVEL);
+    registry.register(&COPPER_PICKAXE);
+    registry.register(&COPPER_AXE);
+    registry.register(&COPPER_HOE);
+    registry.register(&STONE_SWORD);
+    registry.register(&STONE_SHOVEL);
+    registry.register(&STONE_PICKAXE);
+    registry.register(&STONE_AXE);
+    registry.register(&STONE_HOE);
+    registry.register(&GOLDEN_SWORD);
+    registry.register(&GOLDEN_SHOVEL);
+    registry.register(&GOLDEN_PICKAXE);
+    registry.register(&GOLDEN_AXE);
+    registry.register(&GOLDEN_HOE);
+    registry.register(&IRON_SWORD);
+    registry.register(&IRON_SHOVEL);
+    registry.register(&IRON_PICKAXE);
+    registry.register(&IRON_AXE);
+    registry.register(&IRON_HOE);
+    registry.register(&DIAMOND_SWORD);
+    registry.register(&DIAMOND_SHOVEL);
+    registry.register(&DIAMOND_PICKAXE);
+    registry.register(&DIAMOND_AXE);
+    registry.register(&DIAMOND_HOE);
+    registry.register(&NETHERITE_SWORD);
+    registry.register(&NETHERITE_SHOVEL);
+    registry.register(&NETHERITE_PICKAXE);
+    registry.register(&NETHERITE_AXE);
+    registry.register(&NETHERITE_HOE);
+    registry.register(&STICK);
+    registry.register(&MUSHROOM_STEW);
+    registry.register(&STRING);
+    registry.register(&FEATHER);
+    registry.register(&GUNPOWDER);
+    registry.register(&WHEAT_SEEDS);
+    registry.register(&WHEAT);
+    registry.register(&BREAD);
+    registry.register(&LEATHER_HELMET);
+    registry.register(&LEATHER_CHESTPLATE);
+    registry.register(&LEATHER_LEGGINGS);
+    registry.register(&LEATHER_BOOTS);
+    registry.register(&COPPER_HELMET);
+    registry.register(&COPPER_CHESTPLATE);
+    registry.register(&COPPER_LEGGINGS);
+    registry.register(&COPPER_BOOTS);
+    registry.register(&CHAINMAIL_HELMET);
+    registry.register(&CHAINMAIL_CHESTPLATE);
+    registry.register(&CHAINMAIL_LEGGINGS);
+    registry.register(&CHAINMAIL_BOOTS);
+    registry.register(&IRON_HELMET);
+    registry.register(&IRON_CHESTPLATE);
+    registry.register(&IRON_LEGGINGS);
+    registry.register(&IRON_BOOTS);
+    registry.register(&DIAMOND_HELMET);
+    registry.register(&DIAMOND_CHESTPLATE);
+    registry.register(&DIAMOND_LEGGINGS);
+    registry.register(&DIAMOND_BOOTS);
+    registry.register(&GOLDEN_HELMET);
+    registry.register(&GOLDEN_CHESTPLATE);
+    registry.register(&GOLDEN_LEGGINGS);
+    registry.register(&GOLDEN_BOOTS);
+    registry.register(&NETHERITE_HELMET);
+    registry.register(&NETHERITE_CHESTPLATE);
+    registry.register(&NETHERITE_LEGGINGS);
+    registry.register(&NETHERITE_BOOTS);
+    registry.register(&FLINT);
+    registry.register(&PORKCHOP);
+    registry.register(&COOKED_PORKCHOP);
+    registry.register(&PAINTING);
+    registry.register(&GOLDEN_APPLE);
+    registry.register(&ENCHANTED_GOLDEN_APPLE);
+    registry.register(&OAK_SIGN);
+    registry.register(&SPRUCE_SIGN);
+    registry.register(&BIRCH_SIGN);
+    registry.register(&JUNGLE_SIGN);
+    registry.register(&ACACIA_SIGN);
+    registry.register(&CHERRY_SIGN);
+    registry.register(&DARK_OAK_SIGN);
+    registry.register(&PALE_OAK_SIGN);
+    registry.register(&MANGROVE_SIGN);
+    registry.register(&BAMBOO_SIGN);
+    registry.register(&CRIMSON_SIGN);
+    registry.register(&WARPED_SIGN);
+    registry.register(&OAK_HANGING_SIGN);
+    registry.register(&SPRUCE_HANGING_SIGN);
+    registry.register(&BIRCH_HANGING_SIGN);
+    registry.register(&JUNGLE_HANGING_SIGN);
+    registry.register(&ACACIA_HANGING_SIGN);
+    registry.register(&CHERRY_HANGING_SIGN);
+    registry.register(&DARK_OAK_HANGING_SIGN);
+    registry.register(&PALE_OAK_HANGING_SIGN);
+    registry.register(&MANGROVE_HANGING_SIGN);
+    registry.register(&BAMBOO_HANGING_SIGN);
+    registry.register(&CRIMSON_HANGING_SIGN);
+    registry.register(&WARPED_HANGING_SIGN);
+    registry.register(&BUCKET);
+    registry.register(&WATER_BUCKET);
+    registry.register(&LAVA_BUCKET);
+    registry.register(&POWDER_SNOW_BUCKET);
+    registry.register(&SNOWBALL);
+    registry.register(&LEATHER);
+    registry.register(&MILK_BUCKET);
+    registry.register(&PUFFERFISH_BUCKET);
+    registry.register(&SALMON_BUCKET);
+    registry.register(&COD_BUCKET);
+    registry.register(&TROPICAL_FISH_BUCKET);
+    registry.register(&AXOLOTL_BUCKET);
+    registry.register(&TADPOLE_BUCKET);
+    registry.register(&BRICK);
+    registry.register(&CLAY_BALL);
+    registry.register(&DRIED_KELP_BLOCK);
+    registry.register(&PAPER);
+    registry.register(&BOOK);
+    registry.register(&SLIME_BALL);
+    registry.register(&EGG);
+    registry.register(&BLUE_EGG);
+    registry.register(&BROWN_EGG);
+    registry.register(&COMPASS);
+    registry.register(&RECOVERY_COMPASS);
+    registry.register(&BUNDLE);
+    registry.register(&WHITE_BUNDLE);
+    registry.register(&ORANGE_BUNDLE);
+    registry.register(&MAGENTA_BUNDLE);
+    registry.register(&LIGHT_BLUE_BUNDLE);
+    registry.register(&YELLOW_BUNDLE);
+    registry.register(&LIME_BUNDLE);
+    registry.register(&PINK_BUNDLE);
+    registry.register(&GRAY_BUNDLE);
+    registry.register(&LIGHT_GRAY_BUNDLE);
+    registry.register(&CYAN_BUNDLE);
+    registry.register(&PURPLE_BUNDLE);
+    registry.register(&BLUE_BUNDLE);
+    registry.register(&BROWN_BUNDLE);
+    registry.register(&GREEN_BUNDLE);
+    registry.register(&RED_BUNDLE);
+    registry.register(&BLACK_BUNDLE);
+    registry.register(&FISHING_ROD);
+    registry.register(&CLOCK);
+    registry.register(&SPYGLASS);
+    registry.register(&GLOWSTONE_DUST);
+    registry.register(&COD);
+    registry.register(&SALMON);
+    registry.register(&TROPICAL_FISH);
+    registry.register(&PUFFERFISH);
+    registry.register(&COOKED_COD);
+    registry.register(&COOKED_SALMON);
+    registry.register(&INK_SAC);
+    registry.register(&GLOW_INK_SAC);
+    registry.register(&COCOA_BEANS);
+    registry.register(&WHITE_DYE);
+    registry.register(&ORANGE_DYE);
+    registry.register(&MAGENTA_DYE);
+    registry.register(&LIGHT_BLUE_DYE);
+    registry.register(&YELLOW_DYE);
+    registry.register(&LIME_DYE);
+    registry.register(&PINK_DYE);
+    registry.register(&GRAY_DYE);
+    registry.register(&LIGHT_GRAY_DYE);
+    registry.register(&CYAN_DYE);
+    registry.register(&PURPLE_DYE);
+    registry.register(&BLUE_DYE);
+    registry.register(&BROWN_DYE);
+    registry.register(&GREEN_DYE);
+    registry.register(&RED_DYE);
+    registry.register(&BLACK_DYE);
+    registry.register(&BONE_MEAL);
+    registry.register(&BONE);
+    registry.register(&SUGAR);
+    registry.register(&CAKE);
+    registry.register(&WHITE_BED);
+    registry.register(&ORANGE_BED);
+    registry.register(&MAGENTA_BED);
+    registry.register(&LIGHT_BLUE_BED);
+    registry.register(&YELLOW_BED);
+    registry.register(&LIME_BED);
+    registry.register(&PINK_BED);
+    registry.register(&GRAY_BED);
+    registry.register(&LIGHT_GRAY_BED);
+    registry.register(&CYAN_BED);
+    registry.register(&PURPLE_BED);
+    registry.register(&BLUE_BED);
+    registry.register(&BROWN_BED);
+    registry.register(&GREEN_BED);
+    registry.register(&RED_BED);
+    registry.register(&BLACK_BED);
+    registry.register(&COOKIE);
+    registry.register(&CRAFTER);
+    registry.register(&FILLED_MAP);
+    registry.register(&SHEARS);
+    registry.register(&MELON_SLICE);
+    registry.register(&DRIED_KELP);
+    registry.register(&PUMPKIN_SEEDS);
+    registry.register(&MELON_SEEDS);
+    registry.register(&BEEF);
+    registry.register(&COOKED_BEEF);
+    registry.register(&CHICKEN);
+    registry.register(&COOKED_CHICKEN);
+    registry.register(&ROTTEN_FLESH);
+    registry.register(&ENDER_PEARL);
+    registry.register(&BLAZE_ROD);
+    registry.register(&GHAST_TEAR);
+    registry.register(&GOLD_NUGGET);
+    registry.register(&NETHER_WART);
+    registry.register(&GLASS_BOTTLE);
+    registry.register(&POTION);
+    registry.register(&SPIDER_EYE);
+    registry.register(&FERMENTED_SPIDER_EYE);
+    registry.register(&BLAZE_POWDER);
+    registry.register(&MAGMA_CREAM);
+    registry.register(&BREWING_STAND);
+    registry.register(&CAULDRON);
+    registry.register(&ENDER_EYE);
+    registry.register(&GLISTERING_MELON_SLICE);
+    registry.register(&ARMADILLO_SPAWN_EGG);
+    registry.register(&ALLAY_SPAWN_EGG);
+    registry.register(&AXOLOTL_SPAWN_EGG);
+    registry.register(&BAT_SPAWN_EGG);
+    registry.register(&BEE_SPAWN_EGG);
+    registry.register(&BLAZE_SPAWN_EGG);
+    registry.register(&BOGGED_SPAWN_EGG);
+    registry.register(&BREEZE_SPAWN_EGG);
+    registry.register(&CAT_SPAWN_EGG);
+    registry.register(&CAMEL_SPAWN_EGG);
+    registry.register(&CAVE_SPIDER_SPAWN_EGG);
+    registry.register(&CHICKEN_SPAWN_EGG);
+    registry.register(&COD_SPAWN_EGG);
+    registry.register(&COPPER_GOLEM_SPAWN_EGG);
+    registry.register(&COW_SPAWN_EGG);
+    registry.register(&CREEPER_SPAWN_EGG);
+    registry.register(&DOLPHIN_SPAWN_EGG);
+    registry.register(&DONKEY_SPAWN_EGG);
+    registry.register(&DROWNED_SPAWN_EGG);
+    registry.register(&ELDER_GUARDIAN_SPAWN_EGG);
+    registry.register(&ENDER_DRAGON_SPAWN_EGG);
+    registry.register(&ENDERMAN_SPAWN_EGG);
+    registry.register(&ENDERMITE_SPAWN_EGG);
+    registry.register(&EVOKER_SPAWN_EGG);
+    registry.register(&FOX_SPAWN_EGG);
+    registry.register(&FROG_SPAWN_EGG);
+    registry.register(&GHAST_SPAWN_EGG);
+    registry.register(&HAPPY_GHAST_SPAWN_EGG);
+    registry.register(&GLOW_SQUID_SPAWN_EGG);
+    registry.register(&GOAT_SPAWN_EGG);
+    registry.register(&GUARDIAN_SPAWN_EGG);
+    registry.register(&HOGLIN_SPAWN_EGG);
+    registry.register(&HORSE_SPAWN_EGG);
+    registry.register(&HUSK_SPAWN_EGG);
+    registry.register(&IRON_GOLEM_SPAWN_EGG);
+    registry.register(&LLAMA_SPAWN_EGG);
+    registry.register(&MAGMA_CUBE_SPAWN_EGG);
+    registry.register(&MOOSHROOM_SPAWN_EGG);
+    registry.register(&MULE_SPAWN_EGG);
+    registry.register(&OCELOT_SPAWN_EGG);
+    registry.register(&PANDA_SPAWN_EGG);
+    registry.register(&PARROT_SPAWN_EGG);
+    registry.register(&PHANTOM_SPAWN_EGG);
+    registry.register(&PIG_SPAWN_EGG);
+    registry.register(&PIGLIN_SPAWN_EGG);
+    registry.register(&PIGLIN_BRUTE_SPAWN_EGG);
+    registry.register(&PILLAGER_SPAWN_EGG);
+    registry.register(&POLAR_BEAR_SPAWN_EGG);
+    registry.register(&PUFFERFISH_SPAWN_EGG);
+    registry.register(&RABBIT_SPAWN_EGG);
+    registry.register(&RAVAGER_SPAWN_EGG);
+    registry.register(&SALMON_SPAWN_EGG);
+    registry.register(&SHEEP_SPAWN_EGG);
+    registry.register(&SHULKER_SPAWN_EGG);
+    registry.register(&SILVERFISH_SPAWN_EGG);
+    registry.register(&SKELETON_SPAWN_EGG);
+    registry.register(&SKELETON_HORSE_SPAWN_EGG);
+    registry.register(&SLIME_SPAWN_EGG);
+    registry.register(&SNIFFER_SPAWN_EGG);
+    registry.register(&SNOW_GOLEM_SPAWN_EGG);
+    registry.register(&SPIDER_SPAWN_EGG);
+    registry.register(&SQUID_SPAWN_EGG);
+    registry.register(&STRAY_SPAWN_EGG);
+    registry.register(&STRIDER_SPAWN_EGG);
+    registry.register(&TADPOLE_SPAWN_EGG);
+    registry.register(&TRADER_LLAMA_SPAWN_EGG);
+    registry.register(&TROPICAL_FISH_SPAWN_EGG);
+    registry.register(&TURTLE_SPAWN_EGG);
+    registry.register(&VEX_SPAWN_EGG);
+    registry.register(&VILLAGER_SPAWN_EGG);
+    registry.register(&VINDICATOR_SPAWN_EGG);
+    registry.register(&WANDERING_TRADER_SPAWN_EGG);
+    registry.register(&WARDEN_SPAWN_EGG);
+    registry.register(&WITCH_SPAWN_EGG);
+    registry.register(&WITHER_SPAWN_EGG);
+    registry.register(&WITHER_SKELETON_SPAWN_EGG);
+    registry.register(&WOLF_SPAWN_EGG);
+    registry.register(&ZOGLIN_SPAWN_EGG);
+    registry.register(&CREAKING_SPAWN_EGG);
+    registry.register(&ZOMBIE_SPAWN_EGG);
+    registry.register(&ZOMBIE_HORSE_SPAWN_EGG);
+    registry.register(&ZOMBIE_VILLAGER_SPAWN_EGG);
+    registry.register(&ZOMBIFIED_PIGLIN_SPAWN_EGG);
+    registry.register(&EXPERIENCE_BOTTLE);
+    registry.register(&FIRE_CHARGE);
+    registry.register(&WIND_CHARGE);
+    registry.register(&WRITABLE_BOOK);
+    registry.register(&WRITTEN_BOOK);
+    registry.register(&BREEZE_ROD);
+    registry.register(&MACE);
+    registry.register(&ITEM_FRAME);
+    registry.register(&GLOW_ITEM_FRAME);
+    registry.register(&FLOWER_POT);
+    registry.register(&CARROT);
+    registry.register(&POTATO);
+    registry.register(&BAKED_POTATO);
+    registry.register(&POISONOUS_POTATO);
+    registry.register(&MAP);
+    registry.register(&GOLDEN_CARROT);
+    registry.register(&SKELETON_SKULL);
+    registry.register(&WITHER_SKELETON_SKULL);
+    registry.register(&PLAYER_HEAD);
+    registry.register(&ZOMBIE_HEAD);
+    registry.register(&CREEPER_HEAD);
+    registry.register(&DRAGON_HEAD);
+    registry.register(&PIGLIN_HEAD);
+    registry.register(&NETHER_STAR);
+    registry.register(&PUMPKIN_PIE);
+    registry.register(&FIREWORK_ROCKET);
+    registry.register(&FIREWORK_STAR);
+    registry.register(&ENCHANTED_BOOK);
+    registry.register(&NETHER_BRICK);
+    registry.register(&RESIN_BRICK);
+    registry.register(&PRISMARINE_SHARD);
+    registry.register(&PRISMARINE_CRYSTALS);
+    registry.register(&RABBIT);
+    registry.register(&COOKED_RABBIT);
+    registry.register(&RABBIT_STEW);
+    registry.register(&RABBIT_FOOT);
+    registry.register(&RABBIT_HIDE);
+    registry.register(&ARMOR_STAND);
+    registry.register(&COPPER_HORSE_ARMOR);
+    registry.register(&IRON_HORSE_ARMOR);
+    registry.register(&GOLDEN_HORSE_ARMOR);
+    registry.register(&DIAMOND_HORSE_ARMOR);
+    registry.register(&LEATHER_HORSE_ARMOR);
+    registry.register(&LEAD);
+    registry.register(&NAME_TAG);
+    registry.register(&COMMAND_BLOCK_MINECART);
+    registry.register(&MUTTON);
+    registry.register(&COOKED_MUTTON);
+    registry.register(&WHITE_BANNER);
+    registry.register(&ORANGE_BANNER);
+    registry.register(&MAGENTA_BANNER);
+    registry.register(&LIGHT_BLUE_BANNER);
+    registry.register(&YELLOW_BANNER);
+    registry.register(&LIME_BANNER);
+    registry.register(&PINK_BANNER);
+    registry.register(&GRAY_BANNER);
+    registry.register(&LIGHT_GRAY_BANNER);
+    registry.register(&CYAN_BANNER);
+    registry.register(&PURPLE_BANNER);
+    registry.register(&BLUE_BANNER);
+    registry.register(&BROWN_BANNER);
+    registry.register(&GREEN_BANNER);
+    registry.register(&RED_BANNER);
+    registry.register(&BLACK_BANNER);
+    registry.register(&END_CRYSTAL);
+    registry.register(&CHORUS_FRUIT);
+    registry.register(&POPPED_CHORUS_FRUIT);
+    registry.register(&TORCHFLOWER_SEEDS);
+    registry.register(&PITCHER_POD);
+    registry.register(&BEETROOT);
+    registry.register(&BEETROOT_SEEDS);
+    registry.register(&BEETROOT_SOUP);
+    registry.register(&DRAGON_BREATH);
+    registry.register(&SPLASH_POTION);
+    registry.register(&SPECTRAL_ARROW);
+    registry.register(&TIPPED_ARROW);
+    registry.register(&LINGERING_POTION);
+    registry.register(&SHIELD);
+    registry.register(&TOTEM_OF_UNDYING);
+    registry.register(&SHULKER_SHELL);
+    registry.register(&IRON_NUGGET);
+    registry.register(&COPPER_NUGGET);
+    registry.register(&KNOWLEDGE_BOOK);
+    registry.register(&DEBUG_STICK);
+    registry.register(&MUSIC_DISC_13);
+    registry.register(&MUSIC_DISC_CAT);
+    registry.register(&MUSIC_DISC_BLOCKS);
+    registry.register(&MUSIC_DISC_CHIRP);
+    registry.register(&MUSIC_DISC_CREATOR);
+    registry.register(&MUSIC_DISC_CREATOR_MUSIC_BOX);
+    registry.register(&MUSIC_DISC_FAR);
+    registry.register(&MUSIC_DISC_LAVA_CHICKEN);
+    registry.register(&MUSIC_DISC_MALL);
+    registry.register(&MUSIC_DISC_MELLOHI);
+    registry.register(&MUSIC_DISC_STAL);
+    registry.register(&MUSIC_DISC_STRAD);
+    registry.register(&MUSIC_DISC_WARD);
+    registry.register(&MUSIC_DISC_11);
+    registry.register(&MUSIC_DISC_WAIT);
+    registry.register(&MUSIC_DISC_OTHERSIDE);
+    registry.register(&MUSIC_DISC_RELIC);
+    registry.register(&MUSIC_DISC_5);
+    registry.register(&MUSIC_DISC_PIGSTEP);
+    registry.register(&MUSIC_DISC_PRECIPICE);
+    registry.register(&MUSIC_DISC_TEARS);
+    registry.register(&DISC_FRAGMENT_5);
+    registry.register(&TRIDENT);
+    registry.register(&NAUTILUS_SHELL);
+    registry.register(&HEART_OF_THE_SEA);
+    registry.register(&CROSSBOW);
+    registry.register(&SUSPICIOUS_STEW);
+    registry.register(&LOOM);
+    registry.register(&FLOWER_BANNER_PATTERN);
+    registry.register(&CREEPER_BANNER_PATTERN);
+    registry.register(&SKULL_BANNER_PATTERN);
+    registry.register(&MOJANG_BANNER_PATTERN);
+    registry.register(&GLOBE_BANNER_PATTERN);
+    registry.register(&PIGLIN_BANNER_PATTERN);
+    registry.register(&FLOW_BANNER_PATTERN);
+    registry.register(&GUSTER_BANNER_PATTERN);
+    registry.register(&FIELD_MASONED_BANNER_PATTERN);
+    registry.register(&BORDURE_INDENTED_BANNER_PATTERN);
+    registry.register(&GOAT_HORN);
+    registry.register(&COMPOSTER);
+    registry.register(&BARREL);
+    registry.register(&SMOKER);
+    registry.register(&BLAST_FURNACE);
+    registry.register(&CARTOGRAPHY_TABLE);
+    registry.register(&FLETCHING_TABLE);
+    registry.register(&GRINDSTONE);
+    registry.register(&SMITHING_TABLE);
+    registry.register(&STONECUTTER);
+    registry.register(&BELL);
+    registry.register(&LANTERN);
+    registry.register(&SOUL_LANTERN);
+    registry.register(&COPPER_LANTERN);
+    registry.register(&EXPOSED_COPPER_LANTERN);
+    registry.register(&WEATHERED_COPPER_LANTERN);
+    registry.register(&OXIDIZED_COPPER_LANTERN);
+    registry.register(&WAXED_COPPER_LANTERN);
+    registry.register(&WAXED_EXPOSED_COPPER_LANTERN);
+    registry.register(&WAXED_WEATHERED_COPPER_LANTERN);
+    registry.register(&WAXED_OXIDIZED_COPPER_LANTERN);
+    registry.register(&SWEET_BERRIES);
+    registry.register(&GLOW_BERRIES);
+    registry.register(&CAMPFIRE);
+    registry.register(&SOUL_CAMPFIRE);
+    registry.register(&SHROOMLIGHT);
+    registry.register(&HONEYCOMB);
+    registry.register(&BEE_NEST);
+    registry.register(&BEEHIVE);
+    registry.register(&HONEY_BOTTLE);
+    registry.register(&HONEYCOMB_BLOCK);
+    registry.register(&LODESTONE);
+    registry.register(&CRYING_OBSIDIAN);
+    registry.register(&BLACKSTONE);
+    registry.register(&BLACKSTONE_SLAB);
+    registry.register(&BLACKSTONE_STAIRS);
+    registry.register(&GILDED_BLACKSTONE);
+    registry.register(&POLISHED_BLACKSTONE);
+    registry.register(&POLISHED_BLACKSTONE_SLAB);
+    registry.register(&POLISHED_BLACKSTONE_STAIRS);
+    registry.register(&CHISELED_POLISHED_BLACKSTONE);
+    registry.register(&POLISHED_BLACKSTONE_BRICKS);
+    registry.register(&POLISHED_BLACKSTONE_BRICK_SLAB);
+    registry.register(&POLISHED_BLACKSTONE_BRICK_STAIRS);
+    registry.register(&CRACKED_POLISHED_BLACKSTONE_BRICKS);
+    registry.register(&RESPAWN_ANCHOR);
+    registry.register(&CANDLE);
+    registry.register(&WHITE_CANDLE);
+    registry.register(&ORANGE_CANDLE);
+    registry.register(&MAGENTA_CANDLE);
+    registry.register(&LIGHT_BLUE_CANDLE);
+    registry.register(&YELLOW_CANDLE);
+    registry.register(&LIME_CANDLE);
+    registry.register(&PINK_CANDLE);
+    registry.register(&GRAY_CANDLE);
+    registry.register(&LIGHT_GRAY_CANDLE);
+    registry.register(&CYAN_CANDLE);
+    registry.register(&PURPLE_CANDLE);
+    registry.register(&BLUE_CANDLE);
+    registry.register(&BROWN_CANDLE);
+    registry.register(&GREEN_CANDLE);
+    registry.register(&RED_CANDLE);
+    registry.register(&BLACK_CANDLE);
+    registry.register(&SMALL_AMETHYST_BUD);
+    registry.register(&MEDIUM_AMETHYST_BUD);
+    registry.register(&LARGE_AMETHYST_BUD);
+    registry.register(&AMETHYST_CLUSTER);
+    registry.register(&POINTED_DRIPSTONE);
+    registry.register(&OCHRE_FROGLIGHT);
+    registry.register(&VERDANT_FROGLIGHT);
+    registry.register(&PEARLESCENT_FROGLIGHT);
+    registry.register(&FROGSPAWN);
+    registry.register(&ECHO_SHARD);
+    registry.register(&BRUSH);
+    registry.register(&NETHERITE_UPGRADE_SMITHING_TEMPLATE);
+    registry.register(&SENTRY_ARMOR_TRIM_SMITHING_TEMPLATE);
+    registry.register(&DUNE_ARMOR_TRIM_SMITHING_TEMPLATE);
+    registry.register(&COAST_ARMOR_TRIM_SMITHING_TEMPLATE);
+    registry.register(&WILD_ARMOR_TRIM_SMITHING_TEMPLATE);
+    registry.register(&WARD_ARMOR_TRIM_SMITHING_TEMPLATE);
+    registry.register(&EYE_ARMOR_TRIM_SMITHING_TEMPLATE);
+    registry.register(&VEX_ARMOR_TRIM_SMITHING_TEMPLATE);
+    registry.register(&TIDE_ARMOR_TRIM_SMITHING_TEMPLATE);
+    registry.register(&SNOUT_ARMOR_TRIM_SMITHING_TEMPLATE);
+    registry.register(&RIB_ARMOR_TRIM_SMITHING_TEMPLATE);
+    registry.register(&SPIRE_ARMOR_TRIM_SMITHING_TEMPLATE);
+    registry.register(&WAYFINDER_ARMOR_TRIM_SMITHING_TEMPLATE);
+    registry.register(&SHAPER_ARMOR_TRIM_SMITHING_TEMPLATE);
+    registry.register(&SILENCE_ARMOR_TRIM_SMITHING_TEMPLATE);
+    registry.register(&RAISER_ARMOR_TRIM_SMITHING_TEMPLATE);
+    registry.register(&HOST_ARMOR_TRIM_SMITHING_TEMPLATE);
+    registry.register(&FLOW_ARMOR_TRIM_SMITHING_TEMPLATE);
+    registry.register(&BOLT_ARMOR_TRIM_SMITHING_TEMPLATE);
+    registry.register(&ANGLER_POTTERY_SHERD);
+    registry.register(&ARCHER_POTTERY_SHERD);
+    registry.register(&ARMS_UP_POTTERY_SHERD);
+    registry.register(&BLADE_POTTERY_SHERD);
+    registry.register(&BREWER_POTTERY_SHERD);
+    registry.register(&BURN_POTTERY_SHERD);
+    registry.register(&DANGER_POTTERY_SHERD);
+    registry.register(&EXPLORER_POTTERY_SHERD);
+    registry.register(&FLOW_POTTERY_SHERD);
+    registry.register(&FRIEND_POTTERY_SHERD);
+    registry.register(&GUSTER_POTTERY_SHERD);
+    registry.register(&HEART_POTTERY_SHERD);
+    registry.register(&HEARTBREAK_POTTERY_SHERD);
+    registry.register(&HOWL_POTTERY_SHERD);
+    registry.register(&MINER_POTTERY_SHERD);
+    registry.register(&MOURNER_POTTERY_SHERD);
+    registry.register(&PLENTY_POTTERY_SHERD);
+    registry.register(&PRIZE_POTTERY_SHERD);
+    registry.register(&SCRAPE_POTTERY_SHERD);
+    registry.register(&SHEAF_POTTERY_SHERD);
+    registry.register(&SHELTER_POTTERY_SHERD);
+    registry.register(&SKULL_POTTERY_SHERD);
+    registry.register(&SNORT_POTTERY_SHERD);
+    registry.register(&COPPER_GRATE);
+    registry.register(&EXPOSED_COPPER_GRATE);
+    registry.register(&WEATHERED_COPPER_GRATE);
+    registry.register(&OXIDIZED_COPPER_GRATE);
+    registry.register(&WAXED_COPPER_GRATE);
+    registry.register(&WAXED_EXPOSED_COPPER_GRATE);
+    registry.register(&WAXED_WEATHERED_COPPER_GRATE);
+    registry.register(&WAXED_OXIDIZED_COPPER_GRATE);
+    registry.register(&COPPER_BULB);
+    registry.register(&EXPOSED_COPPER_BULB);
+    registry.register(&WEATHERED_COPPER_BULB);
+    registry.register(&OXIDIZED_COPPER_BULB);
+    registry.register(&WAXED_COPPER_BULB);
+    registry.register(&WAXED_EXPOSED_COPPER_BULB);
+    registry.register(&WAXED_WEATHERED_COPPER_BULB);
+    registry.register(&WAXED_OXIDIZED_COPPER_BULB);
+    registry.register(&COPPER_CHEST);
+    registry.register(&EXPOSED_COPPER_CHEST);
+    registry.register(&WEATHERED_COPPER_CHEST);
+    registry.register(&OXIDIZED_COPPER_CHEST);
+    registry.register(&WAXED_COPPER_CHEST);
+    registry.register(&WAXED_EXPOSED_COPPER_CHEST);
+    registry.register(&WAXED_WEATHERED_COPPER_CHEST);
+    registry.register(&WAXED_OXIDIZED_COPPER_CHEST);
+    registry.register(&COPPER_GOLEM_STATUE);
+    registry.register(&EXPOSED_COPPER_GOLEM_STATUE);
+    registry.register(&WEATHERED_COPPER_GOLEM_STATUE);
+    registry.register(&OXIDIZED_COPPER_GOLEM_STATUE);
+    registry.register(&WAXED_COPPER_GOLEM_STATUE);
+    registry.register(&WAXED_EXPOSED_COPPER_GOLEM_STATUE);
+    registry.register(&WAXED_WEATHERED_COPPER_GOLEM_STATUE);
+    registry.register(&WAXED_OXIDIZED_COPPER_GOLEM_STATUE);
+    registry.register(&TRIAL_SPAWNER);
+    registry.register(&TRIAL_KEY);
+    registry.register(&OMINOUS_TRIAL_KEY);
+    registry.register(&VAULT);
+    registry.register(&OMINOUS_BOTTLE);
+}

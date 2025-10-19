@@ -3,16 +3,10 @@ use std::sync::LazyLock;
 use steel_registry::{
     blocks::blocks::BlockRegistry,
     data_components::{DataComponentMap, DataComponentRegistry, vanilla_components},
-    generated::vanilla_blocks,
+    generated::{vanilla_blocks, vanilla_items},
     items::items::{Item, ItemRegistry},
 };
 use steel_utils::ResourceLocation;
-
-static TEST_ITEM: LazyLock<Item> = LazyLock::new(|| Item {
-    key: ResourceLocation::vanilla_static("test_item"),
-    components: DataComponentMap::common_item_components()
-        .builder_set(vanilla_components::MAX_STACK_SIZE, Some(64)),
-});
 
 #[tokio::main]
 async fn main() {
@@ -20,16 +14,21 @@ async fn main() {
 
     let start = tokio::time::Instant::now();
     vanilla_blocks::register_blocks(&mut registry);
-    println!("Time taken: {:?}", start.elapsed());
     registry.freeze();
+    println!("Block registry loaded in: {:?}", start.elapsed());
 
     let mut data_component_registry = DataComponentRegistry::new();
     vanilla_components::register_vanilla_data_components(&mut data_component_registry);
     data_component_registry.freeze();
 
     let mut item_registry = ItemRegistry::new();
-    item_registry.register(&TEST_ITEM);
+    let start = tokio::time::Instant::now();
+    vanilla_items::register_items(&mut item_registry);
     item_registry.freeze();
+    println!("Item registry loaded in: {:?}", start.elapsed());
 
-    println!("Test item id: {:?}", item_registry.by_id(0));
+    println!(
+        "Test item id: {:?}",
+        item_registry.by_key(&ResourceLocation::vanilla_static("stone"))
+    );
 }

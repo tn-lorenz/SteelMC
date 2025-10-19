@@ -7,6 +7,16 @@ use crate::data_components::vanilla_components::{
     TOOLTIP_DISPLAY,
 };
 
+pub trait ComponentValue: std::fmt::Debug + Send + Sync {
+    fn as_any(&self) -> &dyn std::any::Any;
+}
+
+impl<T: 'static + Send + Sync + std::fmt::Debug> ComponentValue for T {
+    fn as_any(&self) -> &dyn std::any::Any {
+        self
+    }
+}
+
 //TODO: Implement codecs, also one for persistent storage and one for network.
 pub struct DataComponentType<T> {
     pub key: ResourceLocation,
@@ -55,7 +65,7 @@ impl DataComponentRegistry {
 
 #[derive(Debug)]
 pub struct DataComponentMap {
-    map: HashMap<ResourceLocation, Box<dyn std::any::Any + Send + Sync>>,
+    map: HashMap<ResourceLocation, Box<dyn ComponentValue>>,
 }
 
 impl DataComponentMap {
@@ -78,7 +88,7 @@ impl DataComponentMap {
             .builder_set(TOOLTIP_DISPLAY, Some(()))
     }
 
-    pub fn builder_set<T: 'static + Send + Sync>(
+    pub fn builder_set<T: 'static + ComponentValue>(
         mut self,
         component: &DataComponentType<T>,
         data: Option<T>,
@@ -87,7 +97,7 @@ impl DataComponentMap {
         self
     }
 
-    pub fn set<T: 'static + Send + Sync>(
+    pub fn set<T: 'static + ComponentValue>(
         &mut self,
         component: &DataComponentType<T>,
         data: Option<T>,
@@ -102,7 +112,7 @@ impl DataComponentMap {
     pub fn get<T: 'static>(&self, component: &DataComponentType<T>) -> Option<&T> {
         self.map
             .get(&component.key)
-            .and_then(|data| data.downcast_ref::<T>())
+            .and_then(|data| data.as_any().downcast_ref::<T>())
     }
 
     pub fn has<T: 'static>(&self, component: &DataComponentType<T>) -> bool {

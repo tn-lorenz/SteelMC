@@ -2,12 +2,28 @@ use std::collections::HashMap;
 
 use steel_utils::ResourceLocation;
 
-use crate::data_components::DataComponentMap;
+use crate::{blocks::blocks::BlockRef, data_components::DataComponentMap};
 
 #[derive(Debug)]
 pub struct Item {
     pub key: ResourceLocation,
     pub components: DataComponentMap,
+}
+
+impl Item {
+    pub fn from_block(block: BlockRef) -> Self {
+        Self {
+            key: block.key.clone(),
+            components: DataComponentMap::common_item_components(),
+        }
+    }
+
+    pub fn from_block_custom_name(block: BlockRef, name: &'static str) -> Self {
+        Self {
+            key: ResourceLocation::vanilla_static(name),
+            components: DataComponentMap::common_item_components(),
+        }
+    }
 }
 
 pub type ItemRef = &'static Item;
