@@ -328,7 +328,7 @@ pub(crate) fn build() -> TokenStream {
         let default_state = generate_default_state(block);
 
         stream.extend(quote! {
-            pub const #block_name: &'static Block = &Block::new(
+            pub const #block_name: &Block = &Block::new(
                 ResourceLocation::vanilla_static(#block_name_str),
                 BlockBehaviourProperties::new()#(#builder_calls)*,
                 &[
