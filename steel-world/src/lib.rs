@@ -1,6 +1,7 @@
 use std::sync::Arc;
 
-use steel_utils::{SteelRwLock, math::vector2::Vector2};
+use scc::{HashIndex, hash_index::OccupiedEntry};
+use steel_utils::{ChunkPos, SteelRwLock, math::vector2::Vector2};
 
 use crate::section::ChunkSections;
 
@@ -12,5 +13,13 @@ pub struct ChunkData {
 }
 
 pub struct Level {
-    pub chunks: papaya::HashMap<Vector2<i32>, Arc<SteelRwLock<ChunkData>>>,
+    pub chunks: HashIndex<ChunkPos, SteelRwLock<ChunkData>>,
+}
+
+impl Level {
+    pub fn new() -> Self {
+        Self {
+            chunks: HashIndex::new(),
+        }
+    }
 }

@@ -5,4 +5,4 @@ edition.workspace = true
 
 [dependencies]
 steel-utils = { path = "../steel-utils" }
-papaya.workspace = true
+scc.workspace = true

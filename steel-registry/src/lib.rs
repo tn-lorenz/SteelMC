@@ -9,3 +9,4 @@
 pub mod blocks;
 pub mod data_components;
 pub mod generated;
+pub mod items;

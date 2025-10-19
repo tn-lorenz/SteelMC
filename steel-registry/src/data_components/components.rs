@@ -2,6 +2,11 @@ use std::{collections::HashMap, marker::PhantomData};
 
 use steel_utils::ResourceLocation;
 
+use crate::data_components::vanilla_components::{
+    ATTRIBUTE_MODIFIERS, BREAK_SOUND, ENCHANTMENTS, LORE, MAX_STACK_SIZE, RARITY, REPAIR_COST,
+    TOOLTIP_DISPLAY,
+};
+
 //TODO: Implement codecs, also one for persistent storage and one for network.
 pub struct DataComponentType<T> {
     pub key: ResourceLocation,
@@ -48,8 +53,9 @@ impl DataComponentRegistry {
     }
 }
 
+#[derive(Debug)]
 pub struct DataComponentMap {
-    map: HashMap<ResourceLocation, Box<dyn std::any::Any>>,
+    map: HashMap<ResourceLocation, Box<dyn std::any::Any + Send + Sync>>,
 }
 
 impl DataComponentMap {
@@ -59,7 +65,33 @@ impl DataComponentMap {
         }
     }
 
-    pub fn set<T: 'static>(&mut self, component: &DataComponentType<T>, data: Option<T>) {
+    pub fn common_item_components() -> Self {
+        //TODO: Some components stil have todo values, we should implement them
+        Self::new()
+            .builder_set(MAX_STACK_SIZE, Some(64))
+            .builder_set(LORE, Some(()))
+            .builder_set(ENCHANTMENTS, Some(()))
+            .builder_set(REPAIR_COST, Some(0))
+            .builder_set(ATTRIBUTE_MODIFIERS, Some(()))
+            .builder_set(RARITY, Some(()))
+            .builder_set(BREAK_SOUND, Some(()))
+            .builder_set(TOOLTIP_DISPLAY, Some(()))
+    }
+
+    pub fn builder_set<T: 'static + Send + Sync>(
+        mut self,
+        component: &DataComponentType<T>,
+        data: Option<T>,
+    ) -> Self {
+        self.set(component, data);
+        self
+    }
+
+    pub fn set<T: 'static + Send + Sync>(
+        &mut self,
+        component: &DataComponentType<T>,
+        data: Option<T>,
+    ) {
         if let Some(data) = data {
             self.map.insert(component.key.clone(), Box::new(data));
         } else {

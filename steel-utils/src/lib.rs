@@ -43,9 +43,11 @@ impl<T> SteelRwLock<T> {
 pub struct BlockStateId(pub u16);
 
 // A chunk position.
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Hash)]
 pub struct ChunkPos(pub Vector2<i32>);
 
 // A block position.
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Hash)]
 pub struct BlockPos(pub Vector3<i32>);
 
 #[derive(Debug, Clone, PartialEq, Eq, Hash)]
