@@ -96,11 +96,11 @@ pub struct BlockAssets {
 /// Converts a push reaction string to a TokenStream representing the enum variant
 fn push_reaction_to_tokens(reaction: &str) -> TokenStream {
     match reaction {
-        "NORMAL" => quote! { crate::blocks::behaviour::PushReaction::Normal },
-        "DESTROY" => quote! { crate::blocks::behaviour::PushReaction::Destroy },
-        "BLOCK" => quote! { crate::blocks::behaviour::PushReaction::Block },
-        "IGNORE" => quote! { crate::blocks::behaviour::PushReaction::Ignore },
-        "PUSH_ONLY" => quote! { crate::blocks::behaviour::PushReaction::PushOnly },
+        "NORMAL" => quote! { PushReaction::Normal },
+        "DESTROY" => quote! { PushReaction::Destroy },
+        "BLOCK" => quote! { PushReaction::Block },
+        "IGNORE" => quote! { PushReaction::Ignore },
+        "PUSH_ONLY" => quote! { PushReaction::PushOnly },
         _ => panic!("Unknown push reaction: {}", reaction),
     }
 }
@@ -108,33 +108,33 @@ fn push_reaction_to_tokens(reaction: &str) -> TokenStream {
 /// Converts an instrument string to a TokenStream representing the enum variant
 fn instrument_to_tokens(instrument: &str) -> TokenStream {
     match instrument.to_uppercase().as_str() {
-        "HARP" => quote! { crate::blocks::properties::NoteBlockInstrument::Harp },
-        "BASEDRUM" => quote! { crate::blocks::properties::NoteBlockInstrument::Basedrum },
-        "SNARE" => quote! { crate::blocks::properties::NoteBlockInstrument::Snare },
-        "HAT" => quote! { crate::blocks::properties::NoteBlockInstrument::Hat },
-        "BASS" => quote! { crate::blocks::properties::NoteBlockInstrument::Bass },
-        "FLUTE" => quote! { crate::blocks::properties::NoteBlockInstrument::Flute },
-        "BELL" => quote! { crate::blocks::properties::NoteBlockInstrument::Bell },
-        "GUITAR" => quote! { crate::blocks::properties::NoteBlockInstrument::Guitar },
-        "CHIME" => quote! { crate::blocks::properties::NoteBlockInstrument::Chime },
-        "XYLOPHONE" => quote! { crate::blocks::properties::NoteBlockInstrument::Xylophone },
+        "HARP" => quote! { NoteBlockInstrument::Harp },
+        "BASEDRUM" => quote! { NoteBlockInstrument::Basedrum },
+        "SNARE" => quote! { NoteBlockInstrument::Snare },
+        "HAT" => quote! { NoteBlockInstrument::Hat },
+        "BASS" => quote! { NoteBlockInstrument::Bass },
+        "FLUTE" => quote! { NoteBlockInstrument::Flute },
+        "BELL" => quote! { NoteBlockInstrument::Bell },
+        "GUITAR" => quote! { NoteBlockInstrument::Guitar },
+        "CHIME" => quote! { NoteBlockInstrument::Chime },
+        "XYLOPHONE" => quote! { NoteBlockInstrument::Xylophone },
         "IRON_XYLOPHONE" => {
-            quote! { crate::blocks::properties::NoteBlockInstrument::IronXylophone }
+            quote! { NoteBlockInstrument::IronXylophone }
         }
-        "COW_BELL" => quote! { crate::blocks::properties::NoteBlockInstrument::CowBell },
-        "DIDGERIDOO" => quote! { crate::blocks::properties::NoteBlockInstrument::Didgeridoo },
-        "BIT" => quote! { crate::blocks::properties::NoteBlockInstrument::Bit },
-        "BANJO" => quote! { crate::blocks::properties::NoteBlockInstrument::Banjo },
-        "PLING" => quote! { crate::blocks::properties::NoteBlockInstrument::Pling },
-        "ZOMBIE" => quote! { crate::blocks::properties::NoteBlockInstrument::Zombie },
-        "SKELETON" => quote! { crate::blocks::properties::NoteBlockInstrument::Skeleton },
-        "CREEPER" => quote! { crate::blocks::properties::NoteBlockInstrument::Creeper },
-        "DRAGON" => quote! { crate::blocks::properties::NoteBlockInstrument::Dragon },
+        "COW_BELL" => quote! { NoteBlockInstrument::CowBell },
+        "DIDGERIDOO" => quote! { NoteBlockInstrument::Didgeridoo },
+        "BIT" => quote! { NoteBlockInstrument::Bit },
+        "BANJO" => quote! { NoteBlockInstrument::Banjo },
+        "PLING" => quote! { NoteBlockInstrument::Pling },
+        "ZOMBIE" => quote! { NoteBlockInstrument::Zombie },
+        "SKELETON" => quote! { NoteBlockInstrument::Skeleton },
+        "CREEPER" => quote! { NoteBlockInstrument::Creeper },
+        "DRAGON" => quote! { NoteBlockInstrument::Dragon },
         "WITHER_SKELETON" => {
-            quote! { crate::blocks::properties::NoteBlockInstrument::WitherSkeleton }
+            quote! { NoteBlockInstrument::WitherSkeleton }
         }
-        "PIGLIN" => quote! { crate::blocks::properties::NoteBlockInstrument::Piglin },
-        "CUSTOM_HEAD" => quote! { crate::blocks::properties::NoteBlockInstrument::CustomHead },
+        "PIGLIN" => quote! { NoteBlockInstrument::Piglin },
+        "CUSTOM_HEAD" => quote! { NoteBlockInstrument::CustomHead },
         _ => panic!("Unknown instrument: {}", instrument),
     }
 }
@@ -266,7 +266,7 @@ fn generate_default_state(block: &Block) -> TokenStream {
                     let variant_ident =
                         Ident::new(&variant_name.to_upper_camel_case(), Span::call_site());
 
-                    quote! { BlockStateProperties::#property_ident.get_internal_index_const(&crate::blocks::properties::#enum_type_ident::#variant_ident) }
+                    quote! { BlockStateProperties::#property_ident.get_internal_index_const(&properties::#enum_type_ident::#variant_ident) }
                 } else {
                     // Fallback if format is unexpected
                     quote! { 0 }
@@ -283,7 +283,7 @@ fn generate_default_state(block: &Block) -> TokenStream {
         .collect::<Vec<_>>();
 
     quote! {
-        .with_default_state(crate::blocks::blocks::offset!(
+        .with_default_state(offset!(
             #(#property_values),*
         ))
     }
@@ -298,8 +298,8 @@ pub(crate) fn build() -> TokenStream {
 
     stream.extend(quote! {
         use crate::{
-            blocks::{behaviour::BlockBehaviourProperties, blocks::Block, blocks::BlockRegistry},
-            blocks::properties::BlockStateProperties,
+            blocks::{behaviour::{BlockBehaviourProperties, PushReaction}, blocks::{Block, offset}, blocks::BlockRegistry},
+            blocks::properties::{self, BlockStateProperties, NoteBlockInstrument}
         };
         use steel_utils::ResourceLocation;
     });

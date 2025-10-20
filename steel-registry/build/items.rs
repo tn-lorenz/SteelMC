@@ -92,8 +92,8 @@ pub(crate) fn build() -> TokenStream {
     stream.extend(quote! {
         use crate::{
             data_components::{vanilla_components, DataComponentMap},
-            generated::vanilla_blocks,
-            items::items::{Item, ItemRegistry, ItemRef},
+            vanilla_blocks,
+            items::items::{Item, ItemRegistry},
         };
         use steel_utils::ResourceLocation;
         use std::sync::LazyLock;

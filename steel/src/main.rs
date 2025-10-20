@@ -3,8 +3,8 @@ use std::sync::LazyLock;
 use steel_registry::{
     blocks::blocks::BlockRegistry,
     data_components::{DataComponentMap, DataComponentRegistry, vanilla_components},
-    generated::{vanilla_blocks, vanilla_items},
     items::items::{Item, ItemRegistry},
+    vanilla_blocks, vanilla_items,
 };
 use steel_utils::ResourceLocation;
 

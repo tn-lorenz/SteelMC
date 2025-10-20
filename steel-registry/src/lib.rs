@@ -8,5 +8,12 @@
 #![allow(internal_features)]
 pub mod blocks;
 pub mod data_components;
-pub mod generated;
 pub mod items;
+
+//#[rustfmt::skip]
+#[path = "generated/vanilla_blocks.rs"]
+pub mod vanilla_blocks;
+
+//#[rustfmt::skip]
+#[path = "generated/vanilla_items.rs"]
+pub mod vanilla_items;

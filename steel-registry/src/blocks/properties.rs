@@ -15,7 +15,7 @@ pub trait DynProperty: Debug {
     fn get_name(&self) -> &'static str;
 }
 
-pub trait Enum {
+pub trait PropertyEnum: PartialEq + Clone + Debug {
     fn as_str(&self) -> &str;
 }
 
@@ -82,10 +82,10 @@ impl BoolProperty {
     }
 }
 
-// Instead of million heap allocs we just use 41 bytes of static mem :)
-const NUM_STR: [&str; 25] = [
-    "1", "2", "3", "4", "5", "6", "7", "8", "9", "10", "11", "12", "13", "14", "15", "16", "17",
-    "18", "19", "20", "21", "22", "23", "24", "25",
+// Instead of million heap allocs we just use 42 bytes of static mem :)
+const NUM_STR: [&str; 26] = [
+    "0", "1", "2", "3", "4", "5", "6", "7", "8", "9", "10", "11", "12", "13", "14", "15", "16",
+    "17", "18", "19", "20", "21", "22", "23", "24", "25",
 ];
 
 #[derive(Debug, Clone)]
@@ -155,12 +155,12 @@ impl IntProperty {
 }
 
 #[derive(Debug, Clone)]
-pub struct EnumProperty<T: Enum + PartialEq + Clone + Debug + 'static> {
+pub struct EnumProperty<T: PropertyEnum + 'static> {
     pub name: &'static str,
     pub possible_values: &'static [T],
 }
 
-impl<T: Enum + PartialEq + Clone + Debug + 'static> DynProperty for EnumProperty<T> {
+impl<T: PropertyEnum + 'static> DynProperty for EnumProperty<T> {
     fn get_possible_values(&self) -> Box<[&str]> {
         self.possible_values.iter().map(|v| v.as_str()).collect()
     }
@@ -170,7 +170,7 @@ impl<T: Enum + PartialEq + Clone + Debug + 'static> DynProperty for EnumProperty
     }
 }
 
-impl<T: Enum + PartialEq + Clone + Debug> EnumProperty<T> {
+impl<T: PropertyEnum> EnumProperty<T> {
     pub const fn new(name: &'static str, possible_values: &'static [T]) -> Self {
         Self {
             name,
@@ -183,7 +183,7 @@ impl<T: Enum + PartialEq + Clone + Debug> EnumProperty<T> {
     }
 }
 
-impl<T: Enum + PartialEq + Clone + Debug> Property<T> for EnumProperty<T> {
+impl<T: PropertyEnum> Property<T> for EnumProperty<T> {
     fn get_value(&self, value: &str) -> Option<T> {
         self.possible_values
             .iter()
@@ -211,7 +211,7 @@ impl<T: Enum + PartialEq + Clone + Debug> Property<T> for EnumProperty<T> {
     }
 }
 
-impl<T: const PartialEq + Clone + Debug + Enum + 'static> EnumProperty<T> {
+impl<T: const PartialEq + PropertyEnum + 'static> EnumProperty<T> {
     pub const fn get_internal_index_const(&self, value: &T) -> usize {
         let mut i = 0;
         while i < self.possible_values.len() {
@@ -235,7 +235,7 @@ pub enum Direction {
     East,
 }
 
-impl Enum for Direction {
+impl PropertyEnum for Direction {
     fn as_str(&self) -> &str {
         match self {
             Direction::Down => "down",
@@ -266,7 +266,7 @@ pub enum FrontAndTop {
     SouthWest,
 }
 
-impl Enum for FrontAndTop {
+impl PropertyEnum for FrontAndTop {
     fn as_str(&self) -> &str {
         match self {
             FrontAndTop::NorthUp => "north_up",
@@ -293,7 +293,7 @@ pub enum AttachFace {
     Ceiling,
 }
 
-impl Enum for AttachFace {
+impl PropertyEnum for AttachFace {
     fn as_str(&self) -> &str {
         match self {
             AttachFace::Floor => "floor",
@@ -312,7 +312,7 @@ pub enum BellAttachType {
     DoubleWall,
 }
 
-impl Enum for BellAttachType {
+impl PropertyEnum for BellAttachType {
     fn as_str(&self) -> &str {
         match self {
             BellAttachType::Floor => "floor",
@@ -331,7 +331,7 @@ pub enum WallSide {
     Tall,
 }
 
-impl Enum for WallSide {
+impl PropertyEnum for WallSide {
     fn as_str(&self) -> &str {
         match self {
             WallSide::None => "none",
@@ -349,7 +349,7 @@ pub enum RedstoneSide {
     None,
 }
 
-impl Enum for RedstoneSide {
+impl PropertyEnum for RedstoneSide {
     fn as_str(&self) -> &str {
         match self {
             RedstoneSide::None => "none",
@@ -366,7 +366,7 @@ pub enum DoubleBlockHalf {
     Lower,
 }
 
-impl Enum for DoubleBlockHalf {
+impl PropertyEnum for DoubleBlockHalf {
     fn as_str(&self) -> &str {
         match self {
             DoubleBlockHalf::Upper => "upper",
@@ -382,7 +382,7 @@ pub enum Half {
     Bottom,
 }
 
-impl Enum for Half {
+impl PropertyEnum for Half {
     fn as_str(&self) -> &str {
         match self {
             Half::Top => "top",
@@ -400,7 +400,7 @@ pub enum SideChainPart {
     Left,
 }
 
-impl Enum for SideChainPart {
+impl PropertyEnum for SideChainPart {
     fn as_str(&self) -> &str {
         match self {
             SideChainPart::Unconnected => "unconnected",
@@ -426,7 +426,7 @@ pub enum RailShape {
     NorthEast,
 }
 
-impl Enum for RailShape {
+impl PropertyEnum for RailShape {
     fn as_str(&self) -> &str {
         match self {
             RailShape::NorthSouth => "north_south",
@@ -450,7 +450,7 @@ pub enum BedPart {
     Foot,
 }
 
-impl Enum for BedPart {
+impl PropertyEnum for BedPart {
     fn as_str(&self) -> &str {
         match self {
             BedPart::Head => "head",
@@ -467,7 +467,7 @@ pub enum ChestType {
     Right,
 }
 
-impl Enum for ChestType {
+impl PropertyEnum for ChestType {
     fn as_str(&self) -> &str {
         match self {
             ChestType::Single => "single",
@@ -484,7 +484,7 @@ pub enum ComparatorMode {
     Subtract,
 }
 
-impl Enum for ComparatorMode {
+impl PropertyEnum for ComparatorMode {
     fn as_str(&self) -> &str {
         match self {
             ComparatorMode::Compare => "compare",
@@ -500,7 +500,7 @@ pub enum DoorHingeSide {
     Right,
 }
 
-impl Enum for DoorHingeSide {
+impl PropertyEnum for DoorHingeSide {
     fn as_str(&self) -> &str {
         match self {
             DoorHingeSide::Left => "left",
@@ -537,7 +537,7 @@ pub enum NoteBlockInstrument {
     CustomHead,
 }
 
-impl Enum for NoteBlockInstrument {
+impl PropertyEnum for NoteBlockInstrument {
     fn as_str(&self) -> &str {
         match self {
             NoteBlockInstrument::Harp => "harp",
@@ -574,7 +574,7 @@ pub enum PistonType {
     Sticky,
 }
 
-impl Enum for PistonType {
+impl PropertyEnum for PistonType {
     fn as_str(&self) -> &str {
         match self {
             PistonType::Normal => "normal",
@@ -591,7 +591,7 @@ pub enum SlabType {
     Double,
 }
 
-impl Enum for SlabType {
+impl PropertyEnum for SlabType {
     fn as_str(&self) -> &str {
         match self {
             SlabType::Bottom => "bottom",
@@ -611,7 +611,7 @@ pub enum StairsShape {
     OuterRight,
 }
 
-impl Enum for StairsShape {
+impl PropertyEnum for StairsShape {
     fn as_str(&self) -> &str {
         match self {
             StairsShape::Straight => "straight",
@@ -632,7 +632,7 @@ pub enum StructureMode {
     Data,
 }
 
-impl Enum for StructureMode {
+impl PropertyEnum for StructureMode {
     fn as_str(&self) -> &str {
         match self {
             StructureMode::Save => "save",
@@ -651,7 +651,7 @@ pub enum BambooLeaves {
     Large,
 }
 
-impl Enum for BambooLeaves {
+impl PropertyEnum for BambooLeaves {
     fn as_str(&self) -> &str {
         match self {
             BambooLeaves::None => "none",
@@ -670,7 +670,7 @@ pub enum Tilt {
     Full,
 }
 
-impl Enum for Tilt {
+impl PropertyEnum for Tilt {
     fn as_str(&self) -> &str {
         match self {
             Tilt::None => "none",
@@ -691,7 +691,7 @@ pub enum DripstoneThickness {
     Base,
 }
 
-impl Enum for DripstoneThickness {
+impl PropertyEnum for DripstoneThickness {
     fn as_str(&self) -> &str {
         match self {
             DripstoneThickness::TipMerge => "tip_merge",
@@ -711,7 +711,7 @@ pub enum SculkSensorPhase {
     Cooldown,
 }
 
-impl Enum for SculkSensorPhase {
+impl PropertyEnum for SculkSensorPhase {
     fn as_str(&self) -> &str {
         match self {
             SculkSensorPhase::Inactive => "inactive",
@@ -732,7 +732,7 @@ pub enum TrialSpawnerState {
     Cooldown,
 }
 
-impl Enum for TrialSpawnerState {
+impl PropertyEnum for TrialSpawnerState {
     fn as_str(&self) -> &str {
         match self {
             TrialSpawnerState::Inactive => "inactive",
@@ -754,7 +754,7 @@ pub enum VaultState {
     Ejecting,
 }
 
-impl Enum for VaultState {
+impl PropertyEnum for VaultState {
     fn as_str(&self) -> &str {
         match self {
             VaultState::Inactive => "inactive",
@@ -773,7 +773,7 @@ pub enum CreakingHeartState {
     Awake,
 }
 
-impl Enum for CreakingHeartState {
+impl PropertyEnum for CreakingHeartState {
     fn as_str(&self) -> &str {
         match self {
             CreakingHeartState::Uprooted => "uprooted",
@@ -792,7 +792,7 @@ pub enum TestBlockMode {
     Accept,
 }
 
-impl Enum for TestBlockMode {
+impl PropertyEnum for TestBlockMode {
     fn as_str(&self) -> &str {
         match self {
             TestBlockMode::Start => "start",
@@ -812,7 +812,7 @@ pub enum Pose {
     Star,
 }
 
-impl Enum for Pose {
+impl PropertyEnum for Pose {
     fn as_str(&self) -> &str {
         match self {
             Pose::Standing => "standing",
@@ -823,7 +823,7 @@ impl Enum for Pose {
     }
 }
 
-impl Enum for Axis {
+impl PropertyEnum for Axis {
     fn as_str(&self) -> &str {
         self.as_str()
     }

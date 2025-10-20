@@ -143,9 +143,7 @@ impl BlockRegistry {
     }
 
     pub fn by_state_id(&self, state_id: BlockStateId) -> Option<BlockRef> {
-        self.state_to_block_lookup
-            .get(state_id.0 as usize)
-            .copied()
+        self.state_to_block_lookup.get(state_id.0 as usize).copied()
     }
 
     // Retrieves a block by its name.
@@ -177,7 +175,7 @@ impl BlockRegistry {
             let current_index = (index % count) as usize;
 
             let possible_values = prop.get_possible_values();
-            property_values.push((prop.get_name(), possible_values[current_index].clone()));
+            property_values.push((prop.get_name(), possible_values[current_index]));
 
             index /= count;
         }

@@ -54,13 +54,13 @@ impl ItemRegistry {
 
         let id = self.items_by_id.len();
         self.items_by_key.insert(item.key.clone(), id);
-        self.items_by_id.push(&item);
+        self.items_by_id.push(item);
 
         id
     }
 
     pub fn by_id(&self, id: usize) -> Option<ItemRef> {
-        self.items_by_id.get(id).map(|i| *i)
+        self.items_by_id.get(id).copied()
     }
 
     pub fn get_id(&self, item: ItemRef) -> &usize {
