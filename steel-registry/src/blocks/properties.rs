@@ -4,22 +4,26 @@ pub use steel_utils::math::vector3::Axis;
 
 pub trait Property<T> {
     fn get_value(&self, value: &str) -> Option<T>;
-    fn get_possible_values(&self) -> Vec<T>;
+    fn get_possible_values(&self) -> Box<[T]>;
     fn get_internal_index(&self, value: &T) -> usize;
     fn value_from_index(&self, index: usize) -> T;
     fn as_dyn(&self) -> &dyn DynProperty;
 }
 
 pub trait DynProperty: Debug {
-    fn get_possible_values(&self) -> Vec<String>;
+    fn get_possible_values(&self) -> Box<[&str]>;
     fn get_name(&self) -> &'static str;
 }
 
+pub trait PropertyEnum: PartialEq + Clone + Debug {
+    fn as_str(&self) -> &str;
+}
+
 #[derive(Debug, Clone)]
-pub struct BooleanProperty {
+pub struct BoolProperty {
     pub name: &'static str,
 }
-impl BooleanProperty {
+impl BoolProperty {
     pub const fn new(name: &'static str) -> Self {
         Self { name }
     }
@@ -30,13 +34,13 @@ impl BooleanProperty {
 
     /// Convert a boolean value to its internal index (true=0, false=1 for Java compatibility)
     pub const fn index_of(&self, value: bool) -> usize {
-        if value { 0 } else { 1 }
+        !value as usize
     }
 }
 
-impl DynProperty for BooleanProperty {
-    fn get_possible_values(&self) -> Vec<String> {
-        vec!["true".to_string(), "false".to_string()]
+impl DynProperty for BoolProperty {
+    fn get_possible_values(&self) -> Box<[&str]> {
+        ["true", "false"].into()
     }
 
     fn get_name(&self) -> &'static str {
@@ -44,7 +48,7 @@ impl DynProperty for BooleanProperty {
     }
 }
 
-impl Property<bool> for BooleanProperty {
+impl Property<bool> for BoolProperty {
     fn get_value(&self, value: &str) -> Option<bool> {
         if value == "true" {
             Some(true)
@@ -55,8 +59,8 @@ impl Property<bool> for BooleanProperty {
         }
     }
 
-    fn get_possible_values(&self) -> Vec<bool> {
-        vec![true, false]
+    fn get_possible_values(&self) -> Box<[bool]> {
+        [true, false].into()
     }
 
     fn get_internal_index(&self, value: &bool) -> usize {
@@ -72,11 +76,17 @@ impl Property<bool> for BooleanProperty {
     }
 }
 
-impl BooleanProperty {
+impl BoolProperty {
     pub const fn get_internal_index_const(self, value: bool) -> usize {
         if value { 0 } else { 1 }
     }
 }
+
+// Instead of million heap allocs we just use 42 bytes of static mem :)
+const NUM_STR: [&str; 26] = [
+    "0", "1", "2", "3", "4", "5", "6", "7", "8", "9", "10", "11", "12", "13", "14", "15", "16",
+    "17", "18", "19", "20", "21", "22", "23", "24", "25",
+];
 
 #[derive(Debug, Clone)]
 pub struct IntProperty {
@@ -96,8 +106,8 @@ impl IntProperty {
 }
 
 impl DynProperty for IntProperty {
-    fn get_possible_values(&self) -> Vec<String> {
-        (self.min..=self.max).map(|v| v.to_string()).collect()
+    fn get_possible_values(&self) -> Box<[&str]> {
+        (self.min..=self.max).map(|v| NUM_STR[v as usize]).collect()
     }
 
     fn get_name(&self) -> &'static str {
@@ -113,16 +123,16 @@ impl Property<u8> for IntProperty {
             .filter(|v| v >= &self.min && v <= &self.max)
     }
 
-    fn get_possible_values(&self) -> Vec<u8> {
+    fn get_possible_values(&self) -> Box<[u8]> {
         (self.min..=self.max).collect()
     }
 
     fn get_internal_index(&self, value: &u8) -> usize {
-        return if *value <= self.max {
+        if *value <= self.max {
             (*value - self.min) as usize
         } else {
             0
-        };
+        }
     }
 
     fn value_from_index(&self, index: usize) -> u8 {
@@ -136,23 +146,23 @@ impl Property<u8> for IntProperty {
 
 impl IntProperty {
     pub const fn get_internal_index_const(self, value: &u8) -> usize {
-        return if *value <= self.max {
+        if *value <= self.max {
             (*value - self.min) as usize
         } else {
             0
-        };
+        }
     }
 }
 
 #[derive(Debug, Clone)]
-pub struct EnumProperty<T: ToString + PartialEq + Clone + Debug + 'static> {
+pub struct EnumProperty<T: PropertyEnum + 'static> {
     pub name: &'static str,
     pub possible_values: &'static [T],
 }
 
-impl<T: ToString + PartialEq + Clone + Debug + 'static> DynProperty for EnumProperty<T> {
-    fn get_possible_values(&self) -> Vec<String> {
-        self.possible_values.iter().map(|v| v.to_string()).collect()
+impl<T: PropertyEnum + 'static> DynProperty for EnumProperty<T> {
+    fn get_possible_values(&self) -> Box<[&str]> {
+        self.possible_values.iter().map(|v| v.as_str()).collect()
     }
 
     fn get_name(&self) -> &'static str {
@@ -160,7 +170,7 @@ impl<T: ToString + PartialEq + Clone + Debug + 'static> DynProperty for EnumProp
     }
 }
 
-impl<T: ToString + PartialEq + Clone + Debug> EnumProperty<T> {
+impl<T: PropertyEnum> EnumProperty<T> {
     pub const fn new(name: &'static str, possible_values: &'static [T]) -> Self {
         Self {
             name,
@@ -173,16 +183,16 @@ impl<T: ToString + PartialEq + Clone + Debug> EnumProperty<T> {
     }
 }
 
-impl<T: ToString + PartialEq + Clone + Debug> Property<T> for EnumProperty<T> {
+impl<T: PropertyEnum> Property<T> for EnumProperty<T> {
     fn get_value(&self, value: &str) -> Option<T> {
         self.possible_values
             .iter()
-            .find(|v| v.to_string() == value)
+            .find(|v| v.as_str() == value)
             .cloned()
     }
 
-    fn get_possible_values(&self) -> Vec<T> {
-        self.possible_values.to_vec()
+    fn get_possible_values(&self) -> Box<[T]> {
+        self.possible_values.into()
     }
 
     fn get_internal_index(&self, value: &T) -> usize {
@@ -201,7 +211,7 @@ impl<T: ToString + PartialEq + Clone + Debug> Property<T> for EnumProperty<T> {
     }
 }
 
-impl<T: const PartialEq + Clone + Debug + ToString + 'static> EnumProperty<T> {
+impl<T: const PartialEq + PropertyEnum + 'static> EnumProperty<T> {
     pub const fn get_internal_index_const(&self, value: &T) -> usize {
         let mut i = 0;
         while i < self.possible_values.len() {
@@ -225,15 +235,15 @@ pub enum Direction {
     East,
 }
 
-impl ToString for Direction {
-    fn to_string(&self) -> String {
+impl PropertyEnum for Direction {
+    fn as_str(&self) -> &str {
         match self {
-            Direction::Down => "down".to_string(),
-            Direction::Up => "up".to_string(),
-            Direction::North => "north".to_string(),
-            Direction::South => "south".to_string(),
-            Direction::West => "west".to_string(),
-            Direction::East => "east".to_string(),
+            Direction::Down => "down",
+            Direction::Up => "up",
+            Direction::North => "north",
+            Direction::South => "south",
+            Direction::West => "west",
+            Direction::East => "east",
         }
     }
 }
@@ -256,21 +266,21 @@ pub enum FrontAndTop {
     SouthWest,
 }
 
-impl ToString for FrontAndTop {
-    fn to_string(&self) -> String {
+impl PropertyEnum for FrontAndTop {
+    fn as_str(&self) -> &str {
         match self {
-            FrontAndTop::NorthUp => "north_up".to_string(),
-            FrontAndTop::EastUp => "east_up".to_string(),
-            FrontAndTop::SouthUp => "south_up".to_string(),
-            FrontAndTop::WestUp => "west_up".to_string(),
-            FrontAndTop::UpNorth => "up_north".to_string(),
-            FrontAndTop::UpEast => "up_east".to_string(),
-            FrontAndTop::UpSouth => "up_south".to_string(),
-            FrontAndTop::UpWest => "up_west".to_string(),
-            FrontAndTop::NorthEast => "north_east".to_string(),
-            FrontAndTop::NorthWest => "north_west".to_string(),
-            FrontAndTop::SouthEast => "south_east".to_string(),
-            FrontAndTop::SouthWest => "south_west".to_string(),
+            FrontAndTop::NorthUp => "north_up",
+            FrontAndTop::EastUp => "east_up",
+            FrontAndTop::SouthUp => "south_up",
+            FrontAndTop::WestUp => "west_up",
+            FrontAndTop::UpNorth => "up_north",
+            FrontAndTop::UpEast => "up_east",
+            FrontAndTop::UpSouth => "up_south",
+            FrontAndTop::UpWest => "up_west",
+            FrontAndTop::NorthEast => "north_east",
+            FrontAndTop::NorthWest => "north_west",
+            FrontAndTop::SouthEast => "south_east",
+            FrontAndTop::SouthWest => "south_west",
         }
     }
 }
@@ -283,12 +293,12 @@ pub enum AttachFace {
     Ceiling,
 }
 
-impl ToString for AttachFace {
-    fn to_string(&self) -> String {
+impl PropertyEnum for AttachFace {
+    fn as_str(&self) -> &str {
         match self {
-            AttachFace::Floor => "floor".to_string(),
-            AttachFace::Wall => "wall".to_string(),
-            AttachFace::Ceiling => "ceiling".to_string(),
+            AttachFace::Floor => "floor",
+            AttachFace::Wall => "wall",
+            AttachFace::Ceiling => "ceiling",
         }
     }
 }
@@ -302,13 +312,13 @@ pub enum BellAttachType {
     DoubleWall,
 }
 
-impl ToString for BellAttachType {
-    fn to_string(&self) -> String {
+impl PropertyEnum for BellAttachType {
+    fn as_str(&self) -> &str {
         match self {
-            BellAttachType::Floor => "floor".to_string(),
-            BellAttachType::Ceiling => "ceiling".to_string(),
-            BellAttachType::SingleWall => "single_wall".to_string(),
-            BellAttachType::DoubleWall => "double_wall".to_string(),
+            BellAttachType::Floor => "floor",
+            BellAttachType::Ceiling => "ceiling",
+            BellAttachType::SingleWall => "single_wall",
+            BellAttachType::DoubleWall => "double_wall",
         }
     }
 }
@@ -321,12 +331,12 @@ pub enum WallSide {
     Tall,
 }
 
-impl ToString for WallSide {
-    fn to_string(&self) -> String {
+impl PropertyEnum for WallSide {
+    fn as_str(&self) -> &str {
         match self {
-            WallSide::None => "none".to_string(),
-            WallSide::Low => "low".to_string(),
-            WallSide::Tall => "tall".to_string(),
+            WallSide::None => "none",
+            WallSide::Low => "low",
+            WallSide::Tall => "tall",
         }
     }
 }
@@ -339,12 +349,12 @@ pub enum RedstoneSide {
     None,
 }
 
-impl ToString for RedstoneSide {
-    fn to_string(&self) -> String {
+impl PropertyEnum for RedstoneSide {
+    fn as_str(&self) -> &str {
         match self {
-            RedstoneSide::None => "none".to_string(),
-            RedstoneSide::Side => "side".to_string(),
-            RedstoneSide::Up => "up".to_string(),
+            RedstoneSide::None => "none",
+            RedstoneSide::Side => "side",
+            RedstoneSide::Up => "up",
         }
     }
 }
@@ -356,11 +366,11 @@ pub enum DoubleBlockHalf {
     Lower,
 }
 
-impl ToString for DoubleBlockHalf {
-    fn to_string(&self) -> String {
+impl PropertyEnum for DoubleBlockHalf {
+    fn as_str(&self) -> &str {
         match self {
-            DoubleBlockHalf::Upper => "upper".to_string(),
-            DoubleBlockHalf::Lower => "lower".to_string(),
+            DoubleBlockHalf::Upper => "upper",
+            DoubleBlockHalf::Lower => "lower",
         }
     }
 }
@@ -372,11 +382,11 @@ pub enum Half {
     Bottom,
 }
 
-impl ToString for Half {
-    fn to_string(&self) -> String {
+impl PropertyEnum for Half {
+    fn as_str(&self) -> &str {
         match self {
-            Half::Top => "top".to_string(),
-            Half::Bottom => "bottom".to_string(),
+            Half::Top => "top",
+            Half::Bottom => "bottom",
         }
     }
 }
@@ -390,13 +400,13 @@ pub enum SideChainPart {
     Left,
 }
 
-impl ToString for SideChainPart {
-    fn to_string(&self) -> String {
+impl PropertyEnum for SideChainPart {
+    fn as_str(&self) -> &str {
         match self {
-            SideChainPart::Unconnected => "unconnected".to_string(),
-            SideChainPart::Right => "right".to_string(),
-            SideChainPart::Center => "center".to_string(),
-            SideChainPart::Left => "left".to_string(),
+            SideChainPart::Unconnected => "unconnected",
+            SideChainPart::Right => "right",
+            SideChainPart::Center => "center",
+            SideChainPart::Left => "left",
         }
     }
 }
@@ -416,19 +426,19 @@ pub enum RailShape {
     NorthEast,
 }
 
-impl ToString for RailShape {
-    fn to_string(&self) -> String {
+impl PropertyEnum for RailShape {
+    fn as_str(&self) -> &str {
         match self {
-            RailShape::NorthSouth => "north_south".to_string(),
-            RailShape::EastWest => "east_west".to_string(),
-            RailShape::AscendingEast => "ascending_east".to_string(),
-            RailShape::AscendingWest => "ascending_west".to_string(),
-            RailShape::AscendingNorth => "ascending_north".to_string(),
-            RailShape::AscendingSouth => "ascending_south".to_string(),
-            RailShape::SouthEast => "south_east".to_string(),
-            RailShape::SouthWest => "south_west".to_string(),
-            RailShape::NorthWest => "north_west".to_string(),
-            RailShape::NorthEast => "north_east".to_string(),
+            RailShape::NorthSouth => "north_south",
+            RailShape::EastWest => "east_west",
+            RailShape::AscendingEast => "ascending_east",
+            RailShape::AscendingWest => "ascending_west",
+            RailShape::AscendingNorth => "ascending_north",
+            RailShape::AscendingSouth => "ascending_south",
+            RailShape::SouthEast => "south_east",
+            RailShape::SouthWest => "south_west",
+            RailShape::NorthWest => "north_west",
+            RailShape::NorthEast => "north_east",
         }
     }
 }
@@ -440,11 +450,11 @@ pub enum BedPart {
     Foot,
 }
 
-impl ToString for BedPart {
-    fn to_string(&self) -> String {
+impl PropertyEnum for BedPart {
+    fn as_str(&self) -> &str {
         match self {
-            BedPart::Head => "head".to_string(),
-            BedPart::Foot => "foot".to_string(),
+            BedPart::Head => "head",
+            BedPart::Foot => "foot",
         }
     }
 }
@@ -457,12 +467,12 @@ pub enum ChestType {
     Right,
 }
 
-impl ToString for ChestType {
-    fn to_string(&self) -> String {
+impl PropertyEnum for ChestType {
+    fn as_str(&self) -> &str {
         match self {
-            ChestType::Single => "single".to_string(),
-            ChestType::Left => "left".to_string(),
-            ChestType::Right => "right".to_string(),
+            ChestType::Single => "single",
+            ChestType::Left => "left",
+            ChestType::Right => "right",
         }
     }
 }
@@ -474,11 +484,11 @@ pub enum ComparatorMode {
     Subtract,
 }
 
-impl ToString for ComparatorMode {
-    fn to_string(&self) -> String {
+impl PropertyEnum for ComparatorMode {
+    fn as_str(&self) -> &str {
         match self {
-            ComparatorMode::Compare => "compare".to_string(),
-            ComparatorMode::Subtract => "subtract".to_string(),
+            ComparatorMode::Compare => "compare",
+            ComparatorMode::Subtract => "subtract",
         }
     }
 }
@@ -490,11 +500,11 @@ pub enum DoorHingeSide {
     Right,
 }
 
-impl ToString for DoorHingeSide {
-    fn to_string(&self) -> String {
+impl PropertyEnum for DoorHingeSide {
+    fn as_str(&self) -> &str {
         match self {
-            DoorHingeSide::Left => "left".to_string(),
-            DoorHingeSide::Right => "right".to_string(),
+            DoorHingeSide::Left => "left",
+            DoorHingeSide::Right => "right",
         }
     }
 }
@@ -527,32 +537,32 @@ pub enum NoteBlockInstrument {
     CustomHead,
 }
 
-impl ToString for NoteBlockInstrument {
-    fn to_string(&self) -> String {
+impl PropertyEnum for NoteBlockInstrument {
+    fn as_str(&self) -> &str {
         match self {
-            NoteBlockInstrument::Harp => "harp".to_string(),
-            NoteBlockInstrument::Basedrum => "basedrum".to_string(),
-            NoteBlockInstrument::Snare => "snare".to_string(),
-            NoteBlockInstrument::Hat => "hat".to_string(),
-            NoteBlockInstrument::Bass => "bass".to_string(),
-            NoteBlockInstrument::Flute => "flute".to_string(),
-            NoteBlockInstrument::Bell => "bell".to_string(),
-            NoteBlockInstrument::Guitar => "guitar".to_string(),
-            NoteBlockInstrument::Chime => "chime".to_string(),
-            NoteBlockInstrument::Xylophone => "xylophone".to_string(),
-            NoteBlockInstrument::IronXylophone => "iron_xylophone".to_string(),
-            NoteBlockInstrument::CowBell => "cow_bell".to_string(),
-            NoteBlockInstrument::Didgeridoo => "didgeridoo".to_string(),
-            NoteBlockInstrument::Bit => "bit".to_string(),
-            NoteBlockInstrument::Banjo => "banjo".to_string(),
-            NoteBlockInstrument::Pling => "pling".to_string(),
-            NoteBlockInstrument::Zombie => "zombie".to_string(),
-            NoteBlockInstrument::Skeleton => "skeleton".to_string(),
-            NoteBlockInstrument::Creeper => "creeper".to_string(),
-            NoteBlockInstrument::Dragon => "dragon".to_string(),
-            NoteBlockInstrument::WitherSkeleton => "wither_skeleton".to_string(),
-            NoteBlockInstrument::Piglin => "piglin".to_string(),
-            NoteBlockInstrument::CustomHead => "custom_head".to_string(),
+            NoteBlockInstrument::Harp => "harp",
+            NoteBlockInstrument::Basedrum => "basedrum",
+            NoteBlockInstrument::Snare => "snare",
+            NoteBlockInstrument::Hat => "hat",
+            NoteBlockInstrument::Bass => "bass",
+            NoteBlockInstrument::Flute => "flute",
+            NoteBlockInstrument::Bell => "bell",
+            NoteBlockInstrument::Guitar => "guitar",
+            NoteBlockInstrument::Chime => "chime",
+            NoteBlockInstrument::Xylophone => "xylophone",
+            NoteBlockInstrument::IronXylophone => "iron_xylophone",
+            NoteBlockInstrument::CowBell => "cow_bell",
+            NoteBlockInstrument::Didgeridoo => "didgeridoo",
+            NoteBlockInstrument::Bit => "bit",
+            NoteBlockInstrument::Banjo => "banjo",
+            NoteBlockInstrument::Pling => "pling",
+            NoteBlockInstrument::Zombie => "zombie",
+            NoteBlockInstrument::Skeleton => "skeleton",
+            NoteBlockInstrument::Creeper => "creeper",
+            NoteBlockInstrument::Dragon => "dragon",
+            NoteBlockInstrument::WitherSkeleton => "wither_skeleton",
+            NoteBlockInstrument::Piglin => "piglin",
+            NoteBlockInstrument::CustomHead => "custom_head",
         }
     }
 }
@@ -564,11 +574,11 @@ pub enum PistonType {
     Sticky,
 }
 
-impl ToString for PistonType {
-    fn to_string(&self) -> String {
+impl PropertyEnum for PistonType {
+    fn as_str(&self) -> &str {
         match self {
-            PistonType::Normal => "normal".to_string(),
-            PistonType::Sticky => "sticky".to_string(),
+            PistonType::Normal => "normal",
+            PistonType::Sticky => "sticky",
         }
     }
 }
@@ -581,12 +591,12 @@ pub enum SlabType {
     Double,
 }
 
-impl ToString for SlabType {
-    fn to_string(&self) -> String {
+impl PropertyEnum for SlabType {
+    fn as_str(&self) -> &str {
         match self {
-            SlabType::Bottom => "bottom".to_string(),
-            SlabType::Top => "top".to_string(),
-            SlabType::Double => "double".to_string(),
+            SlabType::Bottom => "bottom",
+            SlabType::Top => "top",
+            SlabType::Double => "double",
         }
     }
 }
@@ -601,14 +611,14 @@ pub enum StairsShape {
     OuterRight,
 }
 
-impl ToString for StairsShape {
-    fn to_string(&self) -> String {
+impl PropertyEnum for StairsShape {
+    fn as_str(&self) -> &str {
         match self {
-            StairsShape::Straight => "straight".to_string(),
-            StairsShape::InnerLeft => "inner_left".to_string(),
-            StairsShape::InnerRight => "inner_right".to_string(),
-            StairsShape::OuterLeft => "outer_left".to_string(),
-            StairsShape::OuterRight => "outer_right".to_string(),
+            StairsShape::Straight => "straight",
+            StairsShape::InnerLeft => "inner_left",
+            StairsShape::InnerRight => "inner_right",
+            StairsShape::OuterLeft => "outer_left",
+            StairsShape::OuterRight => "outer_right",
         }
     }
 }
@@ -622,13 +632,13 @@ pub enum StructureMode {
     Data,
 }
 
-impl ToString for StructureMode {
-    fn to_string(&self) -> String {
+impl PropertyEnum for StructureMode {
+    fn as_str(&self) -> &str {
         match self {
-            StructureMode::Save => "save".to_string(),
-            StructureMode::Load => "load".to_string(),
-            StructureMode::Corner => "corner".to_string(),
-            StructureMode::Data => "data".to_string(),
+            StructureMode::Save => "save",
+            StructureMode::Load => "load",
+            StructureMode::Corner => "corner",
+            StructureMode::Data => "data",
         }
     }
 }
@@ -641,12 +651,12 @@ pub enum BambooLeaves {
     Large,
 }
 
-impl ToString for BambooLeaves {
-    fn to_string(&self) -> String {
+impl PropertyEnum for BambooLeaves {
+    fn as_str(&self) -> &str {
         match self {
-            BambooLeaves::None => "none".to_string(),
-            BambooLeaves::Small => "small".to_string(),
-            BambooLeaves::Large => "large".to_string(),
+            BambooLeaves::None => "none",
+            BambooLeaves::Small => "small",
+            BambooLeaves::Large => "large",
         }
     }
 }
@@ -660,13 +670,13 @@ pub enum Tilt {
     Full,
 }
 
-impl ToString for Tilt {
-    fn to_string(&self) -> String {
+impl PropertyEnum for Tilt {
+    fn as_str(&self) -> &str {
         match self {
-            Tilt::None => "none".to_string(),
-            Tilt::Unstable => "unstable".to_string(),
-            Tilt::Partial => "partial".to_string(),
-            Tilt::Full => "full".to_string(),
+            Tilt::None => "none",
+            Tilt::Unstable => "unstable",
+            Tilt::Partial => "partial",
+            Tilt::Full => "full",
         }
     }
 }
@@ -681,14 +691,14 @@ pub enum DripstoneThickness {
     Base,
 }
 
-impl ToString for DripstoneThickness {
-    fn to_string(&self) -> String {
+impl PropertyEnum for DripstoneThickness {
+    fn as_str(&self) -> &str {
         match self {
-            DripstoneThickness::TipMerge => "tip_merge".to_string(),
-            DripstoneThickness::Tip => "tip".to_string(),
-            DripstoneThickness::Frustum => "frustum".to_string(),
-            DripstoneThickness::Middle => "middle".to_string(),
-            DripstoneThickness::Base => "base".to_string(),
+            DripstoneThickness::TipMerge => "tip_merge",
+            DripstoneThickness::Tip => "tip",
+            DripstoneThickness::Frustum => "frustum",
+            DripstoneThickness::Middle => "middle",
+            DripstoneThickness::Base => "base",
         }
     }
 }
@@ -701,12 +711,12 @@ pub enum SculkSensorPhase {
     Cooldown,
 }
 
-impl ToString for SculkSensorPhase {
-    fn to_string(&self) -> String {
+impl PropertyEnum for SculkSensorPhase {
+    fn as_str(&self) -> &str {
         match self {
-            SculkSensorPhase::Inactive => "inactive".to_string(),
-            SculkSensorPhase::Active => "active".to_string(),
-            SculkSensorPhase::Cooldown => "cooldown".to_string(),
+            SculkSensorPhase::Inactive => "inactive",
+            SculkSensorPhase::Active => "active",
+            SculkSensorPhase::Cooldown => "cooldown",
         }
     }
 }
@@ -722,17 +732,15 @@ pub enum TrialSpawnerState {
     Cooldown,
 }
 
-impl ToString for TrialSpawnerState {
-    fn to_string(&self) -> String {
+impl PropertyEnum for TrialSpawnerState {
+    fn as_str(&self) -> &str {
         match self {
-            TrialSpawnerState::Inactive => "inactive".to_string(),
-            TrialSpawnerState::WaitingForPlayers => "waiting_for_players".to_string(),
-            TrialSpawnerState::Active => "active".to_string(),
-            TrialSpawnerState::WaitingForRewardEjection => {
-                "waiting_for_reward_ejection".to_string()
-            }
-            TrialSpawnerState::EjectingReward => "ejecting_reward".to_string(),
-            TrialSpawnerState::Cooldown => "cooldown".to_string(),
+            TrialSpawnerState::Inactive => "inactive",
+            TrialSpawnerState::WaitingForPlayers => "waiting_for_players",
+            TrialSpawnerState::Active => "active",
+            TrialSpawnerState::WaitingForRewardEjection => "waiting_for_reward_ejection",
+            TrialSpawnerState::EjectingReward => "ejecting_reward",
+            TrialSpawnerState::Cooldown => "cooldown",
         }
     }
 }
@@ -746,13 +754,13 @@ pub enum VaultState {
     Ejecting,
 }
 
-impl ToString for VaultState {
-    fn to_string(&self) -> String {
+impl PropertyEnum for VaultState {
+    fn as_str(&self) -> &str {
         match self {
-            VaultState::Inactive => "inactive".to_string(),
-            VaultState::Active => "active".to_string(),
-            VaultState::Unlocking => "unlocking".to_string(),
-            VaultState::Ejecting => "ejecting".to_string(),
+            VaultState::Inactive => "inactive",
+            VaultState::Active => "active",
+            VaultState::Unlocking => "unlocking",
+            VaultState::Ejecting => "ejecting",
         }
     }
 }
@@ -765,12 +773,12 @@ pub enum CreakingHeartState {
     Awake,
 }
 
-impl ToString for CreakingHeartState {
-    fn to_string(&self) -> String {
+impl PropertyEnum for CreakingHeartState {
+    fn as_str(&self) -> &str {
         match self {
-            CreakingHeartState::Uprooted => "uprooted".to_string(),
-            CreakingHeartState::Dormant => "dormant".to_string(),
-            CreakingHeartState::Awake => "awake".to_string(),
+            CreakingHeartState::Uprooted => "uprooted",
+            CreakingHeartState::Dormant => "dormant",
+            CreakingHeartState::Awake => "awake",
         }
     }
 }
@@ -784,13 +792,13 @@ pub enum TestBlockMode {
     Accept,
 }
 
-impl ToString for TestBlockMode {
-    fn to_string(&self) -> String {
+impl PropertyEnum for TestBlockMode {
+    fn as_str(&self) -> &str {
         match self {
-            TestBlockMode::Start => "start".to_string(),
-            TestBlockMode::Log => "log".to_string(),
-            TestBlockMode::Fail => "fail".to_string(),
-            TestBlockMode::Accept => "accept".to_string(),
+            TestBlockMode::Start => "start",
+            TestBlockMode::Log => "log",
+            TestBlockMode::Fail => "fail",
+            TestBlockMode::Accept => "accept",
         }
     }
 }
@@ -804,14 +812,20 @@ pub enum Pose {
     Star,
 }
 
-impl ToString for Pose {
-    fn to_string(&self) -> String {
+impl PropertyEnum for Pose {
+    fn as_str(&self) -> &str {
         match self {
-            Pose::Standing => "standing".to_string(),
-            Pose::Sitting => "sitting".to_string(),
-            Pose::Running => "running".to_string(),
-            Pose::Star => "star".to_string(),
+            Pose::Standing => "standing",
+            Pose::Sitting => "sitting",
+            Pose::Running => "running",
+            Pose::Star => "star",
         }
+    }
+}
+
+impl PropertyEnum for Axis {
+    fn as_str(&self) -> &str {
+        self.as_str()
     }
 }
 
@@ -819,49 +833,49 @@ pub struct BlockStateProperties;
 
 //TODO: These got quickly implemented so the ordering might be off. Fix in the future.
 impl BlockStateProperties {
-    pub const ATTACHED: BooleanProperty = BooleanProperty::new("attached");
-    pub const BERRIES: BooleanProperty = BooleanProperty::new("berries");
-    pub const BLOOM: BooleanProperty = BooleanProperty::new("bloom");
-    pub const BOTTOM: BooleanProperty = BooleanProperty::new("bottom");
-    pub const CAN_SUMMON: BooleanProperty = BooleanProperty::new("can_summon");
-    pub const CONDITIONAL: BooleanProperty = BooleanProperty::new("conditional");
-    pub const DISARMED: BooleanProperty = BooleanProperty::new("disarmed");
-    pub const DRAG: BooleanProperty = BooleanProperty::new("drag");
-    pub const ENABLED: BooleanProperty = BooleanProperty::new("enabled");
-    pub const EXTENDED: BooleanProperty = BooleanProperty::new("extended");
-    pub const EYE: BooleanProperty = BooleanProperty::new("eye");
-    pub const FALLING: BooleanProperty = BooleanProperty::new("falling");
-    pub const HANGING: BooleanProperty = BooleanProperty::new("hanging");
-    pub const HAS_BOTTLE_0: BooleanProperty = BooleanProperty::new("has_bottle_0");
-    pub const HAS_BOTTLE_1: BooleanProperty = BooleanProperty::new("has_bottle_1");
-    pub const HAS_BOTTLE_2: BooleanProperty = BooleanProperty::new("has_bottle_2");
-    pub const HAS_RECORD: BooleanProperty = BooleanProperty::new("has_record");
-    pub const HAS_BOOK: BooleanProperty = BooleanProperty::new("has_book");
-    pub const INVERTED: BooleanProperty = BooleanProperty::new("inverted");
-    pub const IN_WALL: BooleanProperty = BooleanProperty::new("in_wall");
-    pub const LIT: BooleanProperty = BooleanProperty::new("lit");
-    pub const LOCKED: BooleanProperty = BooleanProperty::new("locked");
-    pub const NATURAL: BooleanProperty = BooleanProperty::new("natural");
-    pub const OCCUPIED: BooleanProperty = BooleanProperty::new("occupied");
-    pub const OPEN: BooleanProperty = BooleanProperty::new("open");
-    pub const PERSISTENT: BooleanProperty = BooleanProperty::new("persistent");
-    pub const POWERED: BooleanProperty = BooleanProperty::new("powered");
-    pub const SHORT: BooleanProperty = BooleanProperty::new("short");
-    pub const SHRIEKING: BooleanProperty = BooleanProperty::new("shrieking");
-    pub const SIGNAL_FIRE: BooleanProperty = BooleanProperty::new("signal_fire");
-    pub const SNOWY: BooleanProperty = BooleanProperty::new("snowy");
-    pub const TIP: BooleanProperty = BooleanProperty::new("tip");
-    pub const TRIGGERED: BooleanProperty = BooleanProperty::new("triggered");
-    pub const UNSTABLE: BooleanProperty = BooleanProperty::new("unstable");
-    pub const WATERLOGGED: BooleanProperty = BooleanProperty::new("waterlogged");
+    pub const ATTACHED: BoolProperty = BoolProperty::new("attached");
+    pub const BERRIES: BoolProperty = BoolProperty::new("berries");
+    pub const BLOOM: BoolProperty = BoolProperty::new("bloom");
+    pub const BOTTOM: BoolProperty = BoolProperty::new("bottom");
+    pub const CAN_SUMMON: BoolProperty = BoolProperty::new("can_summon");
+    pub const CONDITIONAL: BoolProperty = BoolProperty::new("conditional");
+    pub const DISARMED: BoolProperty = BoolProperty::new("disarmed");
+    pub const DRAG: BoolProperty = BoolProperty::new("drag");
+    pub const ENABLED: BoolProperty = BoolProperty::new("enabled");
+    pub const EXTENDED: BoolProperty = BoolProperty::new("extended");
+    pub const EYE: BoolProperty = BoolProperty::new("eye");
+    pub const FALLING: BoolProperty = BoolProperty::new("falling");
+    pub const HANGING: BoolProperty = BoolProperty::new("hanging");
+    pub const HAS_BOTTLE_0: BoolProperty = BoolProperty::new("has_bottle_0");
+    pub const HAS_BOTTLE_1: BoolProperty = BoolProperty::new("has_bottle_1");
+    pub const HAS_BOTTLE_2: BoolProperty = BoolProperty::new("has_bottle_2");
+    pub const HAS_RECORD: BoolProperty = BoolProperty::new("has_record");
+    pub const HAS_BOOK: BoolProperty = BoolProperty::new("has_book");
+    pub const INVERTED: BoolProperty = BoolProperty::new("inverted");
+    pub const IN_WALL: BoolProperty = BoolProperty::new("in_wall");
+    pub const LIT: BoolProperty = BoolProperty::new("lit");
+    pub const LOCKED: BoolProperty = BoolProperty::new("locked");
+    pub const NATURAL: BoolProperty = BoolProperty::new("natural");
+    pub const OCCUPIED: BoolProperty = BoolProperty::new("occupied");
+    pub const OPEN: BoolProperty = BoolProperty::new("open");
+    pub const PERSISTENT: BoolProperty = BoolProperty::new("persistent");
+    pub const POWERED: BoolProperty = BoolProperty::new("powered");
+    pub const SHORT: BoolProperty = BoolProperty::new("short");
+    pub const SHRIEKING: BoolProperty = BoolProperty::new("shrieking");
+    pub const SIGNAL_FIRE: BoolProperty = BoolProperty::new("signal_fire");
+    pub const SNOWY: BoolProperty = BoolProperty::new("snowy");
+    pub const TIP: BoolProperty = BoolProperty::new("tip");
+    pub const TRIGGERED: BoolProperty = BoolProperty::new("triggered");
+    pub const UNSTABLE: BoolProperty = BoolProperty::new("unstable");
+    pub const WATERLOGGED: BoolProperty = BoolProperty::new("waterlogged");
     pub const HORIZONTAL_AXIS: EnumProperty<Axis> = EnumProperty::new("axis", &[Axis::X, Axis::Z]);
     pub const AXIS: EnumProperty<Axis> = EnumProperty::new("axis", &[Axis::X, Axis::Y, Axis::Z]);
-    pub const UP: BooleanProperty = BooleanProperty::new("up");
-    pub const DOWN: BooleanProperty = BooleanProperty::new("down");
-    pub const NORTH: BooleanProperty = BooleanProperty::new("north");
-    pub const EAST: BooleanProperty = BooleanProperty::new("east");
-    pub const SOUTH: BooleanProperty = BooleanProperty::new("south");
-    pub const WEST: BooleanProperty = BooleanProperty::new("west");
+    pub const UP: BoolProperty = BoolProperty::new("up");
+    pub const DOWN: BoolProperty = BoolProperty::new("down");
+    pub const NORTH: BoolProperty = BoolProperty::new("north");
+    pub const EAST: BoolProperty = BoolProperty::new("east");
+    pub const SOUTH: BoolProperty = BoolProperty::new("south");
+    pub const WEST: BoolProperty = BoolProperty::new("west");
     pub const FACING: EnumProperty<Direction> = EnumProperty::new(
         "facing",
         &[
@@ -1156,14 +1170,14 @@ impl BlockStateProperties {
     );
 
     // Additional boolean properties
-    pub const SLOT_0_OCCUPIED: BooleanProperty = BooleanProperty::new("slot_0_occupied");
-    pub const SLOT_1_OCCUPIED: BooleanProperty = BooleanProperty::new("slot_1_occupied");
-    pub const SLOT_2_OCCUPIED: BooleanProperty = BooleanProperty::new("slot_2_occupied");
-    pub const SLOT_3_OCCUPIED: BooleanProperty = BooleanProperty::new("slot_3_occupied");
-    pub const SLOT_4_OCCUPIED: BooleanProperty = BooleanProperty::new("slot_4_occupied");
-    pub const SLOT_5_OCCUPIED: BooleanProperty = BooleanProperty::new("slot_5_occupied");
-    pub const CRACKED: BooleanProperty = BooleanProperty::new("cracked");
-    pub const CRAFTING: BooleanProperty = BooleanProperty::new("crafting");
-    pub const OMINOUS: BooleanProperty = BooleanProperty::new("ominous");
-    pub const MAP: BooleanProperty = BooleanProperty::new("map");
+    pub const SLOT_0_OCCUPIED: BoolProperty = BoolProperty::new("slot_0_occupied");
+    pub const SLOT_1_OCCUPIED: BoolProperty = BoolProperty::new("slot_1_occupied");
+    pub const SLOT_2_OCCUPIED: BoolProperty = BoolProperty::new("slot_2_occupied");
+    pub const SLOT_3_OCCUPIED: BoolProperty = BoolProperty::new("slot_3_occupied");
+    pub const SLOT_4_OCCUPIED: BoolProperty = BoolProperty::new("slot_4_occupied");
+    pub const SLOT_5_OCCUPIED: BoolProperty = BoolProperty::new("slot_5_occupied");
+    pub const CRACKED: BoolProperty = BoolProperty::new("cracked");
+    pub const CRAFTING: BoolProperty = BoolProperty::new("crafting");
+    pub const OMINOUS: BoolProperty = BoolProperty::new("ominous");
+    pub const MAP: BoolProperty = BoolProperty::new("map");
 }

@@ -105,7 +105,7 @@ impl BlockRegistry {
         let base_state_id = self.next_state_id;
 
         self.blocks_by_key.insert(block.key.clone(), id);
-        self.blocks_by_id.push(&block);
+        self.blocks_by_id.push(block);
         self.block_to_base_state.push(base_state_id);
 
         let mut state_count = 1;
@@ -135,7 +135,7 @@ impl BlockRegistry {
 
     // Retrieves a block by its ID.
     pub fn by_id(&self, id: usize) -> Option<BlockRef> {
-        self.blocks_by_id.get(id).map(|b| *b)
+        self.blocks_by_id.get(id).copied()
     }
 
     pub fn get_id(&self, block: BlockRef) -> &usize {
@@ -143,9 +143,7 @@ impl BlockRegistry {
     }
 
     pub fn by_state_id(&self, state_id: BlockStateId) -> Option<BlockRef> {
-        self.state_to_block_lookup
-            .get(state_id.0 as usize)
-            .map(|b| *b)
+        self.state_to_block_lookup.get(state_id.0 as usize).copied()
     }
 
     // Retrieves a block by its name.
@@ -153,7 +151,7 @@ impl BlockRegistry {
         self.blocks_by_key.get(key).and_then(|id| self.by_id(*id))
     }
 
-    pub fn get_properties(&self, id: BlockStateId) -> Vec<(String, String)> {
+    pub fn get_properties(&self, id: BlockStateId) -> Vec<(&str, &str)> {
         let block = self.by_state_id(id).expect("Invalid state ID");
 
         // If block has no properties, return empty vec
@@ -177,10 +175,7 @@ impl BlockRegistry {
             let current_index = (index % count) as usize;
 
             let possible_values = prop.get_possible_values();
-            property_values.push((
-                prop.get_name().to_string(),
-                possible_values[current_index].clone(),
-            ));
+            property_values.push((prop.get_name(), possible_values[current_index]));
 
             index /= count;
         }

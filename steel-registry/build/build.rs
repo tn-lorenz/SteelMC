@@ -1,4 +1,4 @@
-use std::fs;
+use std::{fs, path::Path};
 
 mod blocks;
 mod items;
@@ -6,6 +6,10 @@ mod items;
 pub const OUT_DIR: &str = "src/generated";
 
 pub fn main() {
+    if !Path::new(OUT_DIR).exists() {
+        fs::create_dir(OUT_DIR).unwrap();
+    }
+
     let blocks = blocks::build().to_string();
     let items = items::build().to_string();
 

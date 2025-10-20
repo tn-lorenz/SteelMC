@@ -20,12 +20,12 @@ pub enum Axis {
     Z,
 }
 
-impl ToString for Axis {
-    fn to_string(&self) -> String {
+impl Axis {
+    pub fn as_str(&self) -> &str {
         match self {
-            Axis::X => "x".to_string(),
-            Axis::Y => "y".to_string(),
-            Axis::Z => "z".to_string(),
+            Axis::X => "x",
+            Axis::Y => "y",
+            Axis::Z => "z",
         }
     }
 }

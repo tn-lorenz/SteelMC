@@ -91,11 +91,11 @@ impl ResourceLocation {
     }
 
     pub fn validate_namespace(namespace: &str) -> bool {
-        namespace.chars().all(|c| Self::valid_namespace_char(c))
+        namespace.chars().all(Self::valid_namespace_char)
     }
 
     pub fn validate_path(path: &str) -> bool {
-        path.chars().all(|c| Self::valid_path_char(c))
+        path.chars().all(Self::valid_path_char)
     }
 
     pub fn validate(namespace: &str, path: &str) -> bool {
