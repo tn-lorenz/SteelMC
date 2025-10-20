@@ -1,6 +1,6 @@
 [workspace]
 resolver = "2"
-members = ["steel", "steel-registry", "steel-utils", "steel-world"]
+members = ["steel", "steel-protocol", "steel-registry", "steel-utils", "steel-world"]
 
 [workspace.package]
 version = "0.0.0"

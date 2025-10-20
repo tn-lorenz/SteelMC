@@ -184,6 +184,13 @@ dependencies = [
 ]
 
 [[package]]
+name = "steel-protocol"
+version = "0.0.0"
+dependencies = [
+ "steel-utils",
+]
+
+[[package]]
 name = "steel-registry"
 version = "0.0.0"
 dependencies = [
@@ -211,6 +218,7 @@ name = "steel-world"
 version = "0.0.0"
 dependencies = [
  "scc",
+ "steel-protocol",
  "steel-utils",
 ]
 
