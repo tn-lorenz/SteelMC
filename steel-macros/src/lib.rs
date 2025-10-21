@@ -47,12 +47,10 @@ pub fn packet_read_derive(input: TokenStream) -> TokenStream {
         }
 
         match read_strategy.as_deref() {
-            // FIX 2: Use `data.reader()` for var_int, just like the manual impl.
-            // We also add `use bytes::Buf;` to ensure the `.reader()` method is available.
             Some("var_int") => quote! {
                 let #field_name = {
-                    use bytes::Buf;
-                    var_int::read(&mut data.reader())?
+                    use crate::ser::NetworkReadExt;
+                    data.reader().get_var_int()?
                 };
             },
             Some("string") => {
@@ -95,6 +93,87 @@ pub fn packet_read_derive(input: TokenStream) -> TokenStream {
                 Ok(Self {
                     #(#field_names),*
                 })
+            }
+        }
+    };
+
+    TokenStream::from(expanded)
+}
+
+#[proc_macro_derive(PacketWrite, attributes(write_as))]
+pub fn packet_write_derive(input: TokenStream) -> TokenStream {
+    let input = parse_macro_input!(input as DeriveInput);
+    let name = input.ident;
+
+    let fields = match input.data {
+        Data::Struct(s) => s.fields,
+        _ => panic!("PacketWrite can only be derived for structs"),
+    };
+    let Fields::Named(fields) = fields else {
+        panic!("PacketWrite only supports structs with named fields");
+    };
+
+    let writers = fields.named.iter().map(|f| {
+        let field_name = f.ident.as_ref().unwrap();
+        let mut write_strategy: Option<String> = None;
+        let mut bound: Option<syn::LitInt> = None;
+
+        if let Some(attr) = f.attrs.iter().find(|a| a.path().is_ident("write_as")) {
+            if let Meta::List(meta) = attr.meta.clone() {
+                meta.parse_nested_meta(|meta| {
+                    if meta.path.is_ident("as") {
+                        let value = meta.value()?;
+                        let s: LitStr = value.parse()?;
+                        write_strategy = Some(s.value());
+                        Ok(())
+                    } else if meta.path.is_ident("bound") {
+                        let value = meta.value()?;
+                        let int_lit: syn::LitInt = value.parse()?;
+                        bound = Some(int_lit);
+                        Ok(())
+                    } else {
+                        Err(meta.error(
+                            "unsupported property. Expected `as = \"...\"` or `bound = ...`",
+                        ))
+                    }
+                })
+                .unwrap_or_else(|e| panic!("Failed to parse `write_as` attribute: {}", e));
+            } else {
+                panic!("`write_as` attribute requires a list format");
+            }
+        }
+
+        match write_strategy.as_deref() {
+            Some("var_int") => quote! {
+                writer.write_var_int(self.#field_name)?;
+            },
+            Some("string") => {
+                let write_call = if let Some(b) = bound {
+                    quote! { writer.write_string_bounded(&self.#field_name, #b)?; }
+                } else {
+                    quote! { writer.write_string(&self.#field_name)?; }
+                };
+
+                quote! {
+                    #write_call
+                }
+            }
+            None => quote! {
+                self.#field_name.write_packet(writer)?;
+            },
+            Some(s) => panic!("Unknown write strategy: `{}`", s),
+        }
+    });
+
+    let expanded = quote! {
+        impl PacketWrite for #name {
+            fn write_packet(&self, writer: &mut impl Write) -> Result<(), crate::utils::PacketWriteError> {
+                use std::io::Write;
+                use crate::ser::NetworkWriteExt;
+
+                #(#writers)*
+
+                Ok(())
             }
         }
     };

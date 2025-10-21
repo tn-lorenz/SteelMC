@@ -44,6 +44,22 @@ pub enum PacketWriteError {
     Message(String),
 }
 
+impl From<crate::codec::errors::WritingError> for PacketWriteError {
+    fn from(err: crate::codec::errors::WritingError) -> Self {
+        match err {
+            crate::codec::errors::WritingError::IoError(io_err) => {
+                PacketWriteError::Message(format!("IO error: {}", io_err))
+            }
+            crate::codec::errors::WritingError::Serde(msg) => {
+                PacketWriteError::Message(format!("Serialization error: {}", msg))
+            }
+            crate::codec::errors::WritingError::Message(msg) => {
+                PacketWriteError::Message(msg)
+            }
+        }
+    }
+}
+
 #[derive(Error, Debug)]
 pub enum PacketReadError {
     #[error("failed to decode packet ID")]
