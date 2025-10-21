@@ -37,6 +37,7 @@ impl PacketWrite for ClientIntent {
         Ok(())
     }
 }
+
 #[derive(PacketRead, PacketWrite)]
 pub struct ClientIntentionPacket {
     #[read_as(as = "var_int")]

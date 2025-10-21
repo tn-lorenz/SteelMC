@@ -48,10 +48,7 @@ pub fn packet_read_derive(input: TokenStream) -> TokenStream {
 
         match read_strategy.as_deref() {
             Some("var_int") => quote! {
-                let #field_name = {
-                    use crate::ser::NetworkReadExt;
-                    data.reader().get_var_int()?
-                };
+                let #field_name = data.reader().get_var_int()?;
             },
             Some("string") => {
                 let read_call = if let Some(b) = bound {
@@ -61,10 +58,7 @@ pub fn packet_read_derive(input: TokenStream) -> TokenStream {
                 };
 
                 quote! {
-                    let #field_name = {
-                        use crate::ser::NetworkReadExt;
-                        #read_call
-                    };
+                    let #field_name = #read_call;
                 }
             }
             // This case was already correct.
@@ -86,6 +80,7 @@ pub fn packet_read_derive(input: TokenStream) -> TokenStream {
             where
                 Self: Sized,
             {
+                use crate::ser::NetworkReadExt;
                 // Execute all generated field readers to create local variables
                 #(#readers)*
 
