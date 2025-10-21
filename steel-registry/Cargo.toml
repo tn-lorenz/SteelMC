@@ -8,8 +8,8 @@ build = "build/build.rs"
 steel-utils = { path = "../steel-utils" }
 
 [build-dependencies]
-proc-macro2 = "1.0.101"
-quote = "1.0.41"
+proc-macro2.workspace = true
+quote.workspace = true
 serde_json.workspace = true
 serde.workspace = true
 steel-utils = { path = "../steel-utils" }

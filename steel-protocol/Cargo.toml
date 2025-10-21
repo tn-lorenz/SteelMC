@@ -3,5 +3,14 @@ name = "steel-protocol"
 version.workspace = true
 edition.workspace = true
 
+
 [dependencies]
+aes = "0.8.4"
+async-compression = { version = "0.4.32", features = ["tokio", "zlib"] }
 steel-utils = { path = "../steel-utils" }
+tokio.workspace = true
+bytes.workspace = true
+thiserror.workspace = true
+cfb8 = "0.8.1"
+take_mut = "0.2.2"
+steel-macros = { path = "../steel-macros" }
