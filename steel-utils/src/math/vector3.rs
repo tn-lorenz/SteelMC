@@ -3,7 +3,7 @@ use std::ops::{Add, AddAssign, Div, Mul, Sub};
 use bytes::BufMut;
 use num_traits::{Float, Num};
 
-use crate::{BlockPos, math::vector2::Vector2};
+use crate::{math::vector2::Vector2, types::BlockPos};
 
 #[derive(Clone, Copy, Debug, PartialEq, Hash, Eq, Default)]
 pub struct Vector3<T> {

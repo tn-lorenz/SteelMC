@@ -8,5 +8,13 @@ edition.workspace = true
 steel-utils = { path = "../steel-utils" }
 steel-world = { path = "../steel-world" }
 steel-registry = { path = "../steel-registry" }
+steel-protocol = { path = "../steel-protocol" }
 tokio.workspace = true
 scc.workspace = true
+bytes.workspace = true
+tokio-util.workspace = true
+crossbeam.workspace = true
+serde.workspace = true
+uuid.workspace = true
+thiserror.workspace = true
+log.workspace = true

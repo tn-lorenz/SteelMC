@@ -4,7 +4,8 @@ use steel_registry::{
     items::items::ItemRegistry,
     vanilla_blocks, vanilla_items,
 };
-use steel_utils::ResourceLocation;
+use steel_utils::types::ResourceLocation;
+mod network;
 
 #[tokio::main]
 async fn main() {

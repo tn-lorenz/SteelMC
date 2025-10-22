@@ -22,10 +22,6 @@ use crate::{
     },
 };
 
-pub trait PacketWrite {
-    fn write_packet_data(&self, writer: &mut impl AsyncWrite) -> Result<(), PacketWriteError>;
-}
-
 // raw -> compress -> encrypt
 
 pub enum EncryptionWriter<W: AsyncWrite + Unpin> {

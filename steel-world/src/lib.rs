@@ -1,5 +1,5 @@
 use scc::HashIndex;
-use steel_utils::{ChunkPos, SteelRwLock};
+use steel_utils::{locks::SteelRwLock, types::ChunkPos};
 
 use crate::section::ChunkSections;
 

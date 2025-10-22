@@ -20,3 +20,19 @@ pub struct ClientIntentionPacket {
     pub port: u16,
     pub intention: ClientIntent,
 }
+
+impl ClientIntentionPacket {
+    pub fn new(
+        protocol_version: i32,
+        hostname: String,
+        port: u16,
+        intention: ClientIntent,
+    ) -> Self {
+        Self {
+            protocol_version,
+            hostname,
+            port,
+            intention,
+        }
+    }
+}

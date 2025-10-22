@@ -237,7 +237,12 @@ pub fn packet_write_derive(input: TokenStream) -> TokenStream {
                         quote! {
                             #write_call
                         }
-                    }
+                    },
+                    Some("json") => quote! {
+                        writer.write_string(&serde_json::to_string(&self.#field_name).map_err(|e| {
+                            crate::utils::PacketWriteError::Message(format!("Failed to serialize: {e}"))
+                        })?)?;
+                    },
                     None => quote! {
                         self.#field_name.write_packet(writer)?;
                     },

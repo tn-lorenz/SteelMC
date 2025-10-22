@@ -1,4 +1,4 @@
-use steel_utils::ResourceLocation;
+use steel_utils::types::ResourceLocation;
 
 use crate::data_components::{DataComponentRegistry, DataComponentType};
 
