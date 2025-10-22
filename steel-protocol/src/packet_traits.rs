@@ -1,4 +1,4 @@
-use std::io::Write;
+use std::io::{Read, Write};
 
 use crate::{
     ser::{NetworkReadExt, NetworkWriteExt},
@@ -7,20 +7,20 @@ use crate::{
 use bytes::{Buf, Bytes};
 
 pub trait PacketRead {
-    fn read_packet(data: &mut Bytes) -> Result<Self, PacketReadError>
+    fn read_packet(data: &mut impl Read) -> Result<Self, PacketReadError>
     where
         Self: Sized;
 }
 
 impl PacketRead for i32 {
-    fn read_packet(data: &mut bytes::Bytes) -> Result<Self, PacketReadError> {
-        Ok(data.reader().get_i32_be()?)
+    fn read_packet(data: &mut impl Read) -> Result<Self, PacketReadError> {
+        Ok(data.get_i32_be()?)
     }
 }
 
 impl PacketRead for u16 {
-    fn read_packet(data: &mut bytes::Bytes) -> Result<Self, PacketReadError> {
-        Ok(data.reader().get_u16_be()?)
+    fn read_packet(data: &mut impl Read) -> Result<Self, PacketReadError> {
+        Ok(data.get_u16_be()?)
     }
 }
 

@@ -1,9 +1,11 @@
 use proc_macro::TokenStream;
 use proc_macro2::Span;
 use quote::quote;
-use syn::{parse_macro_input, Data, DeriveInput, Fields, Ident, LitStr, Meta};
+use syn::{Data, DeriveInput, Fields, Ident, LitStr, Meta, parse_macro_input};
 
-static ALLOWED_TYPES: [&str; 12]  = ["i8","i16","i32","i64","i128","isize","u8","u16","u32","u64","u128","usize"];
+static ALLOWED_TYPES: [&str; 12] = [
+    "i8", "i16", "i32", "i64", "i128", "isize", "u8", "u16", "u32", "u64", "u128", "usize",
+];
 
 #[proc_macro_derive(PacketRead, attributes(read_as))]
 pub fn packet_read_derive(input: TokenStream) -> TokenStream {
@@ -49,20 +51,19 @@ pub fn packet_read_derive(input: TokenStream) -> TokenStream {
 
                 match read_strategy.as_deref() {
                     Some("var_int") => quote! {
-                        let #field_name = data.reader().get_var_int()?;
+                        let #field_name = data.get_var_int()?;
                     },
                     Some("string") => {
                         let read_call = if let Some(b) = bound {
-                            quote! { data.reader().get_string_bounded(#b)? }
+                            quote! { data.get_string_bounded(#b)? }
                         } else {
-                            quote! { data.reader().get_string()? }
+                            quote! { data.get_string()? }
                         };
 
                         quote! {
                             let #field_name = #read_call;
                         }
                     }
-                    // This case was already correct.
                     None => quote! {
                         let #field_name = <#field_type>::read_packet(data)?;
                     },
@@ -76,12 +77,11 @@ pub fn packet_read_derive(input: TokenStream) -> TokenStream {
                 #[automatically_derived]
                 // The trait implementation for the struct.
                 impl PacketRead for #name {
-                    // FIX 3: Signature now takes `&mut bytes::Bytes` to match the trait.
-                    // FIX 1: The return type uses a fully qualified path, no `use` keyword.
-                    fn read_packet(data: &mut bytes::Bytes) -> Result<Self, crate::utils::PacketReadError>
+                    fn read_packet(data: &mut impl std::io::Read) -> Result<Self, crate::utils::PacketReadError>
                     where
                         Self: Sized,
                     {
+                        use std::io::Read;
                         use crate::ser::NetworkReadExt;
                         // Execute all generated field readers to create local variables
                         #(#readers)*
@@ -95,7 +95,7 @@ pub fn packet_read_derive(input: TokenStream) -> TokenStream {
             };
 
             TokenStream::from(expanded)
-        },
+        }
         Data::Enum(e) => {
             let readers = e.variants.iter().map(|v| {
                 if !matches!(v.fields, Fields::Unit) {
@@ -115,11 +115,13 @@ pub fn packet_read_derive(input: TokenStream) -> TokenStream {
             TokenStream::from(quote! {
                 #[automatically_derived]
                 impl PacketRead for #name {
-                    fn read_packet(data: &mut bytes::Bytes) -> Result<Self, crate::utils::PacketReadError>
+                    fn read_packet(data: &mut impl std::io::Read) -> Result<Self, crate::utils::PacketReadError>
                     where
                         Self: Sized,
                     {
-                        Ok(match crate::codec::var_int::read(&mut data.reader())? {
+                        use std::io::Read;
+                        use crate::ser::NetworkReadExt;
+                        Ok(match data.get_var_int()? {
                             #(#readers)*
                             _ => {
                                 return Err(crate::utils::PacketReadError::MalformedValue(
@@ -130,7 +132,7 @@ pub fn packet_read_derive(input: TokenStream) -> TokenStream {
                     }
                 }
             })
-        },
+        }
         _ => panic!("PacketRead can only be derived for structs or enums"),
     }
 }
@@ -201,7 +203,7 @@ pub fn packet_write_derive(input: TokenStream) -> TokenStream {
             let expanded = quote! {
                 #[automatically_derived]
                 impl PacketWrite for #name {
-                    fn write_packet(&self, writer: &mut impl Write) -> Result<(), crate::utils::PacketWriteError> {
+                    fn write_packet(&self, writer: &mut impl std::io::Write) -> Result<(), crate::utils::PacketWriteError> {
                         use std::io::Write;
                         use crate::ser::NetworkWriteExt;
 
@@ -213,7 +215,7 @@ pub fn packet_write_derive(input: TokenStream) -> TokenStream {
             };
 
             TokenStream::from(expanded)
-        },
+        }
         Data::Enum(_) => {
             let mut write_strategy: Option<String> = None;
             let mut bound: Option<syn::LitInt> = None;
@@ -240,7 +242,9 @@ pub fn packet_write_derive(input: TokenStream) -> TokenStream {
                 } else {
                     panic!("`write_as` attribute requires a list format");
                 }
-            } else {panic!("PacketWrite enums requires the \"write_as\" attribute")}
+            } else {
+                panic!("PacketWrite enums requires the \"write_as\" attribute")
+            }
 
             let writer = match write_strategy.as_deref() {
                 // Specialiced implementation
@@ -248,7 +252,7 @@ pub fn packet_write_derive(input: TokenStream) -> TokenStream {
                     quote! {
                         writer.write_var_int(*self as i32)?;
                     }
-                },
+                }
                 // Simple implementation
                 Some(s) => {
                     if !ALLOWED_TYPES.contains(&s) {
@@ -258,13 +262,13 @@ pub fn packet_write_derive(input: TokenStream) -> TokenStream {
                     quote! {
                         (*self as #enum_type).write_packet(writer)?;
                     }
-                },
+                }
                 None => panic!("Expected write_as's \"as\" value"),
             };
             TokenStream::from(quote! {
                 #[automatically_derived]
                 impl PacketWrite for #name {
-                    fn write_packet(&self, writer: &mut impl Write) -> Result<(), crate::utils::PacketWriteError> {
+                    fn write_packet(&self, writer: &mut impl std::io::Write) -> Result<(), crate::utils::PacketWriteError> {
                         use std::io::Write;
                         use crate::ser::NetworkWriteExt;
 

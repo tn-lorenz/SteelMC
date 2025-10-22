@@ -1,9 +1,4 @@
-use std::io::Write;
-
-use crate::{
-    packet_traits::{PacketRead, PacketWrite},
-};
-use bytes::Buf;
+use crate::packet_traits::{PacketRead, PacketWrite};
 use steel_macros::{PacketRead, PacketWrite};
 
 #[derive(Clone, Copy, PartialEq, Eq, PacketRead, PacketWrite)]
