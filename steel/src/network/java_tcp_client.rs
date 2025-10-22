@@ -192,6 +192,21 @@ impl JavaTcpClient {
         }
     }
 
+    pub async fn enqueue_packet(&self, packet: &ClientBoundPacket) -> Result<(), PacketWriteError> {
+        let mut packet_buf = Vec::new();
+        let writer = &mut packet_buf;
+        self.write_prefixed_packet(packet, writer)?;
+        self.outgoing_packet_queue
+            .send(Bytes::from(packet_buf))
+            .map_err(|err| {
+                PacketWriteError::Message(format!(
+                    "Failed to send packet to client {}: {}",
+                    self.id, err
+                ))
+            })?;
+        Ok(())
+    }
+
     pub fn write_prefixed_packet(
         &self,
         packet: &ClientBoundPacket,
