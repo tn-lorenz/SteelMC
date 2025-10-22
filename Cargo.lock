@@ -547,6 +547,7 @@ dependencies = [
  "take_mut",
  "thiserror",
  "tokio",
+ "uuid",
 ]
 
 [[package]]

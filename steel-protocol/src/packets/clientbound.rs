@@ -6,6 +6,7 @@ use crate::{
         common::clientbound_disconnect_packet::ClientboundDisconnectPacket,
         handshake::ClientIntentionPacket,
         login::clientbound_login_disconnect_packet::ClientboundLoginDisconnectPacket,
+        status::clientbound_status_response_packet::ClientboundStatusResponsePacket,
     },
     utils::{ConnectionProtocol, PacketWriteError},
 };
@@ -56,15 +57,21 @@ impl ClientBoundConfiguration {
 }
 
 #[derive(Clone, Debug)]
-pub enum ClientBoundStatus {}
+pub enum ClientBoundStatus {
+    StatusResponse(ClientboundStatusResponsePacket),
+}
 
 impl ClientBoundStatus {
     pub fn get_id(&self) -> i32 {
-        unimplemented!("Not implemented")
+        match self {
+            Self::StatusResponse(_) => status::CLIENTBOUND_STATUS_RESPONSE,
+        }
     }
 
     pub fn write_packet(&self, writer: &mut impl Write) -> Result<(), PacketWriteError> {
-        unimplemented!("Not implemented")
+        match self {
+            Self::StatusResponse(packet) => packet.write_packet(writer),
+        }
     }
 }
 

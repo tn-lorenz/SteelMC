@@ -3,7 +3,10 @@ use steel_registry::packets::serverbound::{config, handshake, login, play, statu
 
 use crate::{
     packet_traits::PacketRead,
-    packets::handshake::ClientIntentionPacket,
+    packets::{
+        handshake::ClientIntentionPacket,
+        status::serverbound_status_request_packet::ServerboundStatusRequestPacket,
+    },
     utils::{ConnectionProtocol, PacketReadError, RawPacket},
 };
 
@@ -62,11 +65,18 @@ impl ServerBoundConfiguration {
 }
 
 #[derive(Clone, Debug)]
-pub enum ServerBoundStatus {}
+pub enum ServerBoundStatus {
+    StatusRequest(ServerboundStatusRequestPacket),
+}
 
 impl ServerBoundStatus {
     pub fn from_raw_packet(raw_packet: RawPacket) -> Result<Self, PacketReadError> {
         match raw_packet.id {
+            status::SERVERBOUND_STATUS_REQUEST => {
+                let packet =
+                    ServerboundStatusRequestPacket::read_packet(&mut raw_packet.payload.reader())?;
+                Ok(Self::StatusRequest(packet))
+            }
             _ => Err(PacketReadError::MalformedValue(format!(
                 "Invalid packet id: {}",
                 raw_packet.id

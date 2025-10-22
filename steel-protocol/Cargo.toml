@@ -17,3 +17,4 @@ steel-macros = { path = "../steel-macros" }
 serde.workspace = true
 serde_json.workspace = true
 steel-registry = { path = "../steel-registry" }
+uuid.workspace = true

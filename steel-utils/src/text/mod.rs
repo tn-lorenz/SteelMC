@@ -65,4 +65,18 @@ impl TextComponent {
             extra: vec![],
         })
     }
+
+    pub fn translate<K: Into<Cow<'static, str>>, W: Into<Vec<TextComponent>>>(
+        key: K,
+        with: W,
+    ) -> Self {
+        Self(TextComponentBase {
+            content: TextContent::Translate {
+                translate: key.into(),
+                with: with.into().into_iter().map(|x| x.0).collect(),
+            },
+            style: Style::default(),
+            extra: vec![],
+        })
+    }
 }

@@ -8,12 +8,17 @@ use steel_protocol::{
     packets::{
         clientbound::{
             ClientBoundConfiguration, ClientBoundLogin, ClientBoundPacket, ClientBoundPlay,
+            ClientBoundStatus,
         },
         common::clientbound_disconnect_packet::ClientboundDisconnectPacket,
+        handshake::ClientIntent,
         login::clientbound_login_disconnect_packet::ClientboundLoginDisconnectPacket,
         serverbound::{
             ServerBoundConfiguration, ServerBoundHandshake, ServerBoundLogin, ServerBoundPlay,
             ServerBoundStatus, ServerboundPacket,
+        },
+        status::clientbound_status_response_packet::{
+            ClientboundStatusResponsePacket, Players, Status,
         },
     },
     ser::NetworkWriteExt,
@@ -282,6 +287,7 @@ impl JavaTcpClient {
                         let packet = network_reader.get_raw_packet().await;
                         match packet {
                             Ok(packet) => {
+                                log::info!("Received packet: {:?}", packet.id);
                                 match ServerboundPacket::from_raw_packet(
                                     packet,
                                     connection_protocol.load(),
@@ -336,17 +342,69 @@ impl JavaTcpClient {
             .await;
     }
 
-    pub async fn handle_handshake(&self, packet: ServerBoundHandshake) {
-        println!("Handshake: {:?}", packet);
+    fn assert_protocol(&self, protocol: ConnectionProtocol) {
+        if self.connection_protocol.load() != protocol {
+            self.close();
+        }
     }
 
-    pub async fn handle_status(&self, packet: ServerBoundStatus) {}
+    pub async fn handle_handshake(&self, packet: ServerBoundHandshake) {
+        self.assert_protocol(ConnectionProtocol::HANDSHAKING);
+        match packet {
+            ServerBoundHandshake::Intention(packet) => {
+                let intent = match packet.intention {
+                    ClientIntent::LOGIN => ConnectionProtocol::LOGIN,
+                    ClientIntent::STATUS => ConnectionProtocol::STATUS,
+                    ClientIntent::TRANSFER => ConnectionProtocol::PLAY,
+                };
+                self.connection_protocol.store(intent);
 
-    pub async fn handle_login(&self, packet: ServerBoundLogin) {}
+                if intent != ConnectionProtocol::STATUS {
+                    self.kick(TextComponent::translate(
+                        "multiplayer.disconnect.incompatible",
+                        [TextComponent::text("1.20.1".to_string())],
+                    ))
+                    .await;
+                }
+            }
+        }
+    }
 
-    pub async fn handle_configuration(&self, packet: ServerBoundConfiguration) {}
+    pub async fn handle_status(&self, packet: ServerBoundStatus) {
+        self.assert_protocol(ConnectionProtocol::STATUS);
 
-    pub async fn handle_play(&self, packet: ServerBoundPlay) {}
+        match packet {
+            ServerBoundStatus::StatusRequest(_) => {
+                let packet = ClientboundStatusResponsePacket::new(Status {
+                    description: "A Minecraft Server".to_string(),
+                    players: Some(Players {
+                        max: 10,
+                        online: 0,
+                        sample: vec![],
+                    }),
+                    enforce_secure_chat: false,
+                    favicon: None,
+                    version: None,
+                });
+                self.send_packet_now(&ClientBoundPacket::Status(
+                    ClientBoundStatus::StatusResponse(packet),
+                ))
+                .await;
+            }
+        }
+    }
+
+    pub async fn handle_login(&self, packet: ServerBoundLogin) {
+        self.assert_protocol(ConnectionProtocol::LOGIN);
+    }
+
+    pub async fn handle_configuration(&self, packet: ServerBoundConfiguration) {
+        self.assert_protocol(ConnectionProtocol::CONFIGURATION);
+    }
+
+    pub async fn handle_play(&self, packet: ServerBoundPlay) {
+        self.assert_protocol(ConnectionProtocol::PLAY);
+    }
 }
 
 impl JavaTcpClient {
