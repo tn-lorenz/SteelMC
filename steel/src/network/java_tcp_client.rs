@@ -1,16 +1,20 @@
-use std::sync::Arc;
+use std::{io::Write, sync::Arc};
 
 use bytes::Bytes;
 use crossbeam::atomic::AtomicCell;
 use steel_protocol::{
     packet_reader::TCPNetworkDecoder,
-    packet_traits::PacketWrite,
     packet_writer::TCPNetworkEncoder,
     packets::{
+        clientbound::{
+            ClientBoundConfiguration, ClientBoundLogin, ClientBoundPacket, ClientBoundPlay,
+        },
         common::clientbound_disconnect_packet::ClientboundDisconnectPacket,
         login::clientbound_login_disconnect_packet::ClientboundLoginDisconnectPacket,
+        serverbound::ServerboundPacket,
     },
-    utils::{PacketReadError, RawPacket},
+    ser::NetworkWriteExt,
+    utils::{ConnectionProtocol, PacketReadError, PacketWriteError, RawPacket},
 };
 use steel_utils::text::TextComponent;
 use thiserror::Error;
@@ -29,32 +33,6 @@ use tokio::{
 use tokio_util::{sync::CancellationToken, task::TaskTracker};
 
 use crate::network::game_profile::GameProfile;
-
-/// Describes the set of packets a connection understands at a given point.
-///
-/// A connection always starts out in state [`ConnectionProtocol::HANDSHAKING`]. In this state,
-/// the client sends its desired protocol using [`steel_protocol::packets::handshake::ClientIntentionPacket`]. The
-/// server then either accepts the connection and switches to the desired
-/// protocol, or it disconnects the client (for example, in case of an
-/// outdated client).
-///
-/// Each protocol has a PacketListener implementation tied to it for
-/// server and client respectively.
-///
-/// Every packet must correspond to exactly one protocol.
-#[derive(Clone, Copy, PartialEq, Eq, Hash)]
-pub enum ConnectionProtocol {
-    /// The handshake protocol. This is the initial protocol, in which the client tells the server its intention (i.e. which protocol it wants to use).
-    HANDSHAKING,
-    /// The play protocol. This is the main protocol that is used while "in game" and most normal packets reside in here.
-    PLAY,
-    /// The status protocol. This protocol is used when a client pings a server while on the multiplayer screen.
-    STATUS,
-    /// The login protocol. This is the first protocol the client switches to to join a server. It handles authentication with the mojang servers. After it is complete, the connection is switched to the PLAY protocol.
-    LOGIN,
-    /// The configuration protocol. Used for syncing regestered registries.
-    CONFIGURATION,
-}
 
 #[derive(Error, Debug)]
 pub enum EncryptionError {
@@ -96,6 +74,9 @@ pub struct JavaTcpClient {
     /// A token to cancel the client's operations. Called when the connection is closed. Or client is removed.
     cancellation_token: CancellationToken,
 
+    pub packet_receiver: Receiver<ServerboundPacket>,
+    packet_sender: Sender<ServerboundPacket>,
+
     /// A queue of serialized packets to send to the network
     outgoing_packet_queue: Sender<Bytes>,
     /// A queue of serialized packets to send to the network
@@ -116,6 +97,8 @@ impl JavaTcpClient {
         let (read, write) = tcp_stream.into_split();
         let (send, recv) = broadcast::channel(128);
 
+        let (packet_sender, packet_receiver) = broadcast::channel(128);
+
         Self {
             id,
             gameprofile: Mutex::new(None),
@@ -124,6 +107,8 @@ impl JavaTcpClient {
             tasks: TaskTracker::new(),
             cancellation_token,
 
+            packet_receiver,
+            packet_sender,
             outgoing_packet_queue: send,
             outgoing_packet_queue_recv: Some(recv),
             network_writer: Arc::new(Mutex::new(TCPNetworkEncoder::new(BufWriter::new(write)))),
@@ -186,10 +171,10 @@ impl JavaTcpClient {
         self.cancellation_token.cancel();
     }
 
-    pub async fn send_packet_now<P: PacketWrite>(&self, packet: &P) {
+    pub async fn send_packet_now(&self, packet: &ClientBoundPacket) {
         let mut packet_buf = Vec::new();
         let writer = &mut packet_buf;
-        packet.write_packet(writer).unwrap();
+        self.write_prefixed_packet(packet, writer).unwrap();
         if let Err(err) = self
             .network_writer
             .lock()
@@ -207,7 +192,18 @@ impl JavaTcpClient {
         }
     }
 
-    /// Starts a task that will send packets to the client.
+    pub fn write_prefixed_packet(
+        &self,
+        packet: &ClientBoundPacket,
+        writer: &mut impl Write,
+    ) -> Result<(), PacketWriteError> {
+        let packet_id = packet.get_id();
+        writer.write_var_int(packet_id)?;
+        packet.write_packet(writer)?;
+        Ok(())
+    }
+
+    /// Starts a task that will send packets to the client from the outgoing packet queue.
     /// This task will run until the client is closed or the cancellation token is cancelled.
     fn start_outgoing_packet_task(&mut self) {
         let mut packet_receiver = self
@@ -250,11 +246,24 @@ impl JavaTcpClient {
         match self.connection_protocol.load() {
             ConnectionProtocol::LOGIN => {
                 let packet = ClientboundLoginDisconnectPacket::new(reason.0);
-                self.send_packet_now(&packet).await;
+                self.send_packet_now(&ClientBoundPacket::Login(
+                    ClientBoundLogin::LoginDisconnectPacket(packet),
+                ))
+                .await;
+            }
+            ConnectionProtocol::CONFIGURATION => {
+                let packet = ClientboundDisconnectPacket::new(reason.0);
+                self.send_packet_now(&ClientBoundPacket::Configuration(
+                    ClientBoundConfiguration::Disconnect(packet),
+                ))
+                .await;
             }
             ConnectionProtocol::PLAY => {
                 let packet = ClientboundDisconnectPacket::new(reason.0);
-                self.send_packet_now(&packet).await;
+                self.send_packet_now(&ClientBoundPacket::Play(ClientBoundPlay::Disconnect(
+                    packet,
+                )))
+                .await;
             }
             _ => {}
         }

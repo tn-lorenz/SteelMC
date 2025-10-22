@@ -500,6 +500,7 @@ dependencies = [
  "serde",
  "serde_json",
  "steel-macros",
+ "steel-registry",
  "steel-utils",
  "take_mut",
  "thiserror",

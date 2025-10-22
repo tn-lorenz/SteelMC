@@ -17,3 +17,7 @@ pub mod vanilla_blocks;
 //#[rustfmt::skip]
 #[path = "generated/vanilla_items.rs"]
 pub mod vanilla_items;
+
+//#[rustfmt::skip]
+#[path = "generated/packets.rs"]
+pub mod packets;

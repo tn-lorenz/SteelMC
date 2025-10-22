@@ -30,6 +30,32 @@ pub type CompressionLevel = u32;
 pub const MAX_PACKET_SIZE: usize = 2_097_152;
 pub const MAX_PACKET_DATA_SIZE: usize = 8_388_608;
 
+/// Describes the set of packets a connection understands at a given point.
+///
+/// A connection always starts out in state [`ConnectionProtocol::HANDSHAKING`]. In this state,
+/// the client sends its desired protocol using [`steel_protocol::packets::handshake::ClientIntentionPacket`]. The
+/// server then either accepts the connection and switches to the desired
+/// protocol, or it disconnects the client (for example, in case of an
+/// outdated client).
+///
+/// Each protocol has a PacketListener implementation tied to it for
+/// server and client respectively.
+///
+/// Every packet must correspond to exactly one protocol.
+#[derive(Clone, Copy, PartialEq, Eq, Hash)]
+pub enum ConnectionProtocol {
+    /// The handshake protocol. This is the initial protocol, in which the client tells the server its intention (i.e. which protocol it wants to use).
+    HANDSHAKING,
+    /// The play protocol. This is the main protocol that is used while "in game" and most normal packets reside in here.
+    PLAY,
+    /// The status protocol. This protocol is used when a client pings a server while on the multiplayer screen.
+    STATUS,
+    /// The login protocol. This is the first protocol the client switches to to join a server. It handles authentication with the mojang servers. After it is complete, the connection is switched to the PLAY protocol.
+    LOGIN,
+    /// The configuration protocol. Used for syncing regestered registries.
+    CONFIGURATION,
+}
+
 pub struct RawPacket {
     pub id: i32,
     pub payload: Bytes,

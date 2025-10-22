@@ -1,8 +1,7 @@
 use crate::packet_traits::{PacketRead, PacketWrite};
-use steel_macros::{PacketRead, PacketWrite};
+use steel_macros::{PacketRead, PacketWrite, packet};
 
-#[derive(Clone, Copy, PartialEq, Eq, PacketRead, PacketWrite)]
-#[write_as(as = "var_int")]
+#[derive(Clone, Copy, PartialEq, Eq, PacketRead)]
 #[read_as(as = "var_int")]
 pub enum ClientIntent {
     STATUS = 1,
@@ -10,10 +9,9 @@ pub enum ClientIntent {
     TRANSFER = 3,
 }
 
-#[derive(PacketRead, PacketWrite)]
+#[derive(PacketRead, Clone)]
 pub struct ClientIntentionPacket {
     #[read_as(as = "var_int")]
-    #[write_as(as = "var_int")]
     pub protocol_version: i32,
     #[read_as(as = "string", bound = 255)]
     pub hostname: String,
