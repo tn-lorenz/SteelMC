@@ -342,14 +342,18 @@ impl JavaTcpClient {
             .await;
     }
 
-    fn assert_protocol(&self, protocol: ConnectionProtocol) {
+    fn assert_protocol(&self, protocol: ConnectionProtocol) -> bool {
         if self.connection_protocol.load() != protocol {
             self.close();
+            return false;
         }
+        true
     }
 
     pub async fn handle_handshake(&self, packet: ServerBoundHandshake) {
-        self.assert_protocol(ConnectionProtocol::HANDSHAKING);
+        if !self.assert_protocol(ConnectionProtocol::HANDSHAKING) {
+            return;
+        }
         match packet {
             ServerBoundHandshake::Intention(packet) => {
                 let intent = match packet.intention {
@@ -371,7 +375,9 @@ impl JavaTcpClient {
     }
 
     pub async fn handle_status(&self, packet: ServerBoundStatus) {
-        self.assert_protocol(ConnectionProtocol::STATUS);
+        if !self.assert_protocol(ConnectionProtocol::STATUS) {
+            return;
+        }
 
         match packet {
             ServerBoundStatus::StatusRequest(_) => {
@@ -395,15 +401,21 @@ impl JavaTcpClient {
     }
 
     pub async fn handle_login(&self, packet: ServerBoundLogin) {
-        self.assert_protocol(ConnectionProtocol::LOGIN);
+        if !self.assert_protocol(ConnectionProtocol::LOGIN) {
+            return;
+        }
     }
 
     pub async fn handle_configuration(&self, packet: ServerBoundConfiguration) {
-        self.assert_protocol(ConnectionProtocol::CONFIGURATION);
+        if !self.assert_protocol(ConnectionProtocol::CONFIGURATION) {
+            return;
+        }
     }
 
     pub async fn handle_play(&self, packet: ServerBoundPlay) {
-        self.assert_protocol(ConnectionProtocol::PLAY);
+        if !self.assert_protocol(ConnectionProtocol::PLAY) {
+            return;
+        }
     }
 }
 
