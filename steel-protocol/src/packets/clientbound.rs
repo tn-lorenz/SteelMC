@@ -4,11 +4,13 @@ use crate::{
     packet_traits::PacketWrite,
     packets::{
         common::clientbound_disconnect_packet::ClientboundDisconnectPacket,
-        handshake::ClientIntentionPacket,
         login::clientbound_login_disconnect_packet::ClientboundLoginDisconnectPacket,
-        status::clientbound_status_response_packet::ClientboundStatusResponsePacket,
+        status::{
+            clientbound_pong_response_packet::ClientboundPongResponsePacket,
+            clientbound_status_response_packet::ClientboundStatusResponsePacket,
+        },
     },
-    utils::{ConnectionProtocol, PacketWriteError},
+    utils::PacketWriteError,
 };
 use steel_registry::packets::clientbound::{config, login, play, status};
 
@@ -59,18 +61,21 @@ impl ClientBoundConfiguration {
 #[derive(Clone, Debug)]
 pub enum ClientBoundStatus {
     StatusResponse(ClientboundStatusResponsePacket),
+    Pong(ClientboundPongResponsePacket),
 }
 
 impl ClientBoundStatus {
     pub fn get_id(&self) -> i32 {
         match self {
             Self::StatusResponse(_) => status::CLIENTBOUND_STATUS_RESPONSE,
+            Self::Pong(_) => status::CLIENTBOUND_PONG_RESPONSE,
         }
     }
 
     pub fn write_packet(&self, writer: &mut impl Write) -> Result<(), PacketWriteError> {
         match self {
             Self::StatusResponse(packet) => packet.write_packet(writer),
+            Self::Pong(packet) => packet.write_packet(writer),
         }
     }
 }

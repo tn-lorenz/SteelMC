@@ -17,8 +17,11 @@ use steel_protocol::{
             ServerBoundConfiguration, ServerBoundHandshake, ServerBoundLogin, ServerBoundPlay,
             ServerBoundStatus, ServerboundPacket,
         },
-        status::clientbound_status_response_packet::{
-            ClientboundStatusResponsePacket, Players, Status,
+        status::{
+            clientbound_pong_response_packet::ClientboundPongResponsePacket,
+            clientbound_status_response_packet::{
+                ClientboundStatusResponsePacket, Players, Status, Version,
+            },
         },
     },
     ser::NetworkWriteExt,
@@ -297,7 +300,7 @@ impl JavaTcpClient {
                                     }
                                     Err(err) => {
                                         log::warn!(
-                                            "Failed to read packet from client {}: {}",
+                                            "Failed to get packet from client {}: {}",
                                             id,
                                             err
                                         );
@@ -306,7 +309,10 @@ impl JavaTcpClient {
                                 }
                             }
                             Err(err) => {
-                                log::warn!("Failed to read packet from client {}: {}", id, err);
+                                if cancellation_token_clone.is_cancelled() {
+                                    break;
+                                }
+                                log::info!("Failed to get raw packet from client {}: {}", id, err,);
                                 cancellation_token_clone.cancel();
                             }
                         }
@@ -316,6 +322,8 @@ impl JavaTcpClient {
         });
     }
 
+    // This code is used but the linter doesn't notice it
+    #[allow(dead_code)]
     pub async fn process_packets(self: &Arc<Self>) {
         let mut packet_receiver = self
             .packet_receiver
@@ -385,34 +393,47 @@ impl JavaTcpClient {
                     description: "A Minecraft Server".to_string(),
                     players: Some(Players {
                         max: 10,
-                        online: 0,
+                        online: 5,
                         sample: vec![],
                     }),
                     enforce_secure_chat: false,
                     favicon: None,
-                    version: None,
+                    version: Some(Version {
+                        name: "1.21.10".to_string(),
+                        protocol: steel_registry::packets::CURRENT_MC_PROTOCOL as i32,
+                    }),
                 });
                 self.send_packet_now(&ClientBoundPacket::Status(
                     ClientBoundStatus::StatusResponse(packet),
                 ))
                 .await;
             }
+            ServerBoundStatus::PingRequest(packet) => {
+                let packet = ClientboundPongResponsePacket::new(packet.time);
+                log::info!(
+                    "Sending pong response packet to client {}: {}",
+                    self.id,
+                    packet.time
+                );
+                self.send_packet_now(&ClientBoundPacket::Status(ClientBoundStatus::Pong(packet)))
+                    .await;
+            }
         }
     }
 
-    pub async fn handle_login(&self, packet: ServerBoundLogin) {
+    pub async fn handle_login(&self, _packet: ServerBoundLogin) {
         if !self.assert_protocol(ConnectionProtocol::LOGIN) {
             return;
         }
     }
 
-    pub async fn handle_configuration(&self, packet: ServerBoundConfiguration) {
+    pub async fn handle_configuration(&self, _packet: ServerBoundConfiguration) {
         if !self.assert_protocol(ConnectionProtocol::CONFIGURATION) {
             return;
         }
     }
 
-    pub async fn handle_play(&self, packet: ServerBoundPlay) {
+    pub async fn handle_play(&self, _packet: ServerBoundPlay) {
         if !self.assert_protocol(ConnectionProtocol::PLAY) {
             return;
         }

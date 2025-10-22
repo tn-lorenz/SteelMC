@@ -1,5 +1,4 @@
-use steel_macros::{PacketWrite, packet};
-use steel_registry::packets::clientbound::login;
+use steel_macros::PacketWrite;
 use steel_utils::text::TextComponentBase;
 
 use crate::packet_traits::PacketWrite;

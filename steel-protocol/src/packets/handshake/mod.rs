@@ -1,5 +1,5 @@
-use crate::packet_traits::{PacketRead, PacketWrite};
-use steel_macros::{PacketRead, PacketWrite, packet};
+use crate::packet_traits::PacketRead;
+use steel_macros::PacketRead;
 
 #[derive(Clone, Copy, PartialEq, Eq, PacketRead, Debug)]
 #[read_as(as = "var_int")]

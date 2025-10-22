@@ -1,9 +1,7 @@
-use std::io::Write;
+use steel_macros::PacketWrite;
+use steel_utils::text::TextComponentBase;
 
-use steel_macros::{PacketWrite, packet};
-use steel_utils::text::{TextComponent, TextComponentBase};
-
-use crate::{packet_traits::PacketWrite, ser::NetworkWriteExt, utils::PacketWriteError};
+use crate::{packet_traits::PacketWrite, ser::NetworkWriteExt};
 
 #[derive(PacketWrite, Clone, Debug)]
 pub struct ClientboundLoginDisconnectPacket {
