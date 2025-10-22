@@ -1,4 +1,4 @@
-use std::{io::Write, sync::Arc};
+use std::{io::Write, net::SocketAddr, sync::Arc};
 
 use bytes::Bytes;
 use crossbeam::atomic::AtomicCell;
@@ -11,7 +11,10 @@ use steel_protocol::{
         },
         common::clientbound_disconnect_packet::ClientboundDisconnectPacket,
         login::clientbound_login_disconnect_packet::ClientboundLoginDisconnectPacket,
-        serverbound::ServerboundPacket,
+        serverbound::{
+            ServerBoundConfiguration, ServerBoundHandshake, ServerBoundLogin, ServerBoundPlay,
+            ServerBoundStatus, ServerboundPacket,
+        },
     },
     ser::NetworkWriteExt,
     utils::{ConnectionProtocol, PacketReadError, PacketWriteError, RawPacket},
@@ -23,7 +26,6 @@ use tokio::{
     net::{
         TcpStream,
         tcp::{OwnedReadHalf, OwnedWriteHalf},
-        unix::SocketAddr,
     },
     sync::{
         Mutex,
@@ -74,8 +76,8 @@ pub struct JavaTcpClient {
     /// A token to cancel the client's operations. Called when the connection is closed. Or client is removed.
     cancellation_token: CancellationToken,
 
-    pub packet_receiver: Receiver<ServerboundPacket>,
-    packet_recv_sender: Option<Sender<ServerboundPacket>>,
+    packet_receiver: Mutex<Option<Receiver<ServerboundPacket>>>,
+    pub packet_recv_sender: Arc<Sender<ServerboundPacket>>,
 
     /// A queue of serialized packets to send to the network
     outgoing_packet_queue: Sender<Bytes>,
@@ -107,8 +109,8 @@ impl JavaTcpClient {
             tasks: TaskTracker::new(),
             cancellation_token,
 
-            packet_receiver,
-            packet_recv_sender: Some(packet_recv_sender),
+            packet_receiver: Mutex::new(Some(packet_receiver)),
+            packet_recv_sender: Arc::new(packet_recv_sender),
             outgoing_packet_queue: send,
             outgoing_packet_queue_recv: Some(recv),
             network_writer: Arc::new(Mutex::new(TCPNetworkEncoder::new(BufWriter::new(write)))),
@@ -171,6 +173,11 @@ impl JavaTcpClient {
         self.cancellation_token.cancel();
     }
 
+    pub async fn await_tasks(&self) {
+        self.tasks.close();
+        self.tasks.wait().await;
+    }
+
     pub async fn send_packet_now(&self, packet: &ClientBoundPacket) {
         let mut packet_buf = Vec::new();
         let writer = &mut packet_buf;
@@ -220,7 +227,7 @@ impl JavaTcpClient {
 
     /// Starts a task that will send packets to the client from the outgoing packet queue.
     /// This task will run until the client is closed or the cancellation token is cancelled.
-    fn start_outgoing_packet_task(&mut self) {
+    pub fn start_outgoing_packet_task(&mut self) {
         let mut packet_sender_recv = self
             .outgoing_packet_queue_recv
             .take()
@@ -259,14 +266,11 @@ impl JavaTcpClient {
 }
 
 impl JavaTcpClient {
-    async fn start_incoming_packet_task(&mut self) {
+    pub fn start_incoming_packet_task(&mut self) {
         let network_reader = self.network_reader.clone();
         let cancellation_token = self.cancellation_token.clone();
         let id = self.id;
-        let packet_recv_sender = self
-            .packet_recv_sender
-            .take()
-            .expect("This was set in the new fn");
+        let packet_recv_sender = self.packet_recv_sender.clone();
         let connection_protocol = self.connection_protocol.clone();
 
         self.tasks.spawn(async move {
@@ -295,6 +299,44 @@ impl JavaTcpClient {
                 .await;
         });
     }
+
+    pub async fn process_packets(self: &Arc<Self>) {
+        let mut packet_receiver = self
+            .packet_receiver
+            .lock()
+            .await
+            .take()
+            .expect("This was set in the new fn or the function was called twice");
+
+        self.cancellation_token
+            .run_until_cancelled(async move {
+                loop {
+                    let packet = packet_receiver.recv().await.unwrap();
+                    match packet {
+                        ServerboundPacket::Handshake(packet) => self.handle_handshake(packet).await,
+                        ServerboundPacket::Status(packet) => self.handle_status(packet).await,
+                        ServerboundPacket::Login(packet) => self.handle_login(packet).await,
+                        ServerboundPacket::Configuration(packet) => {
+                            self.handle_configuration(packet).await
+                        }
+                        ServerboundPacket::Play(packet) => self.handle_play(packet).await,
+                    }
+                }
+            })
+            .await;
+    }
+
+    pub async fn handle_handshake(&self, packet: ServerBoundHandshake) {
+        println!("Handshake: {:?}", packet);
+    }
+
+    pub async fn handle_status(&self, packet: ServerBoundStatus) {}
+
+    pub async fn handle_login(&self, packet: ServerBoundLogin) {}
+
+    pub async fn handle_configuration(&self, packet: ServerBoundConfiguration) {}
+
+    pub async fn handle_play(&self, packet: ServerBoundPlay) {}
 }
 
 impl JavaTcpClient {

@@ -1,3 +1,5 @@
+use log::LevelFilter;
+use simplelog::{ColorChoice, Config, TermLogger, TerminalMode};
 use steel_registry::{
     blocks::blocks::BlockRegistry,
     data_components::{DataComponentRegistry, vanilla_components},
@@ -6,28 +8,19 @@ use steel_registry::{
 };
 use steel_utils::types::ResourceLocation;
 mod network;
+use steel::SteelServer;
 
 #[tokio::main]
 async fn main() {
-    let mut registry = BlockRegistry::new();
+    TermLogger::init(
+        LevelFilter::Info,
+        Config::default(),
+        TerminalMode::Mixed,
+        ColorChoice::Auto,
+    )
+    .unwrap();
 
-    let start = tokio::time::Instant::now();
-    vanilla_blocks::register_blocks(&mut registry);
-    registry.freeze();
-    println!("Block registry loaded in: {:?}", start.elapsed());
+    let mut server = SteelServer::new().await;
 
-    let mut data_component_registry = DataComponentRegistry::new();
-    vanilla_components::register_vanilla_data_components(&mut data_component_registry);
-    data_component_registry.freeze();
-
-    let mut item_registry = ItemRegistry::new();
-    let start = tokio::time::Instant::now();
-    vanilla_items::register_items(&mut item_registry);
-    item_registry.freeze();
-    println!("Item registry loaded in: {:?}", start.elapsed());
-
-    println!(
-        "Test item id: {:?}",
-        item_registry.by_key(&ResourceLocation::vanilla_static("stone"))
-    );
+    server.start().await;
 }
