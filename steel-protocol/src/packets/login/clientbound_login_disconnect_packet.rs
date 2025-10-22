@@ -5,7 +5,7 @@ use steel_utils::text::{TextComponent, TextComponentBase};
 
 use crate::{packet_traits::PacketWrite, ser::NetworkWriteExt, utils::PacketWriteError};
 
-#[derive(PacketWrite, Clone)]
+#[derive(PacketWrite, Clone, Debug)]
 pub struct ClientboundLoginDisconnectPacket {
     #[write_as(as = "json")]
     pub reason: TextComponentBase,

@@ -17,7 +17,7 @@ When adding a common packet search up .addPacket(CommonPacketTypes.CLIENTBOUND_D
 
 // Clientbound packets
 
-#[derive(Clone)]
+#[derive(Clone, Debug)]
 pub enum ClientBoundLogin {
     LoginDisconnectPacket(ClientboundLoginDisconnectPacket),
 }
@@ -36,7 +36,7 @@ impl ClientBoundLogin {
     }
 }
 
-#[derive(Clone)]
+#[derive(Clone, Debug)]
 pub enum ClientBoundConfiguration {
     Disconnect(ClientboundDisconnectPacket),
 }
@@ -55,7 +55,7 @@ impl ClientBoundConfiguration {
     }
 }
 
-#[derive(Clone)]
+#[derive(Clone, Debug)]
 pub enum ClientBoundStatus {}
 
 impl ClientBoundStatus {
@@ -68,7 +68,7 @@ impl ClientBoundStatus {
     }
 }
 
-#[derive(Clone)]
+#[derive(Clone, Debug)]
 pub enum ClientBoundPlay {
     Disconnect(ClientboundDisconnectPacket),
 }
@@ -87,7 +87,7 @@ impl ClientBoundPlay {
     }
 }
 
-#[derive(Clone)]
+#[derive(Clone, Debug)]
 pub enum ClientBoundPacket {
     Status(ClientBoundStatus),
     Login(ClientBoundLogin),

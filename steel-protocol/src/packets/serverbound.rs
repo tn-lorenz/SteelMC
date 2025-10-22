@@ -1,6 +1,11 @@
+use bytes::Buf;
 use steel_registry::packets::serverbound::{config, handshake, login, play, status};
 
-use crate::packets::handshake::ClientIntentionPacket;
+use crate::{
+    packet_traits::PacketRead,
+    packets::handshake::ClientIntentionPacket,
+    utils::{ConnectionProtocol, PacketReadError, RawPacket},
+};
 
 /*
 When adding a common packet search up .addPacket(CommonPacketTypes.CLIENTBOUND_DISCONNECT) for example to see all it's usages.
@@ -8,56 +13,83 @@ When adding a common packet search up .addPacket(CommonPacketTypes.CLIENTBOUND_D
 
 // Serverbound packets
 
-#[derive(Clone)]
+#[derive(Clone, Debug)]
 pub enum ServerBoundHandshake {
     Intention(ClientIntentionPacket),
 }
 
 impl ServerBoundHandshake {
-    pub fn get_id(&self) -> i32 {
-        match self {
-            Self::Intention(_) => handshake::SERVERBOUND_INTENTION,
+    pub fn from_raw_packet(raw_packet: RawPacket) -> Result<Self, PacketReadError> {
+        match raw_packet.id {
+            handshake::SERVERBOUND_INTENTION => {
+                let packet = ClientIntentionPacket::read_packet(&mut raw_packet.payload.reader())?;
+                Ok(Self::Intention(packet))
+            }
+            _ => Err(PacketReadError::MalformedValue(format!(
+                "Invalid packet id: {}",
+                raw_packet.id
+            ))),
         }
     }
 }
 
-#[derive(Clone)]
+#[derive(Clone, Debug)]
 pub enum ServerBoundLogin {}
 
 impl ServerBoundLogin {
-    pub fn get_id(&self) -> i32 {
-        unimplemented!()
+    pub fn from_raw_packet(raw_packet: RawPacket) -> Result<Self, PacketReadError> {
+        match raw_packet.id {
+            _ => Err(PacketReadError::MalformedValue(format!(
+                "Invalid packet id: {}",
+                raw_packet.id
+            ))),
+        }
     }
 }
 
-#[derive(Clone)]
+#[derive(Clone, Debug)]
 pub enum ServerBoundConfiguration {}
 
 impl ServerBoundConfiguration {
-    pub fn get_id(&self) -> i32 {
-        unimplemented!()
+    pub fn from_raw_packet(raw_packet: RawPacket) -> Result<Self, PacketReadError> {
+        match raw_packet.id {
+            _ => Err(PacketReadError::MalformedValue(format!(
+                "Invalid packet id: {}",
+                raw_packet.id
+            ))),
+        }
     }
 }
 
-#[derive(Clone)]
+#[derive(Clone, Debug)]
 pub enum ServerBoundStatus {}
 
 impl ServerBoundStatus {
-    pub fn get_id(&self) -> i32 {
-        unimplemented!()
+    pub fn from_raw_packet(raw_packet: RawPacket) -> Result<Self, PacketReadError> {
+        match raw_packet.id {
+            _ => Err(PacketReadError::MalformedValue(format!(
+                "Invalid packet id: {}",
+                raw_packet.id
+            ))),
+        }
     }
 }
 
-#[derive(Clone)]
+#[derive(Clone, Debug)]
 pub enum ServerBoundPlay {}
 
 impl ServerBoundPlay {
-    pub fn get_id(&self) -> i32 {
-        unimplemented!()
+    pub fn from_raw_packet(raw_packet: RawPacket) -> Result<Self, PacketReadError> {
+        match raw_packet.id {
+            _ => Err(PacketReadError::MalformedValue(format!(
+                "Invalid packet id: {}",
+                raw_packet.id
+            ))),
+        }
     }
 }
 
-#[derive(Clone)]
+#[derive(Clone, Debug)]
 pub enum ServerboundPacket {
     Handshake(ServerBoundHandshake),
     Status(ServerBoundStatus),
@@ -67,13 +99,31 @@ pub enum ServerboundPacket {
 }
 
 impl ServerboundPacket {
-    pub fn get_id(&self) -> i32 {
-        match self {
-            Self::Handshake(handshake) => handshake.get_id(),
-            Self::Status(status) => status.get_id(),
-            Self::Login(login) => login.get_id(),
-            Self::Configuration(configuration) => configuration.get_id(),
-            Self::Play(play) => play.get_id(),
+    pub fn from_raw_packet(
+        raw_packet: RawPacket,
+        connection_protocol: ConnectionProtocol,
+    ) -> Result<Self, PacketReadError> {
+        match connection_protocol {
+            ConnectionProtocol::HANDSHAKING => {
+                let packet = ServerBoundHandshake::from_raw_packet(raw_packet)?;
+                Ok(Self::Handshake(packet))
+            }
+            ConnectionProtocol::STATUS => {
+                let packet = ServerBoundStatus::from_raw_packet(raw_packet)?;
+                Ok(Self::Status(packet))
+            }
+            ConnectionProtocol::LOGIN => {
+                let packet = ServerBoundLogin::from_raw_packet(raw_packet)?;
+                Ok(Self::Login(packet))
+            }
+            ConnectionProtocol::CONFIGURATION => {
+                let packet = ServerBoundConfiguration::from_raw_packet(raw_packet)?;
+                Ok(Self::Configuration(packet))
+            }
+            ConnectionProtocol::PLAY => {
+                let packet = ServerBoundPlay::from_raw_packet(raw_packet)?;
+                Ok(Self::Play(packet))
+            }
         }
     }
 }

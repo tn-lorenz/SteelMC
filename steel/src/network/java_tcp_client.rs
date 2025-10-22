@@ -66,7 +66,7 @@ pub struct JavaTcpClient {
     /// The client's game profile information.
     pub gameprofile: Mutex<Option<GameProfile>>,
     /// The current connection state of the client (e.g., Handshaking, Status, Play).
-    pub connection_protocol: AtomicCell<ConnectionProtocol>,
+    pub connection_protocol: Arc<AtomicCell<ConnectionProtocol>>,
     /// The client's IP address.
     pub address: Mutex<SocketAddr>,
     /// A collection of tasks associated with this client. The tasks await completion when removing the client.
@@ -75,7 +75,7 @@ pub struct JavaTcpClient {
     cancellation_token: CancellationToken,
 
     pub packet_receiver: Receiver<ServerboundPacket>,
-    packet_sender: Sender<ServerboundPacket>,
+    packet_recv_sender: Option<Sender<ServerboundPacket>>,
 
     /// A queue of serialized packets to send to the network
     outgoing_packet_queue: Sender<Bytes>,
@@ -84,7 +84,7 @@ pub struct JavaTcpClient {
     /// The packet encoder for outgoing packets.
     network_writer: Arc<Mutex<TCPNetworkEncoder<BufWriter<OwnedWriteHalf>>>>,
     /// The packet decoder for incoming packets.
-    network_reader: Mutex<TCPNetworkDecoder<BufReader<OwnedReadHalf>>>,
+    network_reader: Arc<Mutex<TCPNetworkDecoder<BufReader<OwnedReadHalf>>>>,
 }
 
 impl JavaTcpClient {
@@ -97,22 +97,22 @@ impl JavaTcpClient {
         let (read, write) = tcp_stream.into_split();
         let (send, recv) = broadcast::channel(128);
 
-        let (packet_sender, packet_receiver) = broadcast::channel(128);
+        let (packet_recv_sender, packet_receiver) = broadcast::channel(128);
 
         Self {
             id,
             gameprofile: Mutex::new(None),
             address: Mutex::new(address),
-            connection_protocol: AtomicCell::new(ConnectionProtocol::HANDSHAKING),
+            connection_protocol: Arc::new(AtomicCell::new(ConnectionProtocol::HANDSHAKING)),
             tasks: TaskTracker::new(),
             cancellation_token,
 
             packet_receiver,
-            packet_sender,
+            packet_recv_sender: Some(packet_recv_sender),
             outgoing_packet_queue: send,
             outgoing_packet_queue_recv: Some(recv),
             network_writer: Arc::new(Mutex::new(TCPNetworkEncoder::new(BufWriter::new(write)))),
-            network_reader: Mutex::new(TCPNetworkDecoder::new(BufReader::new(read))),
+            network_reader: Arc::new(Mutex::new(TCPNetworkDecoder::new(BufReader::new(read)))),
         }
     }
 
@@ -221,7 +221,7 @@ impl JavaTcpClient {
     /// Starts a task that will send packets to the client from the outgoing packet queue.
     /// This task will run until the client is closed or the cancellation token is cancelled.
     fn start_outgoing_packet_task(&mut self) {
-        let mut packet_receiver = self
+        let mut packet_sender_recv = self
             .outgoing_packet_queue_recv
             .take()
             .expect("This was set in the new fn");
@@ -235,7 +235,7 @@ impl JavaTcpClient {
             cancellation_token
                 .run_until_cancelled(async move {
                     loop {
-                        match packet_receiver.recv().await {
+                        match packet_sender_recv.recv().await {
                             Ok(packet) => {
                                 if let Err(err) = writer.lock().await.write_packet(packet).await {
                                     log::warn!("Failed to send packet to client {}: {}", id, err);
@@ -244,7 +244,7 @@ impl JavaTcpClient {
                             }
                             Err(err) => {
                                 log::warn!(
-                                    "Internal packet_receiver channel closed for client {}: {}",
+                                    "Internal packet_sender_recv channel closed for client {}: {}",
                                     id,
                                     err
                                 );
@@ -256,7 +256,48 @@ impl JavaTcpClient {
                 .await;
         });
     }
+}
 
+impl JavaTcpClient {
+    async fn start_incoming_packet_task(&mut self) {
+        let network_reader = self.network_reader.clone();
+        let cancellation_token = self.cancellation_token.clone();
+        let id = self.id;
+        let packet_recv_sender = self
+            .packet_recv_sender
+            .take()
+            .expect("This was set in the new fn");
+        let connection_protocol = self.connection_protocol.clone();
+
+        self.tasks.spawn(async move {
+            let cancellation_token_clone = cancellation_token.clone();
+            cancellation_token
+                .run_until_cancelled(async move {
+                    let mut network_reader = network_reader.lock().await;
+                    loop {
+                        let packet = network_reader.get_raw_packet().await;
+                        match packet {
+                            Ok(packet) => {
+                                let packet = ServerboundPacket::from_raw_packet(
+                                    packet,
+                                    connection_protocol.load(),
+                                )
+                                .unwrap();
+                                packet_recv_sender.send(packet).unwrap();
+                            }
+                            Err(err) => {
+                                log::warn!("Failed to read packet from client {}: {}", id, err);
+                                cancellation_token_clone.cancel();
+                            }
+                        }
+                    }
+                })
+                .await;
+        });
+    }
+}
+
+impl JavaTcpClient {
     pub async fn kick(&self, reason: TextComponent) {
         match self.connection_protocol.load() {
             ConnectionProtocol::LOGIN => {
