@@ -76,16 +76,16 @@ impl ResourceLocation {
     pub fn valid_namespace_char(namespace_char: char) -> bool {
         namespace_char == '_'
             || namespace_char == '-'
-            || namespace_char >= 'a' && namespace_char <= 'z'
-            || namespace_char >= '0' && namespace_char <= '9'
+            || namespace_char.is_ascii_lowercase()
+            || namespace_char.is_ascii_digit()
             || namespace_char == '.'
     }
 
     pub fn valid_path_char(path_char: char) -> bool {
         path_char == '_'
             || path_char == '-'
-            || path_char >= 'a' && path_char <= 'z'
-            || path_char >= '0' && path_char <= '9'
+            || path_char.is_ascii_lowercase()
+            || path_char.is_ascii_digit()
             || path_char == '/'
             || path_char == '.'
     }

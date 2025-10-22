@@ -191,7 +191,7 @@ impl<W: AsyncWrite + Unpin> TCPNetworkEncoder<W> {
 
                 let complete_len =
                     var_int::written_size(full_packet_len) + full_packet_len as usize;
-                if complete_len > MAX_PACKET_SIZE as usize {
+                if complete_len > MAX_PACKET_SIZE {
                     return Err(PacketWriteError::TooLong(complete_len));
                 }
 
@@ -211,7 +211,7 @@ impl<W: AsyncWrite + Unpin> TCPNetworkEncoder<W> {
 
                 let complete_serialization_len =
                     var_int::written_size(full_packet_len) + full_packet_len as usize;
-                if complete_serialization_len > MAX_PACKET_SIZE as usize {
+                if complete_serialization_len > MAX_PACKET_SIZE {
                     return Err(PacketWriteError::TooLong(complete_serialization_len));
                 }
 
@@ -227,7 +227,7 @@ impl<W: AsyncWrite + Unpin> TCPNetworkEncoder<W> {
             // Length of Packet ID + Data
 
             let complete_len = var_int::written_size(data_len as _) + data_len;
-            if complete_len > MAX_PACKET_SIZE as usize {
+            if complete_len > MAX_PACKET_SIZE {
                 return Err(PacketWriteError::TooLong(complete_len));
             }
 

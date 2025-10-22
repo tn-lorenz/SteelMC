@@ -13,7 +13,7 @@ use async_compression::tokio::bufread::ZlibDecoder;
 use tokio::io::{AsyncRead, AsyncReadExt, BufReader, ReadBuf};
 
 use crate::{
-    codec::{errors::ReadingError, var_int},
+    codec::var_int,
     utils::{
         Aes128Cfb8Dec, CompressionThreshold, MAX_PACKET_DATA_SIZE, MAX_PACKET_SIZE,
         PacketReadError, RawPacket, StreamDecryptor,

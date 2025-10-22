@@ -37,6 +37,12 @@ pub struct DataComponentRegistry {
     allows_registering: bool,
 }
 
+impl Default for DataComponentRegistry {
+    fn default() -> Self {
+        Self::new()
+    }
+}
+
 impl DataComponentRegistry {
     pub fn new() -> Self {
         Self {
@@ -66,6 +72,12 @@ impl DataComponentRegistry {
 #[derive(Debug)]
 pub struct DataComponentMap {
     map: HashMap<ResourceLocation, Box<dyn ComponentValue>>,
+}
+
+impl Default for DataComponentMap {
+    fn default() -> Self {
+        Self::new()
+    }
 }
 
 impl DataComponentMap {

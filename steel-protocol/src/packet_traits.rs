@@ -4,7 +4,6 @@ use crate::{
     ser::{NetworkReadExt, NetworkWriteExt},
     utils::{PacketReadError, PacketWriteError},
 };
-use bytes::{Buf, Bytes};
 
 pub trait PacketRead {
     fn read_packet(data: &mut impl Read) -> Result<Self, PacketReadError>

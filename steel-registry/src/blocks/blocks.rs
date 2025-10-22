@@ -76,6 +76,12 @@ pub struct BlockRegistry {
     pub next_state_id: u16,
 }
 
+impl Default for BlockRegistry {
+    fn default() -> Self {
+        Self::new()
+    }
+}
+
 impl BlockRegistry {
     // Creates a new, empty registry.
     pub fn new() -> Self {
@@ -234,11 +240,9 @@ impl BlockRegistry {
             .properties
             .iter()
             .position(|prop| prop.get_name() == property.as_dyn().get_name())
-            .expect(&format!(
-                "Property {} not found on block {}",
+            .unwrap_or_else(|| panic!("Property {} not found on block {}",
                 property.as_dyn().get_name(),
-                block.key.to_string()
-            ));
+                block.key.to_string()));
 
         // Get the base state ID for this block (O(1) lookup)
         let block_id = self.state_to_block_id[id.0 as usize];

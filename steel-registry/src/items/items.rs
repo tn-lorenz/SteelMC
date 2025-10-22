@@ -18,7 +18,7 @@ impl Item {
         }
     }
 
-    pub fn from_block_custom_name(block: BlockRef, name: &'static str) -> Self {
+    pub fn from_block_custom_name(_block: BlockRef, name: &'static str) -> Self {
         Self {
             key: ResourceLocation::vanilla_static(name),
             components: DataComponentMap::common_item_components(),
@@ -32,6 +32,12 @@ pub struct ItemRegistry {
     items_by_id: Vec<ItemRef>,
     items_by_key: HashMap<ResourceLocation, usize>,
     allows_registering: bool,
+}
+
+impl Default for ItemRegistry {
+    fn default() -> Self {
+        Self::new()
+    }
 }
 
 impl ItemRegistry {

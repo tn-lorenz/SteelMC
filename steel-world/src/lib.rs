@@ -1,7 +1,6 @@
-use std::sync::Arc;
 
-use scc::{HashIndex, hash_index::OccupiedEntry};
-use steel_utils::{ChunkPos, SteelRwLock, math::vector2::Vector2};
+use scc::HashIndex;
+use steel_utils::{ChunkPos, SteelRwLock};
 
 use crate::section::ChunkSections;
 
@@ -14,6 +13,12 @@ pub struct ChunkData {
 
 pub struct Level {
     pub chunks: HashIndex<ChunkPos, SteelRwLock<ChunkData>>,
+}
+
+impl Default for Level {
+    fn default() -> Self {
+        Self::new()
+    }
 }
 
 impl Level {
