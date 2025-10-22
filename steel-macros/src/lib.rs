@@ -110,6 +110,51 @@ pub fn packet_read_derive(input: TokenStream) -> TokenStream {
                 }
             });
 
+            // Support reading the enum discriminant using a specified strategy
+            // Defaults to reading a varint when no attribute is provided
+            let mut read_strategy: Option<String> = None;
+            let mut bound: Option<syn::LitInt> = None;
+            if let Some(attr) = input.attrs.iter().find(|a| a.path().is_ident("read_as")) {
+                if let Meta::List(meta) = attr.meta.clone() {
+                    meta.parse_nested_meta(|meta| {
+                        if meta.path.is_ident("as") {
+                            let value = meta.value()?;
+                            let s: LitStr = value.parse()?;
+                            read_strategy = Some(s.value());
+                            Ok(())
+                        } else if meta.path.is_ident("bound") {
+                            let value = meta.value()?;
+                            let int_lit: syn::LitInt = value.parse()?;
+                            bound = Some(int_lit);
+                            Ok(())
+                        } else {
+                            Err(meta.error(
+                                "unsupported property in `read_as` attribute. Expected `as = \"...\"` or `bound = ...`",
+                            ))
+                        }
+                    })
+                    .unwrap_or_else(|e| panic!("Failed to parse `read_as` attribute: {}", e));
+                } else {
+                    panic!(
+                        "`read_as` attribute requires a list format: `#[read_as(as = \"...\", bound = ...)]`"
+                    );
+                }
+            }
+
+            let read_discriminant = match read_strategy.as_deref() {
+                // Specialized implementation: read a VarInt (i32)
+                None | Some("var_int") => quote! { data.get_var_int()? },
+                // Simple implementation: read as a primitive numeric type
+                Some(s) => {
+                    if !ALLOWED_TYPES.contains(&s) {
+                        panic!("Unknown read strategy: `{}`", s)
+                    }
+                    let enum_type = Ident::new(s, Span::call_site());
+                    let _ = bound; // `bound` currently unused for primitive reads
+                    quote! { <#enum_type as PacketRead>::read_packet(data)? }
+                }
+            };
+
             let error_msg = format!("Invalid {name}");
 
             TokenStream::from(quote! {
@@ -121,7 +166,7 @@ pub fn packet_read_derive(input: TokenStream) -> TokenStream {
                     {
                         use std::io::Read;
                         use crate::ser::NetworkReadExt;
-                        Ok(match data.get_var_int()? {
+                        Ok(match { #read_discriminant } {
                             #(#readers)*
                             _ => {
                                 return Err(crate::utils::PacketReadError::MalformedValue(

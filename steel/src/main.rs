@@ -1,4 +1,3 @@
-
 use steel_registry::{
     blocks::blocks::BlockRegistry,
     data_components::{DataComponentRegistry, vanilla_components},

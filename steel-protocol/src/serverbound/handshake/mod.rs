@@ -3,6 +3,7 @@ use steel_macros::{PacketRead, PacketWrite};
 
 #[derive(Clone, Copy, PartialEq, Eq, PacketRead, PacketWrite)]
 #[write_as(as = "var_int")]
+#[read_as(as = "var_int")]
 pub enum ClientIntent {
     STATUS = 1,
     LOGIN = 2,
