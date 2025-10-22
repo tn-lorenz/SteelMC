@@ -282,12 +282,22 @@ impl JavaTcpClient {
                         let packet = network_reader.get_raw_packet().await;
                         match packet {
                             Ok(packet) => {
-                                let packet = ServerboundPacket::from_raw_packet(
+                                match ServerboundPacket::from_raw_packet(
                                     packet,
                                     connection_protocol.load(),
-                                )
-                                .unwrap();
-                                packet_recv_sender.send(packet).unwrap();
+                                ) {
+                                    Ok(packet) => {
+                                        packet_recv_sender.send(packet).unwrap();
+                                    }
+                                    Err(err) => {
+                                        log::warn!(
+                                            "Failed to read packet from client {}: {}",
+                                            id,
+                                            err
+                                        );
+                                        cancellation_token_clone.cancel();
+                                    }
+                                }
                             }
                             Err(err) => {
                                 log::warn!("Failed to read packet from client {}: {}", id, err);

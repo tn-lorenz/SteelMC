@@ -58,7 +58,7 @@ impl SteelServer {
                     if let Err(e) = connection.set_nodelay(true) {
                         log::warn!("Failed to set TCP_NODELAY: {e}");
                     }
-                    let mut java_client = JavaTcpClient::new(connection, address, self.client_id, cancellation_token_clone);
+                    let mut java_client = JavaTcpClient::new(connection, address, self.client_id, cancellation_token_clone.child_token());
                     self.client_id += 1;
                     log::info!("Accepted connection from Java Edition: {address} (id {})", self.client_id);
                     java_client.start_incoming_packet_task();
