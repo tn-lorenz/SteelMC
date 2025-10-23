@@ -2,6 +2,13 @@ use std::io::{Error, Write};
 
 use crate::packet_traits::WriteTo;
 
+impl WriteTo for bool {
+    fn write(&self, writer: &mut impl Write) -> Result<(), Error> {
+        (*self as u8).write(writer)?;
+        Ok(())
+    }
+}
+
 impl WriteTo for u8 {
     fn write(&self, writer: &mut impl Write) -> Result<(), Error> {
         writer.write_all(&self.to_be_bytes())

@@ -1,10 +1,11 @@
 use bytes::Buf;
-use steel_registry::packets::serverbound::{handshake, status};
+use steel_registry::packets::serverbound::{handshake, login, status};
 
 use crate::{
     packet_traits::PacketRead,
     packets::{
         handshake::ClientIntentionPacket,
+        login::s_hello_packet::SHelloPacket,
         status::{
             s_ping_request_packet::SPingRequestPacket,
             s_status_request_packet::SStatusRequestPacket,
@@ -40,11 +41,17 @@ impl SBoundHandshake {
 }
 
 #[derive(Clone, Debug)]
-pub enum SBoundLogin {}
+pub enum SBoundLogin {
+    Hello(SHelloPacket),
+}
 
 impl SBoundLogin {
     pub fn from_raw_packet(raw_packet: RawPacket) -> Result<Self, PacketError> {
         match raw_packet.id {
+            login::SERVERBOUND_HELLO => {
+                let packet = SHelloPacket::read_packet(&mut raw_packet.payload.reader())?;
+                Ok(Self::Hello(packet))
+            }
             _ => Err(PacketError::MalformedValue(format!(
                 "Invalid packet id: {}",
                 raw_packet.id

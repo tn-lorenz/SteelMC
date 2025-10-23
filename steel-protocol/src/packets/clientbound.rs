@@ -4,7 +4,7 @@ use crate::{
     packet_traits::PacketWrite,
     packets::{
         common::c_disconnect_packet::CDisconnectPacket,
-        login::c_login_disconnect_packet::CLoginDisconnectPacket,
+        login::{c_hello_packet::CHelloPacket, c_login_disconnect_packet::CLoginDisconnectPacket},
         status::{
             c_pong_response_packet::CPongResponsePacket,
             c_status_response_packet::CStatusResponsePacket,
@@ -23,18 +23,21 @@ When adding a common packet search up .addPacket(CommonPacketTypes.CLIENTBOUND_D
 #[derive(Clone, Debug)]
 pub enum CBoundLogin {
     LoginDisconnectPacket(CLoginDisconnectPacket),
+    Hello(CHelloPacket),
 }
 
 impl CBoundLogin {
     pub fn get_id(&self) -> i32 {
         match self {
             Self::LoginDisconnectPacket(_) => login::CLIENTBOUND_LOGIN_DISCONNECT,
+            Self::Hello(_) => login::CLIENTBOUND_HELLO,
         }
     }
 
     pub fn write_packet(&self, writer: &mut impl Write) -> Result<(), PacketError> {
         match self {
             Self::LoginDisconnectPacket(packet) => packet.write_packet(writer),
+            Self::Hello(packet) => packet.write_packet(writer),
         }
     }
 }

@@ -2,6 +2,13 @@ use std::io::{Error, Read};
 
 use crate::packet_traits::ReadFrom;
 
+impl ReadFrom for bool {
+    fn read(data: &mut impl Read) -> Result<Self, Error> {
+        let byte = u8::read(data)?;
+        Ok(byte == 1)
+    }
+}
+
 impl ReadFrom for u8 {
     fn read(data: &mut impl Read) -> Result<Self, Error> {
         let mut buf = [0; size_of::<Self>()];

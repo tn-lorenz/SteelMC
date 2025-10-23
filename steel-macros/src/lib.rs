@@ -248,8 +248,10 @@ pub fn packet_write_derive(input: TokenStream) -> TokenStream {
                         };
 
                         quote! {
-                            use crate::packet_traits::PrefixedWrite;
-                            #write_call
+                            {
+                                use crate::packet_traits::PrefixedWrite;
+                                #write_call
+                            }
                         }
                     },
                     Some("json") => {

@@ -110,9 +110,7 @@ impl<R: AsyncRead + Unpin> TCPNetworkDecoder<R> {
     }
 
     pub async fn get_raw_packet(&mut self) -> Result<RawPacket, PacketError> {
-        println!("get len");
         let packet_len = VarInt::read_async(&mut self.reader).await? as usize;
-        println!("len: {}", packet_len);
 
         if packet_len > MAX_PACKET_SIZE {
             Err(PacketError::OutOfBounds)?

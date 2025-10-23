@@ -1,4 +1,8 @@
-use std::{io::Write, net::SocketAddr, sync::Arc};
+use std::{
+    io::Write,
+    net::SocketAddr,
+    sync::{Arc, atomic::AtomicBool},
+};
 
 use bytes::Bytes;
 use crossbeam::atomic::AtomicCell;
@@ -38,7 +42,11 @@ use tokio::{
 };
 use tokio_util::{sync::CancellationToken, task::TaskTracker};
 
-use crate::network::game_profile::GameProfile;
+use crate::network::{
+    game_profile::GameProfile,
+    login::handle_hello,
+    status::{handle_ping_request, handle_status_request},
+};
 
 #[derive(Error, Debug)]
 pub enum EncryptionError {
@@ -91,6 +99,7 @@ pub struct JavaTcpClient {
     network_writer: Arc<Mutex<TCPNetworkEncoder<BufWriter<OwnedWriteHalf>>>>,
     /// The packet decoder for incoming packets.
     network_reader: Arc<Mutex<TCPNetworkDecoder<BufReader<OwnedReadHalf>>>>,
+    pub(crate) has_requested_status: AtomicBool,
 }
 
 impl JavaTcpClient {
@@ -119,6 +128,7 @@ impl JavaTcpClient {
             outgoing_queue_recv: Some(recv),
             network_writer: Arc::new(Mutex::new(TCPNetworkEncoder::new(BufWriter::new(write)))),
             network_reader: Arc::new(Mutex::new(TCPNetworkDecoder::new(BufReader::new(read)))),
+            has_requested_status: AtomicBool::new(false),
         }
     }
 
@@ -203,7 +213,7 @@ impl JavaTcpClient {
         }
     }
 
-    pub async fn enqueue_packet(&self, packet: &CBoundPacket) -> Result<(), PacketError> {
+    pub fn enqueue_packet(&self, packet: &CBoundPacket) -> Result<(), PacketError> {
         let mut packet_buf = Vec::new();
         let writer = &mut packet_buf;
         self.write_prefixed_packet(packet, writer)?;
@@ -363,16 +373,12 @@ impl JavaTcpClient {
                 let intent = match packet.intention {
                     ClientIntent::LOGIN => ConnectionProtocol::LOGIN,
                     ClientIntent::STATUS => ConnectionProtocol::STATUS,
-                    ClientIntent::TRANSFER => ConnectionProtocol::PLAY,
+                    ClientIntent::TRANSFER => ConnectionProtocol::LOGIN,
                 };
                 self.connection_protocol.store(intent);
 
                 if intent != ConnectionProtocol::STATUS {
-                    self.kick(TextComponent::translate(
-                        "multiplayer.disconnect.incompatible",
-                        [TextComponent::text("1.20.1".to_string())],
-                    ))
-                    .await;
+                    //TODO: Handle client version being too low or high
                 }
             }
         }
@@ -384,40 +390,18 @@ impl JavaTcpClient {
         }
 
         match packet {
-            SBoundStatus::StatusRequest(_) => {
-                let packet = CStatusResponsePacket::new(Status {
-                    description: "A Minecraft Server".to_string(),
-                    players: Some(Players {
-                        max: 10,
-                        online: 5,
-                        sample: vec![],
-                    }),
-                    enforce_secure_chat: false,
-                    favicon: None,
-                    version: Some(Version {
-                        name: "1.21.10".to_string(),
-                        protocol: steel_registry::packets::CURRENT_MC_PROTOCOL as i32,
-                    }),
-                });
-                self.send_packet_now(&CBoundPacket::Status(CBoundStatus::StatusResponse(packet)))
-                    .await;
-            }
-            SBoundStatus::PingRequest(packet) => {
-                let packet = CPongResponsePacket::new(packet.time);
-                log::info!(
-                    "Sending pong response packet to client {}: {}",
-                    self.id,
-                    packet.time
-                );
-                self.send_packet_now(&CBoundPacket::Status(CBoundStatus::Pong(packet)))
-                    .await;
-            }
+            SBoundStatus::StatusRequest(packet) => handle_status_request(self, packet).await,
+            SBoundStatus::PingRequest(packet) => handle_ping_request(self, packet).await,
         }
     }
 
-    pub async fn handle_login(&self, _packet: SBoundLogin) {
+    pub async fn handle_login(&self, packet: SBoundLogin) {
         if !self.assert_protocol(ConnectionProtocol::LOGIN) {
             return;
+        }
+
+        match packet {
+            SBoundLogin::Hello(packet) => handle_hello(self, packet).await,
         }
     }
 
@@ -461,10 +445,4 @@ impl JavaTcpClient {
         log::debug!("Closing connection for {}", self.id);
         self.close();
     }
-}
-
-pub fn is_valid_player_name(name: &str) -> bool {
-    name.len() >= 3
-        && name.len() <= 16
-        && name.chars().all(|c| c.is_ascii_alphanumeric() || c == '_')
 }
