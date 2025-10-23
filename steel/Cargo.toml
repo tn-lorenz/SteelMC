@@ -19,3 +19,4 @@ uuid.workspace = true
 thiserror.workspace = true
 log.workspace = true
 simplelog = "0.12.2"
+serde_json5 = "0.2.1"

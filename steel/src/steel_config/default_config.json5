@@ -1,0 +1,23 @@
+{
+    $schema: "https://raw.githubusercontent.com/4lve/SteelMC/refs/heads/master/steel/src/steel_config/schema.json5",
+    // Server address in the format 'host:port'
+    server_address: "0.0.0.0:25565",
+    // World seed for generating the world, empty string means random seed
+    seed: "",
+    // Maximum number of players allowed on the server
+    max_players: 20,
+    // Maximum view distance in chunks
+    view_distance: 10,
+    // Maximum simulation distance in chunks
+    simulation_distance: 10,
+    // Whether to use Mojang's authentication service
+    online_mode: true,
+    // Whether to enable encryption for client-server communication
+    encryption: true,
+    // Message of the day displayed in server lists
+    motd: "A Steel Server",
+    // Whether to use a custom favicon for the server
+    use_favicon: true,
+    // Path to the favicon file (PNG format, 64x64 pixels)
+    favicon: "steel.png",
+}

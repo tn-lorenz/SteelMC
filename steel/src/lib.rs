@@ -12,6 +12,7 @@ use tokio_util::{sync::CancellationToken, task::TaskTracker};
 use crate::network::java_tcp_client::JavaTcpClient;
 
 pub mod network;
+pub mod steel_config;
 
 pub struct SteelServer {
     pub tcp_listener: TcpListener,
