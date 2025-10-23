@@ -1,7 +1,9 @@
+use base64::{Engine, prelude::BASE64_STANDARD};
 use serde::Deserialize;
 use std::{fs, net::SocketAddr, path::Path, sync::LazyLock};
 
 const DEFAULT_CONFIG_STR: &str = include_str!("default_config.json5");
+const DEFAULT_FAVICON_STR: &[u8] = include_bytes!("default_favicon.png");
 
 #[derive(Debug, Clone, Deserialize)]
 pub struct SteelConfig {
@@ -15,11 +17,12 @@ pub struct SteelConfig {
     pub motd: String,
     pub use_favicon: bool,
     pub favicon: String,
+    pub enforce_secure_chat: bool,
 }
 
 impl SteelConfig {
     pub fn load_or_create(path: &Path) -> Self {
-        if path.exists() {
+        let config = if path.exists() {
             let config_str = fs::read_to_string(path).unwrap();
             let config: SteelConfig = serde_json5::from_str(config_str.as_str()).unwrap();
             config.validate().unwrap();
@@ -30,13 +33,17 @@ impl SteelConfig {
             let config: SteelConfig = serde_json5::from_str(DEFAULT_CONFIG_STR).unwrap();
             config.validate().unwrap();
             config
+        };
+
+        // If icon file doesnt exist, write it
+        if config.use_favicon && !Path::new(&config.favicon).exists() {
+            fs::write(Path::new(&config.favicon), DEFAULT_FAVICON_STR).unwrap();
         }
+
+        config
     }
 
     pub fn validate(&self) -> Result<(), String> {
-        if self.server_address.is_ipv4() {
-            return Err("Server address must be a valid IPv4 address".to_string());
-        }
         if self.view_distance == 0 {
             return Err("View distance must be greater than 0".to_string());
         }
@@ -50,5 +57,19 @@ impl SteelConfig {
             return Err("Simulation distance must be less than or equal to 32".to_string());
         }
         Ok(())
+    }
+
+    const PREFIX: &str = "data:image/png;base64,";
+
+    pub fn load_favicon(&self) -> Option<String> {
+        if self.use_favicon {
+            let path = Path::new(&self.favicon);
+            if path.exists() {
+                let base64 = BASE64_STANDARD
+                    .encode(fs::read(path).unwrap_or_else(|_| DEFAULT_FAVICON_STR.to_vec()));
+                return Some(format!("{}{}", Self::PREFIX, base64));
+            }
+        }
+        None
     }
 }

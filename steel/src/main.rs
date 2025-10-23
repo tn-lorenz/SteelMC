@@ -1,6 +1,5 @@
 use log::LevelFilter;
 use simplelog::{ColorChoice, Config, TermLogger, TerminalMode};
-mod network;
 use steel::SteelServer;
 
 #[tokio::main]

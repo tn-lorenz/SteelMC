@@ -11,7 +11,7 @@ use steel_protocol::packets::{
 };
 use steel_utils::text::TextComponent;
 
-use crate::network::java_tcp_client::JavaTcpClient;
+use crate::{STEEL_CONFIG, network::java_tcp_client::JavaTcpClient};
 
 pub async fn handle_status_request(tcp_client: &JavaTcpClient, packet: SStatusRequestPacket) {
     // Checks if this funciton has already been called this connection. If not it sets has_requested_status to true. If it has been called before compare_exchange fails.
@@ -28,12 +28,13 @@ pub async fn handle_status_request(tcp_client: &JavaTcpClient, packet: SStatusRe
     let res_packet = CStatusResponsePacket::new(Status {
         description: "Hello World!".to_string(),
         players: Some(Players {
-            max: 10,
-            online: 5,
+            max: STEEL_CONFIG.max_players as i32,
+            //TODO: Get online players count
+            online: 0,
             sample: vec![],
         }),
-        enforce_secure_chat: false,
-        favicon: None,
+        enforce_secure_chat: STEEL_CONFIG.enforce_secure_chat,
+        favicon: STEEL_CONFIG.load_favicon(),
         version: Some(Version {
             name: "1.21.10".to_string(),
             protocol: steel_registry::packets::CURRENT_MC_PROTOCOL as i32,

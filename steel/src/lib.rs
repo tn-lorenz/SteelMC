@@ -1,5 +1,8 @@
-use std::sync::Arc;
-
+use crate::{network::java_tcp_client::JavaTcpClient, steel_config::SteelConfig};
+use std::{
+    path::Path,
+    sync::{Arc, LazyLock},
+};
 use steel_registry::{
     blocks::blocks::BlockRegistry,
     data_components::{DataComponentRegistry, vanilla_components},
@@ -9,10 +12,11 @@ use steel_registry::{
 use tokio::{net::TcpListener, select};
 use tokio_util::{sync::CancellationToken, task::TaskTracker};
 
-use crate::network::java_tcp_client::JavaTcpClient;
-
 pub mod network;
 pub mod steel_config;
+
+pub static STEEL_CONFIG: LazyLock<SteelConfig> =
+    LazyLock::new(|| SteelConfig::load_or_create(Path::new("config/steel_config.json5")));
 
 pub struct SteelServer {
     pub tcp_listener: TcpListener,
@@ -37,7 +41,9 @@ impl SteelServer {
         item_registry.freeze();
 
         Self {
-            tcp_listener: TcpListener::bind("0.0.0.0:25565").await.unwrap(),
+            tcp_listener: TcpListener::bind(STEEL_CONFIG.server_address)
+                .await
+                .unwrap(),
             cancellation_token: CancellationToken::new(),
             client_id: 0,
         }

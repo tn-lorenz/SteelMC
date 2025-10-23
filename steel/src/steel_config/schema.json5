@@ -4,6 +4,10 @@
     "description": "Configuration schema for Steel Minecraft server",
     "type": "object",
     "properties": {
+        "$schema": {
+            "type": "string",
+            "format": "uri"
+        },
         "server_address": {
             "type": "string",
             "description": "Server address in the format 'host:port'",
@@ -63,6 +67,11 @@
             "type": "string",
             "description": "Path to the favicon file (PNG format, 64x64 pixels)",
             "default": "steel.png"
+        },
+        "enforce_secure_chat": {
+            "type": "boolean",
+            "description": "Whether to enforce secure chat",
+            "default": false
         }
     },
     "required": [
