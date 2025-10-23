@@ -21,11 +21,11 @@ When adding a common packet search up .addPacket(CommonPacketTypes.CLIENTBOUND_D
 // Clientbound packets
 
 #[derive(Clone, Debug)]
-pub enum ClientBoundLogin {
+pub enum CBoundLogin {
     LoginDisconnectPacket(CLoginDisconnectPacket),
 }
 
-impl ClientBoundLogin {
+impl CBoundLogin {
     pub fn get_id(&self) -> i32 {
         match self {
             Self::LoginDisconnectPacket(_) => login::CLIENTBOUND_LOGIN_DISCONNECT,
@@ -40,11 +40,11 @@ impl ClientBoundLogin {
 }
 
 #[derive(Clone, Debug)]
-pub enum ClientBoundConfiguration {
+pub enum CBoundConfiguration {
     Disconnect(CDisconnectPacket),
 }
 
-impl ClientBoundConfiguration {
+impl CBoundConfiguration {
     pub fn get_id(&self) -> i32 {
         match self {
             Self::Disconnect(_) => config::CLIENTBOUND_DISCONNECT,
@@ -59,12 +59,12 @@ impl ClientBoundConfiguration {
 }
 
 #[derive(Clone, Debug)]
-pub enum ClientBoundStatus {
+pub enum CBoundStatus {
     StatusResponse(CStatusResponsePacket),
     Pong(CPongResponsePacket),
 }
 
-impl ClientBoundStatus {
+impl CBoundStatus {
     pub fn get_id(&self) -> i32 {
         match self {
             Self::StatusResponse(_) => status::CLIENTBOUND_STATUS_RESPONSE,
@@ -81,11 +81,11 @@ impl ClientBoundStatus {
 }
 
 #[derive(Clone, Debug)]
-pub enum ClientBoundPlay {
+pub enum CBoundPlay {
     Disconnect(CDisconnectPacket),
 }
 
-impl ClientBoundPlay {
+impl CBoundPlay {
     pub fn get_id(&self) -> i32 {
         match self {
             Self::Disconnect(_) => play::CLIENTBOUND_DISCONNECT,
@@ -100,14 +100,14 @@ impl ClientBoundPlay {
 }
 
 #[derive(Clone, Debug)]
-pub enum ClientPacket {
-    Status(ClientBoundStatus),
-    Login(ClientBoundLogin),
-    Configuration(ClientBoundConfiguration),
-    Play(ClientBoundPlay),
+pub enum CBoundPacket {
+    Status(CBoundStatus),
+    Login(CBoundLogin),
+    Configuration(CBoundConfiguration),
+    Play(CBoundPlay),
 }
 
-impl ClientPacket {
+impl CBoundPacket {
     pub fn get_id(&self) -> i32 {
         match self {
             Self::Status(status) => status.get_id(),

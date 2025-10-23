@@ -8,16 +8,13 @@ use steel_protocol::{
     packet_traits::WriteTo,
     packet_writer::TCPNetworkEncoder,
     packets::{
-        clientbound::{
-            ClientBoundConfiguration, ClientBoundLogin, ClientBoundPlay, ClientBoundStatus,
-            ClientPacket,
-        },
+        clientbound::{CBoundConfiguration, CBoundLogin, CBoundPacket, CBoundPlay, CBoundStatus},
         common::c_disconnect_packet::CDisconnectPacket,
         handshake::ClientIntent,
         login::c_login_disconnect_packet::CLoginDisconnectPacket,
         serverbound::{
-            ServerBoundConfiguration, ServerBoundHandshake, ServerBoundLogin, ServerBoundPlay,
-            ServerBoundStatus, ServerPacket,
+            SBoundConfiguration, SBoundHandshake, SBoundLogin, SBoundPacket, SBoundPlay,
+            SBoundStatus,
         },
         status::{
             c_pong_response_packet::CPongResponsePacket,
@@ -83,8 +80,8 @@ pub struct JavaTcpClient {
     /// A token to cancel the client's operations. Called when the connection is closed. Or client is removed.
     cancel_token: CancellationToken,
 
-    packet_receiver: Mutex<Option<Receiver<ServerPacket>>>,
-    pub packet_recv_sender: Arc<Sender<ServerPacket>>,
+    packet_receiver: Mutex<Option<Receiver<SBoundPacket>>>,
+    pub packet_recv_sender: Arc<Sender<SBoundPacket>>,
 
     /// A queue of serialized packets to send to the network
     outgoing_queue: Sender<Bytes>,
@@ -185,7 +182,7 @@ impl JavaTcpClient {
         self.tasks.wait().await;
     }
 
-    pub async fn send_packet_now(&self, packet: &ClientPacket) {
+    pub async fn send_packet_now(&self, packet: &CBoundPacket) {
         let mut packet_buf = Vec::new();
         let writer = &mut packet_buf;
         self.write_prefixed_packet(packet, writer).unwrap();
@@ -206,7 +203,7 @@ impl JavaTcpClient {
         }
     }
 
-    pub async fn enqueue_packet(&self, packet: &ClientPacket) -> Result<(), PacketError> {
+    pub async fn enqueue_packet(&self, packet: &CBoundPacket) -> Result<(), PacketError> {
         let mut packet_buf = Vec::new();
         let writer = &mut packet_buf;
         self.write_prefixed_packet(packet, writer)?;
@@ -223,7 +220,7 @@ impl JavaTcpClient {
 
     pub fn write_prefixed_packet(
         &self,
-        packet: &ClientPacket,
+        packet: &CBoundPacket,
         writer: &mut impl Write,
     ) -> Result<(), PacketError> {
         let packet_id = packet.get_id();
@@ -290,7 +287,7 @@ impl JavaTcpClient {
                         match packet {
                             Ok(packet) => {
                                 log::info!("Received packet: {:?}", packet.id);
-                                match ServerPacket::from_raw_packet(
+                                match SBoundPacket::from_raw_packet(
                                     packet,
                                     connection_protocol.load(),
                                 ) {
@@ -336,13 +333,13 @@ impl JavaTcpClient {
                 loop {
                     let packet = packet_receiver.recv().await.unwrap();
                     match packet {
-                        ServerPacket::Handshake(packet) => self.handle_handshake(packet).await,
-                        ServerPacket::Status(packet) => self.handle_status(packet).await,
-                        ServerPacket::Login(packet) => self.handle_login(packet).await,
-                        ServerPacket::Configuration(packet) => {
+                        SBoundPacket::Handshake(packet) => self.handle_handshake(packet).await,
+                        SBoundPacket::Status(packet) => self.handle_status(packet).await,
+                        SBoundPacket::Login(packet) => self.handle_login(packet).await,
+                        SBoundPacket::Configuration(packet) => {
                             self.handle_configuration(packet).await
                         }
-                        ServerPacket::Play(packet) => self.handle_play(packet).await,
+                        SBoundPacket::Play(packet) => self.handle_play(packet).await,
                     }
                 }
             })
@@ -357,12 +354,12 @@ impl JavaTcpClient {
         true
     }
 
-    pub async fn handle_handshake(&self, packet: ServerBoundHandshake) {
+    pub async fn handle_handshake(&self, packet: SBoundHandshake) {
         if !self.assert_protocol(ConnectionProtocol::HANDSHAKING) {
             return;
         }
         match packet {
-            ServerBoundHandshake::Intention(packet) => {
+            SBoundHandshake::Intention(packet) => {
                 let intent = match packet.intention {
                     ClientIntent::LOGIN => ConnectionProtocol::LOGIN,
                     ClientIntent::STATUS => ConnectionProtocol::STATUS,
@@ -381,13 +378,13 @@ impl JavaTcpClient {
         }
     }
 
-    pub async fn handle_status(&self, packet: ServerBoundStatus) {
+    pub async fn handle_status(&self, packet: SBoundStatus) {
         if !self.assert_protocol(ConnectionProtocol::STATUS) {
             return;
         }
 
         match packet {
-            ServerBoundStatus::StatusRequest(_) => {
+            SBoundStatus::StatusRequest(_) => {
                 let packet = CStatusResponsePacket::new(Status {
                     description: "A Minecraft Server".to_string(),
                     players: Some(Players {
@@ -402,37 +399,35 @@ impl JavaTcpClient {
                         protocol: steel_registry::packets::CURRENT_MC_PROTOCOL as i32,
                     }),
                 });
-                self.send_packet_now(&ClientPacket::Status(ClientBoundStatus::StatusResponse(
-                    packet,
-                )))
-                .await;
+                self.send_packet_now(&CBoundPacket::Status(CBoundStatus::StatusResponse(packet)))
+                    .await;
             }
-            ServerBoundStatus::PingRequest(packet) => {
+            SBoundStatus::PingRequest(packet) => {
                 let packet = CPongResponsePacket::new(packet.time);
                 log::info!(
                     "Sending pong response packet to client {}: {}",
                     self.id,
                     packet.time
                 );
-                self.send_packet_now(&ClientPacket::Status(ClientBoundStatus::Pong(packet)))
+                self.send_packet_now(&CBoundPacket::Status(CBoundStatus::Pong(packet)))
                     .await;
             }
         }
     }
 
-    pub async fn handle_login(&self, _packet: ServerBoundLogin) {
+    pub async fn handle_login(&self, _packet: SBoundLogin) {
         if !self.assert_protocol(ConnectionProtocol::LOGIN) {
             return;
         }
     }
 
-    pub async fn handle_configuration(&self, _packet: ServerBoundConfiguration) {
+    pub async fn handle_configuration(&self, _packet: SBoundConfiguration) {
         if !self.assert_protocol(ConnectionProtocol::CONFIGURATION) {
             return;
         }
     }
 
-    pub async fn handle_play(&self, _packet: ServerBoundPlay) {
+    pub async fn handle_play(&self, _packet: SBoundPlay) {
         if !self.assert_protocol(ConnectionProtocol::PLAY) {
             return;
         }
@@ -444,21 +439,21 @@ impl JavaTcpClient {
         match self.connection_protocol.load() {
             ConnectionProtocol::LOGIN => {
                 let packet = CLoginDisconnectPacket::new(reason.0);
-                self.send_packet_now(&ClientPacket::Login(
-                    ClientBoundLogin::LoginDisconnectPacket(packet),
-                ))
+                self.send_packet_now(&CBoundPacket::Login(CBoundLogin::LoginDisconnectPacket(
+                    packet,
+                )))
                 .await;
             }
             ConnectionProtocol::CONFIGURATION => {
                 let packet = CDisconnectPacket::new(reason.0);
-                self.send_packet_now(&ClientPacket::Configuration(
-                    ClientBoundConfiguration::Disconnect(packet),
+                self.send_packet_now(&CBoundPacket::Configuration(
+                    CBoundConfiguration::Disconnect(packet),
                 ))
                 .await;
             }
             ConnectionProtocol::PLAY => {
                 let packet = CDisconnectPacket::new(reason.0);
-                self.send_packet_now(&ClientPacket::Play(ClientBoundPlay::Disconnect(packet)))
+                self.send_packet_now(&CBoundPacket::Play(CBoundPlay::Disconnect(packet)))
                     .await;
             }
             _ => {}

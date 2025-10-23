@@ -20,11 +20,11 @@ When adding a common packet search up .addPacket(CommonPacketTypes.CLIENTBOUND_D
 // Serverbound packets
 
 #[derive(Clone, Debug)]
-pub enum ServerBoundHandshake {
+pub enum SBoundHandshake {
     Intention(ClientIntentionPacket),
 }
 
-impl ServerBoundHandshake {
+impl SBoundHandshake {
     pub fn from_raw_packet(raw_packet: RawPacket) -> Result<Self, PacketError> {
         match raw_packet.id {
             handshake::SERVERBOUND_INTENTION => {
@@ -40,9 +40,9 @@ impl ServerBoundHandshake {
 }
 
 #[derive(Clone, Debug)]
-pub enum ServerBoundLogin {}
+pub enum SBoundLogin {}
 
-impl ServerBoundLogin {
+impl SBoundLogin {
     pub fn from_raw_packet(raw_packet: RawPacket) -> Result<Self, PacketError> {
         match raw_packet.id {
             _ => Err(PacketError::MalformedValue(format!(
@@ -54,9 +54,9 @@ impl ServerBoundLogin {
 }
 
 #[derive(Clone, Debug)]
-pub enum ServerBoundConfiguration {}
+pub enum SBoundConfiguration {}
 
-impl ServerBoundConfiguration {
+impl SBoundConfiguration {
     pub fn from_raw_packet(raw_packet: RawPacket) -> Result<Self, PacketError> {
         match raw_packet.id {
             _ => Err(PacketError::MalformedValue(format!(
@@ -68,12 +68,12 @@ impl ServerBoundConfiguration {
 }
 
 #[derive(Clone, Debug)]
-pub enum ServerBoundStatus {
+pub enum SBoundStatus {
     StatusRequest(SStatusRequestPacket),
     PingRequest(SPingRequestPacket),
 }
 
-impl ServerBoundStatus {
+impl SBoundStatus {
     pub fn from_raw_packet(raw_packet: RawPacket) -> Result<Self, PacketError> {
         match raw_packet.id {
             status::SERVERBOUND_STATUS_REQUEST => {
@@ -93,9 +93,9 @@ impl ServerBoundStatus {
 }
 
 #[derive(Clone, Debug)]
-pub enum ServerBoundPlay {}
+pub enum SBoundPlay {}
 
-impl ServerBoundPlay {
+impl SBoundPlay {
     pub fn from_raw_packet(raw_packet: RawPacket) -> Result<Self, PacketError> {
         match raw_packet.id {
             _ => Err(PacketError::MalformedValue(format!(
@@ -107,38 +107,38 @@ impl ServerBoundPlay {
 }
 
 #[derive(Clone, Debug)]
-pub enum ServerPacket {
-    Handshake(ServerBoundHandshake),
-    Status(ServerBoundStatus),
-    Login(ServerBoundLogin),
-    Configuration(ServerBoundConfiguration),
-    Play(ServerBoundPlay),
+pub enum SBoundPacket {
+    Handshake(SBoundHandshake),
+    Status(SBoundStatus),
+    Login(SBoundLogin),
+    Configuration(SBoundConfiguration),
+    Play(SBoundPlay),
 }
 
-impl ServerPacket {
+impl SBoundPacket {
     pub fn from_raw_packet(
         raw_packet: RawPacket,
         connection_protocol: ConnectionProtocol,
     ) -> Result<Self, PacketError> {
         match connection_protocol {
             ConnectionProtocol::HANDSHAKING => {
-                let packet = ServerBoundHandshake::from_raw_packet(raw_packet)?;
+                let packet = SBoundHandshake::from_raw_packet(raw_packet)?;
                 Ok(Self::Handshake(packet))
             }
             ConnectionProtocol::STATUS => {
-                let packet = ServerBoundStatus::from_raw_packet(raw_packet)?;
+                let packet = SBoundStatus::from_raw_packet(raw_packet)?;
                 Ok(Self::Status(packet))
             }
             ConnectionProtocol::LOGIN => {
-                let packet = ServerBoundLogin::from_raw_packet(raw_packet)?;
+                let packet = SBoundLogin::from_raw_packet(raw_packet)?;
                 Ok(Self::Login(packet))
             }
             ConnectionProtocol::CONFIGURATION => {
-                let packet = ServerBoundConfiguration::from_raw_packet(raw_packet)?;
+                let packet = SBoundConfiguration::from_raw_packet(raw_packet)?;
                 Ok(Self::Configuration(packet))
             }
             ConnectionProtocol::PLAY => {
-                let packet = ServerBoundPlay::from_raw_packet(raw_packet)?;
+                let packet = SBoundPlay::from_raw_packet(raw_packet)?;
                 Ok(Self::Play(packet))
             }
         }
