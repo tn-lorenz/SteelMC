@@ -1,8 +1,6 @@
 use serde::Serialize;
 use steel_macros::PacketWrite;
 
-use crate::packet_traits::PacketWrite;
-
 #[derive(Serialize, Clone, Debug)]
 pub struct Sample {
     /// The player's name.
@@ -34,12 +32,12 @@ pub struct Status {
 }
 
 #[derive(PacketWrite, Clone, Debug)]
-pub struct ClientboundStatusResponsePacket {
+pub struct CStatusResponsePacket {
     #[write_as(as = "json")]
     status: Status,
 }
 
-impl ClientboundStatusResponsePacket {
+impl CStatusResponsePacket {
     pub fn new(status: Status) -> Self {
         Self { status }
     }

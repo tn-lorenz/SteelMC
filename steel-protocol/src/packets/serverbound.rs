@@ -6,11 +6,11 @@ use crate::{
     packets::{
         handshake::ClientIntentionPacket,
         status::{
-            serverbound_ping_request_packet::ServerboundPingRequestPacket,
-            serverbound_status_request_packet::ServerboundStatusRequestPacket,
+            s_ping_request_packet::SPingRequestPacket,
+            s_status_request_packet::SStatusRequestPacket,
         },
     },
-    utils::{ConnectionProtocol, PacketReadError, RawPacket},
+    utils::{ConnectionProtocol, PacketError, RawPacket},
 };
 
 /*
@@ -25,13 +25,13 @@ pub enum ServerBoundHandshake {
 }
 
 impl ServerBoundHandshake {
-    pub fn from_raw_packet(raw_packet: RawPacket) -> Result<Self, PacketReadError> {
+    pub fn from_raw_packet(raw_packet: RawPacket) -> Result<Self, PacketError> {
         match raw_packet.id {
             handshake::SERVERBOUND_INTENTION => {
                 let packet = ClientIntentionPacket::read_packet(&mut raw_packet.payload.reader())?;
                 Ok(Self::Intention(packet))
             }
-            _ => Err(PacketReadError::MalformedValue(format!(
+            _ => Err(PacketError::MalformedValue(format!(
                 "Invalid packet id: {}",
                 raw_packet.id
             ))),
@@ -43,9 +43,9 @@ impl ServerBoundHandshake {
 pub enum ServerBoundLogin {}
 
 impl ServerBoundLogin {
-    pub fn from_raw_packet(raw_packet: RawPacket) -> Result<Self, PacketReadError> {
+    pub fn from_raw_packet(raw_packet: RawPacket) -> Result<Self, PacketError> {
         match raw_packet.id {
-            _ => Err(PacketReadError::MalformedValue(format!(
+            _ => Err(PacketError::MalformedValue(format!(
                 "Invalid packet id: {}",
                 raw_packet.id
             ))),
@@ -57,9 +57,9 @@ impl ServerBoundLogin {
 pub enum ServerBoundConfiguration {}
 
 impl ServerBoundConfiguration {
-    pub fn from_raw_packet(raw_packet: RawPacket) -> Result<Self, PacketReadError> {
+    pub fn from_raw_packet(raw_packet: RawPacket) -> Result<Self, PacketError> {
         match raw_packet.id {
-            _ => Err(PacketReadError::MalformedValue(format!(
+            _ => Err(PacketError::MalformedValue(format!(
                 "Invalid packet id: {}",
                 raw_packet.id
             ))),
@@ -69,24 +69,22 @@ impl ServerBoundConfiguration {
 
 #[derive(Clone, Debug)]
 pub enum ServerBoundStatus {
-    StatusRequest(ServerboundStatusRequestPacket),
-    PingRequest(ServerboundPingRequestPacket),
+    StatusRequest(SStatusRequestPacket),
+    PingRequest(SPingRequestPacket),
 }
 
 impl ServerBoundStatus {
-    pub fn from_raw_packet(raw_packet: RawPacket) -> Result<Self, PacketReadError> {
+    pub fn from_raw_packet(raw_packet: RawPacket) -> Result<Self, PacketError> {
         match raw_packet.id {
             status::SERVERBOUND_STATUS_REQUEST => {
-                let packet =
-                    ServerboundStatusRequestPacket::read_packet(&mut raw_packet.payload.reader())?;
+                let packet = SStatusRequestPacket::read_packet(&mut raw_packet.payload.reader())?;
                 Ok(Self::StatusRequest(packet))
             }
             status::SERVERBOUND_PING_REQUEST => {
-                let packet =
-                    ServerboundPingRequestPacket::read_packet(&mut raw_packet.payload.reader())?;
+                let packet = SPingRequestPacket::read_packet(&mut raw_packet.payload.reader())?;
                 Ok(Self::PingRequest(packet))
             }
-            _ => Err(PacketReadError::MalformedValue(format!(
+            _ => Err(PacketError::MalformedValue(format!(
                 "Invalid packet id: {}",
                 raw_packet.id
             ))),
@@ -98,9 +96,9 @@ impl ServerBoundStatus {
 pub enum ServerBoundPlay {}
 
 impl ServerBoundPlay {
-    pub fn from_raw_packet(raw_packet: RawPacket) -> Result<Self, PacketReadError> {
+    pub fn from_raw_packet(raw_packet: RawPacket) -> Result<Self, PacketError> {
         match raw_packet.id {
-            _ => Err(PacketReadError::MalformedValue(format!(
+            _ => Err(PacketError::MalformedValue(format!(
                 "Invalid packet id: {}",
                 raw_packet.id
             ))),
@@ -109,7 +107,7 @@ impl ServerBoundPlay {
 }
 
 #[derive(Clone, Debug)]
-pub enum ServerboundPacket {
+pub enum ServerPacket {
     Handshake(ServerBoundHandshake),
     Status(ServerBoundStatus),
     Login(ServerBoundLogin),
@@ -117,11 +115,11 @@ pub enum ServerboundPacket {
     Play(ServerBoundPlay),
 }
 
-impl ServerboundPacket {
+impl ServerPacket {
     pub fn from_raw_packet(
         raw_packet: RawPacket,
         connection_protocol: ConnectionProtocol,
-    ) -> Result<Self, PacketReadError> {
+    ) -> Result<Self, PacketError> {
         match connection_protocol {
             ConnectionProtocol::HANDSHAKING => {
                 let packet = ServerBoundHandshake::from_raw_packet(raw_packet)?;
