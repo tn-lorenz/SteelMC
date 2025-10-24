@@ -6,6 +6,11 @@
     core_intrinsics
 )]
 #![allow(internal_features)]
+
+use crate::{
+    blocks::blocks::BlockRegistry, data_components::DataComponentRegistry,
+    items::items::ItemRegistry,
+};
 pub mod blocks;
 pub mod data_components;
 pub mod items;
@@ -21,3 +26,9 @@ pub mod vanilla_items;
 //#[rustfmt::skip]
 #[path = "generated/packets.rs"]
 pub mod packets;
+
+pub struct Registry {
+    pub blocks: BlockRegistry,
+    pub items: ItemRegistry,
+    pub data_components: DataComponentRegistry,
+}

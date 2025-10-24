@@ -5,7 +5,7 @@ use crate::{
     packet_traits::PacketRead,
     packets::{
         handshake::ClientIntentionPacket,
-        login::s_hello_packet::SHelloPacket,
+        login::{s_hello_packet::SHelloPacket, s_key_packet::SKeyPacket},
         status::{
             s_ping_request_packet::SPingRequestPacket,
             s_status_request_packet::SStatusRequestPacket,
@@ -43,6 +43,7 @@ impl SBoundHandshake {
 #[derive(Clone, Debug)]
 pub enum SBoundLogin {
     Hello(SHelloPacket),
+    Key(SKeyPacket),
 }
 
 impl SBoundLogin {
@@ -51,6 +52,10 @@ impl SBoundLogin {
             login::SERVERBOUND_HELLO => {
                 let packet = SHelloPacket::read_packet(&mut raw_packet.payload.reader())?;
                 Ok(Self::Hello(packet))
+            }
+            login::SERVERBOUND_KEY => {
+                let packet = SKeyPacket::read_packet(&mut raw_packet.payload.reader())?;
+                Ok(Self::Key(packet))
             }
             _ => Err(PacketError::MalformedValue(format!(
                 "Invalid packet id: {}",

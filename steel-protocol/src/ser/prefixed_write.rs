@@ -22,7 +22,7 @@ impl PrefixedWrite for String {
     }
 }
 
-impl PrefixedWrite for Vec<u8> {
+impl<T: WriteTo> PrefixedWrite for Vec<T> {
     fn write_prefixed_bound<P: TryFrom<usize> + WriteTo>(
         &self,
         writer: &mut impl Write,
@@ -39,6 +39,10 @@ impl PrefixedWrite for Vec<u8> {
 
         len.write(writer)?;
 
-        writer.write_all(self)
+        for property in self {
+            property.write(writer)?;
+        }
+
+        Ok(())
     }
 }

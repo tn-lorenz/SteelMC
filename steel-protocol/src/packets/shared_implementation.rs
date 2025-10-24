@@ -23,3 +23,12 @@ impl ReadFrom for Uuid {
         ))
     }
 }
+
+impl WriteTo for Uuid {
+    fn write(&self, writer: &mut impl Write) -> Result<(), io::Error> {
+        let (most_significant_bits, least_significant_bits) = self.as_u64_pair();
+        most_significant_bits.write(writer)?;
+        least_significant_bits.write(writer)?;
+        Ok(())
+    }
+}

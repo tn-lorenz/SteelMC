@@ -4,7 +4,11 @@ use crate::{
     packet_traits::PacketWrite,
     packets::{
         common::c_disconnect_packet::CDisconnectPacket,
-        login::{c_hello_packet::CHelloPacket, c_login_disconnect_packet::CLoginDisconnectPacket},
+        login::{
+            c_hello_packet::CHelloPacket, c_login_compression_packet::CLoginCompressionPacket,
+            c_login_disconnect_packet::CLoginDisconnectPacket,
+            c_login_finished_packet::CLoginFinishedPacket,
+        },
         status::{
             c_pong_response_packet::CPongResponsePacket,
             c_status_response_packet::CStatusResponsePacket,
@@ -24,6 +28,8 @@ When adding a common packet search up .addPacket(CommonPacketTypes.CLIENTBOUND_D
 pub enum CBoundLogin {
     LoginDisconnectPacket(CLoginDisconnectPacket),
     Hello(CHelloPacket),
+    LoginFinished(CLoginFinishedPacket),
+    LoginCompression(CLoginCompressionPacket),
 }
 
 impl CBoundLogin {
@@ -31,6 +37,8 @@ impl CBoundLogin {
         match self {
             Self::LoginDisconnectPacket(_) => login::CLIENTBOUND_LOGIN_DISCONNECT,
             Self::Hello(_) => login::CLIENTBOUND_HELLO,
+            Self::LoginFinished(_) => login::CLIENTBOUND_LOGIN_FINISHED,
+            Self::LoginCompression(_) => login::CLIENTBOUND_LOGIN_COMPRESSION,
         }
     }
 
@@ -38,6 +46,8 @@ impl CBoundLogin {
         match self {
             Self::LoginDisconnectPacket(packet) => packet.write_packet(writer),
             Self::Hello(packet) => packet.write_packet(writer),
+            Self::LoginFinished(packet) => packet.write_packet(writer),
+            Self::LoginCompression(packet) => packet.write_packet(writer),
         }
     }
 }

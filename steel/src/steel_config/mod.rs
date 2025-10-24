@@ -1,6 +1,7 @@
 use base64::{Engine, prelude::BASE64_STANDARD};
 use serde::Deserialize;
 use std::{fs, net::SocketAddr, path::Path};
+use steel_protocol::packet_traits::CompressionInfo;
 
 const DEFAULT_CONFIG_STR: &str = include_str!("default_config.json5");
 const DEFAULT_FAVICON_STR: &[u8] = include_bytes!("default_favicon.png");
@@ -18,6 +19,7 @@ pub struct SteelConfig {
     pub use_favicon: bool,
     pub favicon: String,
     pub enforce_secure_chat: bool,
+    pub compression: Option<CompressionInfo>,
 }
 
 impl SteelConfig {
@@ -55,6 +57,16 @@ impl SteelConfig {
         }
         if self.simulation_distance > 32 {
             return Err("Simulation distance must be less than or equal to 32".to_string());
+        }
+        if self.compression.is_some() {
+            if self.compression.unwrap().threshold < 256 {
+                return Err(
+                    "Compression threshold must be greater than or equal to 256".to_string()
+                );
+            }
+            if self.compression.unwrap().level < 1 || self.compression.unwrap().level > 9 {
+                return Err("Compression level must be between 1 and 9".to_string());
+            }
         }
         Ok(())
     }

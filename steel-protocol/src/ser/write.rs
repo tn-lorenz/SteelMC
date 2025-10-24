@@ -1,6 +1,9 @@
 use std::io::{Error, Write};
 
-use crate::packet_traits::WriteTo;
+use crate::{
+    codec::VarInt,
+    packet_traits::{PrefixedWrite, WriteTo},
+};
 
 impl WriteTo for bool {
     fn write(&self, writer: &mut impl Write) -> Result<(), Error> {
@@ -54,5 +57,17 @@ impl WriteTo for i32 {
 impl WriteTo for i64 {
     fn write(&self, writer: &mut impl Write) -> Result<(), Error> {
         writer.write_all(&self.to_be_bytes())
+    }
+}
+
+impl WriteTo for Option<String> {
+    fn write(&self, writer: &mut impl Write) -> Result<(), Error> {
+        if let Some(value) = self {
+            (true).write(writer)?;
+            value.write_prefixed::<VarInt>(writer)?;
+        } else {
+            (false).write(writer)?;
+        }
+        Ok(())
     }
 }

@@ -1,15 +1,12 @@
 use std::{
-    io::Write,
     net::SocketAddr,
     sync::{Arc, atomic::AtomicBool},
 };
 
-use bytes::Bytes;
 use crossbeam::atomic::AtomicCell;
 use steel_protocol::{
-    codec::VarInt,
     packet_reader::TCPNetworkDecoder,
-    packet_traits::{CompressionInfo, EncodedPacket, WriteTo},
+    packet_traits::{CompressionInfo, EncodedPacket},
     packet_writer::TCPNetworkEncoder,
     packets::{
         clientbound::{CBoundConfiguration, CBoundLogin, CBoundPacket, CBoundPlay},
@@ -38,10 +35,13 @@ use tokio::{
 };
 use tokio_util::{sync::CancellationToken, task::TaskTracker};
 
-use crate::network::{
-    game_profile::GameProfile,
-    login::handle_hello,
-    status::{handle_ping_request, handle_status_request},
+use crate::{
+    network::{
+        game_profile::GameProfile,
+        login::{handle_hello, handle_key},
+        status::{handle_ping_request, handle_status_request},
+    },
+    server::server::Server,
 };
 
 #[derive(Error, Debug)]
@@ -84,6 +84,8 @@ pub struct JavaTcpClient {
     network_reader: Arc<Mutex<TCPNetworkDecoder<BufReader<OwnedReadHalf>>>>,
     compression_info: Arc<AtomicCell<Option<CompressionInfo>>>,
     pub(crate) has_requested_status: AtomicBool,
+    pub server: Arc<Server>,
+    pub challenge: AtomicCell<Option<[u8; 4]>>,
 }
 
 impl JavaTcpClient {
@@ -92,6 +94,7 @@ impl JavaTcpClient {
         address: SocketAddr,
         id: u64,
         cancel_token: CancellationToken,
+        server: Arc<Server>,
     ) -> Self {
         let (read, write) = tcp_stream.into_split();
         let (send, recv) = broadcast::channel(128);
@@ -114,6 +117,8 @@ impl JavaTcpClient {
             network_reader: Arc::new(Mutex::new(TCPNetworkDecoder::new(BufReader::new(read)))),
             has_requested_status: AtomicBool::new(false),
             compression_info: Arc::new(AtomicCell::new(None)),
+            server: server,
+            challenge: AtomicCell::new(None),
         }
     }
 
@@ -129,7 +134,7 @@ impl JavaTcpClient {
         Ok(())
     }
 
-    async fn set_compression(&self, compression: CompressionInfo) {
+    pub async fn set_compression(&self, compression: CompressionInfo) {
         if compression.level > 9 {
             log::error!("Invalid compression level! Clients will not be able to read this!");
         }
@@ -300,6 +305,7 @@ impl JavaTcpClient {
             cancel_token
                 .run_until_cancelled(async move {
                     let mut network_reader = network_reader.lock().await;
+
                     loop {
                         let packet = network_reader.get_raw_packet().await;
                         match packet {
@@ -410,6 +416,7 @@ impl JavaTcpClient {
 
         match packet {
             SBoundLogin::Hello(packet) => handle_hello(self, packet).await,
+            SBoundLogin::Key(packet) => handle_key(self, packet).await,
         }
     }
 

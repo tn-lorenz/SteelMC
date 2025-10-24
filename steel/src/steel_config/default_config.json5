@@ -22,4 +22,9 @@
     favicon: "config/favicon.png",
     // Whether to enforce secure chat
     enforce_secure_chat: false,
+    // Compression settings
+    compression: {
+        threshold: 256,
+        level: 4,
+    },
 }

@@ -2,7 +2,7 @@ use std::fmt::Debug;
 
 pub use steel_utils::math::vector3::Axis;
 
-pub trait Property<T> {
+pub trait Property<T>: Sync + Send {
     fn get_value(&self, value: &str) -> Option<T>;
     fn get_possible_values(&self) -> Box<[T]>;
     fn get_internal_index(&self, value: &T) -> usize;
@@ -10,12 +10,12 @@ pub trait Property<T> {
     fn as_dyn(&self) -> &dyn DynProperty;
 }
 
-pub trait DynProperty: Debug {
+pub trait DynProperty: Debug + Sync + Send {
     fn get_possible_values(&self) -> Box<[&str]>;
     fn get_name(&self) -> &'static str;
 }
 
-pub trait PropertyEnum: PartialEq + Clone + Debug {
+pub trait PropertyEnum: PartialEq + Clone + Debug + Sync + Send {
     fn as_str(&self) -> &str;
 }
 

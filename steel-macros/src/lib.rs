@@ -75,7 +75,6 @@ pub fn packet_read_derive(input: TokenStream) -> TokenStream {
                         };
 
                         quote! {
-                            use crate::packet_traits::PrefixedRead;
                             let #field_name = #read_call;
                         }
                     }
@@ -92,6 +91,8 @@ pub fn packet_read_derive(input: TokenStream) -> TokenStream {
                 #[automatically_derived]
                 impl crate::packet_traits::ReadFrom for #name {
                     fn read(data: &mut impl std::io::Read) -> Result<Self, std::io::Error>{
+                        use crate::packet_traits::PrefixedRead;
+
                         #(#readers)*
 
                         Ok(Self {

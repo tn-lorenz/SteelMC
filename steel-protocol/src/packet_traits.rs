@@ -1,7 +1,8 @@
 use std::io::{Error, Read, Write};
 
 use async_compression::{Level, tokio::write::ZlibEncoder};
-use bytes::{BufMut, Bytes, BytesMut};
+use bytes::Bytes;
+use serde::Deserialize;
 use tokio::io::AsyncWriteExt;
 
 use crate::{
@@ -39,10 +40,7 @@ pub trait PrefixedRead: Sized {
         bound: usize,
     ) -> Result<Self, Error>;
 
-    fn read_prefixed<P: TryInto<usize> + ReadFrom>(
-        &self,
-        data: &mut impl Read,
-    ) -> Result<Self, Error> {
+    fn read_prefixed<P: TryInto<usize> + ReadFrom>(data: &mut impl Read) -> Result<Self, Error> {
         Self::read_prefixed_bound::<P>(data, DEFAULT_BOUND)
     }
 }
@@ -62,7 +60,7 @@ pub trait PrefixedWrite {
     }
 }
 
-#[derive(Copy, Clone, Debug)]
+#[derive(Copy, Clone, Debug, Deserialize)]
 pub struct CompressionInfo {
     /// The compression threshold used when compression is enabled.
     pub threshold: usize,

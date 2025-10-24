@@ -9,17 +9,13 @@ use std::{
 };
 
 use aes::cipher::KeyIvInit;
-use async_compression::{Level, tokio::write::ZlibEncoder};
-use bytes::Bytes;
 use thiserror::Error;
 use tokio::io::{AsyncWrite, AsyncWriteExt};
 
 use crate::{
-    codec::VarInt,
     packet_traits::EncodedPacket,
     utils::{
-        Aes128Cfb8Enc, CompressionLevel, CompressionThreshold, MAX_PACKET_DATA_SIZE,
-        MAX_PACKET_SIZE, PacketError, StreamEncryptor,
+        Aes128Cfb8Enc, PacketError, StreamEncryptor,
     },
 };
 
