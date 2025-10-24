@@ -16,6 +16,7 @@ use tokio::io::{AsyncWrite, AsyncWriteExt};
 
 use crate::{
     codec::VarInt,
+    packet_traits::CompressedPacket,
     utils::{
         Aes128Cfb8Enc, CompressionLevel, CompressionThreshold, MAX_PACKET_DATA_SIZE,
         MAX_PACKET_SIZE, PacketError, StreamEncryptor,
@@ -237,6 +238,23 @@ impl<W: AsyncWrite + Unpin> TCPNetworkEncoder<W> {
             .flush()
             .await
             .map_err(|e| PacketError::EncryptionFailed(e.to_string()))?;
+        Ok(())
+    }
+
+    pub async fn write_packet_compressed(
+        &mut self,
+        packet: &CompressedPacket,
+    ) -> Result<(), PacketError> {
+        self.writer
+            .write_all(&packet.compressed_data)
+            .await
+            .map_err(|e| PacketError::EncryptionFailed(e.to_string()))?;
+
+        self.writer
+            .flush()
+            .await
+            .map_err(|e| PacketError::EncryptionFailed(e.to_string()))?;
+
         Ok(())
     }
 }
