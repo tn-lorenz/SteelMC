@@ -62,12 +62,83 @@ pub trait PrefixedWrite {
     }
 }
 
-// A packet that is compressed if over the threshold
-pub struct CompressedPacket {
-    pub compressed_data: Bytes,
+#[derive(Copy, Clone, Debug)]
+pub struct CompressionInfo {
+    /// The compression threshold used when compression is enabled.
+    pub threshold: usize,
+    /// A value between `0..9`.
+    /// `1` = Optimize for the best speed of encoding.
+    /// `9` = Optimize for the size of data being encoded.
+    pub level: i32,
 }
 
-impl CompressedPacket {
+impl Default for CompressionInfo {
+    fn default() -> Self {
+        Self {
+            threshold: 256,
+            level: 4,
+        }
+    }
+}
+
+/// Represents an encoded clientbound packet, optionally applying compression based on threshold and level.
+///
+/// # Packet Size Limits
+/// - Maximum packet size: 2097151 bytes (2^21 - 1, max 3-byte VarInt)
+/// - Maximum uncompressed size for compressed packets: 8388608 bytes (2^23)
+/// - Length field must not exceed 3 bytes
+///
+/// # Packet Encoding Format
+///
+/// **Without Compression:**
+/// ```text
+/// [Length: VarInt]     Length of (Packet ID + Data)
+/// [Packet ID: VarInt]  Protocol ID from packet report
+/// [Data: Byte Array]   Packet payload
+/// ```
+///
+/// **With Compression (size >= threshold):**
+/// ```text
+/// [Length: VarInt]     Length of (Data Length + compressed data)
+/// [Data Length: VarInt] Length of uncompressed (Packet ID + Data)
+/// [Compressed Data]    zlib compressed (Packet ID + Data)
+/// ```
+///
+/// **With Compression (size < threshold):**
+/// ```text
+/// [Length: VarInt]     Length of (Data Length + uncompressed data)
+/// [Data Length: VarInt] 0 to indicate uncompressed
+/// [Packet ID: VarInt]  Protocol ID from packet report
+/// [Data: Byte Array]   Uncompressed packet payload
+/// ```
+///
+/// Compression is only applied when:
+/// 1. Compression is enabled via Set Compression packet
+/// 2. The uncompressed data length meets/exceeds the threshold
+/// 3. The threshold is non-negative
+pub struct EncodedPacket {
+    pub encoded_data: Bytes,
+}
+
+impl EncodedPacket {
+    async fn from_packet_data_no_compression(packet_data: Bytes) -> Result<Self, PacketError> {
+        let mut buf: Vec<u8> = Vec::new();
+        let data_len = packet_data.len();
+
+        let complete_len = VarInt::written_size(data_len as _) + data_len;
+        if complete_len > MAX_PACKET_SIZE {
+            return Err(PacketError::TooLong(complete_len));
+        }
+
+        VarInt(data_len as _).write(&mut buf)?;
+        std::io::Write::write_all(&mut buf, &packet_data)
+            .map_err(|e| PacketError::EncryptionFailed(e.to_string()))?;
+
+        Ok(Self {
+            encoded_data: buf.into(),
+        })
+    }
+
     async fn from_packet_data(
         packet_data: Bytes,
         threshold: usize,
@@ -128,17 +199,27 @@ impl CompressedPacket {
         }
 
         Ok(Self {
-            compressed_data: buf.into(),
+            encoded_data: buf.into(),
         })
     }
 
     pub async fn from_packet(
-        packet: CBoundPacket,
-        threshold: usize,
-        level: i32,
+        packet: &CBoundPacket,
+        compression_info: Option<CompressionInfo>,
     ) -> Result<Self, PacketError> {
         let mut buf = Vec::new();
+        let packet_id = packet.get_id();
+        VarInt(packet_id).write(&mut buf)?;
         packet.write_packet(&mut buf)?;
-        Self::from_packet_data(buf.into(), threshold, level).await
+        if let Some(compression_info) = compression_info {
+            Self::from_packet_data(
+                buf.into(),
+                compression_info.threshold,
+                compression_info.level,
+            )
+            .await
+        } else {
+            Self::from_packet_data_no_compression(buf.into()).await
+        }
     }
 }

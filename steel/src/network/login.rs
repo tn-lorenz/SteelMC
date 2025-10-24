@@ -1,4 +1,3 @@
-
 use steel_protocol::packets::login::s_hello_packet::SHelloPacket;
 use steel_utils::text::TextComponent;
 
@@ -11,6 +10,7 @@ pub fn is_valid_player_name(name: &str) -> bool {
 }
 
 pub async fn handle_hello(tcp_client: &JavaTcpClient, packet: &SHelloPacket) {
+    println!("Hello packet: {:?}", packet);
     if !is_valid_player_name(&packet.name) {
         tcp_client
             .kick(TextComponent::text("Invalid player name"))

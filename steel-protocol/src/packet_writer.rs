@@ -16,7 +16,7 @@ use tokio::io::{AsyncWrite, AsyncWriteExt};
 
 use crate::{
     codec::VarInt,
-    packet_traits::CompressedPacket,
+    packet_traits::EncodedPacket,
     utils::{
         Aes128Cfb8Enc, CompressionLevel, CompressionThreshold, MAX_PACKET_DATA_SIZE,
         MAX_PACKET_SIZE, PacketError, StreamEncryptor,
@@ -88,20 +88,13 @@ impl<W: AsyncWrite + Unpin> AsyncWrite for EncryptionWriter<W> {
 /// Supports Aes128 Encryption
 pub struct TCPNetworkEncoder<W: AsyncWrite + Unpin> {
     writer: EncryptionWriter<W>,
-    // compression and compression threshold
-    compression: Option<(CompressionThreshold, CompressionLevel)>,
 }
 
 impl<W: AsyncWrite + Unpin> TCPNetworkEncoder<W> {
     pub fn new(writer: W) -> Self {
         Self {
             writer: EncryptionWriter::None(writer),
-            compression: None,
         }
-    }
-
-    pub fn set_compression(&mut self, compression_info: (CompressionThreshold, CompressionLevel)) {
-        self.compression = Some(compression_info);
     }
 
     /// NOTE: Encryption can only be set; a minecraft stream cannot go back to being unencrypted
@@ -113,140 +106,12 @@ impl<W: AsyncWrite + Unpin> TCPNetworkEncoder<W> {
         take_mut::take(&mut self.writer, |encoder| encoder.upgrade(cipher));
     }
 
-    /// Appends a Clientbound `ClientPacket` to the internal buffer and applies compression when needed.
-    ///
-    /// If compression is enabled and the packet size exceeds the threshold, the packet is compressed.
-    /// The packet is prefixed with its length and, if compressed, the uncompressed data length.
-    /// The packet format is as follows:
-    ///
-    /// **Uncompressed:**
-    /// |-----------------------|
-    /// | Packet Length (VarInt)|
-    /// |-----------------------|
-    /// | Packet ID (VarInt)    |
-    /// |-----------------------|
-    /// | Data (Byte Array)     |
-    /// |-----------------------|
-    ///
-    /// **Compressed:**
-    /// |------------------------|
-    /// | Packet Length (VarInt) |
-    /// |------------------------|
-    /// | Data Length (VarInt)   |
-    /// |------------------------|
-    /// | Packet ID (VarInt)     |
-    /// |------------------------|
-    /// | Data (Byte Array)      |
-    /// |------------------------|
-    ///
-    /// -   `Packet Length`: The total length of the packet *excluding* the `Packet Length` field itself.
-    /// -   `Data Length`: (Only present in compressed packets) The length of the uncompressed `Packet ID` and `Data`.
-    /// -   `Packet ID`: The ID of the packet.
-    /// -   `Data`: The packet's data.
-    pub async fn write_packet(&mut self, packet_data: Bytes) -> Result<(), PacketError> {
-        // We need to know the length of the compressed buffer and serde is not async :(
-        // We need to write to a buffer here 😔
-
-        let data_len = packet_data.len();
-        // We dont need any more size check to convert to i32 as MAX_PACKET_DATA_SIZE < i32::MAX
-        if data_len > MAX_PACKET_DATA_SIZE {
-            return Err(PacketError::TooLong(data_len));
-        }
-
-        if let Some((compression_threshold, compression_level)) = self.compression {
-            if data_len >= compression_threshold {
-                // Pushed before data:
-                // Length of (Data Length) + length of compressed (Packet ID + Data)
-                // Length of uncompressed (Packet ID + Data)
-
-                // TODO: We need the compressed length at the beginning of the packet so we need to write to
-                // buf here :( Is there a magic way to find a compressed length?
-                let mut compressed_buf = Vec::new();
-                let mut compressor = ZlibEncoder::with_quality(
-                    &mut compressed_buf,
-                    Level::Precise(compression_level as i32),
-                );
-
-                compressor
-                    .write_all(&packet_data)
-                    .await
-                    .map_err(|e| PacketError::CompressionFailed(e.to_string()))?;
-                compressor
-                    .flush()
-                    .await
-                    .map_err(|e| PacketError::CompressionFailed(e.to_string()))?;
-                debug_assert!(!compressed_buf.is_empty());
-
-                let full_packet_len = (VarInt::written_size(data_len as _) + compressed_buf.len())
-                    .try_into()
-                    .map_err(|_| PacketError::TooLong(data_len))?;
-
-                let complete_len = VarInt::written_size(full_packet_len) + full_packet_len as usize;
-                if complete_len > MAX_PACKET_SIZE {
-                    return Err(PacketError::TooLong(complete_len));
-                }
-
-                VarInt(full_packet_len)
-                    .write_async(&mut self.writer)
-                    .await?;
-                VarInt(data_len as _).write_async(&mut self.writer).await?;
-
-                self.writer
-                    .write_all(&compressed_buf)
-                    .await
-                    .map_err(|e| PacketError::EncryptionFailed(e.to_string()))?;
-            } else {
-                // Pushed before data:
-                // Length of (Data Length) + length of compressed (Packet ID + Data)
-                // 0 to indicate uncompressed
-
-                let full_packet_len = data_len as i32;
-
-                let complete_serialization_len =
-                    VarInt::written_size(full_packet_len) + full_packet_len as usize;
-                if complete_serialization_len > MAX_PACKET_SIZE {
-                    return Err(PacketError::TooLong(complete_serialization_len));
-                }
-
-                VarInt(full_packet_len)
-                    .write_async(&mut self.writer)
-                    .await?;
-                VarInt(0).write_async(&mut self.writer).await?;
-
-                self.writer
-                    .write_all(&packet_data)
-                    .await
-                    .map_err(|e| PacketError::EncryptionFailed(e.to_string()))?;
-            }
-        } else {
-            // Pushed before data:
-            // Length of Packet ID + Data
-
-            let complete_len = VarInt::written_size(data_len as _) + data_len;
-            if complete_len > MAX_PACKET_SIZE {
-                return Err(PacketError::TooLong(complete_len));
-            }
-
-            VarInt(data_len as _).write_async(&mut self.writer).await?;
-            self.writer
-                .write_all(&packet_data)
-                .await
-                .map_err(|e| PacketError::EncryptionFailed(e.to_string()))?;
-        }
-
-        self.writer
-            .flush()
-            .await
-            .map_err(|e| PacketError::EncryptionFailed(e.to_string()))?;
-        Ok(())
-    }
-
-    pub async fn write_packet_compressed(
+    pub async fn write_encoded_packet(
         &mut self,
-        packet: &CompressedPacket,
+        packet: &EncodedPacket,
     ) -> Result<(), PacketError> {
         self.writer
-            .write_all(&packet.compressed_data)
+            .write_all(&packet.encoded_data)
             .await
             .map_err(|e| PacketError::EncryptionFailed(e.to_string()))?;
 

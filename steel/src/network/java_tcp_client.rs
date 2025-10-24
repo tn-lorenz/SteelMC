@@ -9,7 +9,7 @@ use crossbeam::atomic::AtomicCell;
 use steel_protocol::{
     codec::VarInt,
     packet_reader::TCPNetworkDecoder,
-    packet_traits::WriteTo,
+    packet_traits::{CompressionInfo, EncodedPacket, WriteTo},
     packet_writer::TCPNetworkEncoder,
     packets::{
         clientbound::{CBoundConfiguration, CBoundLogin, CBoundPacket, CBoundPlay},
@@ -52,23 +52,10 @@ pub enum EncryptionError {
     SharedWrongLength,
 }
 
-#[derive(Clone, Debug)]
-pub struct CompressionInfo {
-    /// The compression threshold used when compression is enabled.
-    pub threshold: u32,
-    /// A value between `0..9`.
-    /// `1` = Optimize for the best speed of encoding.
-    /// `9` = Optimize for the size of data being encoded.
-    pub level: u32,
-}
-
-impl Default for CompressionInfo {
-    fn default() -> Self {
-        Self {
-            threshold: 256,
-            level: 4,
-        }
-    }
+#[derive(Clone)]
+pub enum EnqueuedPacket {
+    Packet(CBoundPacket),
+    EncodedPacket(Arc<EncodedPacket>),
 }
 
 pub struct JavaTcpClient {
@@ -88,13 +75,14 @@ pub struct JavaTcpClient {
     pub packet_recv_sender: Arc<Sender<Arc<SBoundPacket>>>,
 
     /// A queue of serialized packets to send to the network
-    outgoing_queue: Sender<Bytes>,
+    outgoing_queue: Sender<EnqueuedPacket>,
     /// A queue of serialized packets to send to the network
-    outgoing_queue_recv: Option<Receiver<Bytes>>,
+    outgoing_queue_recv: Option<Receiver<EnqueuedPacket>>,
     /// The packet encoder for outgoing packets.
     network_writer: Arc<Mutex<TCPNetworkEncoder<BufWriter<OwnedWriteHalf>>>>,
     /// The packet decoder for incoming packets.
     network_reader: Arc<Mutex<TCPNetworkDecoder<BufReader<OwnedReadHalf>>>>,
+    compression_info: Arc<AtomicCell<Option<CompressionInfo>>>,
     pub(crate) has_requested_status: AtomicBool,
 }
 
@@ -125,6 +113,7 @@ impl JavaTcpClient {
             network_writer: Arc::new(Mutex::new(TCPNetworkEncoder::new(BufWriter::new(write)))),
             network_reader: Arc::new(Mutex::new(TCPNetworkDecoder::new(BufReader::new(read)))),
             has_requested_status: AtomicBool::new(false),
+            compression_info: Arc::new(AtomicCell::new(None)),
         }
     }
 
@@ -150,10 +139,7 @@ impl JavaTcpClient {
             .await
             .set_compression(compression.threshold as usize);
 
-        self.network_writer
-            .lock()
-            .await
-            .set_compression((compression.threshold as usize, compression.level));
+        self.compression_info.store(Some(compression));
     }
 
     async fn get_packet(&self) -> Option<RawPacket> {
@@ -188,15 +174,16 @@ impl JavaTcpClient {
         self.tasks.wait().await;
     }
 
-    pub async fn send_packet_now(&self, packet: &CBoundPacket) {
-        let mut packet_buf = Vec::new();
-        let writer = &mut packet_buf;
-        self.write_prefixed_packet(packet, writer).unwrap();
+    pub async fn send_packet_now(&self, packet: CBoundPacket) {
+        let compression_info = self.compression_info.load();
+        let encoded_packet = EncodedPacket::from_packet(&packet, compression_info)
+            .await
+            .unwrap();
         if let Err(err) = self
             .network_writer
             .lock()
             .await
-            .write_packet(Bytes::from(packet_buf))
+            .write_encoded_packet(&encoded_packet)
             .await
         {
             // It is expected that the packet will fail if we are cancelled
@@ -209,12 +196,9 @@ impl JavaTcpClient {
         }
     }
 
-    pub fn enqueue_packet(&self, packet: &CBoundPacket) -> Result<(), PacketError> {
-        let mut packet_buf = Vec::new();
-        let writer = &mut packet_buf;
-        self.write_prefixed_packet(packet, writer)?;
+    pub fn enqueue_packet(&self, packet: CBoundPacket) -> Result<(), PacketError> {
         self.outgoing_queue
-            .send(Bytes::from(packet_buf))
+            .send(EnqueuedPacket::Packet(packet))
             .map_err(|e| {
                 PacketError::SendError(format!(
                     "Failed to send packet to client {}: {}",
@@ -224,15 +208,28 @@ impl JavaTcpClient {
         Ok(())
     }
 
-    pub fn write_prefixed_packet(
-        &self,
-        packet: &CBoundPacket,
-        writer: &mut impl Write,
-    ) -> Result<(), PacketError> {
-        let packet_id = packet.get_id();
-        VarInt(packet_id).write(writer)?;
-        packet.write_packet(writer)?;
+    pub fn enqueue_encoded_packet(&self, packet: Arc<EncodedPacket>) -> Result<(), PacketError> {
+        self.outgoing_queue
+            .send(EnqueuedPacket::EncodedPacket(packet))
+            .map_err(|e| {
+                PacketError::SendError(format!(
+                    "Failed to send packet to client {}: {}",
+                    self.id, e
+                ))
+            })?;
         Ok(())
+    }
+
+    pub async fn create_encoded_packet(
+        packet: CBoundPacket,
+        compression_info: Option<CompressionInfo>,
+    ) -> Result<Arc<EncodedPacket>, PacketError> {
+        let encoded_packet = EncodedPacket::from_packet(&packet, compression_info)
+            .await
+            .map_err(|e| {
+                PacketError::SendError(format!("Failed to create encoded packet: {}", e))
+            })?;
+        Ok(Arc::new(encoded_packet))
     }
 
     /// Starts a task that will send packets to the client from the outgoing packet queue.
@@ -245,6 +242,7 @@ impl JavaTcpClient {
         let cancel_token = self.cancel_token.clone();
         let writer = self.network_writer.clone();
         let id = self.id;
+        let compression_info = self.compression_info.clone();
 
         self.tasks.spawn(async move {
             let cancel_token_clone = cancel_token.clone();
@@ -254,7 +252,21 @@ impl JavaTcpClient {
                     loop {
                         match sender_recv.recv().await {
                             Ok(packet) => {
-                                if let Err(err) = writer.lock().await.write_packet(packet).await {
+                                let encoded_packet = match packet {
+                                    EnqueuedPacket::EncodedPacket(packet) => packet,
+                                    EnqueuedPacket::Packet(packet) => {
+                                        Self::create_encoded_packet(packet, compression_info.load())
+                                            .await
+                                            .unwrap()
+                                    }
+                                };
+
+                                if let Err(err) = writer
+                                    .lock()
+                                    .await
+                                    .write_encoded_packet(&encoded_packet)
+                                    .await
+                                {
                                     log::warn!("Failed to send packet to client {}: {}", id, err);
                                     cancel_token_clone.cancel();
                                 }
@@ -402,13 +414,11 @@ impl JavaTcpClient {
     }
 
     pub async fn handle_configuration(&self, _packet: &SBoundConfiguration) {
-        if !self.assert_protocol(ConnectionProtocol::CONFIGURATION) {
-        }
+        if !self.assert_protocol(ConnectionProtocol::CONFIGURATION) {}
     }
 
     pub async fn handle_play(&self, _packet: &SBoundPlay) {
-        if !self.assert_protocol(ConnectionProtocol::PLAY) {
-        }
+        if !self.assert_protocol(ConnectionProtocol::PLAY) {}
     }
 }
 
@@ -417,21 +427,21 @@ impl JavaTcpClient {
         match self.connection_protocol.load() {
             ConnectionProtocol::LOGIN => {
                 let packet = CLoginDisconnectPacket::new(reason.0);
-                self.send_packet_now(&CBoundPacket::Login(CBoundLogin::LoginDisconnectPacket(
+                self.send_packet_now(CBoundPacket::Login(CBoundLogin::LoginDisconnectPacket(
                     packet,
                 )))
                 .await;
             }
             ConnectionProtocol::CONFIGURATION => {
                 let packet = CDisconnectPacket::new(reason.0);
-                self.send_packet_now(&CBoundPacket::Configuration(
+                self.send_packet_now(CBoundPacket::Configuration(
                     CBoundConfiguration::Disconnect(packet),
                 ))
                 .await;
             }
             ConnectionProtocol::PLAY => {
                 let packet = CDisconnectPacket::new(reason.0);
-                self.send_packet_now(&CBoundPacket::Play(CBoundPlay::Disconnect(packet)))
+                self.send_packet_now(CBoundPacket::Play(CBoundPlay::Disconnect(packet)))
                     .await;
             }
             _ => {}
