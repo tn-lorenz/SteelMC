@@ -244,7 +244,7 @@ impl BlockRegistry {
                 panic!(
                     "Property {} not found on block {}",
                     property.as_dyn().get_name(),
-                    block.key.to_string()
+                    block.key
                 )
             });
 

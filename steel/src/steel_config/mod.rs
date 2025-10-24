@@ -1,6 +1,6 @@
 use base64::{Engine, prelude::BASE64_STANDARD};
 use serde::Deserialize;
-use std::{fs, net::SocketAddr, path::Path, sync::LazyLock};
+use std::{fs, net::SocketAddr, path::Path};
 
 const DEFAULT_CONFIG_STR: &str = include_str!("default_config.json5");
 const DEFAULT_FAVICON_STR: &[u8] = include_bytes!("default_favicon.png");

@@ -12,17 +12,13 @@ use steel_protocol::{
     packet_traits::WriteTo,
     packet_writer::TCPNetworkEncoder,
     packets::{
-        clientbound::{CBoundConfiguration, CBoundLogin, CBoundPacket, CBoundPlay, CBoundStatus},
+        clientbound::{CBoundConfiguration, CBoundLogin, CBoundPacket, CBoundPlay},
         common::c_disconnect_packet::CDisconnectPacket,
         handshake::ClientIntent,
         login::c_login_disconnect_packet::CLoginDisconnectPacket,
         serverbound::{
             SBoundConfiguration, SBoundHandshake, SBoundLogin, SBoundPacket, SBoundPlay,
             SBoundStatus,
-        },
-        status::{
-            c_pong_response_packet::CPongResponsePacket,
-            c_status_response_packet::{CStatusResponsePacket, Players, Status, Version},
         },
     },
     utils::{ConnectionProtocol, PacketError, RawPacket},
@@ -88,8 +84,8 @@ pub struct JavaTcpClient {
     /// A token to cancel the client's operations. Called when the connection is closed. Or client is removed.
     cancel_token: CancellationToken,
 
-    packet_receiver: Mutex<Option<Receiver<SBoundPacket>>>,
-    pub packet_recv_sender: Arc<Sender<SBoundPacket>>,
+    packet_receiver: Mutex<Option<Receiver<Arc<SBoundPacket>>>>,
+    pub packet_recv_sender: Arc<Sender<Arc<SBoundPacket>>>,
 
     /// A queue of serialized packets to send to the network
     outgoing_queue: Sender<Bytes>,
@@ -302,7 +298,7 @@ impl JavaTcpClient {
                                     connection_protocol.load(),
                                 ) {
                                     Ok(packet) => {
-                                        packet_recv_sender.send(packet).unwrap();
+                                        packet_recv_sender.send(Arc::new(packet)).unwrap();
                                     }
                                     Err(err) => {
                                         log::warn!(
@@ -342,7 +338,7 @@ impl JavaTcpClient {
             .run_until_cancelled(async move {
                 loop {
                     let packet = packet_receiver.recv().await.unwrap();
-                    match packet {
+                    match &*packet {
                         SBoundPacket::Handshake(packet) => self.handle_handshake(packet).await,
                         SBoundPacket::Status(packet) => self.handle_status(packet).await,
                         SBoundPacket::Login(packet) => self.handle_login(packet).await,
@@ -364,7 +360,7 @@ impl JavaTcpClient {
         true
     }
 
-    pub async fn handle_handshake(&self, packet: SBoundHandshake) {
+    pub async fn handle_handshake(&self, packet: &SBoundHandshake) {
         if !self.assert_protocol(ConnectionProtocol::HANDSHAKING) {
             return;
         }
@@ -384,7 +380,7 @@ impl JavaTcpClient {
         }
     }
 
-    pub async fn handle_status(&self, packet: SBoundStatus) {
+    pub async fn handle_status(&self, packet: &SBoundStatus) {
         if !self.assert_protocol(ConnectionProtocol::STATUS) {
             return;
         }
@@ -395,7 +391,7 @@ impl JavaTcpClient {
         }
     }
 
-    pub async fn handle_login(&self, packet: SBoundLogin) {
+    pub async fn handle_login(&self, packet: &SBoundLogin) {
         if !self.assert_protocol(ConnectionProtocol::LOGIN) {
             return;
         }
@@ -405,15 +401,13 @@ impl JavaTcpClient {
         }
     }
 
-    pub async fn handle_configuration(&self, _packet: SBoundConfiguration) {
+    pub async fn handle_configuration(&self, _packet: &SBoundConfiguration) {
         if !self.assert_protocol(ConnectionProtocol::CONFIGURATION) {
-            return;
         }
     }
 
-    pub async fn handle_play(&self, _packet: SBoundPlay) {
+    pub async fn handle_play(&self, _packet: &SBoundPlay) {
         if !self.assert_protocol(ConnectionProtocol::PLAY) {
-            return;
         }
     }
 }

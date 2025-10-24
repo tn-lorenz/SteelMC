@@ -65,12 +65,10 @@ pub enum SBoundConfiguration {}
 
 impl SBoundConfiguration {
     pub fn from_raw_packet(raw_packet: RawPacket) -> Result<Self, PacketError> {
-        match raw_packet.id {
-            _ => Err(PacketError::MalformedValue(format!(
-                "Invalid packet id: {}",
-                raw_packet.id
-            ))),
-        }
+        Err(PacketError::MalformedValue(format!(
+            "Invalid packet id: {}",
+            raw_packet.id
+        )))
     }
 }
 
@@ -104,12 +102,10 @@ pub enum SBoundPlay {}
 
 impl SBoundPlay {
     pub fn from_raw_packet(raw_packet: RawPacket) -> Result<Self, PacketError> {
-        match raw_packet.id {
-            _ => Err(PacketError::MalformedValue(format!(
-                "Invalid packet id: {}",
-                raw_packet.id
-            ))),
-        }
+        Err(PacketError::MalformedValue(format!(
+            "Invalid packet id: {}",
+            raw_packet.id
+        )))
     }
 }
 

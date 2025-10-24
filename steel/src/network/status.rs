@@ -1,4 +1,4 @@
-use std::sync::{LazyLock, atomic::Ordering};
+use std::sync::atomic::Ordering;
 
 use steel_protocol::packets::{
     clientbound::{CBoundPacket, CBoundStatus},
@@ -9,24 +9,23 @@ use steel_protocol::packets::{
         s_status_request_packet::SStatusRequestPacket,
     },
 };
-use steel_utils::text::TextComponent;
 
 use crate::{STEEL_CONFIG, network::java_tcp_client::JavaTcpClient};
 
-pub async fn handle_status_request(tcp_client: &JavaTcpClient, packet: SStatusRequestPacket) {
+pub async fn handle_status_request(tcp_client: &JavaTcpClient, _packet: &SStatusRequestPacket) {
     // Checks if this funciton has already been called this connection. If not it sets has_requested_status to true. If it has been called before compare_exchange fails.
-    if let Err(_) = tcp_client.has_requested_status.compare_exchange(
+    if tcp_client.has_requested_status.compare_exchange(
         false,
         true,
         Ordering::Relaxed,
         Ordering::Relaxed,
-    ) {
+    ).is_err() {
         tcp_client.close();
         return;
     }
 
     let res_packet = CStatusResponsePacket::new(Status {
-        description: "Hello World!".to_string(),
+        description: STEEL_CONFIG.motd.clone(),
         players: Some(Players {
             max: STEEL_CONFIG.max_players as i32,
             //TODO: Get online players count
@@ -47,7 +46,7 @@ pub async fn handle_status_request(tcp_client: &JavaTcpClient, packet: SStatusRe
         .await;
 }
 
-pub async fn handle_ping_request(tcp_client: &JavaTcpClient, packet: SPingRequestPacket) {
+pub async fn handle_ping_request(tcp_client: &JavaTcpClient, packet: &SPingRequestPacket) {
     let res_packet = CPongResponsePacket::new(packet.time);
     tcp_client
         .send_packet_now(&CBoundPacket::Status(CBoundStatus::Pong(res_packet)))
