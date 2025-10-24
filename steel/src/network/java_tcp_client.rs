@@ -304,9 +304,9 @@ impl JavaTcpClient {
             let cancel_token_clone = cancel_token.clone();
             cancel_token
                 .run_until_cancelled(async move {
-                    let mut network_reader = network_reader.lock().await;
-
                     loop {
+                        let mut network_reader = network_reader.lock().await;
+
                         let packet = network_reader.get_raw_packet().await;
                         match packet {
                             Ok(packet) => {

@@ -14,9 +14,7 @@ use tokio::io::{AsyncWrite, AsyncWriteExt};
 
 use crate::{
     packet_traits::EncodedPacket,
-    utils::{
-        Aes128Cfb8Enc, PacketError, StreamEncryptor,
-    },
+    utils::{Aes128Cfb8Enc, PacketError, StreamEncryptor},
 };
 
 // raw -> compress -> encrypt

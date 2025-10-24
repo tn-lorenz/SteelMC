@@ -49,16 +49,6 @@ pub async fn handle_hello(tcp_client: &JavaTcpClient, packet: &SHelloPacket) {
         });
     }
 
-    if let Some(compression) = STEEL_CONFIG.compression {
-        tcp_client
-            .send_packet_now(CBoundPacket::Login(CBoundLogin::LoginCompression(
-                CLoginCompressionPacket::new(compression.threshold as i32),
-            )))
-            .await;
-        tcp_client.set_compression(compression).await;
-        println!("Set compression to: {:?}", compression);
-    }
-
     if STEEL_CONFIG.encryption {
         let challenge: [u8; 4] = rand::random();
         tcp_client.challenge.store(Some(challenge));
