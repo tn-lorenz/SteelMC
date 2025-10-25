@@ -1,12 +1,16 @@
 use std::io::Cursor;
 
-use steel_registry::packets::serverbound::{handshake, login, status};
+use steel_registry::packets::serverbound::{config, handshake, login, status};
 
 use crate::{
     packet_traits::PacketRead,
     packets::{
+        common::s_custom_payload_packet::SCustomPayloadPacket,
         handshake::ClientIntentionPacket,
-        login::{s_hello_packet::SHelloPacket, s_key_packet::SKeyPacket},
+        login::{
+            s_hello_packet::SHelloPacket, s_key_packet::SKeyPacket,
+            s_login_acknowledged_packet::SLoginAcknowledgedPacket,
+        },
         status::{
             s_ping_request_packet::SPingRequestPacket,
             s_status_request_packet::SStatusRequestPacket,
@@ -47,6 +51,7 @@ impl SBoundHandshake {
 pub enum SBoundLogin {
     Hello(SHelloPacket),
     Key(SKeyPacket),
+    LoginAcknowledged(SLoginAcknowledgedPacket),
 }
 
 impl SBoundLogin {
@@ -62,6 +67,10 @@ impl SBoundLogin {
                 let packet = SKeyPacket::read_packet(&mut data)?;
                 Ok(Self::Key(packet))
             }
+            login::SERVERBOUND_LOGIN_ACKNOWLEDGED => {
+                let packet = SLoginAcknowledgedPacket::read_packet(&mut data)?;
+                Ok(Self::LoginAcknowledged(packet))
+            }
             _ => Err(PacketError::MalformedValue(format!(
                 "Invalid packet id: {}",
                 raw_packet.id
@@ -71,14 +80,24 @@ impl SBoundLogin {
 }
 
 #[derive(Clone, Debug)]
-pub enum SBoundConfiguration {}
+pub enum SBoundConfiguration {
+    CustomPayload(SCustomPayloadPacket),
+}
 
 impl SBoundConfiguration {
     pub fn from_raw_packet(raw_packet: RawPacket) -> Result<Self, PacketError> {
-        Err(PacketError::MalformedValue(format!(
-            "Invalid packet id: {}",
-            raw_packet.id
-        )))
+        let mut data = Cursor::new(raw_packet.payload);
+
+        match raw_packet.id {
+            config::SERVERBOUND_CUSTOM_PAYLOAD => {
+                let packet = SCustomPayloadPacket::read_packet(&mut data)?;
+                Ok(Self::CustomPayload(packet))
+            }
+            _ => Err(PacketError::MalformedValue(format!(
+                "Invalid packet id: {}",
+                raw_packet.id
+            ))),
+        }
     }
 }
 

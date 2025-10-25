@@ -38,7 +38,8 @@ use tokio_util::{sync::CancellationToken, task::TaskTracker};
 
 use crate::{
     network::{
-        login::{handle_hello, handle_key},
+        config,
+        login::{self, handle_hello, handle_key, handle_login_acknowledged},
         status::{handle_ping_request, handle_status_request},
     },
     server::server::Server,
@@ -429,13 +430,21 @@ impl JavaTcpClient {
         }
 
         match packet {
-            SBoundLogin::Hello(packet) => handle_hello(self, packet).await,
-            SBoundLogin::Key(packet) => handle_key(self, packet).await,
+            SBoundLogin::Hello(packet) => login::handle_hello(self, packet).await,
+            SBoundLogin::Key(packet) => login::handle_key(self, packet).await,
+            SBoundLogin::LoginAcknowledged(packet) => {
+                login::handle_login_acknowledged(self, packet).await
+            }
         }
     }
 
-    pub async fn handle_configuration(&self, _packet: &SBoundConfiguration) {
+    pub async fn handle_configuration(&self, packet: &SBoundConfiguration) {
         if !self.assert_protocol(ConnectionProtocol::CONFIGURATION) {}
+        match packet {
+            SBoundConfiguration::CustomPayload(packet) => {
+                config::handle_custom_payload(self, packet).await
+            }
+        }
     }
 
     pub async fn handle_play(&self, _packet: &SBoundPlay) {

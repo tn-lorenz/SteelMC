@@ -9,9 +9,10 @@ use steel_protocol::{
         login::{
             c_hello_packet::CHelloPacket, c_login_compression_packet::CLoginCompressionPacket,
             c_login_finished_packet::CLoginFinishedPacket, s_hello_packet::SHelloPacket,
-            s_key_packet::SKeyPacket,
+            s_key_packet::SKeyPacket, s_login_acknowledged_packet::SLoginAcknowledgedPacket,
         },
     },
+    utils::ConnectionProtocol,
 };
 use steel_utils::text::TextComponent;
 use steel_world::player::game_profile::GameProfile;
@@ -200,4 +201,14 @@ pub async fn finish_login(tcp_client: &JavaTcpClient, profile: &GameProfile) {
             CLoginFinishedPacket::new(profile.id, profile.name.clone(), profile.properties.clone()),
         )))
         .await;
+}
+
+pub async fn handle_login_acknowledged(
+    tcp_client: &JavaTcpClient,
+    packet: &SLoginAcknowledgedPacket,
+) {
+    tcp_client
+        .connection_protocol
+        .store(ConnectionProtocol::CONFIGURATION);
+    println!("Login acknowledged packet: {:?}", packet);
 }

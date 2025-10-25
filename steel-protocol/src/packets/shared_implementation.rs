@@ -1,9 +1,15 @@
-use std::io::{self, Result, Write};
+use std::{
+    io::{self, Result, Write},
+    str::FromStr,
+};
 
-use steel_utils::text::TextComponentBase;
+use steel_utils::{ResourceLocation, text::TextComponentBase};
 use uuid::Uuid;
 
-use crate::packet_traits::{ReadFrom, WriteTo};
+use crate::{
+    codec::VarInt,
+    packet_traits::{PrefixedRead, PrefixedWrite, ReadFrom, WriteTo},
+};
 
 impl WriteTo for TextComponentBase {
     fn write(&self, _: &mut impl Write) -> Result<()> {
@@ -29,6 +35,22 @@ impl WriteTo for Uuid {
         let (most_significant_bits, least_significant_bits) = self.as_u64_pair();
         most_significant_bits.write(writer)?;
         least_significant_bits.write(writer)?;
+        Ok(())
+    }
+}
+
+impl ReadFrom for ResourceLocation {
+    fn read(data: &mut impl io::Read) -> Result<Self> {
+        Ok(
+            ResourceLocation::from_str(&String::read_prefixed::<VarInt>(data)?)
+                .map_err(|e| std::io::Error::other(e.to_string()))?,
+        )
+    }
+}
+
+impl WriteTo for ResourceLocation {
+    fn write(&self, writer: &mut impl Write) -> Result<()> {
+        self.to_string().write_prefixed::<VarInt>(writer)?;
         Ok(())
     }
 }
