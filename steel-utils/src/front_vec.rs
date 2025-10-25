@@ -1,4 +1,9 @@
-use std::{io::{self, Write}, ops::{Deref, DerefMut}, pin::Pin, task::{Context, Poll}};
+use std::{
+    io::{self, Write},
+    ops::{Deref, DerefMut},
+    pin::Pin,
+    task::{Context, Poll},
+};
 
 use tokio::io::AsyncWrite;
 

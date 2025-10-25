@@ -79,9 +79,9 @@ pub struct JavaTcpClient {
     /// A queue of serialized packets to send to the network
     outgoing_queue_recv: Option<Receiver<EnqueuedPacket>>,
     /// The packet encoder for outgoing packets.
-    network_writer: Arc<Mutex<TCPNetworkEncoder<BufWriter<OwnedWriteHalf>>>>,
+    network_writer: Option<TCPNetworkEncoder<BufWriter<OwnedWriteHalf>>>,
     /// The packet decoder for incoming packets.
-    network_reader: Arc<Mutex<TCPNetworkDecoder<BufReader<OwnedReadHalf>>>>,
+    network_reader: Option<TCPNetworkDecoder<BufReader<OwnedReadHalf>>>,
     compression_info: Arc<AtomicCell<Option<CompressionInfo>>>,
     pub(crate) has_requested_status: AtomicBool,
     pub server: Arc<Server>,
@@ -113,60 +113,12 @@ impl JavaTcpClient {
             packet_recv_sender: Arc::new(packet_recv_sender),
             outgoing_queue: send,
             outgoing_queue_recv: Some(recv),
-            network_writer: Arc::new(Mutex::new(TCPNetworkEncoder::new(BufWriter::new(write)))),
-            network_reader: Arc::new(Mutex::new(TCPNetworkDecoder::new(BufReader::new(read)))),
+            network_writer: Some(TCPNetworkEncoder::new(BufWriter::new(write))),
+            network_reader: Some(TCPNetworkDecoder::new(BufReader::new(read))),
             has_requested_status: AtomicBool::new(false),
             compression_info: Arc::new(AtomicCell::new(None)),
             server: server,
             challenge: AtomicCell::new(None),
-        }
-    }
-
-    async fn set_encryption(
-        &self,
-        shared_secret: &[u8], // decrypted
-    ) -> Result<(), EncryptionError> {
-        let crypt_key: [u8; 16] = shared_secret
-            .try_into()
-            .map_err(|_| EncryptionError::SharedWrongLength)?;
-        self.network_reader.lock().await.set_encryption(&crypt_key);
-        self.network_writer.lock().await.set_encryption(&crypt_key);
-        Ok(())
-    }
-
-    pub async fn set_compression(&self, compression: CompressionInfo) {
-        if compression.level > 9 {
-            log::error!("Invalid compression level! Clients will not be able to read this!");
-        }
-
-        self.network_reader
-            .lock()
-            .await
-            .set_compression(compression.threshold as usize);
-
-        self.compression_info.store(Some(compression));
-    }
-
-    async fn get_packet(&self) -> Option<RawPacket> {
-        let mut network_reader = self.network_reader.lock().await;
-        tokio::select! {
-            () = self.cancel_token.cancelled() => {
-                log::debug!("Canceling player packet processing");
-                None
-            },
-            packet_result = network_reader.get_raw_packet() => {
-                match packet_result {
-                    Ok(packet) => Some(packet),
-                    Err(err) => {
-                        if !matches!(err, PacketError::ConnectionClosed) {
-                            log::warn!("Failed to decode packet from client {}: {}", self.id, err);
-                            let text = format!("Error while reading incoming packet {err}");
-                            self.kick(TextComponent::text(text)).await;
-                        }
-                        None
-                    }
-                }
-            }
         }
     }
 
@@ -185,11 +137,8 @@ impl JavaTcpClient {
             .await
             .unwrap();
         if let Err(err) = self
-            .network_writer
-            .lock()
-            .await
-            .write_encoded_packet(&encoded_packet)
-            .await
+            .outgoing_queue
+            .send(EnqueuedPacket::EncodedPacket(encoded_packet))
         {
             // It is expected that the packet will fail if we are cancelled
             if !self.cancel_token.is_cancelled() {
@@ -245,7 +194,10 @@ impl JavaTcpClient {
             .take()
             .expect("This was set in the new fn");
         let cancel_token = self.cancel_token.clone();
-        let writer = self.network_writer.clone();
+        let mut writer = self
+            .network_writer
+            .take()
+            .expect("This was set in the new fn");
         let id = self.id;
         let compression_info = self.compression_info.clone();
 
@@ -266,11 +218,7 @@ impl JavaTcpClient {
                                     }
                                 };
 
-                                if let Err(err) = writer
-                                    .lock()
-                                    .await
-                                    .write_encoded_packet(&encoded_packet)
-                                    .await
+                                if let Err(err) = writer.write_encoded_packet(&encoded_packet).await
                                 {
                                     log::warn!("Failed to send packet to client {}: {}", id, err);
                                     cancel_token_clone.cancel();
@@ -294,7 +242,10 @@ impl JavaTcpClient {
 
 impl JavaTcpClient {
     pub fn start_incoming_packet_task(&mut self) {
-        let network_reader = self.network_reader.clone();
+        let mut network_reader = self
+            .network_reader
+            .take()
+            .expect("This was set in the new fn");
         let cancel_token = self.cancel_token.clone();
         let id = self.id;
         let packet_recv_sender = self.packet_recv_sender.clone();
@@ -305,8 +256,6 @@ impl JavaTcpClient {
             cancel_token
                 .run_until_cancelled(async move {
                     loop {
-                        let mut network_reader = network_reader.lock().await;
-
                         let packet = network_reader.get_raw_packet().await;
                         match packet {
                             Ok(packet) => {

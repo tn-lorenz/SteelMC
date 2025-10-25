@@ -1,4 +1,4 @@
-use std::io::{Error, Write, Result};
+use std::io::{Error, Result, Write};
 
 use crate::packet_traits::{PrefixedWrite, WriteTo};
 

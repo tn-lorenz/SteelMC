@@ -1,4 +1,4 @@
-use std::io::{self, Write, Result};
+use std::io::{self, Result, Write};
 
 use steel_utils::text::TextComponentBase;
 use uuid::Uuid;
