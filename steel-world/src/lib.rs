@@ -3,6 +3,7 @@ use steel_utils::{ChunkPos, locks::SteelRwLock};
 
 use crate::section::ChunkSections;
 
+pub mod player;
 pub mod section;
 
 #[derive(Debug)]

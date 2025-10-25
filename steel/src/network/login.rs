@@ -1,4 +1,6 @@
+use num_bigint::BigInt;
 use rsa::Pkcs1v15Encrypt;
+use sha1::Sha1;
 use sha2::{Digest, Sha256};
 use steel_protocol::{
     packet_traits::CompressionInfo,
@@ -12,13 +14,14 @@ use steel_protocol::{
     },
 };
 use steel_utils::text::TextComponent;
+use steel_world::player::game_profile::GameProfile;
 use uuid::Uuid;
 
 use crate::{
     STEEL_CONFIG,
     network::{
-        game_profile::GameProfile,
         java_tcp_client::{ConnectionUpdate, JavaTcpClient},
+        mojang_authentication::{AuthError, mojang_authenticate},
     },
 };
 
@@ -52,6 +55,16 @@ pub async fn handle_hello(tcp_client: &JavaTcpClient, packet: &SHelloPacket) {
             profile_actions: None,
         });
     }
+
+    /*
+    if let Some(compression) = STEEL_CONFIG.compression {
+        tcp_client.compression_info.store(Some(compression));
+        tcp_client
+            .connection_updates
+            .send(ConnectionUpdate::EnableCompression(compression))
+            .unwrap();
+    }
+     */
 
     if STEEL_CONFIG.encryption {
         let challenge: [u8; 4] = rand::random();
@@ -129,11 +142,37 @@ pub async fn handle_key(tcp_client: &JavaTcpClient, packet: &SKeyPacket) {
         return;
     };
 
-    if let Some(compression) = STEEL_CONFIG.compression {
-        tcp_client.compression_info.store(Some(compression));
-        tcp_client
-            .connection_updates
-            .send(ConnectionUpdate::EnableCompression(compression))
-            .unwrap();
+    let mut gameprofile = tcp_client.gameprofile.lock().await;
+
+    let Some(profile) = gameprofile.as_mut() else {
+        tcp_client.kick(TextComponent::text("No GameProfile")).await;
+        return;
+    };
+
+    if STEEL_CONFIG.online_mode {
+        let server_hash = &Sha1::new()
+            .chain_update(&secret_key)
+            .chain_update(&tcp_client.server.key_store.public_key_der)
+            .finalize();
+
+        let server_hash = BigInt::from_signed_bytes_be(server_hash).to_str_radix(16);
+
+        match mojang_authenticate(&profile.name, &server_hash).await {
+            Ok(new_profile) => *profile = new_profile,
+            Err(error) => {
+                tcp_client
+                    .kick(match error {
+                        AuthError::FailedResponse => {
+                            TextComponent::translate("multiplayer.disconnect.authservers_down", [])
+                        }
+                        AuthError::UnverifiedUsername => TextComponent::translate(
+                            "multiplayer.disconnect.unverified_username",
+                            [],
+                        ),
+                        e => TextComponent::text(e.to_string()),
+                    })
+                    .await;
+            }
+        }
     }
 }

@@ -7,3 +7,5 @@ edition.workspace = true
 steel-utils = { path = "../steel-utils" }
 steel-protocol = { path = "../steel-protocol" }
 scc.workspace = true
+uuid.workspace = true
+serde.workspace = true

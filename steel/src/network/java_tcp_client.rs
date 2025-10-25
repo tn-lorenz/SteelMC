@@ -21,6 +21,7 @@ use steel_protocol::{
     utils::{ConnectionProtocol, PacketError, RawPacket},
 };
 use steel_utils::text::TextComponent;
+use steel_world::player::game_profile::GameProfile;
 use thiserror::Error;
 use tokio::{
     io::{BufReader, BufWriter},
@@ -37,7 +38,6 @@ use tokio_util::{sync::CancellationToken, task::TaskTracker};
 
 use crate::{
     network::{
-        game_profile::GameProfile,
         login::{handle_hello, handle_key},
         status::{handle_ping_request, handle_status_request},
     },
