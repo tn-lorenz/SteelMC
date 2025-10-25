@@ -18,3 +18,4 @@ serde_json.workspace = true
 steel-registry = { path = "../steel-registry" }
 uuid.workspace = true
 crossbeam.workspace = true
+log.workspace = true

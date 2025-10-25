@@ -171,6 +171,13 @@ impl EncodedPacket {
 
             VarInt(data_len as _).set_in_front(&mut buf, varint_size);
             VarInt(full_len as _).set_in_front(&mut buf, full_varint_size);
+            log::info!(
+                "data length: {}, full length: {}, varint size: {}, full varint size: {}",
+                data_len,
+                full_len,
+                varint_size,
+                full_varint_size
+            );
 
             Ok(Self {
                 encoded_data: Arc::new(packet_data),

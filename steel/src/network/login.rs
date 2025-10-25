@@ -15,6 +15,7 @@ use steel_protocol::{
 };
 use steel_utils::text::TextComponent;
 use steel_world::player::game_profile::GameProfile;
+use tokio::net::tcp;
 use uuid::Uuid;
 
 use crate::{
@@ -55,16 +56,6 @@ pub async fn handle_hello(tcp_client: &JavaTcpClient, packet: &SHelloPacket) {
             profile_actions: None,
         });
     }
-
-    /*
-    if let Some(compression) = STEEL_CONFIG.compression {
-        tcp_client.compression_info.store(Some(compression));
-        tcp_client
-            .connection_updates
-            .send(ConnectionUpdate::EnableCompression(compression))
-            .unwrap();
-    }
-     */
 
     if STEEL_CONFIG.encryption {
         let challenge: [u8; 4] = rand::random();
@@ -147,6 +138,8 @@ pub async fn handle_key(tcp_client: &JavaTcpClient, packet: &SKeyPacket) {
         return;
     };
 
+    tcp_client.connection_update_enabled.notified().await;
+
     let mut gameprofile = tcp_client.gameprofile.lock().await;
 
     let Some(profile) = gameprofile.as_mut() else {
@@ -187,6 +180,21 @@ pub async fn handle_key(tcp_client: &JavaTcpClient, packet: &SKeyPacket) {
 }
 
 pub async fn finish_login(tcp_client: &JavaTcpClient, profile: &GameProfile) {
+    if let Some(compression) = STEEL_CONFIG.compression {
+        tcp_client
+            .send_packet_now(CBoundPacket::Login(CBoundLogin::LoginCompression(
+                CLoginCompressionPacket::new(compression.threshold as i32),
+            )))
+            .await;
+        tcp_client.compression_info.store(Some(compression));
+        tcp_client
+            .connection_updates
+            .send(ConnectionUpdate::EnableCompression(compression))
+            .unwrap();
+    }
+    tcp_client.can_process_next_packet.notify_waiters();
+    tcp_client.connection_update_enabled.notified().await;
+
     tcp_client
         .send_packet_now(CBoundPacket::Login(CBoundLogin::LoginFinished(
             CLoginFinishedPacket::new(profile.id, profile.name.clone(), profile.properties.clone()),

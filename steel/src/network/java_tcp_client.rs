@@ -94,8 +94,9 @@ pub struct JavaTcpClient {
     pub challenge: AtomicCell<Option<[u8; 4]>>,
 
     pub(crate) connection_updates: Arc<Sender<ConnectionUpdate>>,
+    pub(crate) connection_update_enabled: Arc<Notify>,
 
-    can_process_next_packet: Arc<Notify>,
+    pub(crate) can_process_next_packet: Arc<Notify>,
 }
 
 impl JavaTcpClient {
@@ -131,6 +132,7 @@ impl JavaTcpClient {
             server: server,
             challenge: AtomicCell::new(None),
             connection_updates: Arc::new(connection_updates_send),
+            connection_update_enabled: Arc::new(Notify::new()),
             can_process_next_packet: Arc::new(Notify::new()),
         }
     }
@@ -214,6 +216,7 @@ impl JavaTcpClient {
         let id = self.id;
         let compression_info = self.compression_info.clone();
         let mut connection_updates_recv = self.connection_updates.subscribe();
+        let connection_update_enabled = self.connection_update_enabled.clone();
 
         self.tasks.spawn(async move {
             let cancel_token_clone = cancel_token.clone();
@@ -253,11 +256,14 @@ impl JavaTcpClient {
                         }
                     }
                     connection_update = connection_updates_recv.recv() => {
+                        log::info!("Received connection update outgoing: {:?}", connection_update);
                         match connection_update {
                             Ok(connection_update) => {
                                 match connection_update {
                                     ConnectionUpdate::EnableEncryption(key) => {
+                                        log::info!("Enabling encryption with key: {:?}", key);
                                         network_writer.lock().await.set_encryption(&key);
+                                        connection_update_enabled.notify_waiters();
                                     }
                                     _ => {}
                                 }
@@ -284,6 +290,7 @@ impl JavaTcpClient {
         let connection_protocol = self.connection_protocol.clone();
         let mut connection_updates_recv = self.connection_updates.subscribe();
         let can_process_next_packet = self.can_process_next_packet.clone();
+        let connection_update_enabled = self.connection_update_enabled.clone();
 
         self.tasks.spawn(async move {
             let cancel_token_clone = cancel_token.clone();
@@ -324,6 +331,8 @@ impl JavaTcpClient {
                         }
                     }
                     connection_update = connection_updates_recv.recv() => {
+                        log::info!("Received connection update incoming: {:?}", connection_update);
+
                         match connection_update {
                             Ok(connection_update) => {
                                 match connection_update {
@@ -332,6 +341,7 @@ impl JavaTcpClient {
                                     }
                                     ConnectionUpdate::EnableCompression(compression) => {
                                         network_reader.set_compression(compression.threshold);
+                                        connection_update_enabled.notify_waiters();
                                     }
                                 }
                             }
