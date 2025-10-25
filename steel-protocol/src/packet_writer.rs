@@ -93,7 +93,6 @@ impl<W: AsyncWrite + Unpin> TCPNetworkEncoder<W> {
 
     /// NOTE: Encryption can only be set; a minecraft stream cannot go back to being unencrypted
     pub fn set_encryption(&mut self, key: &[u8; 16]) {
-        log::info!("Setting encryption with key: {:?}", key);
         if matches!(self.writer, EncryptionWriter::Encrypt(_)) {
             panic!("Cannot upgrade a stream that already has a cipher!");
         }

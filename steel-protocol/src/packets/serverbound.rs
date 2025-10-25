@@ -5,7 +5,10 @@ use steel_registry::packets::serverbound::{config, handshake, login, status};
 use crate::{
     packet_traits::PacketRead,
     packets::{
-        common::s_custom_payload_packet::SCustomPayloadPacket,
+        common::{
+            s_client_information_packet::SClientInformationPacket,
+            s_custom_payload_packet::SCustomPayloadPacket,
+        },
         handshake::ClientIntentionPacket,
         login::{
             s_hello_packet::SHelloPacket, s_key_packet::SKeyPacket,
@@ -82,6 +85,7 @@ impl SBoundLogin {
 #[derive(Clone, Debug)]
 pub enum SBoundConfiguration {
     CustomPayload(SCustomPayloadPacket),
+    ClientInformation(SClientInformationPacket),
 }
 
 impl SBoundConfiguration {
@@ -92,6 +96,10 @@ impl SBoundConfiguration {
             config::SERVERBOUND_CUSTOM_PAYLOAD => {
                 let packet = SCustomPayloadPacket::read_packet(&mut data)?;
                 Ok(Self::CustomPayload(packet))
+            }
+            config::SERVERBOUND_CLIENT_INFORMATION => {
+                let packet = SClientInformationPacket::read_packet(&mut data)?;
+                Ok(Self::ClientInformation(packet))
             }
             _ => Err(PacketError::MalformedValue(format!(
                 "Invalid packet id: {}",

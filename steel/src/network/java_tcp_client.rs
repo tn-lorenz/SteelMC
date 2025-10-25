@@ -257,12 +257,10 @@ impl JavaTcpClient {
                         }
                     }
                     connection_update = connection_updates_recv.recv() => {
-                        log::info!("Received connection update outgoing: {:?}", connection_update);
                         match connection_update {
                             Ok(connection_update) => {
                                 match connection_update {
                                     ConnectionUpdate::EnableEncryption(key) => {
-                                        log::info!("Enabling encryption with key: {:?}", key);
                                         network_writer.lock().await.set_encryption(&key);
                                         connection_update_enabled.notify_waiters();
                                     }
@@ -332,7 +330,6 @@ impl JavaTcpClient {
                         }
                     }
                     connection_update = connection_updates_recv.recv() => {
-                        log::info!("Received connection update incoming: {:?}", connection_update);
 
                         match connection_update {
                             Ok(connection_update) => {
@@ -443,6 +440,9 @@ impl JavaTcpClient {
         match packet {
             SBoundConfiguration::CustomPayload(packet) => {
                 config::handle_custom_payload(self, packet).await
+            }
+            SBoundConfiguration::ClientInformation(packet) => {
+                config::handle_client_information(self, packet).await
             }
         }
     }

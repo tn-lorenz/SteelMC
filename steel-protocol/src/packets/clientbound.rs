@@ -3,7 +3,9 @@ use std::io::Write;
 use crate::{
     packet_traits::PacketWrite,
     packets::{
-        common::c_disconnect_packet::CDisconnectPacket,
+        common::{
+            c_custom_payload_packet::CCustomPayloadPacket, c_disconnect_packet::CDisconnectPacket,
+        },
         login::{
             c_hello_packet::CHelloPacket, c_login_compression_packet::CLoginCompressionPacket,
             c_login_disconnect_packet::CLoginDisconnectPacket,
@@ -55,18 +57,21 @@ impl CBoundLogin {
 #[derive(Clone, Debug)]
 pub enum CBoundConfiguration {
     Disconnect(CDisconnectPacket),
+    CustomPayload(CCustomPayloadPacket),
 }
 
 impl CBoundConfiguration {
     pub fn get_id(&self) -> i32 {
         match self {
             Self::Disconnect(_) => config::CLIENTBOUND_DISCONNECT,
+            Self::CustomPayload(_) => config::CLIENTBOUND_CUSTOM_PAYLOAD,
         }
     }
 
     pub fn write_packet(&self, writer: &mut impl Write) -> Result<(), PacketError> {
         match self {
             Self::Disconnect(packet) => packet.write_packet(writer),
+            Self::CustomPayload(packet) => packet.write_packet(writer),
         }
     }
 }

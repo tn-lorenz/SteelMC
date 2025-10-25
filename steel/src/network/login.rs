@@ -22,6 +22,7 @@ use uuid::Uuid;
 use crate::{
     STEEL_CONFIG,
     network::{
+        config,
         java_tcp_client::{ConnectionUpdate, JavaTcpClient},
         mojang_authentication::{AuthError, mojang_authenticate},
     },
@@ -210,5 +211,6 @@ pub async fn handle_login_acknowledged(
     tcp_client
         .connection_protocol
         .store(ConnectionProtocol::CONFIGURATION);
-    println!("Login acknowledged packet: {:?}", packet);
+
+    config::start_configuration(tcp_client).await;
 }

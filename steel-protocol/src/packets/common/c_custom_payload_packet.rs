@@ -5,11 +5,11 @@ use steel_utils::ResourceLocation;
 pub struct CCustomPayloadPacket {
     pub resource_location: ResourceLocation,
     #[write_as(as = "vec")]
-    pub payload: Vec<u8>,
+    pub payload: Box<[u8]>,
 }
 
 impl CCustomPayloadPacket {
-    pub fn new(resource_location: ResourceLocation, payload: Vec<u8>) -> Self {
+    pub fn new(resource_location: ResourceLocation, payload: Box<[u8]>) -> Self {
         Self {
             resource_location,
             payload,
