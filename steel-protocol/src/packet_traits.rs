@@ -171,7 +171,7 @@ impl EncodedPacket {
 
             VarInt(data_len as _).set_in_front(&mut buf, varint_size);
             VarInt(full_len as _).set_in_front(&mut buf, full_varint_size);
-            log::info!(
+            log::trace!(
                 "data length: {}, full length: {}, varint size: {}, full varint size: {}",
                 data_len,
                 full_len,
@@ -180,17 +180,18 @@ impl EncodedPacket {
             );
 
             Ok(Self {
-                encoded_data: Arc::new(packet_data),
+                encoded_data: Arc::new(buf),
             })
         } else {
             // Pushed before data:
             // Length of (Data Length) + length of compressed (Packet ID + Data)
             // 0 to indicate uncompressed
 
-            let varint_size = VarInt::written_size(data_len as _);
+            let data_len_with_header = data_len + 1;
+            let varint_size = VarInt::written_size(data_len_with_header as _);
 
             VarInt(0).set_in_front(&mut packet_data, 1);
-            VarInt(data_len as _).set_in_front(&mut packet_data, varint_size);
+            VarInt(data_len_with_header as _).set_in_front(&mut packet_data, varint_size);
 
             Ok(Self {
                 encoded_data: Arc::new(packet_data),
