@@ -1,8 +1,9 @@
+use serde::{Deserialize, Serialize};
 use steel_macros::PacketWrite;
 use uuid::Uuid;
 
-#[derive(Clone, Debug, PacketWrite)]
-pub struct Property {
+#[derive(Clone, Debug, PacketWrite, Serialize, Deserialize)]
+pub struct GameProfileProperty {
     #[write_as(as = "string", bound = 16)]
     pub name: String,
     #[write_as(as = "string")]
@@ -17,11 +18,11 @@ pub struct CLoginFinishedPacket {
     #[write_as(as = "string", bound = 16)]
     pub name: String,
     #[write_as(as = "vec")]
-    pub properties: Vec<Property>,
+    pub properties: Vec<GameProfileProperty>,
 }
 
 impl CLoginFinishedPacket {
-    pub fn new(uuid: Uuid, name: String, properties: Vec<Property>) -> Self {
+    pub fn new(uuid: Uuid, name: String, properties: Vec<GameProfileProperty>) -> Self {
         Self {
             uuid,
             name,

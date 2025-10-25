@@ -79,11 +79,16 @@ pub async fn handle_hello(tcp_client: &JavaTcpClient, packet: &SHelloPacket) {
             ))))
             .await;
     } else {
-        tcp_client
-            .send_packet_now(CBoundPacket::Login(CBoundLogin::LoginFinished(
-                CLoginFinishedPacket::new(id, packet.name.clone(), vec![]),
-            )))
-            .await;
+        finish_login(
+            tcp_client,
+            &GameProfile {
+                id,
+                name: packet.name.clone(),
+                properties: vec![],
+                profile_actions: None,
+            },
+        )
+        .await;
     }
 }
 
@@ -175,4 +180,16 @@ pub async fn handle_key(tcp_client: &JavaTcpClient, packet: &SKeyPacket) {
             }
         }
     }
+
+    //TODO: Check for duplicate player UUID or name
+
+    finish_login(tcp_client, profile).await;
+}
+
+pub async fn finish_login(tcp_client: &JavaTcpClient, profile: &GameProfile) {
+    tcp_client
+        .send_packet_now(CBoundPacket::Login(CBoundLogin::LoginFinished(
+            CLoginFinishedPacket::new(profile.id, profile.name.clone(), profile.properties.clone()),
+        )))
+        .await;
 }

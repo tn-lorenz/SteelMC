@@ -1,14 +1,6 @@
 use serde::{Deserialize, Serialize};
+use steel_protocol::packets::login::c_login_finished_packet::GameProfileProperty;
 use uuid::Uuid;
-
-#[derive(Serialize, Deserialize, Clone, Debug)]
-pub struct GameProfileProperty {
-    pub name: String,
-    // base 64
-    pub value: String,
-    // base 64
-    pub signature: Option<String>,
-}
 
 #[derive(Deserialize, Serialize, Clone, Debug, PartialEq, Eq)]
 #[serde(rename_all = "SCREAMING_SNAKE_CASE")]
