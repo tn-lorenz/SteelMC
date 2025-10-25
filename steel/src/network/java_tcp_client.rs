@@ -29,7 +29,7 @@ use tokio::{
         tcp::{OwnedReadHalf, OwnedWriteHalf},
     },
     sync::{
-        Mutex,
+        Mutex, Notify,
         broadcast::{self, Receiver, Sender},
     },
 };
@@ -85,7 +85,7 @@ pub struct JavaTcpClient {
     /// A queue of serialized packets to send to the network
     outgoing_queue_recv: Option<Receiver<EnqueuedPacket>>,
     /// The packet encoder for outgoing packets.
-    network_writer: Option<TCPNetworkEncoder<BufWriter<OwnedWriteHalf>>>,
+    network_writer: Arc<Mutex<TCPNetworkEncoder<BufWriter<OwnedWriteHalf>>>>,
     /// The packet decoder for incoming packets.
     network_reader: Option<TCPNetworkDecoder<BufReader<OwnedReadHalf>>>,
     pub(crate) compression_info: Arc<AtomicCell<Option<CompressionInfo>>>,
@@ -94,6 +94,8 @@ pub struct JavaTcpClient {
     pub challenge: AtomicCell<Option<[u8; 4]>>,
 
     pub(crate) connection_updates: Arc<Sender<ConnectionUpdate>>,
+
+    can_process_next_packet: Arc<Notify>,
 }
 
 impl JavaTcpClient {
@@ -122,13 +124,14 @@ impl JavaTcpClient {
             packet_recv_sender: Arc::new(packet_recv_sender),
             outgoing_queue: send,
             outgoing_queue_recv: Some(recv),
-            network_writer: Some(TCPNetworkEncoder::new(BufWriter::new(write))),
+            network_writer: Arc::new(Mutex::new(TCPNetworkEncoder::new(BufWriter::new(write)))),
             network_reader: Some(TCPNetworkDecoder::new(BufReader::new(read))),
             has_requested_status: AtomicBool::new(false),
             compression_info: Arc::new(AtomicCell::new(None)),
             server: server,
             challenge: AtomicCell::new(None),
             connection_updates: Arc::new(connection_updates_send),
+            can_process_next_packet: Arc::new(Notify::new()),
         }
     }
 
@@ -147,8 +150,11 @@ impl JavaTcpClient {
             .await
             .unwrap();
         if let Err(err) = self
-            .outgoing_queue
-            .send(EnqueuedPacket::EncodedPacket(encoded_packet))
+            .network_writer
+            .lock()
+            .await
+            .write_encoded_packet(&encoded_packet)
+            .await
         {
             // It is expected that the packet will fail if we are cancelled
             if !self.cancel_token.is_cancelled() {
@@ -204,10 +210,7 @@ impl JavaTcpClient {
             .take()
             .expect("This was set in the new fn");
         let cancel_token = self.cancel_token.clone();
-        let mut writer = self
-            .network_writer
-            .take()
-            .expect("This was set in the new fn");
+        let network_writer = self.network_writer.clone();
         let id = self.id;
         let compression_info = self.compression_info.clone();
         let mut connection_updates_recv = self.connection_updates.subscribe();
@@ -232,7 +235,7 @@ impl JavaTcpClient {
                                     }
                                 };
 
-                                if let Err(err) = writer.write_encoded_packet(&encoded_packet).await
+                                if let Err(err) = network_writer.lock().await.write_encoded_packet(&encoded_packet).await
                                 {
                                     log::warn!("Failed to send packet to client {}: {}", id, err);
                                     cancel_token_clone.cancel();
@@ -254,7 +257,7 @@ impl JavaTcpClient {
                             Ok(connection_update) => {
                                 match connection_update {
                                     ConnectionUpdate::EnableEncryption(key) => {
-                                        writer.set_encryption(&key);
+                                        network_writer.lock().await.set_encryption(&key);
                                     }
                                     _ => {}
                                 }
@@ -280,6 +283,7 @@ impl JavaTcpClient {
         let packet_recv_sender = self.packet_recv_sender.clone();
         let connection_protocol = self.connection_protocol.clone();
         let mut connection_updates_recv = self.connection_updates.subscribe();
+        let can_process_next_packet = self.can_process_next_packet.clone();
 
         self.tasks.spawn(async move {
             let cancel_token_clone = cancel_token.clone();
@@ -291,13 +295,14 @@ impl JavaTcpClient {
                     packet = network_reader.get_raw_packet() => {
                         match packet {
                             Ok(packet) => {
-                                log::info!("Received packet: {:?}, data: {:?}, protocol: {:?}", packet.id, packet.payload, connection_protocol.load());
+                                log::info!("Received packet: {:?}, protocol: {:?}", packet.id, connection_protocol.load());
                                 match SBoundPacket::from_raw_packet(
                                     packet,
                                     connection_protocol.load(),
                                 ) {
                                     Ok(packet) => {
                                         packet_recv_sender.send(Arc::new(packet)).unwrap();
+                                        can_process_next_packet.notified().await;
                                     }
                                     Err(err) => {
                                         log::warn!(
@@ -341,8 +346,6 @@ impl JavaTcpClient {
         });
     }
 
-    // This code is used but the linter doesn't notice it
-    #[allow(dead_code)]
     pub async fn process_packets(self: &Arc<Self>) {
         let mut packet_receiver = self
             .packet_receiver
@@ -350,6 +353,7 @@ impl JavaTcpClient {
             .await
             .take()
             .expect("This was set in the new fn or the function was called twice");
+        let can_process_next_packet = self.can_process_next_packet.clone();
 
         self.cancel_token
             .run_until_cancelled(async move {
@@ -364,6 +368,7 @@ impl JavaTcpClient {
                         }
                         SBoundPacket::Play(packet) => self.handle_play(packet).await,
                     }
+                    can_process_next_packet.notify_waiters();
                 }
             })
             .await;
@@ -381,7 +386,6 @@ impl JavaTcpClient {
         if !self.assert_protocol(ConnectionProtocol::HANDSHAKING) {
             return;
         }
-        log::info!("Handling handshake: {:?}", packet);
         match packet {
             SBoundHandshake::Intention(packet) => {
                 let intent = match packet.intention {
