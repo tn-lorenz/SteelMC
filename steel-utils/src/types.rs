@@ -6,6 +6,7 @@ use std::{
     str::FromStr,
 };
 
+
 use crate::math::{vector2::Vector2, vector3::Vector3};
 
 // A raw block state id. Using the registry this id can be derived into a block and it's current properties.

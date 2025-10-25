@@ -10,4 +10,11 @@
 pub mod locks;
 pub mod math;
 pub mod text;
-pub mod types;
+mod front_vec;
+mod types;
+
+pub use types::BlockPos;
+pub use types::BlockStateId;
+pub use types::ChunkPos;
+pub use front_vec::FrontVec;
+pub use types::ResourceLocation;

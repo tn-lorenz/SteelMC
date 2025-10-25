@@ -5,7 +5,6 @@ use std::{
 };
 
 use aes::cipher::{BlockDecryptMut, BlockEncryptMut, BlockSizeUser, generic_array::GenericArray};
-use bytes::Bytes;
 use thiserror::Error;
 use tokio::io::{AsyncRead, AsyncWrite, ReadBuf};
 
@@ -56,7 +55,7 @@ pub enum ConnectionProtocol {
 
 pub struct RawPacket {
     pub id: i32,
-    pub payload: Bytes,
+    pub payload: Box<[u8]>,
 }
 
 #[derive(Error, Debug)]
@@ -119,7 +118,7 @@ impl<W: AsyncWrite + Unpin> AsyncWrite for StreamEncryptor<W> {
         self: Pin<&mut Self>,
         cx: &mut Context<'_>,
         buf: &[u8],
-    ) -> Poll<Result<usize, io::Error>> {
+    ) -> Poll<io::Result<usize>> {
         let ref_self = self.get_mut();
         let cipher = &mut ref_self.cipher;
 
@@ -165,13 +164,13 @@ impl<W: AsyncWrite + Unpin> AsyncWrite for StreamEncryptor<W> {
         Poll::Ready(Ok(total_written))
     }
 
-    fn poll_flush(self: Pin<&mut Self>, cx: &mut Context<'_>) -> Poll<Result<(), io::Error>> {
+    fn poll_flush(self: Pin<&mut Self>, cx: &mut Context<'_>) -> Poll<io::Result<()>> {
         let ref_self = self.get_mut();
         let write = Pin::new(&mut ref_self.write);
         write.poll_flush(cx)
     }
 
-    fn poll_shutdown(self: Pin<&mut Self>, cx: &mut Context<'_>) -> Poll<Result<(), io::Error>> {
+    fn poll_shutdown(self: Pin<&mut Self>, cx: &mut Context<'_>) -> Poll<io::Result<()>> {
         let ref_self = self.get_mut();
         let write = Pin::new(&mut ref_self.write);
         write.poll_shutdown(cx)
