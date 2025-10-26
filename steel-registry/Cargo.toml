@@ -5,6 +5,7 @@ edition.workspace = true
 build = "build/build.rs"
 
 [dependencies]
+include_dir = { version = "0.7.4", features = ["nightly"] }
 steel-utils = { path = "../steel-utils" }
 
 [build-dependencies]

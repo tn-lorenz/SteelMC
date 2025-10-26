@@ -7,13 +7,18 @@
 )]
 #![allow(internal_features)]
 
+use std::path::Path;
+
 use crate::{
     blocks::blocks::BlockRegistry, data_components::DataComponentRegistry,
     items::items::ItemRegistry,
 };
+use include_dir::{Dir, include_dir};
 pub mod blocks;
 pub mod data_components;
 pub mod items;
+
+pub static MINECRAFT_CORE_DIR: Dir = include_dir!("$CARGO_MANIFEST_DIR/build_assets/minecraft");
 
 //#[rustfmt::skip]
 #[path = "generated/vanilla_blocks.rs"]

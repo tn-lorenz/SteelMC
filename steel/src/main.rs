@@ -14,5 +14,7 @@ async fn main() {
 
     let mut server = SteelServer::new().await;
 
+    println!("{:?}", steel_registry::MINECRAFT_CORE_DIR.entries());
+
     server.start().await;
 }
