@@ -3,6 +3,7 @@ use std::{
     str::FromStr,
 };
 
+use steel_macros::{PacketRead, PacketWrite};
 use steel_utils::{ResourceLocation, text::TextComponentBase};
 use uuid::Uuid;
 
@@ -50,5 +51,28 @@ impl WriteTo for ResourceLocation {
     fn write(&self, writer: &mut impl Write) -> Result<()> {
         self.to_string().write_prefixed::<VarInt>(writer)?;
         Ok(())
+    }
+}
+
+#[derive(Clone, Debug, PacketWrite, PacketRead)]
+pub struct KnownPack {
+    #[write_as(as = "string")]
+    #[read_as(as = "string")]
+    pub namespace: String,
+    #[write_as(as = "string")]
+    #[read_as(as = "string")]
+    pub id: String,
+    #[write_as(as = "string")]
+    #[read_as(as = "string")]
+    pub version: String,
+}
+
+impl KnownPack {
+    pub fn new(namespace: String, id: String, version: String) -> Self {
+        Self {
+            namespace,
+            id,
+            version,
+        }
     }
 }

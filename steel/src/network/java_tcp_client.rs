@@ -432,6 +432,9 @@ impl JavaTcpClient {
             SBoundConfiguration::ClientInformation(packet) => {
                 config::handle_client_information(self, packet).await
             }
+            SBoundConfiguration::SelectKnownPacks(packet) => {
+                config::handle_select_known_packs(self, packet).await
+            }
         }
     }
 

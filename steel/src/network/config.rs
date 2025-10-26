@@ -3,6 +3,9 @@ use steel_protocol::packets::common::{
     s_client_information_packet::SClientInformationPacket,
     s_custom_payload_packet::SCustomPayloadPacket,
 };
+use steel_protocol::packets::configuration::c_select_known_packs::CSelectKnownPacks;
+use steel_protocol::packets::configuration::s_select_known_packs::SSelectKnownPacks;
+use steel_protocol::packets::shared_implementation::KnownPack;
 use steel_utils::ResourceLocation;
 
 use crate::network::java_tcp_client::JavaTcpClient;
@@ -27,4 +30,16 @@ pub async fn start_configuration(tcp_client: &JavaTcpClient) {
             Box::new(*BRAND_PAYLOAD),
         ))
         .await;
+
+    tcp_client
+        .send_packet_now(CSelectKnownPacks::new(vec![KnownPack::new(
+            "minecraft".to_string(),
+            "core".to_string(),
+            "1.21.10".to_string(),
+        )]))
+        .await;
+}
+
+pub async fn handle_select_known_packs(tcp_client: &JavaTcpClient, packet: &SSelectKnownPacks) {
+    println!("Select known packs packet: {:?}", packet);
 }
