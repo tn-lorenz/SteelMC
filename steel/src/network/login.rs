@@ -31,7 +31,6 @@ pub fn offline_uuid(username: &str) -> Result<Uuid, uuid::Error> {
     Uuid::from_slice(&Sha256::digest(username)[..16])
 }
 pub async fn handle_hello(tcp_client: &JavaTcpClient, packet: &SHelloPacket) {
-    println!("Hello packet: {:?}", packet);
     if !is_valid_player_name(&packet.name) {
         tcp_client
             .kick(TextComponent::text("Invalid player name"))
@@ -81,7 +80,6 @@ pub async fn handle_hello(tcp_client: &JavaTcpClient, packet: &SHelloPacket) {
 }
 
 pub async fn handle_key(tcp_client: &JavaTcpClient, packet: &SKeyPacket) {
-    println!("Key packet: {:?}", packet);
     let challenge = tcp_client.challenge.load();
     if challenge.is_none() {
         tcp_client

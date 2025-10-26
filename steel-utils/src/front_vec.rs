@@ -11,7 +11,6 @@ use tokio::io::AsyncWrite;
 /// Its meant for our packet serialization,
 /// you can just put the len of the packet in front without reallocating
 /// keep in mind that calling multiple set_in_front() sets the data in reverse order compared to extend_from_slice()
-#[derive(Clone)]
 pub struct FrontVec {
     buf: Vec<u8>,
     front_space: usize,
