@@ -1,7 +1,13 @@
-use steel_macros::PacketWrite;
+use steel_macros::{CBoundPacket, PacketWrite};
+use steel_registry::packets::clientbound::config::CLIENTBOUND_CUSTOM_PAYLOAD;
+use steel_registry::packets::clientbound::play::CLIENTBOUND_CUSTOM_PAYLOAD as PLAY_CLIENTBOUND_CUSTOM_PAYLOAD;
 use steel_utils::ResourceLocation;
 
-#[derive(PacketWrite, Clone, Debug)]
+#[derive(PacketWrite, CBoundPacket, Clone, Debug)]
+#[packet_id(
+    CONFIGURATION = "CLIENTBOUND_CUSTOM_PAYLOAD",
+    PLAY = "PLAY_CLIENTBOUND_CUSTOM_PAYLOAD"
+)]
 pub struct CCustomPayloadPacket {
     pub resource_location: ResourceLocation,
     #[write_as(as = "vec")]

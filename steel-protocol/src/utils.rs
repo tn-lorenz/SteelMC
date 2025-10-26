@@ -87,6 +87,8 @@ pub enum PacketError {
     SendError(String),
     #[error("Error: {0}")]
     Other(String),
+    #[error("Invalid protocol: {0}")]
+    InvalidProtocol(String),
 }
 
 impl From<io::Error> for PacketError {

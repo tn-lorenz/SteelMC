@@ -6,10 +6,9 @@ use std::{
 use crossbeam::atomic::AtomicCell;
 use steel_protocol::{
     packet_reader::TCPNetworkDecoder,
-    packet_traits::{CompressionInfo, EncodedPacket},
+    packet_traits::{CBoundPacket, CompressionInfo, EncodedPacket},
     packet_writer::TCPNetworkEncoder,
     packets::{
-        clientbound::{CBoundConfiguration, CBoundLogin, CBoundPacket, CBoundPlay},
         common::c_disconnect_packet::CDisconnectPacket,
         handshake::ClientIntent,
         login::c_login_disconnect_packet::CLoginDisconnectPacket,
@@ -18,9 +17,9 @@ use steel_protocol::{
             SBoundStatus,
         },
     },
-    utils::{ConnectionProtocol, PacketError, RawPacket},
+    utils::{ConnectionProtocol, PacketError},
 };
-use steel_utils::text::TextComponent;
+use steel_utils::{FrontVec, text::TextComponent};
 use steel_world::player::game_profile::GameProfile;
 use thiserror::Error;
 use tokio::{
@@ -32,6 +31,7 @@ use tokio::{
     sync::{
         Mutex, Notify,
         broadcast::{self, Receiver, Sender},
+        mpsc,
     },
 };
 use tokio_util::{sync::CancellationToken, task::TaskTracker};
@@ -39,7 +39,7 @@ use tokio_util::{sync::CancellationToken, task::TaskTracker};
 use crate::{
     network::{
         config,
-        login::{self, handle_hello, handle_key, handle_login_acknowledged},
+        login::{self},
         status::{handle_ping_request, handle_status_request},
     },
     server::server::Server,
@@ -53,9 +53,8 @@ pub enum EncryptionError {
     SharedWrongLength,
 }
 
-#[derive(Clone)]
 pub enum EnqueuedPacket {
-    Packet(CBoundPacket),
+    RawData(FrontVec),
     EncodedPacket(EncodedPacket),
 }
 
@@ -82,9 +81,9 @@ pub struct JavaTcpClient {
     pub packet_recv_sender: Arc<Sender<Arc<SBoundPacket>>>,
 
     /// A queue of serialized packets to send to the network
-    outgoing_queue: Sender<EnqueuedPacket>,
+    outgoing_queue: mpsc::UnboundedSender<EnqueuedPacket>,
     /// A queue of serialized packets to send to the network
-    outgoing_queue_recv: Option<Receiver<EnqueuedPacket>>,
+    outgoing_queue_recv: Option<mpsc::UnboundedReceiver<EnqueuedPacket>>,
     /// The packet encoder for outgoing packets.
     network_writer: Arc<Mutex<TCPNetworkEncoder<BufWriter<OwnedWriteHalf>>>>,
     /// The packet decoder for incoming packets.
@@ -109,7 +108,7 @@ impl JavaTcpClient {
         server: Arc<Server>,
     ) -> Self {
         let (read, write) = tcp_stream.into_split();
-        let (send, recv) = broadcast::channel(128);
+        let (send, recv) = tokio::sync::mpsc::unbounded_channel();
         let (connection_updates_send, _) = broadcast::channel(128);
 
         let (packet_recv_sender, packet_receiver) = broadcast::channel(128);
@@ -130,7 +129,7 @@ impl JavaTcpClient {
             network_reader: Some(TCPNetworkDecoder::new(BufReader::new(read))),
             has_requested_status: AtomicBool::new(false),
             compression_info: Arc::new(AtomicCell::new(None)),
-            server: server,
+            server,
             challenge: AtomicCell::new(None),
             connection_updates: Arc::new(connection_updates_send),
             connection_update_enabled: Arc::new(Notify::new()),
@@ -147,11 +146,13 @@ impl JavaTcpClient {
         self.tasks.wait().await;
     }
 
-    pub async fn send_packet_now(&self, packet: CBoundPacket) {
+    pub async fn send_packet_now<P: CBoundPacket>(&self, packet: P) {
         let compression_info = self.compression_info.load();
-        let encoded_packet = EncodedPacket::from_packet(&packet, compression_info)
-            .await
-            .unwrap();
+        let connection_protocol = self.connection_protocol.load();
+        let encoded_packet =
+            EncodedPacket::from_packet(&packet, compression_info, connection_protocol)
+                .await
+                .unwrap();
         if let Err(err) = self
             .network_writer
             .lock()
@@ -169,9 +170,11 @@ impl JavaTcpClient {
         }
     }
 
-    pub fn enqueue_packet(&self, packet: CBoundPacket) -> Result<(), PacketError> {
+    pub fn enqueue_packet<P: CBoundPacket>(&self, packet: P) -> Result<(), PacketError> {
+        let connection_protocol = self.connection_protocol.load();
+        let buf = EncodedPacket::data_from_packet(&packet, connection_protocol)?;
         self.outgoing_queue
-            .send(EnqueuedPacket::Packet(packet))
+            .send(EnqueuedPacket::RawData(buf))
             .map_err(|e| {
                 PacketError::SendError(format!(
                     "Failed to send packet to client {}: {}",
@@ -191,18 +194,6 @@ impl JavaTcpClient {
                 ))
             })?;
         Ok(())
-    }
-
-    pub async fn encode_packet(
-        packet: CBoundPacket,
-        compression_info: Option<CompressionInfo>,
-    ) -> Result<EncodedPacket, PacketError> {
-        let encoded_packet = EncodedPacket::from_packet(&packet, compression_info)
-            .await
-            .map_err(|e| {
-                PacketError::SendError(format!("Failed to create encoded packet: {}", e))
-            })?;
-        Ok(encoded_packet)
     }
 
     /// Starts a task that will send packets to the client from the outgoing packet queue.
@@ -229,27 +220,25 @@ impl JavaTcpClient {
                     }
                     packet = sender_recv.recv() => {
                         match packet {
-                            Ok(packet) => {
+                            Some(packet) => {
                                 let encoded_packet = match packet {
                                     EnqueuedPacket::EncodedPacket(packet) => packet,
-                                    EnqueuedPacket::Packet(packet) => {
-                                        Self::encode_packet(packet, compression_info.load())
+                                    EnqueuedPacket::RawData(packet) => {
+                                        EncodedPacket::from_data(packet, compression_info.load())
                                             .await
                                             .unwrap()
                                     }
                                 };
-
                                 if let Err(err) = network_writer.lock().await.write_encoded_packet(&encoded_packet).await
                                 {
                                     log::warn!("Failed to send packet to client {}: {}", id, err);
                                     cancel_token_clone.cancel();
                                 }
                             }
-                            Err(err) => {
+                            None => {
                                 log::warn!(
-                                    "Internal packet_sender_recv channel closed for client {}: {}",
+                                    "Internal packet_sender_recv channel closed for client {}",
                                     id,
-                                    err
                                 );
                                 cancel_token_clone.cancel();
                             }
@@ -259,12 +248,9 @@ impl JavaTcpClient {
                     connection_update = connection_updates_recv.recv() => {
                         match connection_update {
                             Ok(connection_update) => {
-                                match connection_update {
-                                    ConnectionUpdate::EnableEncryption(key) => {
-                                        network_writer.lock().await.set_encryption(&key);
-                                        connection_update_enabled.notify_waiters();
-                                    }
-                                    _ => {}
+                                if let ConnectionUpdate::EnableEncryption(key) = connection_update {
+                                    network_writer.lock().await.set_encryption(&key);
+                                    connection_update_enabled.notify_waiters();
                                 }
                             }
                             Err(err) => {
@@ -436,7 +422,9 @@ impl JavaTcpClient {
     }
 
     pub async fn handle_configuration(&self, packet: &SBoundConfiguration) {
-        if !self.assert_protocol(ConnectionProtocol::CONFIGURATION) {}
+        if !self.assert_protocol(ConnectionProtocol::CONFIGURATION) {
+            return;
+        }
         match packet {
             SBoundConfiguration::CustomPayload(packet) => {
                 config::handle_custom_payload(self, packet).await
@@ -448,7 +436,9 @@ impl JavaTcpClient {
     }
 
     pub async fn handle_play(&self, _packet: &SBoundPlay) {
-        if !self.assert_protocol(ConnectionProtocol::PLAY) {}
+        if !self.assert_protocol(ConnectionProtocol::PLAY) {
+            return;
+        }
     }
 }
 
@@ -457,22 +447,15 @@ impl JavaTcpClient {
         match self.connection_protocol.load() {
             ConnectionProtocol::LOGIN => {
                 let packet = CLoginDisconnectPacket::new(reason.0);
-                self.send_packet_now(CBoundPacket::Login(CBoundLogin::LoginDisconnectPacket(
-                    packet,
-                )))
-                .await;
+                self.send_packet_now(packet).await;
             }
             ConnectionProtocol::CONFIGURATION => {
                 let packet = CDisconnectPacket::new(reason.0);
-                self.send_packet_now(CBoundPacket::Configuration(
-                    CBoundConfiguration::Disconnect(packet),
-                ))
-                .await;
+                self.send_packet_now(packet).await;
             }
             ConnectionProtocol::PLAY => {
                 let packet = CDisconnectPacket::new(reason.0);
-                self.send_packet_now(CBoundPacket::Play(CBoundPlay::Disconnect(packet)))
-                    .await;
+                self.send_packet_now(packet).await;
             }
             _ => {}
         }

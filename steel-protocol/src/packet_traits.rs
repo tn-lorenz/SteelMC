@@ -10,8 +10,7 @@ use tokio::io::AsyncWriteExt;
 
 use crate::{
     codec::VarInt,
-    packets::clientbound::CBoundPacket,
-    utils::{MAX_PACKET_DATA_SIZE, MAX_PACKET_SIZE, PacketError},
+    utils::{ConnectionProtocol, MAX_PACKET_DATA_SIZE, MAX_PACKET_SIZE, PacketError},
 };
 
 const DEFAULT_BOUND: usize = i32::MAX as _;
@@ -199,23 +198,43 @@ impl EncodedPacket {
         }
     }
 
-    pub async fn from_packet(
-        packet: &CBoundPacket,
+    pub async fn from_packet<P: CBoundPacket>(
+        packet: &P,
         compression_info: Option<CompressionInfo>,
+        connection_protocol: ConnectionProtocol,
     ) -> Result<Self, PacketError> {
+        let buf = Self::data_from_packet(packet, connection_protocol)?;
+        Self::from_data(buf, compression_info).await
+    }
+
+    pub fn data_from_packet<P: CBoundPacket>(
+        packet: &P,
+        connection_protocol: ConnectionProtocol,
+    ) -> Result<FrontVec, PacketError> {
         let mut buf = FrontVec::new(6);
-        let packet_id = packet.get_id();
+        let packet_id = packet
+            .get_id(connection_protocol)
+            .ok_or(PacketError::InvalidProtocol(format!(
+                "Invalid protocol {:?}",
+                connection_protocol
+            )))?;
         VarInt(packet_id).write(&mut buf)?;
         packet.write_packet(&mut buf)?;
+        Ok(buf)
+    }
+
+    pub async fn from_data(
+        buf: FrontVec,
+        compression_info: Option<CompressionInfo>,
+    ) -> Result<Self, PacketError> {
         if let Some(compression_info) = compression_info {
-            Self::from_packet_data(
-                buf.into(),
-                compression_info.threshold,
-                compression_info.level,
-            )
-            .await
+            Self::from_packet_data(buf, compression_info.threshold, compression_info.level).await
         } else {
             Self::from_data_no_compression(buf)
         }
     }
+}
+
+pub trait CBoundPacket: PacketWrite + WriteTo {
+    fn get_id(&self, protocol: ConnectionProtocol) -> Option<i32>;
 }

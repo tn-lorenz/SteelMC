@@ -3,20 +3,15 @@ use rsa::Pkcs1v15Encrypt;
 use sha1::Sha1;
 use sha2::{Digest, Sha256};
 use steel_protocol::{
-    packet_traits::CompressionInfo,
-    packets::{
-        clientbound::{CBoundLogin, CBoundPacket},
-        login::{
-            c_hello_packet::CHelloPacket, c_login_compression_packet::CLoginCompressionPacket,
-            c_login_finished_packet::CLoginFinishedPacket, s_hello_packet::SHelloPacket,
-            s_key_packet::SKeyPacket, s_login_acknowledged_packet::SLoginAcknowledgedPacket,
-        },
+    packets::login::{
+        c_hello_packet::CHelloPacket, c_login_compression_packet::CLoginCompressionPacket,
+        c_login_finished_packet::CLoginFinishedPacket, s_hello_packet::SHelloPacket,
+        s_key_packet::SKeyPacket, s_login_acknowledged_packet::SLoginAcknowledgedPacket,
     },
     utils::ConnectionProtocol,
 };
 use steel_utils::text::TextComponent;
 use steel_world::player::game_profile::GameProfile;
-use tokio::net::tcp;
 use uuid::Uuid;
 
 use crate::{
@@ -64,12 +59,12 @@ pub async fn handle_hello(tcp_client: &JavaTcpClient, packet: &SHelloPacket) {
         tcp_client.challenge.store(Some(challenge));
 
         tcp_client
-            .send_packet_now(CBoundPacket::Login(CBoundLogin::Hello(CHelloPacket::new(
+            .send_packet_now(CHelloPacket::new(
                 "".to_string(),
                 tcp_client.server.key_store.public_key_der.clone(),
                 challenge,
                 true,
-            ))))
+            ))
             .await;
     } else {
         finish_login(
@@ -105,7 +100,7 @@ pub async fn handle_key(tcp_client: &JavaTcpClient, packet: &SKeyPacket) {
         return;
     };
 
-    if &challenge_response != &challenge {
+    if challenge_response != challenge {
         tcp_client
             .kick(TextComponent::text("Invalid challenge response"))
             .await;
@@ -151,7 +146,7 @@ pub async fn handle_key(tcp_client: &JavaTcpClient, packet: &SKeyPacket) {
 
     if STEEL_CONFIG.online_mode {
         let server_hash = &Sha1::new()
-            .chain_update(&secret_key)
+            .chain_update(secret_key)
             .chain_update(&tcp_client.server.key_store.public_key_der)
             .finalize();
 
@@ -184,9 +179,7 @@ pub async fn handle_key(tcp_client: &JavaTcpClient, packet: &SKeyPacket) {
 pub async fn finish_login(tcp_client: &JavaTcpClient, profile: &GameProfile) {
     if let Some(compression) = STEEL_CONFIG.compression {
         tcp_client
-            .send_packet_now(CBoundPacket::Login(CBoundLogin::LoginCompression(
-                CLoginCompressionPacket::new(compression.threshold as i32),
-            )))
+            .send_packet_now(CLoginCompressionPacket::new(compression.threshold as i32))
             .await;
         tcp_client.compression_info.store(Some(compression));
         tcp_client
@@ -198,15 +191,17 @@ pub async fn finish_login(tcp_client: &JavaTcpClient, profile: &GameProfile) {
     tcp_client.connection_update_enabled.notified().await;
 
     tcp_client
-        .send_packet_now(CBoundPacket::Login(CBoundLogin::LoginFinished(
-            CLoginFinishedPacket::new(profile.id, profile.name.clone(), profile.properties.clone()),
-        )))
+        .send_packet_now(CLoginFinishedPacket::new(
+            profile.id,
+            profile.name.clone(),
+            profile.properties.clone(),
+        ))
         .await;
 }
 
 pub async fn handle_login_acknowledged(
     tcp_client: &JavaTcpClient,
-    packet: &SLoginAcknowledgedPacket,
+    _packet: &SLoginAcknowledgedPacket,
 ) {
     tcp_client
         .connection_protocol

@@ -1,5 +1,6 @@
 use serde::Serialize;
-use steel_macros::PacketWrite;
+use steel_macros::{CBoundPacket, PacketWrite};
+use steel_registry::packets::clientbound::status::CLIENTBOUND_STATUS_RESPONSE;
 
 #[derive(Serialize, Clone, Debug)]
 pub struct Sample {
@@ -31,7 +32,8 @@ pub struct Status {
     pub enforce_secure_chat: bool,
 }
 
-#[derive(PacketWrite, Clone, Debug)]
+#[derive(PacketWrite, CBoundPacket, Clone, Debug)]
+#[packet_id(STATUS = "CLIENTBOUND_STATUS_RESPONSE")]
 pub struct CStatusResponsePacket {
     #[write_as(as = "json")]
     status: Status,

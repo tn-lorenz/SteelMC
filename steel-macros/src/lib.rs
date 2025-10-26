@@ -354,21 +354,64 @@ pub fn packet_write_derive(input: TokenStream) -> TokenStream {
     }
 }
 
-#[proc_macro_attribute]
-pub fn packet(input: TokenStream, item: TokenStream) -> TokenStream {
-    let ast: syn::DeriveInput = syn::parse(item.clone()).unwrap();
-    let name = &ast.ident;
-    let (impl_generics, ty_generics, _) = ast.generics.split_for_impl();
+#[proc_macro_derive(CBoundPacket, attributes(packet_id))]
+pub fn cbound_packet_derive(input: TokenStream) -> TokenStream {
+    let input = parse_macro_input!(input as DeriveInput);
+    let name = input.ident;
 
-    let input: proc_macro2::TokenStream = input.into();
-    let item: proc_macro2::TokenStream = item.into();
+    // Find the packet_id attributes
+    let attrs: Vec<_> = input
+        .attrs
+        .iter()
+        .filter(|a| a.path().is_ident("packet_id"))
+        .collect();
 
-    let code = quote! {
-        #item
-        impl #impl_generics crate::packet_traits::Packet for #name #ty_generics {
-            const PACKET_ID: i32 = #input;
+    if attrs.is_empty() {
+        panic!("CBoundPacket derive macro requires at least one #[packet_id(...)] attribute");
+    }
+
+    let mut match_arms = Vec::new();
+
+    for attr in attrs {
+        if let Meta::List(meta) = attr.meta.clone() {
+            meta.parse_nested_meta(|meta| {
+                let state = meta
+                    .path
+                    .get_ident()
+                    .expect("Expected an identifier for the protocol state")
+                    .to_string();
+                let value = meta.value()?;
+                let id_path: LitStr = value.parse()?;
+
+                let state_ident = Ident::new(&state, Span::call_site());
+                let id_path_val = id_path.value();
+                let id_ident: syn::Path =
+                    syn::parse_str(&id_path_val).expect("Failed to parse id path");
+
+                let arm = quote! {
+                    crate::utils::ConnectionProtocol::#state_ident => Some(#id_ident as i32),
+                };
+                match_arms.push(arm);
+
+                Ok(())
+            })
+            .unwrap_or_else(|e| panic!("Failed to parse `packet_id` attribute: {}", e));
+        } else {
+            panic!("`packet_id` attribute must be a list: `#[packet_id(STATE = \"path\", ...)]`");
+        }
+    }
+
+    let expanded = quote! {
+        #[automatically_derived]
+        impl crate::packet_traits::CBoundPacket for #name {
+            fn get_id(&self, protocol: crate::utils::ConnectionProtocol) -> Option<i32> {
+                match protocol {
+                    #(#match_arms)*
+                    _ => None,
+                }
+            }
         }
     };
 
-    code.into()
+    TokenStream::from(expanded)
 }

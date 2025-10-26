@@ -15,6 +15,12 @@ pub struct Server {
     pub registry: Arc<Registry>,
 }
 
+impl Default for Server {
+    fn default() -> Self {
+        Self::new()
+    }
+}
+
 impl Server {
     pub fn new() -> Self {
         let mut block_registry = BlockRegistry::new();

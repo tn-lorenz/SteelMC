@@ -1,6 +1,8 @@
-use steel_macros::PacketWrite;
+use steel_macros::{CBoundPacket, PacketWrite};
+use steel_registry::packets::clientbound::login::CLIENTBOUND_HELLO;
 
-#[derive(PacketWrite, Clone, Debug)]
+#[derive(PacketWrite, CBoundPacket, Clone, Debug)]
+#[packet_id(LOGIN = "CLIENTBOUND_HELLO")]
 pub struct CHelloPacket {
     #[write_as(as = "string", bound = 20)]
     pub server_id: String,

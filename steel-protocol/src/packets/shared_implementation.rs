@@ -41,10 +41,8 @@ impl WriteTo for Uuid {
 
 impl ReadFrom for ResourceLocation {
     fn read(data: &mut impl io::Read) -> Result<Self> {
-        Ok(
-            ResourceLocation::from_str(&String::read_prefixed::<VarInt>(data)?)
-                .map_err(|e| std::io::Error::other(e.to_string()))?,
-        )
+        ResourceLocation::from_str(&String::read_prefixed::<VarInt>(data)?)
+                .map_err(|e| std::io::Error::other(e.to_string()))
     }
 }
 

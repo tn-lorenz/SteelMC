@@ -1,6 +1,8 @@
-use steel_macros::PacketWrite;
+use steel_macros::{CBoundPacket, PacketWrite};
+use steel_registry::packets::clientbound::status::CLIENTBOUND_PONG_RESPONSE;
 
-#[derive(PacketWrite, Clone, Debug)]
+#[derive(PacketWrite, CBoundPacket, Clone, Debug)]
+#[packet_id(STATUS = "CLIENTBOUND_PONG_RESPONSE")]
 pub struct CPongResponsePacket {
     pub time: i64,
 }
