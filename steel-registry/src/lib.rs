@@ -18,7 +18,8 @@ pub mod blocks;
 pub mod data_components;
 pub mod items;
 
-pub static MINECRAFT_CORE_DIR: Dir = include_dir!("$CARGO_MANIFEST_DIR/build_assets/minecraft");
+pub static MINECRAFT_CORE_DIR: Dir =
+    include_dir!("$CARGO_MANIFEST_DIR/build_assets/builtin_datapacks");
 
 //#[rustfmt::skip]
 #[path = "generated/vanilla_blocks.rs"]
