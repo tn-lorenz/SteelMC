@@ -36,3 +36,4 @@ quote = "1.0.41"
 crossbeam = "0.8.4"
 uuid = { version = "1.18.1", features = ["serde"] }
 log = "0.4.28"
+simdnbt = "0.8.0"

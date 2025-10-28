@@ -3,6 +3,7 @@ use std::{
     str::FromStr,
 };
 
+use simdnbt::owned::NbtTag;
 use steel_macros::{PacketRead, PacketWrite};
 use steel_utils::{ResourceLocation, text::TextComponentBase};
 use uuid::Uuid;
@@ -74,5 +75,14 @@ impl KnownPack {
             id,
             version,
         }
+    }
+}
+
+impl WriteTo for NbtTag {
+    fn write(&self, writer: &mut impl Write) -> Result<()> {
+        let mut buf = Vec::new();
+        self.write(&mut buf);
+        writer.write_all(&buf)?;
+        Ok(())
     }
 }

@@ -266,6 +266,16 @@ pub fn packet_write_derive(input: TokenStream) -> TokenStream {
                             })?.write_prefixed::<#prefix>(writer)?;
                         }
                     },
+                    Some("option") => {
+                        quote! {
+                            if let Some(value) = &self.#field_name {
+                                true.write(writer)?;
+                                crate::packet_traits::WriteTo::write(value, writer)?;
+                            } else {
+                                false.write(writer)?;
+                            }
+                        }
+                    },
                     None => quote! {
                         self.#field_name.write(writer)?;
                     },
