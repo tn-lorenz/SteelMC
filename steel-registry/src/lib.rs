@@ -7,28 +7,130 @@
 )]
 #![allow(internal_features)]
 
-use std::path::Path;
-
 use crate::{
+    banner_pattern::banner_pattern::BannerPatternRegistry,
+    biome::biome::BiomeRegistry,
     blocks::blocks::BlockRegistry,
+    cat_variant::cat_variant::CatVariantRegistry,
+    chat_type::chat_type::ChatTypeRegistry,
+    chicken_variant::chicken_variant::ChickenVariantRegistry,
+    cow_variant::cow_variant::CowVariantRegistry,
+    damage_type::damage_type::DamageTypeRegistry,
     data_components::{DataComponentRegistry, vanilla_components},
+    dialog::dialog::DialogRegistry,
+    dimension_type::dimension_type::DimensionTypeRegistry,
+    frog_variant::frog_variant::FrogVariantRegistry,
+    instrument::instrument::InstrumentRegistry,
     items::items::ItemRegistry,
+    jukebox_song::jukebox_song::JukeboxSongRegistry,
+    painting_variant::painting_variant::PaintingVariantRegistry,
+    pig_variant::pig_variant::PigVariantRegistry,
+    trim_material::trim_material::TrimMaterialRegistry,
+    trim_pattern::trim_pattern::TrimPatternRegistry,
+    wolf_sound_variant::wolf_sound_variant::WolfSoundVariantRegistry,
+    wolf_variant::wolf_variant::WolfVariantRegistry,
 };
-use include_dir::{Dir, include_dir};
+pub mod banner_pattern;
+pub mod biome;
 pub mod blocks;
+pub mod cat_variant;
+pub mod chat_type;
+pub mod chicken_variant;
+pub mod cow_variant;
+pub mod damage_type;
 pub mod data_components;
+pub mod dialog;
+pub mod dimension_type;
+pub mod frog_variant;
+pub mod instrument;
 pub mod items;
-
-pub static MINECRAFT_CORE_DIR: Dir =
-    include_dir!("$CARGO_MANIFEST_DIR/build_assets/builtin_datapacks");
+pub mod jukebox_song;
+pub mod painting_variant;
+pub mod pig_variant;
+pub mod trim_material;
+pub mod trim_pattern;
+pub mod wolf_sound_variant;
+pub mod wolf_variant;
 
 //#[rustfmt::skip]
 #[path = "generated/vanilla_blocks.rs"]
 pub mod vanilla_blocks;
 
 //#[rustfmt::skip]
+#[path = "generated/vanilla_banner_patterns.rs"]
+pub mod vanilla_banner_patterns;
+
+//#[rustfmt::skip]
 #[path = "generated/vanilla_items.rs"]
 pub mod vanilla_items;
+
+//#[rustfmt::skip]
+#[path = "generated/vanilla_biomes.rs"]
+pub mod vanilla_biomes;
+
+//#[rustfmt::skip]
+#[path = "generated/vanilla_chat_types.rs"]
+pub mod vanilla_chat_types;
+
+//#[rustfmt::skip]
+#[path = "generated/vanilla_trim_patterns.rs"]
+pub mod vanilla_trim_patterns;
+
+//#[rustfmt::skip]
+#[path = "generated/vanilla_trim_materials.rs"]
+pub mod vanilla_trim_materials;
+
+//#[rustfmt::skip]
+#[path = "generated/vanilla_wolf_variants.rs"]
+pub mod vanilla_wolf_variants;
+
+//#[rustfmt::skip]
+#[path = "generated/vanilla_wolf_sound_variants.rs"]
+pub mod vanilla_wolf_sound_variants;
+
+//#[rustfmt::skip]
+#[path = "generated/vanilla_pig_variants.rs"]
+pub mod vanilla_pig_variants;
+
+//#[rustfmt::skip]
+#[path = "generated/vanilla_frog_variants.rs"]
+pub mod vanilla_frog_variants;
+
+//#[rustfmt::skip]
+#[path = "generated/vanilla_cat_variants.rs"]
+pub mod vanilla_cat_variants;
+
+//#[rustfmt::skip]
+#[path = "generated/vanilla_cow_variants.rs"]
+pub mod vanilla_cow_variants;
+
+//#[rustfmt::skip]
+#[path = "generated/vanilla_chicken_variants.rs"]
+pub mod vanilla_chicken_variants;
+
+//#[rustfmt::skip]
+#[path = "generated/vanilla_painting_variants.rs"]
+pub mod vanilla_painting_variants;
+
+//#[rustfmt::skip]
+#[path = "generated/vanilla_dimension_types.rs"]
+pub mod vanilla_dimension_types;
+
+//#[rustfmt::skip]
+#[path = "generated/vanilla_damage_types.rs"]
+pub mod vanilla_damage_types;
+
+//#[rustfmt::skip]
+#[path = "generated/vanilla_jukebox_songs.rs"]
+pub mod vanilla_jukebox_songs;
+
+//#[rustfmt::skip]
+#[path = "generated/vanilla_instruments.rs"]
+pub mod vanilla_instruments;
+
+//#[rustfmt::skip]
+#[path = "generated/vanilla_dialogs.rs"]
+pub mod vanilla_dialogs;
 
 //#[rustfmt::skip]
 #[path = "generated/packets.rs"]
@@ -42,6 +144,24 @@ pub struct Registry {
     pub blocks: BlockRegistry,
     pub items: ItemRegistry,
     pub data_components: DataComponentRegistry,
+    pub biomes: BiomeRegistry,
+    pub chat_types: ChatTypeRegistry,
+    pub trim_patterns: TrimPatternRegistry,
+    pub trim_materials: TrimMaterialRegistry,
+    pub wolf_variants: WolfVariantRegistry,
+    pub wolf_sound_variants: WolfSoundVariantRegistry,
+    pub pig_variants: PigVariantRegistry,
+    pub frog_variants: FrogVariantRegistry,
+    pub cat_variants: CatVariantRegistry,
+    pub cow_variants: CowVariantRegistry,
+    pub chicken_variants: ChickenVariantRegistry,
+    pub painting_variants: PaintingVariantRegistry,
+    pub dimension_types: DimensionTypeRegistry,
+    pub damage_types: DamageTypeRegistry,
+    pub banner_patterns: BannerPatternRegistry,
+    pub jukebox_songs: JukeboxSongRegistry,
+    pub instruments: InstrumentRegistry,
+    pub dialogs: DialogRegistry,
 }
 
 impl Registry {
@@ -55,10 +175,82 @@ impl Registry {
         let mut item_registry = ItemRegistry::new();
         vanilla_items::register_items(&mut item_registry);
 
+        let mut biome_registry = BiomeRegistry::new();
+        vanilla_biomes::register_biomes(&mut biome_registry);
+
+        let mut chat_type_registry = ChatTypeRegistry::new();
+        vanilla_chat_types::register_chat_types(&mut chat_type_registry);
+
+        let mut trim_pattern_registry = TrimPatternRegistry::new();
+        vanilla_trim_patterns::register_trim_patterns(&mut trim_pattern_registry);
+
+        let mut trim_material_registry = TrimMaterialRegistry::new();
+        vanilla_trim_materials::register_trim_materials(&mut trim_material_registry);
+
+        let mut wolf_variant_registry = WolfVariantRegistry::new();
+        vanilla_wolf_variants::register_wolf_variants(&mut wolf_variant_registry);
+
+        let mut wolf_sound_variant_registry = WolfSoundVariantRegistry::new();
+        vanilla_wolf_sound_variants::register_wolf_sound_variants(&mut wolf_sound_variant_registry);
+
+        let mut pig_variant_registry = PigVariantRegistry::new();
+        vanilla_pig_variants::register_pig_variants(&mut pig_variant_registry);
+
+        let mut frog_variant_registry = FrogVariantRegistry::new();
+        vanilla_frog_variants::register_frog_variants(&mut frog_variant_registry);
+
+        let mut cat_variant_registry = CatVariantRegistry::new();
+        vanilla_cat_variants::register_cat_variants(&mut cat_variant_registry);
+
+        let mut cow_variant_registry = CowVariantRegistry::new();
+        vanilla_cow_variants::register_cow_variants(&mut cow_variant_registry);
+
+        let mut chicken_variant_registry = ChickenVariantRegistry::new();
+        vanilla_chicken_variants::register_chicken_variants(&mut chicken_variant_registry);
+
+        let mut painting_variant_registry = PaintingVariantRegistry::new();
+        vanilla_painting_variants::register_painting_variants(&mut painting_variant_registry);
+
+        let mut dimension_type_registry = DimensionTypeRegistry::new();
+        vanilla_dimension_types::register_dimension_types(&mut dimension_type_registry);
+
+        let mut damage_type_registry = DamageTypeRegistry::new();
+        vanilla_damage_types::register_damage_types(&mut damage_type_registry);
+
+        let mut banner_pattern_registry = BannerPatternRegistry::new();
+        vanilla_banner_patterns::register_banner_patterns(&mut banner_pattern_registry);
+
+        let mut jukebox_song_registry = JukeboxSongRegistry::new();
+        vanilla_jukebox_songs::register_jukebox_songs(&mut jukebox_song_registry);
+
+        let mut instrument_registry = InstrumentRegistry::new();
+        vanilla_instruments::register_instruments(&mut instrument_registry);
+
+        let mut dialog_registry = DialogRegistry::new();
+        vanilla_dialogs::register_dialogs(&mut dialog_registry);
+
         Self {
             blocks: block_registry,
             data_components: data_component_registry,
             items: item_registry,
+            biomes: biome_registry,
+            chat_types: chat_type_registry,
+            trim_patterns: trim_pattern_registry,
+            trim_materials: trim_material_registry,
+            wolf_variants: wolf_variant_registry,
+            wolf_sound_variants: wolf_sound_variant_registry,
+            pig_variants: pig_variant_registry,
+            frog_variants: frog_variant_registry,
+            cat_variants: cat_variant_registry,
+            cow_variants: cow_variant_registry,
+            chicken_variants: chicken_variant_registry,
+            painting_variants: painting_variant_registry,
+            dimension_types: dimension_type_registry,
+            damage_types: damage_type_registry,
+            banner_patterns: banner_pattern_registry,
+            jukebox_songs: jukebox_song_registry,
+            instruments: instrument_registry,
+            dialogs: dialog_registry,
         }
     }
 
@@ -66,5 +258,23 @@ impl Registry {
         self.blocks.freeze();
         self.data_components.freeze();
         self.items.freeze();
+        self.biomes.freeze();
+        self.chat_types.freeze();
+        self.trim_patterns.freeze();
+        self.trim_materials.freeze();
+        self.wolf_variants.freeze();
+        self.wolf_sound_variants.freeze();
+        self.pig_variants.freeze();
+        self.frog_variants.freeze();
+        self.cat_variants.freeze();
+        self.cow_variants.freeze();
+        self.chicken_variants.freeze();
+        self.painting_variants.freeze();
+        self.dimension_types.freeze();
+        self.damage_types.freeze();
+        self.banner_patterns.freeze();
+        self.jukebox_songs.freeze();
+        self.instruments.freeze();
+        self.dialogs.freeze();
     }
 }

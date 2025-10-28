@@ -7,6 +7,8 @@ use steel_registry::{
     items::items::ItemRegistry,
     vanilla_blocks, vanilla_items,
 };
+use steel_utils::ResourceLocation;
+use tokio::time::Instant;
 
 use crate::server::key_store::KeyStore;
 
@@ -23,8 +25,10 @@ impl Default for Server {
 
 impl Server {
     pub fn new() -> Self {
+        let start = Instant::now();
         let mut registry = Registry::new_vanilla();
         registry.freeze();
+        log::info!("Vanilla registry loaded in {:?}", start.elapsed());
 
         Server {
             key_store: KeyStore::new(),

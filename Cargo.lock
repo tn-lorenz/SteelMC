@@ -1507,6 +1507,7 @@ dependencies = [
  "rsa-der",
  "scc",
  "serde",
+ "serde_json",
  "serde_json5",
  "sha1",
  "sha2",

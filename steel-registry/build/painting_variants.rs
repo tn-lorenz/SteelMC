@@ -1,0 +1,144 @@
+use std::fs;
+
+use heck::ToShoutySnakeCase;
+use proc_macro2::{Ident, Span, TokenStream};
+use quote::quote;
+use serde::Deserialize;
+use steel_utils::ResourceLocation;
+
+#[derive(Deserialize, Debug)]
+pub struct PaintingVariantJson {
+    width: i32,
+    height: i32,
+    asset_id: ResourceLocation,
+    #[serde(default)]
+    title: Option<TextComponentJson>,
+    #[serde(default)]
+    author: Option<TextComponentJson>,
+}
+
+#[derive(Deserialize, Debug)]
+pub struct TextComponentJson {
+    translate: String,
+    #[serde(default)]
+    color: Option<String>,
+}
+
+fn generate_resource_location(resource: &ResourceLocation) -> TokenStream {
+    let namespace = resource.namespace.as_ref();
+    let path = resource.path.as_ref();
+    quote! { ResourceLocation { namespace: Cow::Borrowed(#namespace), path: Cow::Borrowed(#path) } }
+}
+
+fn generate_option<T, F>(opt: &Option<T>, f: F) -> TokenStream
+where
+    F: FnOnce(&T) -> TokenStream,
+{
+    match opt {
+        Some(val) => {
+            let inner = f(val);
+            quote! { Some(#inner) }
+        }
+        None => quote! { None },
+    }
+}
+
+fn generate_text_component(component: &TextComponentJson) -> TokenStream {
+    let translate = component.translate.as_str();
+    let color = generate_option(&component.color, |c| {
+        let color_str = c.as_str();
+        quote! { #color_str }
+    });
+
+    quote! {
+        TextComponent {
+            translate: #translate,
+            color: #color,
+        }
+    }
+}
+
+pub(crate) fn build() -> TokenStream {
+    println!(
+        "cargo:rerun-if-changed=build_assets/builtin_datapacks/minecraft/data/minecraft/painting_variant/"
+    );
+
+    let painting_variant_dir =
+        "build_assets/builtin_datapacks/minecraft/data/minecraft/painting_variant";
+    let mut painting_variants = Vec::new();
+
+    // Read all painting variant JSON files
+    for entry in fs::read_dir(painting_variant_dir).unwrap() {
+        let entry = entry.unwrap();
+        let path = entry.path();
+
+        if path.extension().and_then(|s| s.to_str()) == Some("json") {
+            let painting_variant_name = path.file_stem().unwrap().to_str().unwrap().to_string();
+            let content = fs::read_to_string(&path).unwrap();
+            let painting_variant: PaintingVariantJson = serde_json::from_str(&content)
+                .unwrap_or_else(|e| panic!("Failed to parse {}: {}", painting_variant_name, e));
+
+            painting_variants.push((painting_variant_name, painting_variant));
+        }
+    }
+
+    // Sort painting variants by name for consistent generation
+    painting_variants.sort_by(|a, b| a.0.cmp(&b.0));
+
+    let mut stream = TokenStream::new();
+
+    stream.extend(quote! {
+        use crate::painting_variant::painting_variant::{
+            PaintingVariant, PaintingVariantRegistry, TextComponent,
+        };
+        use steel_utils::ResourceLocation;
+        use std::borrow::Cow;
+    });
+
+    // Generate static painting variant definitions
+    for (painting_variant_name, painting_variant) in &painting_variants {
+        let painting_variant_ident = Ident::new(
+            &painting_variant_name.to_shouty_snake_case(),
+            Span::call_site(),
+        );
+        let painting_variant_name_str = painting_variant_name.clone();
+
+        let key = quote! { ResourceLocation::vanilla_static(#painting_variant_name_str) };
+        let asset_id = generate_resource_location(&painting_variant.asset_id);
+        let width = painting_variant.width;
+        let height = painting_variant.height;
+        let title = generate_option(&painting_variant.title, generate_text_component);
+        let author = generate_option(&painting_variant.author, generate_text_component);
+
+        stream.extend(quote! {
+            pub const #painting_variant_ident: &PaintingVariant = &PaintingVariant {
+                key: #key,
+                width: #width,
+                height: #height,
+                asset_id: #asset_id,
+                title: #title,
+                author: #author,
+            };
+        });
+    }
+
+    // Generate registration function
+    let mut register_stream = TokenStream::new();
+    for (painting_variant_name, _) in &painting_variants {
+        let painting_variant_ident = Ident::new(
+            &painting_variant_name.to_shouty_snake_case(),
+            Span::call_site(),
+        );
+        register_stream.extend(quote! {
+            registry.register(&#painting_variant_ident);
+        });
+    }
+
+    stream.extend(quote! {
+        pub fn register_painting_variants(registry: &mut PaintingVariantRegistry) {
+            #register_stream
+        }
+    });
+
+    stream
+}

@@ -6,6 +6,8 @@ use std::{
     str::FromStr,
 };
 
+use serde::{Deserialize, Serialize};
+
 use crate::math::{vector2::Vector2, vector3::Vector3};
 
 // A raw block state id. Using the registry this id can be derived into a block and it's current properties.
@@ -100,5 +102,23 @@ impl FromStr for ResourceLocation {
             namespace: Cow::Owned(parts[0].to_string()),
             path: Cow::Owned(parts[1].to_string()),
         })
+    }
+}
+impl Serialize for ResourceLocation {
+    fn serialize<S>(&self, serializer: S) -> Result<S::Ok, S::Error>
+    where
+        S: serde::Serializer,
+    {
+        serializer.serialize_str(&self.to_string())
+    }
+}
+
+impl<'de> Deserialize<'de> for ResourceLocation {
+    fn deserialize<D>(deserializer: D) -> Result<Self, D::Error>
+    where
+        D: serde::Deserializer<'de>,
+    {
+        let s = String::deserialize(deserializer)?;
+        ResourceLocation::from_str(&s).map_err(serde::de::Error::custom)
     }
 }
