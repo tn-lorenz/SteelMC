@@ -23,25 +23,12 @@ impl Default for Server {
 
 impl Server {
     pub fn new() -> Self {
-        let mut block_registry = BlockRegistry::new();
-        vanilla_blocks::register_blocks(&mut block_registry);
-        block_registry.freeze();
-
-        let mut data_component_registry = DataComponentRegistry::new();
-        vanilla_components::register_vanilla_data_components(&mut data_component_registry);
-        data_component_registry.freeze();
-
-        let mut item_registry = ItemRegistry::new();
-        vanilla_items::register_items(&mut item_registry);
-        item_registry.freeze();
+        let mut registry = Registry::new_vanilla();
+        registry.freeze();
 
         Server {
             key_store: KeyStore::new(),
-            registry: Arc::new(Registry {
-                blocks: block_registry,
-                data_components: data_component_registry,
-                items: item_registry,
-            }),
+            registry: Arc::new(registry),
         }
     }
 }

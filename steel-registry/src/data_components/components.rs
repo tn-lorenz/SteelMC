@@ -2,9 +2,12 @@ use std::{collections::HashMap, marker::PhantomData};
 
 use steel_utils::ResourceLocation;
 
-use crate::data_components::vanilla_components::{
-    ATTRIBUTE_MODIFIERS, BREAK_SOUND, ENCHANTMENTS, LORE, MAX_STACK_SIZE, RARITY, REPAIR_COST,
-    TOOLTIP_DISPLAY,
+use crate::{
+    RegistryExt,
+    data_components::vanilla_components::{
+        ATTRIBUTE_MODIFIERS, BREAK_SOUND, ENCHANTMENTS, LORE, MAX_STACK_SIZE, RARITY, REPAIR_COST,
+        TOOLTIP_DISPLAY,
+    },
 };
 
 pub trait ComponentValue: std::fmt::Debug + Send + Sync {
@@ -51,10 +54,6 @@ impl DataComponentRegistry {
         }
     }
 
-    pub fn freeze(&mut self) {
-        self.allows_registering = false;
-    }
-
     pub fn register<T: 'static>(&mut self, component: &'static DataComponentType<T>) {
         if !self.allows_registering {
             panic!("Cannot register data components after the registry has been frozen");
@@ -66,6 +65,13 @@ impl DataComponentRegistry {
 
     pub fn get_id<T: 'static>(&self, component: &DataComponentType<T>) -> Option<usize> {
         self.components_by_key.get(&component.key).copied()
+    }
+}
+
+impl RegistryExt for DataComponentRegistry {
+    // Prevents the registry from registering new blocks.
+    fn freeze(&mut self) {
+        self.allows_registering = false;
     }
 }
 
