@@ -14,13 +14,5 @@ async fn main() {
 
     let mut server = SteelServer::new().await;
 
-    println!(
-        "{:?}",
-        steel_registry::MINECRAFT_CORE_DIR
-            .get_file("minecraft/pack.mcmeta")
-            .unwrap()
-            .contents_utf8()
-    );
-
     server.start().await;
 }

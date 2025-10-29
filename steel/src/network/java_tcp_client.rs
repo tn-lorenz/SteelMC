@@ -435,6 +435,9 @@ impl JavaTcpClient {
             SBoundConfiguration::SelectKnownPacks(packet) => {
                 config::handle_select_known_packs(self, packet).await
             }
+            SBoundConfiguration::FinishConfiguration(packet) => {
+                config::handle_finish_configuration(self, packet).await
+            }
         }
     }
 
@@ -449,15 +452,15 @@ impl JavaTcpClient {
     pub async fn kick(&self, reason: TextComponent) {
         match self.connection_protocol.load() {
             ConnectionProtocol::LOGIN => {
-                let packet = CLoginDisconnectPacket::new(reason.0);
+                let packet = CLoginDisconnectPacket::new(reason);
                 self.send_packet_now(packet).await;
             }
             ConnectionProtocol::CONFIGURATION => {
-                let packet = CDisconnectPacket::new(reason.0);
+                let packet = CDisconnectPacket::new(reason);
                 self.send_packet_now(packet).await;
             }
             ConnectionProtocol::PLAY => {
-                let packet = CDisconnectPacket::new(reason.0);
+                let packet = CDisconnectPacket::new(reason);
                 self.send_packet_now(packet).await;
             }
             _ => {}

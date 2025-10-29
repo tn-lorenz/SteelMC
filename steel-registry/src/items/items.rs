@@ -2,7 +2,7 @@ use std::collections::HashMap;
 
 use steel_utils::ResourceLocation;
 
-use crate::{blocks::blocks::BlockRef, data_components::DataComponentMap};
+use crate::{RegistryExt, blocks::blocks::BlockRef, data_components::DataComponentMap};
 
 #[derive(Debug)]
 pub struct Item {
@@ -49,10 +49,6 @@ impl ItemRegistry {
         }
     }
 
-    pub fn freeze(&mut self) {
-        self.allows_registering = false;
-    }
-
     pub fn register(&mut self, item: ItemRef) -> usize {
         if !self.allows_registering {
             panic!("Cannot register items after the registry has been frozen");
@@ -75,5 +71,26 @@ impl ItemRegistry {
 
     pub fn by_key(&self, key: &ResourceLocation) -> Option<ItemRef> {
         self.items_by_key.get(key).and_then(|id| self.by_id(*id))
+    }
+
+    pub fn iter(&self) -> impl Iterator<Item = (usize, ItemRef)> + '_ {
+        self.items_by_id
+            .iter()
+            .enumerate()
+            .map(|(id, &item)| (id, item))
+    }
+
+    pub fn len(&self) -> usize {
+        self.items_by_id.len()
+    }
+
+    pub fn is_empty(&self) -> bool {
+        self.items_by_id.is_empty()
+    }
+}
+
+impl RegistryExt for ItemRegistry {
+    fn freeze(&mut self) {
+        self.allows_registering = false;
     }
 }

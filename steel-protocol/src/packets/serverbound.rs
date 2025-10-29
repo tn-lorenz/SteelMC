@@ -9,7 +9,10 @@ use crate::{
             s_client_information_packet::SClientInformationPacket,
             s_custom_payload_packet::SCustomPayloadPacket,
         },
-        configuration::s_select_known_packs::SSelectKnownPacks,
+        configuration::{
+            s_finish_configuration_packet::SFinishConfigurationPacket,
+            s_select_known_packs::SSelectKnownPacks,
+        },
         handshake::ClientIntentionPacket,
         login::{
             s_hello_packet::SHelloPacket, s_key_packet::SKeyPacket,
@@ -88,6 +91,7 @@ pub enum SBoundConfiguration {
     CustomPayload(SCustomPayloadPacket),
     ClientInformation(SClientInformationPacket),
     SelectKnownPacks(SSelectKnownPacks),
+    FinishConfiguration(SFinishConfigurationPacket),
 }
 
 impl SBoundConfiguration {
@@ -106,6 +110,10 @@ impl SBoundConfiguration {
             config::SERVERBOUND_SELECT_KNOWN_PACKS => {
                 let packet = SSelectKnownPacks::read_packet(&mut data)?;
                 Ok(Self::SelectKnownPacks(packet))
+            }
+            config::SERVERBOUND_FINISH_CONFIGURATION => {
+                let packet = SFinishConfigurationPacket::read_packet(&mut data)?;
+                Ok(Self::FinishConfiguration(packet))
             }
             _ => Err(PacketError::MalformedValue(format!(
                 "Invalid packet id: {}",

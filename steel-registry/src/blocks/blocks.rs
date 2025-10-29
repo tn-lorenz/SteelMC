@@ -2,6 +2,7 @@ use std::collections::HashMap;
 
 use steel_utils::{BlockStateId, ResourceLocation};
 
+use crate::RegistryExt;
 use crate::blocks::behaviour::BlockBehaviourProperties;
 use crate::blocks::properties::{DynProperty, Property};
 
@@ -94,11 +95,6 @@ impl BlockRegistry {
             block_to_base_state: Vec::new(),
             next_state_id: 0,
         }
-    }
-
-    // Prevents the registry from registering new blocks.
-    pub fn freeze(&mut self) {
-        self.allows_registering = false;
     }
 
     // Registers a new block.
@@ -282,6 +278,27 @@ impl BlockRegistry {
         );
 
         BlockStateId(base_state_id + new_relative_index)
+    }
+
+    pub fn iter(&self) -> impl Iterator<Item = (usize, BlockRef)> + '_ {
+        self.blocks_by_id
+            .iter()
+            .enumerate()
+            .map(|(id, &block)| (id, block))
+    }
+
+    pub fn len(&self) -> usize {
+        self.blocks_by_id.len()
+    }
+
+    pub fn is_empty(&self) -> bool {
+        self.blocks_by_id.is_empty()
+    }
+}
+
+impl RegistryExt for BlockRegistry {
+    fn freeze(&mut self) {
+        self.allows_registering = false;
     }
 }
 

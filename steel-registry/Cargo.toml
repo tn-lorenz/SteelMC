@@ -7,6 +7,8 @@ build = "build/build.rs"
 [dependencies]
 include_dir = { version = "0.7.4", features = ["nightly"] }
 steel-utils = { path = "../steel-utils" }
+serde_json.workspace = true
+serde.workspace = true
 
 [build-dependencies]
 proc-macro2.workspace = true
