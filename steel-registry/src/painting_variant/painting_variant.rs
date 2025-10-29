@@ -1,5 +1,6 @@
 use std::collections::HashMap;
 use steel_utils::ResourceLocation;
+use steel_utils::text::TextComponent;
 
 use crate::RegistryExt;
 
@@ -12,13 +13,6 @@ pub struct PaintingVariant {
     pub asset_id: ResourceLocation,
     pub title: Option<TextComponent>,
     pub author: Option<TextComponent>,
-}
-
-/// Represents a text component with color and translation.
-#[derive(Debug)]
-pub struct TextComponent {
-    pub translate: &'static str,
-    pub color: Option<&'static str>,
 }
 
 pub type PaintingVariantRef = &'static PaintingVariant;

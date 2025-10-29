@@ -10,12 +10,9 @@ pub mod hover;
 pub mod locale;
 pub mod style;
 
-#[derive(Clone, Debug, PartialEq, Eq, Hash)]
-pub struct TextComponent(pub TextComponentBase);
-
 #[derive(Clone, Debug, Serialize, Deserialize, PartialEq, Eq, Hash)]
 #[serde(rename_all = "camelCase")]
-pub struct TextComponentBase {
+pub struct TextComponent {
     /// The actual text
     #[serde(flatten)]
     pub content: TextContent,
@@ -25,7 +22,7 @@ pub struct TextComponentBase {
     pub style: Style,
     #[serde(default, skip_serializing_if = "Vec::is_empty")]
     /// Extra text components
-    pub extra: Vec<TextComponentBase>,
+    pub extra: Vec<TextComponent>,
 }
 
 #[derive(Clone, Debug, Serialize, Deserialize, PartialEq, Eq, Hash)]
@@ -37,7 +34,7 @@ pub enum TextContent {
     Translate {
         translate: Cow<'static, str>,
         #[serde(default, skip_serializing_if = "Vec::is_empty")]
-        with: Vec<TextComponentBase>,
+        with: Vec<TextComponent>,
     },
     /// Displays the name of one or more entities found by a selector.
     EntityNames {
@@ -53,30 +50,79 @@ pub enum TextContent {
     Custom {
         key: Cow<'static, str>,
         locale: Locale,
-        with: Vec<TextComponentBase>,
+        with: Vec<TextComponent>,
     },
 }
 
 impl TextComponent {
     pub fn text<P: Into<Cow<'static, str>>>(plain: P) -> Self {
-        Self(TextComponentBase {
+        Self {
             content: TextContent::Text { text: plain.into() },
             style: Style::default(),
             extra: vec![],
-        })
+        }
     }
 
     pub fn translate<K: Into<Cow<'static, str>>, W: Into<Vec<TextComponent>>>(
         key: K,
         with: W,
     ) -> Self {
-        Self(TextComponentBase {
+        Self {
             content: TextContent::Translate {
                 translate: key.into(),
-                with: with.into().into_iter().map(|x| x.0).collect(),
+                with: with.into(),
             },
             style: Style::default(),
             extra: vec![],
-        })
+        }
+    }
+
+    /// Create a simple translated text component in a const context
+    /// This is useful for static/const definitions where the full `translate` method cannot be used
+    pub const fn const_translate(key: &'static str) -> Self {
+        Self {
+            content: TextContent::Translate {
+                translate: Cow::Borrowed(key),
+                with: Vec::new(),
+            },
+            style: Style {
+                color: None,
+                bold: None,
+                italic: None,
+                underlined: None,
+                strikethrough: None,
+                obfuscated: None,
+                insertion: None,
+                click_event: None,
+                hover_event: None,
+                font: None,
+                shadow_color: None,
+            },
+            extra: Vec::new(),
+        }
+    }
+
+    /// Create a translated text component with a color in a const context
+    pub const fn const_translate_with_color(key: &'static str, color: color::Color) -> Self {
+        Self {
+            content: TextContent::Translate {
+                translate: Cow::Borrowed(key),
+                with: Vec::new(),
+            },
+            style: Style {
+                color: Some(color),
+                bold: None,
+                italic: None,
+                underlined: None,
+                strikethrough: None,
+                obfuscated: None,
+                insertion: None,
+                click_event: None,
+                hover_event: None,
+                font: None,
+                shadow_color: None,
+            },
+            extra: Vec::new(),
+        }
     }
 }

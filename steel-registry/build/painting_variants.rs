@@ -43,17 +43,41 @@ where
     }
 }
 
+fn parse_color(color_str: &str) -> TokenStream {
+    // Parse named colors at build time
+    match color_str {
+        "black" => quote! { Color::Named(NamedColor::Black) },
+        "dark_blue" => quote! { Color::Named(NamedColor::DarkBlue) },
+        "dark_green" => quote! { Color::Named(NamedColor::DarkGreen) },
+        "dark_aqua" => quote! { Color::Named(NamedColor::DarkAqua) },
+        "dark_red" => quote! { Color::Named(NamedColor::DarkRed) },
+        "dark_purple" => quote! { Color::Named(NamedColor::DarkPurple) },
+        "gold" => quote! { Color::Named(NamedColor::Gold) },
+        "gray" => quote! { Color::Named(NamedColor::Gray) },
+        "dark_gray" => quote! { Color::Named(NamedColor::DarkGray) },
+        "blue" => quote! { Color::Named(NamedColor::Blue) },
+        "green" => quote! { Color::Named(NamedColor::Green) },
+        "aqua" => quote! { Color::Named(NamedColor::Aqua) },
+        "red" => quote! { Color::Named(NamedColor::Red) },
+        "light_purple" => quote! { Color::Named(NamedColor::LightPurple) },
+        "yellow" => quote! { Color::Named(NamedColor::Yellow) },
+        "white" => quote! { Color::Named(NamedColor::White) },
+        _ => panic!("Unknown color: {}", color_str),
+    }
+}
+
 fn generate_text_component(component: &TextComponentJson) -> TokenStream {
     let translate = component.translate.as_str();
-    let color = generate_option(&component.color, |c| {
-        let color_str = c.as_str();
-        quote! { #color_str }
-    });
 
-    quote! {
-        TextComponent {
-            translate: #translate,
-            color: #color,
+    if let Some(color_str) = &component.color {
+        let color = parse_color(color_str.as_str());
+        // Generate code that creates a TextComponent with color
+        quote! {
+            TextComponent::const_translate_with_color(#translate, #color)
+        }
+    } else {
+        quote! {
+            TextComponent::const_translate(#translate)
         }
     }
 }
@@ -89,9 +113,11 @@ pub(crate) fn build() -> TokenStream {
 
     stream.extend(quote! {
         use crate::painting_variant::painting_variant::{
-            PaintingVariant, PaintingVariantRegistry, TextComponent,
+            PaintingVariant, PaintingVariantRegistry,
         };
         use steel_utils::ResourceLocation;
+        use steel_utils::text::TextComponent;
+        use steel_utils::text::color::{Color, NamedColor};
         use std::borrow::Cow;
     });
 

@@ -2,13 +2,13 @@ use std::{borrow::Cow, vec};
 
 use serde::{Deserialize, Serialize};
 
-use super::{TextComponent, TextComponentBase};
+use super::TextComponent;
 
 #[derive(Clone, Debug, Serialize, Deserialize, PartialEq, Eq, Hash)]
 #[serde(tag = "action", rename_all = "snake_case")]
 pub enum HoverEvent {
     /// Displays a tooltip with the given text.
-    ShowText { value: Vec<TextComponentBase> },
+    ShowText { value: Vec<TextComponent> },
     /// Shows an item.
     ShowItem {
         /// Resource identifier of the item
@@ -28,15 +28,13 @@ pub enum HoverEvent {
         uuid: Cow<'static, str>,
         /// Optional custom name for the entity
         #[serde(default, skip_serializing_if = "Option::is_none")]
-        name: Option<Vec<TextComponentBase>>,
+        name: Option<Vec<TextComponent>>,
     },
 }
 
 impl HoverEvent {
     pub fn show_text(text: TextComponent) -> Self {
-        Self::ShowText {
-            value: vec![text.0],
-        }
+        Self::ShowText { value: vec![text] }
     }
     pub fn show_entity<P: Into<Cow<'static, str>>>(
         uuid: P,
@@ -47,7 +45,7 @@ impl HoverEvent {
             id: kind.into(),
             uuid: uuid.into(),
             name: match name {
-                Some(name) => Some(vec![name.0]),
+                Some(name) => Some(vec![name]),
                 None => None,
             },
         }

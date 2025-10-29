@@ -5,7 +5,7 @@ use std::{
 
 use simdnbt::owned::NbtTag;
 use steel_macros::{PacketRead, PacketWrite};
-use steel_utils::{ResourceLocation, text::TextComponentBase};
+use steel_utils::{ResourceLocation, text::TextComponent};
 use uuid::Uuid;
 
 use crate::{
@@ -13,7 +13,7 @@ use crate::{
     packet_traits::{PrefixedRead, PrefixedWrite, ReadFrom, WriteTo},
 };
 
-impl WriteTo for TextComponentBase {
+impl WriteTo for TextComponent {
     fn write(&self, _: &mut impl Write) -> Result<()> {
         //TODO: Implement
         todo!()

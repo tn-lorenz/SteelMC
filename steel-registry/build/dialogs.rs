@@ -49,9 +49,7 @@ pub struct TextComponentJson {
 fn generate_text_component(component: &TextComponentJson) -> TokenStream {
     let translate = component.translate.as_str();
     quote! {
-        TextComponent {
-            translate: #translate,
-        }
+        TextComponent::const_translate(#translate)
     }
 }
 
@@ -96,9 +94,10 @@ pub(crate) fn build() -> TokenStream {
 
     stream.extend(quote! {
         use crate::dialog::dialog::{
-            Dialog, DialogList, ServerLinks, DialogRegistry, ExitAction, TextComponent,
+            Dialog, DialogList, ServerLinks, DialogRegistry, ExitAction,
         };
         use steel_utils::ResourceLocation;
+        use steel_utils::text::TextComponent;
     });
 
     // Generate static dialog definitions

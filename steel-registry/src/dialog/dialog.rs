@@ -1,5 +1,6 @@
 use std::collections::HashMap;
 use steel_utils::ResourceLocation;
+use steel_utils::text::TextComponent;
 
 use crate::RegistryExt;
 
@@ -38,12 +39,6 @@ pub struct ServerLinks {
 pub struct ExitAction {
     pub label: TextComponent,
     pub width: i32,
-}
-
-/// Represents a text component with translation key.
-#[derive(Debug)]
-pub struct TextComponent {
-    pub translate: &'static str,
 }
 
 pub type DialogRef = &'static Dialog;

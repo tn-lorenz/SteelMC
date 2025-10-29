@@ -1,5 +1,6 @@
 use std::collections::HashMap;
 use steel_utils::ResourceLocation;
+use steel_utils::text::TextComponent;
 
 use crate::RegistryExt;
 
@@ -11,12 +12,6 @@ pub struct JukeboxSong {
     pub description: TextComponent,
     pub length_in_seconds: f32,
     pub comparator_output: i32,
-}
-
-/// A simplified representation of a translatable text component.
-#[derive(Debug)]
-pub struct TextComponent {
-    pub translate: &'static str,
 }
 
 pub type JukeboxSongRef = &'static JukeboxSong;

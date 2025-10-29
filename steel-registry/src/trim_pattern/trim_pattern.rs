@@ -1,5 +1,6 @@
 use std::collections::HashMap;
 use steel_utils::ResourceLocation;
+use steel_utils::text::TextComponent;
 
 use crate::RegistryExt;
 
@@ -10,12 +11,6 @@ pub struct TrimPattern {
     pub asset_id: ResourceLocation,
     pub description: TextComponent,
     pub decal: bool,
-}
-
-/// A simplified representation of a translatable text component.
-#[derive(Debug)]
-pub struct TextComponent {
-    pub translate: &'static str,
 }
 
 pub type TrimPatternRef = &'static TrimPattern;

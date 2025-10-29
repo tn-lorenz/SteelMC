@@ -28,9 +28,7 @@ fn generate_resource_location(resource: &ResourceLocation) -> TokenStream {
 fn generate_text_component(component: &TextComponentJson) -> TokenStream {
     let translate = component.translate.as_str();
     quote! {
-        TextComponent {
-            translate: #translate,
-        }
+        TextComponent::const_translate(#translate)
     }
 }
 
@@ -64,9 +62,10 @@ pub(crate) fn build() -> TokenStream {
 
     stream.extend(quote! {
         use crate::jukebox_song::jukebox_song::{
-            JukeboxSong, JukeboxSongRegistry, TextComponent,
+            JukeboxSong, JukeboxSongRegistry,
         };
         use steel_utils::ResourceLocation;
+        use steel_utils::text::TextComponent;
         use std::borrow::Cow;
     });
 

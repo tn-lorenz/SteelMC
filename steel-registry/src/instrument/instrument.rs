@@ -1,5 +1,6 @@
 use std::collections::HashMap;
 use steel_utils::ResourceLocation;
+use steel_utils::text::TextComponent;
 
 use crate::RegistryExt;
 
@@ -12,12 +13,6 @@ pub struct Instrument {
     pub use_duration: f32,
     pub range: f32,
     pub description: TextComponent,
-}
-
-/// A simplified representation of a translatable text component.
-#[derive(Debug)]
-pub struct TextComponent {
-    pub translate: &'static str,
 }
 
 pub type InstrumentRef = &'static Instrument;

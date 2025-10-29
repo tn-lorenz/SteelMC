@@ -55,9 +55,10 @@ pub(crate) fn build() -> TokenStream {
 
     stream.extend(quote! {
         use crate::trim_pattern::trim_pattern::{
-            TrimPattern, TrimPatternRegistry, TextComponent,
+            TrimPattern, TrimPatternRegistry,
         };
         use steel_utils::ResourceLocation;
+        use steel_utils::text::TextComponent;
         use std::borrow::Cow;
     });
 
@@ -76,9 +77,7 @@ pub(crate) fn build() -> TokenStream {
             pub const #trim_pattern_ident: &TrimPattern = &TrimPattern {
                 key: #key,
                 asset_id: #asset_id,
-                description: TextComponent {
-                    translate: #translate,
-                },
+                description: TextComponent::const_translate(#translate),
                 decal: #decal,
             };
         });
