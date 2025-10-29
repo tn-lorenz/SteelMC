@@ -1,7 +1,6 @@
 use log::LevelFilter;
 use simplelog::{ColorChoice, Config, TermLogger, TerminalMode};
 use steel::SteelServer;
-use steel_registry::biome::biome;
 
 #[tokio::main]
 async fn main() {

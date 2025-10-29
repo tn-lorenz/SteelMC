@@ -1,6 +1,5 @@
-use std::borrow::Cow;
-
 use serde::{Deserialize, Serialize};
+use std::borrow::Cow;
 
 use crate::text::{locale::Locale, style::Style};
 

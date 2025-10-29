@@ -4,7 +4,6 @@ use heck::ToShoutySnakeCase;
 use proc_macro2::{Ident, Span, TokenStream};
 use quote::quote;
 use serde::Deserialize;
-use steel_utils::ResourceLocation;
 
 #[derive(Deserialize, Debug)]
 #[serde(tag = "type")]

@@ -23,3 +23,9 @@ impl CRegistryDataPacket {
         Self { registry, entries }
     }
 }
+
+impl RegistryEntry {
+    pub fn new(id: ResourceLocation, data: Option<NbtTag>) -> Self {
+        Self { id, data }
+    }
+}

@@ -36,25 +36,61 @@ pub struct BiomeCondition {
 pub type WolfVariantRef = &'static WolfVariant;
 
 pub struct WolfVariantRegistry {
-    wolf_variants: HashMap<ResourceLocation, WolfVariantRef>,
+    wolf_variants_by_id: Vec<WolfVariantRef>,
+    wolf_variants_by_key: HashMap<ResourceLocation, usize>,
     allows_registering: bool,
 }
 
 impl WolfVariantRegistry {
     pub fn new() -> Self {
         Self {
-            wolf_variants: HashMap::new(),
+            wolf_variants_by_id: Vec::new(),
+            wolf_variants_by_key: HashMap::new(),
             allows_registering: true,
         }
     }
 
-    pub fn register(&mut self, wolf_variant: WolfVariantRef) {
+    pub fn register(&mut self, wolf_variant: WolfVariantRef) -> usize {
         if !self.allows_registering {
             panic!("Cannot register wolf variants after the registry has been frozen");
         }
 
-        self.wolf_variants
-            .insert(wolf_variant.key.clone(), wolf_variant);
+        let id = self.wolf_variants_by_id.len();
+        self.wolf_variants_by_key
+            .insert(wolf_variant.key.clone(), id);
+        self.wolf_variants_by_id.push(wolf_variant);
+        id
+    }
+
+    pub fn by_id(&self, id: usize) -> Option<WolfVariantRef> {
+        self.wolf_variants_by_id.get(id).copied()
+    }
+
+    pub fn get_id(&self, wolf_variant: WolfVariantRef) -> &usize {
+        self.wolf_variants_by_key
+            .get(&wolf_variant.key)
+            .expect("Wolf variant not found")
+    }
+
+    pub fn by_key(&self, key: &ResourceLocation) -> Option<WolfVariantRef> {
+        self.wolf_variants_by_key
+            .get(key)
+            .and_then(|id| self.by_id(*id))
+    }
+
+    pub fn iter(&self) -> impl Iterator<Item = (usize, WolfVariantRef)> + '_ {
+        self.wolf_variants_by_id
+            .iter()
+            .enumerate()
+            .map(|(id, &variant)| (id, variant))
+    }
+
+    pub fn len(&self) -> usize {
+        self.wolf_variants_by_id.len()
+    }
+
+    pub fn is_empty(&self) -> bool {
+        self.wolf_variants_by_id.is_empty()
     }
 }
 

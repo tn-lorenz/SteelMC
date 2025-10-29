@@ -1572,6 +1572,7 @@ dependencies = [
  "num-traits",
  "serde",
  "serde_json",
+ "simdnbt",
  "tokio",
 ]
 

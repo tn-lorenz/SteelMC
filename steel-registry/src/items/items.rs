@@ -72,6 +72,21 @@ impl ItemRegistry {
     pub fn by_key(&self, key: &ResourceLocation) -> Option<ItemRef> {
         self.items_by_key.get(key).and_then(|id| self.by_id(*id))
     }
+
+    pub fn iter(&self) -> impl Iterator<Item = (usize, ItemRef)> + '_ {
+        self.items_by_id
+            .iter()
+            .enumerate()
+            .map(|(id, &item)| (id, item))
+    }
+
+    pub fn len(&self) -> usize {
+        self.items_by_id.len()
+    }
+
+    pub fn is_empty(&self) -> bool {
+        self.items_by_id.is_empty()
+    }
 }
 
 impl RegistryExt for ItemRegistry {

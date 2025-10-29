@@ -1,13 +1,6 @@
 use std::sync::Arc;
 
-use steel_registry::{
-    Registry,
-    blocks::blocks::BlockRegistry,
-    data_components::{DataComponentRegistry, vanilla_components},
-    items::items::ItemRegistry,
-    vanilla_blocks, vanilla_items,
-};
-use steel_utils::ResourceLocation;
+use steel_registry::Registry;
 use tokio::time::Instant;
 
 use crate::server::key_store::KeyStore;

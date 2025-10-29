@@ -42,25 +42,61 @@ pub struct BiomeCondition {
 pub type ChickenVariantRef = &'static ChickenVariant;
 
 pub struct ChickenVariantRegistry {
-    chicken_variants: HashMap<ResourceLocation, ChickenVariantRef>,
+    chicken_variants_by_id: Vec<ChickenVariantRef>,
+    chicken_variants_by_key: HashMap<ResourceLocation, usize>,
     allows_registering: bool,
 }
 
 impl ChickenVariantRegistry {
     pub fn new() -> Self {
         Self {
-            chicken_variants: HashMap::new(),
+            chicken_variants_by_id: Vec::new(),
+            chicken_variants_by_key: HashMap::new(),
             allows_registering: true,
         }
     }
 
-    pub fn register(&mut self, chicken_variant: ChickenVariantRef) {
+    pub fn register(&mut self, chicken_variant: ChickenVariantRef) -> usize {
         if !self.allows_registering {
             panic!("Cannot register chicken variants after the registry has been frozen");
         }
 
-        self.chicken_variants
-            .insert(chicken_variant.key.clone(), chicken_variant);
+        let id = self.chicken_variants_by_id.len();
+        self.chicken_variants_by_key
+            .insert(chicken_variant.key.clone(), id);
+        self.chicken_variants_by_id.push(chicken_variant);
+        id
+    }
+
+    pub fn by_id(&self, id: usize) -> Option<ChickenVariantRef> {
+        self.chicken_variants_by_id.get(id).copied()
+    }
+
+    pub fn get_id(&self, chicken_variant: ChickenVariantRef) -> &usize {
+        self.chicken_variants_by_key
+            .get(&chicken_variant.key)
+            .expect("Chicken variant not found")
+    }
+
+    pub fn by_key(&self, key: &ResourceLocation) -> Option<ChickenVariantRef> {
+        self.chicken_variants_by_key
+            .get(key)
+            .and_then(|id| self.by_id(*id))
+    }
+
+    pub fn iter(&self) -> impl Iterator<Item = (usize, ChickenVariantRef)> + '_ {
+        self.chicken_variants_by_id
+            .iter()
+            .enumerate()
+            .map(|(id, &variant)| (id, variant))
+    }
+
+    pub fn len(&self) -> usize {
+        self.chicken_variants_by_id.len()
+    }
+
+    pub fn is_empty(&self) -> bool {
+        self.chicken_variants_by_id.is_empty()
     }
 }
 

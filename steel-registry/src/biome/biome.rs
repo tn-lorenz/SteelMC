@@ -1,4 +1,3 @@
-use serde::{Deserialize, Serialize};
 use std::collections::HashMap;
 use steel_utils::ResourceLocation;
 
@@ -110,28 +109,60 @@ pub struct ParticleOptions {
 pub type BiomeRef = &'static Biome;
 
 pub struct BiomeRegistry {
-    biomes: HashMap<ResourceLocation, BiomeRef>,
+    biomes_by_id: Vec<BiomeRef>,
+    biomes_by_key: HashMap<ResourceLocation, usize>,
     allows_registering: bool,
 }
 
 impl BiomeRegistry {
     pub fn new() -> Self {
         Self {
-            biomes: HashMap::new(),
+            biomes_by_id: Vec::new(),
+            biomes_by_key: HashMap::new(),
             allows_registering: true,
         }
     }
 
-    pub fn register(&mut self, biome: BiomeRef, key: ResourceLocation) {
+    pub fn register(&mut self, biome: BiomeRef, key: ResourceLocation) -> usize {
         if !self.allows_registering {
             panic!("Cannot register biomes after the registry has been frozen");
         }
 
-        self.biomes.insert(key, biome);
+        let id = self.biomes_by_id.len();
+        self.biomes_by_key.insert(key, id);
+        self.biomes_by_id.push(biome);
+        id
+    }
+
+    pub fn by_id(&self, id: usize) -> Option<BiomeRef> {
+        self.biomes_by_id.get(id).copied()
+    }
+
+    pub fn get_id(&self, biome: BiomeRef) -> &usize {
+        self.biomes_by_key.get(&biome.key).expect("Biome not found")
     }
 
     pub fn get(&self, key: &ResourceLocation) -> Option<BiomeRef> {
-        self.biomes.get(key).copied()
+        self.biomes_by_key.get(key).and_then(|id| self.by_id(*id))
+    }
+
+    pub fn by_key(&self, key: &ResourceLocation) -> Option<BiomeRef> {
+        self.get(key)
+    }
+
+    pub fn iter(&self) -> impl Iterator<Item = (usize, BiomeRef)> + '_ {
+        self.biomes_by_id
+            .iter()
+            .enumerate()
+            .map(|(id, &biome)| (id, biome))
+    }
+
+    pub fn len(&self) -> usize {
+        self.biomes_by_id.len()
+    }
+
+    pub fn is_empty(&self) -> bool {
+        self.biomes_by_id.is_empty()
     }
 }
 

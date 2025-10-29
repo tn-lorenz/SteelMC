@@ -435,6 +435,9 @@ impl JavaTcpClient {
             SBoundConfiguration::SelectKnownPacks(packet) => {
                 config::handle_select_known_packs(self, packet).await
             }
+            SBoundConfiguration::FinishConfiguration(packet) => {
+                config::handle_finish_configuration(self, packet).await
+            }
         }
     }
 

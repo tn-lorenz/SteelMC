@@ -18,24 +18,60 @@ pub struct Instrument {
 pub type InstrumentRef = &'static Instrument;
 
 pub struct InstrumentRegistry {
-    instruments: HashMap<ResourceLocation, InstrumentRef>,
+    instruments_by_id: Vec<InstrumentRef>,
+    instruments_by_key: HashMap<ResourceLocation, usize>,
     allows_registering: bool,
 }
 
 impl InstrumentRegistry {
     pub fn new() -> Self {
         Self {
-            instruments: HashMap::new(),
+            instruments_by_id: Vec::new(),
+            instruments_by_key: HashMap::new(),
             allows_registering: true,
         }
     }
 
-    pub fn register(&mut self, instrument: InstrumentRef) {
+    pub fn register(&mut self, instrument: InstrumentRef) -> usize {
         if !self.allows_registering {
             panic!("Cannot register instruments after the registry has been frozen");
         }
 
-        self.instruments.insert(instrument.key.clone(), instrument);
+        let id = self.instruments_by_id.len();
+        self.instruments_by_key.insert(instrument.key.clone(), id);
+        self.instruments_by_id.push(instrument);
+        id
+    }
+
+    pub fn by_id(&self, id: usize) -> Option<InstrumentRef> {
+        self.instruments_by_id.get(id).copied()
+    }
+
+    pub fn get_id(&self, instrument: InstrumentRef) -> &usize {
+        self.instruments_by_key
+            .get(&instrument.key)
+            .expect("Instrument not found")
+    }
+
+    pub fn by_key(&self, key: &ResourceLocation) -> Option<InstrumentRef> {
+        self.instruments_by_key
+            .get(key)
+            .and_then(|id| self.by_id(*id))
+    }
+
+    pub fn iter(&self) -> impl Iterator<Item = (usize, InstrumentRef)> + '_ {
+        self.instruments_by_id
+            .iter()
+            .enumerate()
+            .map(|(id, &instrument)| (id, instrument))
+    }
+
+    pub fn len(&self) -> usize {
+        self.instruments_by_id.len()
+    }
+
+    pub fn is_empty(&self) -> bool {
+        self.instruments_by_id.is_empty()
     }
 }
 

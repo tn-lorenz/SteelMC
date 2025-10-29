@@ -7,6 +7,8 @@
 )]
 #![allow(internal_features)]
 
+use steel_utils::ResourceLocation;
+
 use crate::{
     banner_pattern::banner_pattern::BannerPatternRegistry,
     biome::biome::BiomeRegistry,
@@ -139,6 +141,39 @@ pub mod packets;
 pub trait RegistryExt {
     fn freeze(&mut self);
 }
+
+pub const BLOCKS_REGISTRY: ResourceLocation = ResourceLocation::vanilla_static("blocks");
+pub const ITEMS_REGISTRY: ResourceLocation = ResourceLocation::vanilla_static("items");
+pub const BIOMES_REGISTRY: ResourceLocation = ResourceLocation::vanilla_static("worldgen/biome");
+pub const CHAT_TYPE_REGISTRY: ResourceLocation = ResourceLocation::vanilla_static("chat_type");
+pub const TRIM_PATTERN_REGISTRY: ResourceLocation =
+    ResourceLocation::vanilla_static("trim_pattern");
+pub const TRIM_MATERIAL_REGISTRY: ResourceLocation =
+    ResourceLocation::vanilla_static("trim_material");
+pub const WOLF_VARIANT_REGISTRY: ResourceLocation =
+    ResourceLocation::vanilla_static("wolf_variant");
+pub const WOLF_SOUND_VARIANT_REGISTRY: ResourceLocation =
+    ResourceLocation::vanilla_static("wolf_sound_variant");
+pub const PIG_VARIANT_REGISTRY: ResourceLocation = ResourceLocation::vanilla_static("pig_variant");
+pub const FROG_VARIANT_REGISTRY: ResourceLocation =
+    ResourceLocation::vanilla_static("frog_variant");
+pub const CAT_VARIANT_REGISTRY: ResourceLocation = ResourceLocation::vanilla_static("cat_variant");
+pub const COW_VARIANT_REGISTRY: ResourceLocation = ResourceLocation::vanilla_static("cow_variant");
+pub const CHICKEN_VARIANT_REGISTRY: ResourceLocation =
+    ResourceLocation::vanilla_static("chicken_variant");
+pub const PAINTING_VARIANT_REGISTRY: ResourceLocation =
+    ResourceLocation::vanilla_static("painting_variant");
+pub const DIMENSION_TYPE_REGISTRY: ResourceLocation =
+    ResourceLocation::vanilla_static("dimension_type");
+pub const DAMAGE_TYPE_REGISTRY: ResourceLocation = ResourceLocation::vanilla_static("damage_type");
+pub const BANNER_PATTERN_REGISTRY: ResourceLocation =
+    ResourceLocation::vanilla_static("banner_pattern");
+//TODO: Add enchantments
+//pub const ENCHANTMENT_REGISTRY: ResourceLocation = ResourceLocation::vanilla_static("enchantment");
+pub const JUKEBOX_SONG_REGISTRY: ResourceLocation =
+    ResourceLocation::vanilla_static("jukebox_song");
+pub const INSTRUMENT_REGISTRY: ResourceLocation = ResourceLocation::vanilla_static("instrument");
+pub const DIALOG_REGISTRY: ResourceLocation = ResourceLocation::vanilla_static("dialog");
 
 pub struct Registry {
     pub blocks: BlockRegistry,
