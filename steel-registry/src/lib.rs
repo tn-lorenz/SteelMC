@@ -59,6 +59,10 @@ pub mod wolf_variant;
 pub mod vanilla_blocks;
 
 //#[rustfmt::skip]
+#[path = "generated/vanilla_block_tags.rs"]
+pub mod vanilla_block_tags;
+
+//#[rustfmt::skip]
 #[path = "generated/vanilla_banner_patterns.rs"]
 pub mod vanilla_banner_patterns;
 
@@ -203,6 +207,7 @@ impl Registry {
     pub fn new_vanilla() -> Self {
         let mut block_registry = BlockRegistry::new();
         vanilla_blocks::register_blocks(&mut block_registry);
+        vanilla_block_tags::register_block_tags(&mut block_registry);
 
         let mut data_component_registry = DataComponentRegistry::new();
         vanilla_components::register_vanilla_data_components(&mut data_component_registry);

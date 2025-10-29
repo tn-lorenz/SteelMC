@@ -1,6 +1,7 @@
 use log::LevelFilter;
 use simplelog::{ColorChoice, Config, TermLogger, TerminalMode};
 use steel::SteelServer;
+use steel_utils::ResourceLocation;
 
 #[tokio::main]
 async fn main() {
@@ -13,6 +14,19 @@ async fn main() {
     .unwrap();
 
     let mut server = SteelServer::new().await;
+
+    log::info!(
+        "{:?}",
+        server
+            .server
+            .registry
+            .blocks
+            .get_tag(&ResourceLocation::vanilla_static("fences"))
+            .unwrap()
+            .iter()
+            .map(|b| b.key.path.to_string())
+            .collect::<Vec<String>>()
+    );
 
     server.start().await;
 }

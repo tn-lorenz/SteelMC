@@ -2,6 +2,7 @@ use std::{fs, path::Path};
 
 mod banner_patterns;
 mod biomes;
+mod block_tags;
 mod blocks;
 mod cat_variants;
 mod chat_types;
@@ -30,6 +31,7 @@ pub fn main() {
     }
 
     let blocks = blocks::build().to_string();
+    let block_tags = block_tags::build().to_string();
     let items = items::build().to_string();
     let packets = packets::build().to_string();
     let banner_patterns = banner_patterns::build().to_string();
@@ -52,6 +54,7 @@ pub fn main() {
     let dialogs = dialogs::build().to_string();
 
     fs::write(format!("{}/vanilla_blocks.rs", OUT_DIR), blocks).unwrap();
+    fs::write(format!("{}/vanilla_block_tags.rs", OUT_DIR), block_tags).unwrap();
     fs::write(format!("{}/vanilla_items.rs", OUT_DIR), items).unwrap();
     fs::write(format!("{}/packets.rs", OUT_DIR), packets).unwrap();
     fs::write(

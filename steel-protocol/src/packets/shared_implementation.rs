@@ -14,8 +14,7 @@ use crate::{
 };
 
 impl WriteTo for TextComponent {
-    fn write(&self, _: &mut impl Write) -> Result<()> {
-        //TODO: Implement
+    fn write(&self, writer: &mut impl Write) -> Result<()> {
         todo!()
     }
 }

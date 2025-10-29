@@ -67,6 +67,7 @@ pub type BlockRef = &'static Block;
 pub struct BlockRegistry {
     blocks_by_id: Vec<BlockRef>,
     blocks_by_key: HashMap<ResourceLocation, usize>,
+    tags: HashMap<ResourceLocation, Vec<BlockRef>>,
     allows_registering: bool,
     pub state_to_block_lookup: Vec<BlockRef>,
     /// Maps state IDs to block IDs (parallel to state_to_block_lookup for O(1) lookup)
@@ -89,6 +90,7 @@ impl BlockRegistry {
         Self {
             blocks_by_id: Vec::new(),
             blocks_by_key: HashMap::new(),
+            tags: HashMap::new(),
             allows_registering: true,
             state_to_block_lookup: Vec::new(),
             state_to_block_id: Vec::new(),
@@ -293,6 +295,54 @@ impl BlockRegistry {
 
     pub fn is_empty(&self) -> bool {
         self.blocks_by_id.is_empty()
+    }
+
+    // Tag-related methods
+
+    /// Registers a tag with a list of block keys.
+    /// Block keys that don't exist in the registry are silently skipped.
+    pub fn register_tag(&mut self, tag: ResourceLocation, block_keys: &[&'static str]) {
+        if !self.allows_registering {
+            panic!("Cannot register tags after registry has been frozen");
+        }
+
+        let blocks: Vec<BlockRef> = block_keys
+            .iter()
+            .filter_map(|key| self.by_key(&ResourceLocation::vanilla_static(key)))
+            .collect();
+
+        self.tags.insert(tag, blocks);
+    }
+
+    /// Checks if a block is in a given tag.
+    pub fn is_in_tag(&self, block: BlockRef, tag: &ResourceLocation) -> bool {
+        self.tags
+            .get(tag)
+            .map(|blocks| {
+                blocks
+                    .iter()
+                    .any(|&b| std::ptr::eq(b as *const _, block as *const _))
+            })
+            .unwrap_or(false)
+    }
+
+    /// Gets all blocks in a tag.
+    pub fn get_tag(&self, tag: &ResourceLocation) -> Option<&[BlockRef]> {
+        self.tags.get(tag).map(|v| v.as_slice())
+    }
+
+    /// Iterates over all blocks in a tag.
+    pub fn iter_tag(&self, tag: &ResourceLocation) -> impl Iterator<Item = BlockRef> + '_ {
+        self.tags
+            .get(tag)
+            .map(|v| v.iter().copied())
+            .into_iter()
+            .flatten()
+    }
+
+    /// Gets all tag keys.
+    pub fn tag_keys(&self) -> impl Iterator<Item = &ResourceLocation> + '_ {
+        self.tags.keys()
     }
 }
 

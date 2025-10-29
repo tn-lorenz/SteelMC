@@ -20,6 +20,7 @@ use steel_registry::{
     WOLF_SOUND_VARIANT_REGISTRY, WOLF_VARIANT_REGISTRY,
 };
 use steel_utils::ResourceLocation;
+use steel_utils::text::TextComponent;
 
 use crate::network::java_tcp_client::JavaTcpClient;
 
