@@ -13,6 +13,7 @@ mod dialogs;
 mod dimension_types;
 mod frog_variants;
 mod instruments;
+mod item_tags;
 mod items;
 mod jukebox_songs;
 mod packets;
@@ -33,6 +34,7 @@ pub fn main() {
     let blocks = blocks::build().to_string();
     let block_tags = block_tags::build().to_string();
     let items = items::build().to_string();
+    let item_tags = item_tags::build().to_string();
     let packets = packets::build().to_string();
     let banner_patterns = banner_patterns::build().to_string();
     let biomes = biomes::build().to_string();
@@ -56,6 +58,7 @@ pub fn main() {
     fs::write(format!("{}/vanilla_blocks.rs", OUT_DIR), blocks).unwrap();
     fs::write(format!("{}/vanilla_block_tags.rs", OUT_DIR), block_tags).unwrap();
     fs::write(format!("{}/vanilla_items.rs", OUT_DIR), items).unwrap();
+    fs::write(format!("{}/vanilla_item_tags.rs", OUT_DIR), item_tags).unwrap();
     fs::write(format!("{}/packets.rs", OUT_DIR), packets).unwrap();
     fs::write(
         format!("{}/vanilla_banner_patterns.rs", OUT_DIR),

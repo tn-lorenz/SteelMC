@@ -1,5 +1,8 @@
-use scc::HashMap;
+use std::collections::HashMap;
+
+use steel_protocol::codec::VarInt;
 use steel_protocol::packets::common::c_custom_payload_packet::CCustomPayloadPacket;
+use steel_protocol::packets::common::c_update_tags_packet::CUpdateTagsPacket;
 use steel_protocol::packets::common::{
     s_client_information_packet::SClientInformationPacket,
     s_custom_payload_packet::SCustomPayloadPacket,
@@ -14,14 +17,13 @@ use steel_protocol::packets::configuration::s_select_known_packs::SSelectKnownPa
 use steel_protocol::packets::shared_implementation::KnownPack;
 use steel_protocol::utils::ConnectionProtocol;
 use steel_registry::{
-    BANNER_PATTERN_REGISTRY, BIOMES_REGISTRY, CAT_VARIANT_REGISTRY, CHAT_TYPE_REGISTRY,
-    CHICKEN_VARIANT_REGISTRY, COW_VARIANT_REGISTRY, DAMAGE_TYPE_REGISTRY, DIMENSION_TYPE_REGISTRY,
-    FROG_VARIANT_REGISTRY, INSTRUMENT_REGISTRY, JUKEBOX_SONG_REGISTRY, PAINTING_VARIANT_REGISTRY,
-    PIG_VARIANT_REGISTRY, TRIM_MATERIAL_REGISTRY, TRIM_PATTERN_REGISTRY,
-    WOLF_SOUND_VARIANT_REGISTRY, WOLF_VARIANT_REGISTRY,
+    BANNER_PATTERN_REGISTRY, BIOMES_REGISTRY, BLOCKS_REGISTRY, CAT_VARIANT_REGISTRY,
+    CHAT_TYPE_REGISTRY, CHICKEN_VARIANT_REGISTRY, COW_VARIANT_REGISTRY, DAMAGE_TYPE_REGISTRY,
+    DIMENSION_TYPE_REGISTRY, FROG_VARIANT_REGISTRY, INSTRUMENT_REGISTRY, ITEMS_REGISTRY,
+    JUKEBOX_SONG_REGISTRY, PAINTING_VARIANT_REGISTRY, PIG_VARIANT_REGISTRY, TRIM_MATERIAL_REGISTRY,
+    TRIM_PATTERN_REGISTRY, WOLF_SOUND_VARIANT_REGISTRY, WOLF_VARIANT_REGISTRY,
 };
 use steel_utils::ResourceLocation;
-use steel_utils::text::TextComponent;
 
 use crate::network::java_tcp_client::JavaTcpClient;
 
@@ -218,7 +220,38 @@ pub async fn handle_select_known_packs(tcp_client: &JavaTcpClient, packet: &SSel
             .await;
     }
 
-    //TODO: Send tags
+    // Send tags
+    let mut tags_by_registry: HashMap<ResourceLocation, HashMap<ResourceLocation, Vec<VarInt>>> =
+        HashMap::new();
+
+    // Build block tags
+    let mut block_tags: HashMap<ResourceLocation, Vec<VarInt>> = HashMap::new();
+    for tag_key in registry.blocks.tag_keys() {
+        let mut block_ids = Vec::new();
+        for block in registry.blocks.iter_tag(tag_key) {
+            let block_id = *registry.blocks.get_id(block);
+            block_ids.push(VarInt(block_id as i32));
+        }
+        block_tags.insert(tag_key.clone(), block_ids);
+    }
+    tags_by_registry.insert(BLOCKS_REGISTRY, block_tags);
+
+    // Build item tags
+    let mut item_tags: HashMap<ResourceLocation, Vec<VarInt>> = HashMap::new();
+    for tag_key in registry.items.tag_keys() {
+        let mut item_ids = Vec::new();
+        for item in registry.items.iter_tag(tag_key) {
+            let item_id = *registry.items.get_id(item);
+            item_ids.push(VarInt(item_id as i32));
+        }
+        item_tags.insert(tag_key.clone(), item_ids);
+    }
+    tags_by_registry.insert(ITEMS_REGISTRY, item_tags);
+
+    // Send the tags packet
+    tcp_client
+        .send_packet_now(CUpdateTagsPacket::new(tags_by_registry))
+        .await;
 
     // Finish configuration with CFinishConfigurationPacket
     tcp_client

@@ -31,6 +31,7 @@ pub type ItemRef = &'static Item;
 pub struct ItemRegistry {
     items_by_id: Vec<ItemRef>,
     items_by_key: HashMap<ResourceLocation, usize>,
+    tags: HashMap<ResourceLocation, Vec<ItemRef>>,
     allows_registering: bool,
 }
 
@@ -45,6 +46,7 @@ impl ItemRegistry {
         Self {
             items_by_id: Vec::new(),
             items_by_key: HashMap::new(),
+            tags: HashMap::new(),
             allows_registering: true,
         }
     }
@@ -86,6 +88,54 @@ impl ItemRegistry {
 
     pub fn is_empty(&self) -> bool {
         self.items_by_id.is_empty()
+    }
+
+    // Tag-related methods
+
+    /// Registers a tag with a list of item keys.
+    /// Item keys that don't exist in the registry are silently skipped.
+    pub fn register_tag(&mut self, tag: ResourceLocation, item_keys: &[&'static str]) {
+        if !self.allows_registering {
+            panic!("Cannot register tags after registry has been frozen");
+        }
+
+        let items: Vec<ItemRef> = item_keys
+            .iter()
+            .filter_map(|key| self.by_key(&ResourceLocation::vanilla_static(key)))
+            .collect();
+
+        self.tags.insert(tag, items);
+    }
+
+    /// Checks if an item is in a given tag.
+    pub fn is_in_tag(&self, item: ItemRef, tag: &ResourceLocation) -> bool {
+        self.tags
+            .get(tag)
+            .map(|items| {
+                items
+                    .iter()
+                    .any(|&i| std::ptr::eq(i as *const _, item as *const _))
+            })
+            .unwrap_or(false)
+    }
+
+    /// Gets all items in a tag.
+    pub fn get_tag(&self, tag: &ResourceLocation) -> Option<&[ItemRef]> {
+        self.tags.get(tag).map(|v| v.as_slice())
+    }
+
+    /// Iterates over all items in a tag.
+    pub fn iter_tag(&self, tag: &ResourceLocation) -> impl Iterator<Item = ItemRef> + '_ {
+        self.tags
+            .get(tag)
+            .map(|v| v.iter().copied())
+            .into_iter()
+            .flatten()
+    }
+
+    /// Gets all tag keys.
+    pub fn tag_keys(&self) -> impl Iterator<Item = &ResourceLocation> + '_ {
+        self.tags.keys()
     }
 }
 

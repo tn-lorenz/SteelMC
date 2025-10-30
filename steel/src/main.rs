@@ -20,8 +20,8 @@ async fn main() {
         server
             .server
             .registry
-            .blocks
-            .get_tag(&ResourceLocation::vanilla_static("fences"))
+            .items
+            .get_tag(&ResourceLocation::vanilla_static("swords"))
             .unwrap()
             .iter()
             .map(|b| b.key.path.to_string())

@@ -71,6 +71,10 @@ pub mod vanilla_banner_patterns;
 pub mod vanilla_items;
 
 //#[rustfmt::skip]
+#[path = "generated/vanilla_item_tags.rs"]
+pub mod vanilla_item_tags;
+
+//#[rustfmt::skip]
 #[path = "generated/vanilla_biomes.rs"]
 pub mod vanilla_biomes;
 
@@ -146,8 +150,8 @@ pub trait RegistryExt {
     fn freeze(&mut self);
 }
 
-pub const BLOCKS_REGISTRY: ResourceLocation = ResourceLocation::vanilla_static("blocks");
-pub const ITEMS_REGISTRY: ResourceLocation = ResourceLocation::vanilla_static("items");
+pub const BLOCKS_REGISTRY: ResourceLocation = ResourceLocation::vanilla_static("block");
+pub const ITEMS_REGISTRY: ResourceLocation = ResourceLocation::vanilla_static("item");
 pub const BIOMES_REGISTRY: ResourceLocation = ResourceLocation::vanilla_static("worldgen/biome");
 pub const CHAT_TYPE_REGISTRY: ResourceLocation = ResourceLocation::vanilla_static("chat_type");
 pub const TRIM_PATTERN_REGISTRY: ResourceLocation =
@@ -214,6 +218,7 @@ impl Registry {
 
         let mut item_registry = ItemRegistry::new();
         vanilla_items::register_items(&mut item_registry);
+        vanilla_item_tags::register_item_tags(&mut item_registry);
 
         let mut biome_registry = BiomeRegistry::new();
         vanilla_biomes::register_biomes(&mut biome_registry);
