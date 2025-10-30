@@ -17,9 +17,9 @@ use steel_protocol::{
             SBoundStatus,
         },
     },
-    utils::{ConnectionProtocol, PacketError},
+    utils::{ConnectionProtocol, EnqueuedPacket, PacketError},
 };
-use steel_utils::{FrontVec, text::TextComponent};
+use steel_utils::text::TextComponent;
 use steel_world::player::game_profile::GameProfile;
 use thiserror::Error;
 use tokio::{
@@ -53,11 +53,6 @@ pub enum EncryptionError {
     SharedWrongLength,
 }
 
-pub enum EnqueuedPacket {
-    RawData(FrontVec),
-    EncodedPacket(EncodedPacket),
-}
-
 #[derive(Clone, Debug)]
 pub enum ConnectionUpdate {
     EnableEncryption([u8; 16]),
@@ -75,13 +70,13 @@ pub struct JavaTcpClient {
     /// A collection of tasks associated with this client. The tasks await completion when removing the client.
     tasks: TaskTracker,
     /// A token to cancel the client's operations. Called when the connection is closed. Or client is removed.
-    cancel_token: CancellationToken,
+    pub cancel_token: CancellationToken,
 
     packet_receiver: Mutex<Option<Receiver<Arc<SBoundPacket>>>>,
     pub packet_recv_sender: Arc<Sender<Arc<SBoundPacket>>>,
 
     /// A queue of serialized packets to send to the network
-    outgoing_queue: mpsc::UnboundedSender<EnqueuedPacket>,
+    pub outgoing_queue: mpsc::UnboundedSender<EnqueuedPacket>,
     /// A queue of serialized packets to send to the network
     outgoing_queue_recv: Option<mpsc::UnboundedReceiver<EnqueuedPacket>>,
     /// The packet encoder for outgoing packets.

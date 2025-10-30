@@ -24,8 +24,11 @@ use steel_registry::{
     TRIM_PATTERN_REGISTRY, WOLF_SOUND_VARIANT_REGISTRY, WOLF_VARIANT_REGISTRY,
 };
 use steel_utils::ResourceLocation;
+use steel_world::player::player::Player;
+use steel_world::server::server::WorldServer;
 
 use crate::network::java_tcp_client::JavaTcpClient;
+use crate::server::server::Server;
 
 pub async fn handle_custom_payload(_tcp_client: &JavaTcpClient, packet: &SCustomPayloadPacket) {
     println!("Custom payload packet: {:?}", packet);
@@ -261,10 +264,15 @@ pub async fn handle_select_known_packs(tcp_client: &JavaTcpClient, packet: &SSel
 
 pub async fn handle_finish_configuration(
     tcp_client: &JavaTcpClient,
-    packet: &SFinishConfigurationPacket,
+    _packet: &SFinishConfigurationPacket,
 ) {
     tcp_client
         .connection_protocol
         .store(ConnectionProtocol::PLAY);
-    println!("Finish configuration packet: {:?}", packet);
+
+    tcp_client.server.add_player(Player::new(
+        tcp_client.gameprofile.lock().await.clone().unwrap(),
+        tcp_client.outgoing_queue.clone(),
+        tcp_client.cancel_token.clone(),
+    ));
 }

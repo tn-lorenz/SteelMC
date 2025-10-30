@@ -11,7 +11,7 @@ use serde::{Deserialize, Serialize};
 use crate::math::{vector2::Vector2, vector3::Vector3};
 
 // A raw block state id. Using the registry this id can be derived into a block and it's current properties.
-#[derive(Debug, Clone, Copy, PartialEq, Eq, Hash)]
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Hash, Default)]
 pub struct BlockStateId(pub u16);
 
 // A chunk position.

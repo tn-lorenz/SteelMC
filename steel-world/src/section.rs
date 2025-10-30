@@ -112,7 +112,7 @@ impl<V: Hash + Eq + Copy + Default + Debug, const DIM: usize> PalettedContainer<
     }
 }
 
-pub type BlockPalette = PalettedContainer<u16, 16>;
+pub type BlockPalette = PalettedContainer<BlockStateId, 16>;
 
 #[derive(Debug, Clone)]
 pub struct SubChunk {
@@ -141,9 +141,9 @@ impl ChunkSections {
 
         let section_index = relative_y / BlockPalette::SIZE;
         let relative_y = relative_y % BlockPalette::SIZE;
-        self.sections.get(section_index).map(|section| {
-            BlockStateId(section.block_states.get(relative_x, relative_y, relative_z))
-        })
+        self.sections
+            .get(section_index)
+            .map(|section| section.block_states.get(relative_x, relative_y, relative_z))
     }
 
     pub fn set_relative_block(
@@ -164,6 +164,6 @@ impl ChunkSections {
         );
         self.sections[section_index]
             .block_states
-            .set(relative_x, relative_y, relative_z, value.0);
+            .set(relative_x, relative_y, relative_z, value);
     }
 }

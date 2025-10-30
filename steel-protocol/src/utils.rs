@@ -5,8 +5,16 @@ use std::{
 };
 
 use aes::cipher::{BlockDecryptMut, BlockEncryptMut, BlockSizeUser, generic_array::GenericArray};
+use steel_utils::FrontVec;
 use thiserror::Error;
 use tokio::io::{AsyncRead, AsyncWrite, ReadBuf};
+
+use crate::packet_traits::EncodedPacket;
+
+pub enum EnqueuedPacket {
+    RawData(FrontVec),
+    EncodedPacket(EncodedPacket),
+}
 
 pub type Aes128Cfb8Enc = cfb8::Encryptor<aes::Aes128>;
 pub type Aes128Cfb8Dec = cfb8::Decryptor<aes::Aes128>;
