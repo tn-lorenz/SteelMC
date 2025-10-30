@@ -1,3 +1,4 @@
+use scc::HashMap;
 use steel_protocol::packets::common::c_custom_payload_packet::CCustomPayloadPacket;
 use steel_protocol::packets::common::{
     s_client_information_packet::SClientInformationPacket,
@@ -216,6 +217,8 @@ pub async fn handle_select_known_packs(tcp_client: &JavaTcpClient, packet: &SSel
             .send_packet_now(CRegistryDataPacket::new(registry_key, entries))
             .await;
     }
+
+    //TODO: Send tags
 
     // Finish configuration with CFinishConfigurationPacket
     tcp_client

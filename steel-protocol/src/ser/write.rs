@@ -1,6 +1,9 @@
-use std::io::{Result, Write};
+use std::{
+    collections::HashMap,
+    io::{Result, Write},
+};
 
-use crate::packet_traits::WriteTo;
+use crate::{codec::VarInt, packet_traits::WriteTo};
 
 impl WriteTo for bool {
     fn write(&self, writer: &mut impl Write) -> Result<()> {
@@ -72,6 +75,27 @@ impl<T: WriteTo, const N: usize> WriteTo for [T; N] {
     fn write(&self, writer: &mut impl Write) -> Result<()> {
         for i in self {
             i.write(writer)?;
+        }
+        Ok(())
+    }
+}
+
+impl<K: WriteTo, V: WriteTo> WriteTo for HashMap<K, V> {
+    fn write(&self, writer: &mut impl Write) -> Result<()> {
+        VarInt(self.len() as i32).write(writer)?;
+        for (key, value) in self {
+            key.write(writer)?;
+            value.write(writer)?;
+        }
+        Ok(())
+    }
+}
+
+impl<V: WriteTo> WriteTo for Vec<V> {
+    fn write(&self, writer: &mut impl Write) -> Result<()> {
+        VarInt(self.len() as i32).write(writer)?;
+        for v in self {
+            v.write(writer)?;
         }
         Ok(())
     }
