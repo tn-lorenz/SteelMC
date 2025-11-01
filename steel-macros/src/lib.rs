@@ -276,6 +276,20 @@ pub fn packet_write_derive(input: TokenStream) -> TokenStream {
                             }
                         }
                     },
+                    Some("option_byte") => {
+                        quote! {
+                            if let Some(value) = &self.#field_name {
+                                (*value as i8).write(writer)?;
+                            } else {
+                                (-1i8).write(writer)?;
+                            }
+                        }
+                    },
+                    Some("byte") => {
+                        quote! {
+                            (self.#field_name as i8).write(writer)?;
+                        }
+                    },
                     None => quote! {
                         self.#field_name.write(writer)?;
                     },

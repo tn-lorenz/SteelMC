@@ -1,6 +1,6 @@
 use std::io::Cursor;
 
-use steel_registry::packets::serverbound::{config, handshake, login, status};
+use steel_registry::packets::serverbound::{config, handshake, login, play, status};
 
 use crate::{
     packet_traits::PacketRead,
@@ -151,14 +151,24 @@ impl SBoundStatus {
 }
 
 #[derive(Clone, Debug)]
-pub enum SBoundPlay {}
+pub enum SBoundPlay {
+    CustomPayload(SCustomPayloadPacket),
+}
 
 impl SBoundPlay {
     pub fn from_raw_packet(raw_packet: RawPacket) -> Result<Self, PacketError> {
-        Err(PacketError::MalformedValue(format!(
-            "Invalid packet id: {}",
-            raw_packet.id
-        )))
+        let mut data = Cursor::new(raw_packet.payload);
+
+        match raw_packet.id {
+            play::SERVERBOUND_CUSTOM_PAYLOAD => {
+                let packet = SCustomPayloadPacket::read_packet(&mut data)?;
+                Ok(Self::CustomPayload(packet))
+            }
+            _ => Err(PacketError::MalformedValue(format!(
+                "Invalid packet id: {}",
+                raw_packet.id
+            ))),
+        }
     }
 }
 

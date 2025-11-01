@@ -22,6 +22,40 @@ pub struct ChunkPos(pub Vector2<i32>);
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Hash)]
 pub struct BlockPos(pub Vector3<i32>);
 
+impl BlockPos {
+    // Define constants as per the Java logic, but in Rust style
+    const PACKED_HORIZONTAL_LENGTH: u32 = 26;
+    const PACKED_Y_LENGTH: u32 = 64 - 2 * Self::PACKED_HORIZONTAL_LENGTH;
+    const X_OFFSET: u32 = Self::PACKED_Y_LENGTH + Self::PACKED_HORIZONTAL_LENGTH;
+    const Z_OFFSET: u32 = 0;
+    const PACKED_X_MASK: i64 = (1i64 << Self::PACKED_HORIZONTAL_LENGTH) - 1;
+    const PACKED_Y_MASK: i64 = (1i64 << Self::PACKED_Y_LENGTH) - 1;
+    const PACKED_Z_MASK: i64 = (1i64 << Self::PACKED_HORIZONTAL_LENGTH) - 1;
+
+    pub fn as_i64(&self) -> i64 {
+        let x = self.0.x as i64;
+        let y = self.0.y as i64;
+        let z = self.0.z as i64;
+        ((x & Self::PACKED_X_MASK) << Self::X_OFFSET)
+            | ((y & Self::PACKED_Y_MASK) << 0)
+            | ((z & Self::PACKED_Z_MASK) << Self::Z_OFFSET)
+    }
+}
+
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Hash)]
+pub enum GameType {
+    Survival = 0,
+    Creative = 1,
+    Adventure = 2,
+    Spectator = 3,
+}
+
+impl From<GameType> for i8 {
+    fn from(value: GameType) -> Self {
+        value as i8
+    }
+}
+
 #[derive(Debug, Clone, PartialEq, Eq, Hash)]
 pub struct ResourceLocation {
     pub namespace: Cow<'static, str>,

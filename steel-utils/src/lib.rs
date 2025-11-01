@@ -11,7 +11,7 @@ mod front_vec;
 pub mod locks;
 pub mod math;
 pub mod text;
-mod types;
+pub mod types;
 
 pub use front_vec::FrontVec;
 pub use types::BlockPos;

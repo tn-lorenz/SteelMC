@@ -40,6 +40,7 @@ use crate::{
     network::{
         config,
         login::{self},
+        play,
         status::{handle_ping_request, handle_status_request},
     },
     server::server::Server,
@@ -297,7 +298,7 @@ impl JavaTcpClient {
                                             id,
                                             err,
                                         );
-                                        cancel_token_clone.cancel();
+                                        //cancel_token_clone.cancel();
                                     }
                                 }
                             }
@@ -436,9 +437,12 @@ impl JavaTcpClient {
         }
     }
 
-    pub async fn handle_play(&self, _packet: &SBoundPlay) {
+    pub async fn handle_play(&self, packet: &SBoundPlay) {
         if !self.assert_protocol(ConnectionProtocol::PLAY) {
             return;
+        }
+        match packet {
+            SBoundPlay::CustomPayload(packet) => play::handle_custom_payload(self, packet),
         }
     }
 }
