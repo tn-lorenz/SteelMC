@@ -63,8 +63,8 @@ impl WorldServer for Server {
                 0,
                 64,
             ),
-            false,
+            true,
         ));
-        self.worlds[0].add_player(player);
+        self.worlds[0].add_player(Arc::new(player));
     }
 }

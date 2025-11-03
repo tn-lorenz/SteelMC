@@ -52,9 +52,7 @@ pub async fn handle_select_known_packs(tcp_client: &JavaTcpClient, packet: &SSel
 
     let registry_cache = tcp_client.server.registry_cache.clone();
     for encoded_packet in registry_cache.compressed_registry_packets.iter() {
-        tcp_client
-            .send_encoded_packet_now(encoded_packet)
-            .await;
+        tcp_client.send_encoded_packet_now(encoded_packet).await;
     }
 
     // Send the packet for tags
