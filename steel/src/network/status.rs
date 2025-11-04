@@ -8,7 +8,7 @@ pub async fn handle_status_request(tcp_client: &JavaTcpClient, _packet: SStatusR
     let res_packet = CStatusResponse::new(Status {
         description: STEEL_CONFIG.motd.clone(),
         players: Some(Players {
-            max: STEEL_CONFIG.max_players as i32,
+            max: STEEL_CONFIG.max_players.cast_signed(),
             //TODO: Get online players count
             online: 0,
             sample: vec![],
@@ -17,7 +17,7 @@ pub async fn handle_status_request(tcp_client: &JavaTcpClient, _packet: SStatusR
         favicon: STEEL_CONFIG.load_favicon(),
         version: Some(Version {
             name: MC_VERSION,
-            protocol: steel_registry::packets::CURRENT_MC_PROTOCOL as i32,
+            protocol: steel_registry::packets::CURRENT_MC_PROTOCOL.cast_signed(),
         }),
     });
     tcp_client.send_bare_packet_now(res_packet).await;

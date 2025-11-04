@@ -9,7 +9,14 @@ use steel_protocol::{
     },
     utils::ConnectionProtocol,
 };
-use steel_registry::*;
+use steel_registry::{
+    BANNER_PATTERN_REGISTRY, BIOMES_REGISTRY, BLOCKS_REGISTRY, CAT_VARIANT_REGISTRY,
+    CHAT_TYPE_REGISTRY, CHICKEN_VARIANT_REGISTRY, COW_VARIANT_REGISTRY, DAMAGE_TYPE_REGISTRY,
+    DIMENSION_TYPE_REGISTRY, FROG_VARIANT_REGISTRY, INSTRUMENT_REGISTRY, ITEMS_REGISTRY,
+    JUKEBOX_SONG_REGISTRY, PAINTING_VARIANT_REGISTRY, PIG_VARIANT_REGISTRY, Registry,
+    TRIM_MATERIAL_REGISTRY, TRIM_PATTERN_REGISTRY, WOLF_SOUND_VARIANT_REGISTRY,
+    WOLF_VARIANT_REGISTRY,
+};
 use steel_utils::ResourceLocation;
 
 use crate::STEEL_CONFIG;
@@ -89,7 +96,7 @@ impl RegistryCache {
 
             for block in registry.blocks.iter_tag(tag_key) {
                 let block_id = *registry.blocks.get_id(block);
-                block_ids.push(VarInt(block_id as i32));
+                block_ids.push(VarInt(i32::try_from(block_id).unwrap()));
             }
 
             block_tags.insert(tag_key.clone(), block_ids);
@@ -104,7 +111,7 @@ impl RegistryCache {
 
             for item in registry.items.iter_tag(tag_key) {
                 let item_id = *registry.items.get_id(item);
-                item_ids.push(VarInt(item_id as i32));
+                item_ids.push(VarInt(i32::try_from(item_id).unwrap()));
             }
 
             item_tags.insert(tag_key.clone(), item_ids);
@@ -125,12 +132,14 @@ pub async fn compress_packet<P: ClientPacket>(packet: P) -> Result<EncodedPacket
         EncodedPacket::from_packet(packet, compression_info, ConnectionProtocol::Config)
             .await
             .map_err(|_| {
-                log::error!("Failed to encode packet: {:?}", id);
+                log::error!("Failed to encode packet: {id:?}");
             })?;
 
     Ok(encoded_packet)
 }
 
+/// # Panics
+/// This function will panic if the compression fails.
 pub async fn build_compressed_packets(
     registry_packets: Vec<CRegistryData>,
     tags_packet: CUpdateTags,

@@ -23,6 +23,9 @@ pub struct SteelConfig {
 }
 
 impl SteelConfig {
+    #[must_use]
+    /// # Panics
+    /// This function will panic if the config file does not exist and the directory cannot be created, or if the config file cannot be read or written.
     pub fn load_or_create(path: &Path) -> Self {
         let config = if path.exists() {
             let config_str = fs::read_to_string(path).unwrap();
@@ -58,13 +61,13 @@ impl SteelConfig {
         if self.simulation_distance > 32 {
             return Err("Simulation distance must be less than or equal to 32".to_string());
         }
-        if self.compression.is_some() {
-            if self.compression.unwrap().threshold < 256 {
+        if let Some(compression) = self.compression {
+            if compression.threshold < 256 {
                 return Err(
                     "Compression threshold must be greater than or equal to 256".to_string()
                 );
             }
-            if self.compression.unwrap().level < 1 || self.compression.unwrap().level > 9 {
+            if compression.level < 1 || compression.level > 9 {
                 return Err("Compression level must be between 1 and 9".to_string());
             }
         }
@@ -73,6 +76,7 @@ impl SteelConfig {
 
     const PREFIX: &str = "data:image/png;base64,";
 
+    #[must_use]
     pub fn load_favicon(&self) -> Option<String> {
         if self.use_favicon {
             let path = Path::new(&self.favicon);

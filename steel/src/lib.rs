@@ -1,3 +1,13 @@
+#![warn(clippy::all, clippy::pedantic, clippy::cargo)]
+#![allow(
+    clippy::single_call_fn,
+    clippy::multiple_inherent_impl,
+    clippy::shadow_unrelated,
+    clippy::missing_errors_doc,
+    clippy::struct_excessive_bools,
+    clippy::needless_pass_by_value,
+    clippy::cargo_common_metadata
+)]
 use crate::{network::JavaTcpClient, server::Server, steel_config::SteelConfig};
 use std::{
     path::Path,
@@ -23,6 +33,8 @@ pub struct SteelServer {
 }
 
 impl SteelServer {
+    /// # Panics
+    /// This function will panic if the TCP listener fails to bind to the server address.
     pub async fn new() -> Self {
         log::info!("Starting Steel Server");
 
@@ -43,16 +55,18 @@ impl SteelServer {
 
         loop {
             select! {
-                _ = self.cancel_token.cancelled() => {
+                () = self.cancel_token.cancelled() => {
                     break;
                 }
                 accept_result = self.tcp_listener.accept() => {
-                    let (connection, address) = accept_result.unwrap();
+                    let Ok((connection, address)) = accept_result else {
+                        continue;
+                    };
                     if let Err(e) = connection.set_nodelay(true) {
                         log::warn!("Failed to set TCP_NODELAY: {e}");
                     }
                     let (java_client, sender_recv, net_reader) = JavaTcpClient::new(connection, address, self.client_id, self.cancel_token.child_token(), self.server.clone());
-                    self.client_id += 1;
+                    self.client_id = self.client_id.wrapping_add(1);
                     log::info!("Accepted connection from Java Edition: {address} (id {})", self.client_id);
 
                     let java_client = Arc::new(java_client);

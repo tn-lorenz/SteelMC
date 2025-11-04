@@ -18,6 +18,7 @@ use crate::{
     },
 };
 
+#[must_use]
 pub fn is_valid_player_name(name: &str) -> bool {
     (3..=16).contains(&name.len()) && name.chars().all(|c| c.is_ascii_alphanumeric() || c == '_')
 }
@@ -27,6 +28,8 @@ pub fn offline_uuid(username: &str) -> Result<Uuid, uuid::Error> {
 }
 
 impl JavaTcpClient {
+    /// # Panics
+    /// This function will panic if the player name converted to a UUID fails.
     pub async fn handle_hello(&self, packet: SHello) {
         if !is_valid_player_name(&packet.name) {
             self.kick(TextComponent::text("Invalid player name")).await;
@@ -53,7 +56,7 @@ impl JavaTcpClient {
             self.challenge.store(Some(challenge));
 
             self.send_bare_packet_now(CHello::new(
-                "".to_string(),
+                String::new(),
                 self.server.key_store.public_key_der.clone(),
                 challenge,
                 true,
@@ -72,10 +75,11 @@ impl JavaTcpClient {
 
     pub async fn handle_key(&self, packet: SKey) {
         let challenge = self.challenge.load();
-        if challenge.is_none() {
+
+        let Some(challenge) = challenge else {
             self.kick(TextComponent::text("No challenge found")).await;
-        }
-        let challenge = challenge.unwrap();
+            return;
+        };
 
         let Ok(challenge_response) = self
             .server
@@ -103,12 +107,11 @@ impl JavaTcpClient {
             return;
         };
 
-        let secret_key: [u8; 16] = match secret_key.try_into() {
-            Ok(secret_key) => secret_key,
-            Err(_) => {
-                self.kick(TextComponent::text("Invalid key")).await;
-                return;
-            }
+        let secret_key: [u8; 16] = if let Ok(secret_key) = secret_key.try_into() {
+            secret_key
+        } else {
+            self.kick(TextComponent::text("Invalid key")).await;
+            return;
         };
 
         let Ok(_) = self
@@ -160,10 +163,14 @@ impl JavaTcpClient {
         self.finish_login(profile).await;
     }
 
+    /// # Panics
+    /// This function will panic if the compression threshold cannot be converted to an i32. Should never happen.
     pub async fn finish_login(&self, profile: &GameProfile) {
         if let Some(compression) = STEEL_CONFIG.compression {
-            self.send_bare_packet_now(CLoginCompression::new(compression.threshold as i32))
-                .await;
+            self.send_bare_packet_now(CLoginCompression::new(
+                i32::try_from(compression.threshold).unwrap(),
+            ))
+            .await;
             self.compression_info.store(Some(compression));
             self.connection_updates
                 .send(ConnectionUpdate::EnableCompression(compression))

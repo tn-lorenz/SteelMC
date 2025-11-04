@@ -18,12 +18,12 @@ use crate::network::JavaTcpClient;
 const BRAND_PAYLOAD: &[u8; 5] = b"Steel";
 
 impl JavaTcpClient {
-    pub async fn handle_config_custom_payload(&self, packet: SCustomPayload) {
-        println!("Custom payload packet: {:?}", packet);
+    pub fn handle_config_custom_payload(&self, packet: SCustomPayload) {
+        println!("Custom payload packet: {packet:?}");
     }
 
-    pub async fn handle_client_information(&self, packet: SClientInformation) {
-        println!("Client information packet: {:?}", packet);
+    pub fn handle_client_information(&self, packet: SClientInformation) {
+        println!("Client information packet: {packet:?}");
     }
 
     pub async fn start_configuration(&self) {
@@ -42,7 +42,7 @@ impl JavaTcpClient {
     }
 
     pub async fn handle_select_known_packs(&self, packet: SSelectKnownPacks) {
-        println!("Select known packs packet: {:?}", packet);
+        println!("Select known packs packet: {packet:?}");
 
         let registry_cache = self.server.registry_cache.registry_packets.clone();
         for encoded_packet in registry_cache.iter() {
@@ -57,11 +57,17 @@ impl JavaTcpClient {
         self.send_bare_packet_now(CFinishConfiguration {}).await;
     }
 
+    /// # Panics
+    /// This function will panic if the game profile is empty, should be impossible at this point.
     pub async fn handle_finish_configuration(&self, _packet: SFinishConfiguration) {
         self.connection_protocol.store(ConnectionProtocol::Play);
 
         self.server.add_player(Player::new(
-            self.gameprofile.lock().await.clone().unwrap(),
+            self.gameprofile
+                .lock()
+                .await
+                .clone()
+                .expect("Game profile is empty"),
             self.outgoing_queue.clone(),
             self.cancel_token.clone(),
         ));
