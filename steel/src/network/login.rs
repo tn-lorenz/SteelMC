@@ -3,21 +3,16 @@ use rsa::Pkcs1v15Encrypt;
 use sha1::Sha1;
 use sha2::{Digest, Sha256};
 use steel_protocol::{
-    packets::login::{
-        c_hello_packet::CHelloPacket, c_login_compression_packet::CLoginCompressionPacket,
-        c_login_finished_packet::CLoginFinishedPacket, s_hello_packet::SHelloPacket,
-        s_key_packet::SKeyPacket, s_login_acknowledged_packet::SLoginAcknowledgedPacket,
-    },
+    packets::login::{CHello, CLoginCompression, CLoginFinished, SHello, SKey, SLoginAcknowledged},
     utils::ConnectionProtocol,
 };
 use steel_utils::text::TextComponent;
-use steel_world::player::game_profile::GameProfile;
+use steel_world::player::GameProfile;
 use uuid::Uuid;
 
 use crate::{
     STEEL_CONFIG,
     network::{
-        config,
         java_tcp_client::{ConnectionUpdate, JavaTcpClient},
         mojang_authentication::{AuthError, mojang_authenticate},
     },
@@ -30,131 +25,122 @@ pub fn is_valid_player_name(name: &str) -> bool {
 pub fn offline_uuid(username: &str) -> Result<Uuid, uuid::Error> {
     Uuid::from_slice(&Sha256::digest(username)[..16])
 }
-pub async fn handle_hello(tcp_client: &JavaTcpClient, packet: &SHelloPacket) {
-    if !is_valid_player_name(&packet.name) {
-        tcp_client
-            .kick(TextComponent::text("Invalid player name"))
-            .await;
-    }
 
-    let id = if STEEL_CONFIG.online_mode {
-        packet.profile_id
-    } else {
-        offline_uuid(&packet.name).expect("This is very not safe and bad")
-    };
+impl JavaTcpClient {
+    pub async fn handle_hello(&self, packet: SHello) {
+        if !is_valid_player_name(&packet.name) {
+            self.kick(TextComponent::text("Invalid player name")).await;
+        }
 
-    {
-        let mut gameprofile = tcp_client.gameprofile.lock().await;
-        *gameprofile = Some(GameProfile {
-            id,
-            name: packet.name.clone(),
-            properties: vec![],
-            profile_actions: None,
-        });
-    }
+        let id = if STEEL_CONFIG.online_mode {
+            packet.profile_id
+        } else {
+            offline_uuid(&packet.name).expect("This is very not safe and bad")
+        };
 
-    if STEEL_CONFIG.encryption {
-        let challenge: [u8; 4] = rand::random();
-        tcp_client.challenge.store(Some(challenge));
-
-        tcp_client
-            .send_packet_now(CHelloPacket::new(
-                "".to_string(),
-                tcp_client.server.key_store.public_key_der.clone(),
-                challenge,
-                true,
-            ))
-            .await;
-    } else {
-        finish_login(
-            tcp_client,
-            &GameProfile {
+        {
+            let mut gameprofile = self.gameprofile.lock().await;
+            *gameprofile = Some(GameProfile {
                 id,
                 name: packet.name.clone(),
                 properties: vec![],
                 profile_actions: None,
-            },
-        )
-        .await;
-    }
-}
+            });
+        }
 
-pub async fn handle_key(tcp_client: &JavaTcpClient, packet: &SKeyPacket) {
-    let challenge = tcp_client.challenge.load();
-    if challenge.is_none() {
-        tcp_client
-            .kick(TextComponent::text("No challenge found"))
+        if STEEL_CONFIG.encryption {
+            let challenge: [u8; 4] = rand::random();
+            self.challenge.store(Some(challenge));
+
+            self.send_bare_packet_now(CHello::new(
+                "".to_string(),
+                self.server.key_store.public_key_der.clone(),
+                challenge,
+                true,
+            ))
             .await;
-    }
-    let challenge = challenge.unwrap();
-
-    let Ok(challenge_response) = tcp_client
-        .server
-        .key_store
-        .private_key
-        .decrypt(Pkcs1v15Encrypt, &packet.challenge)
-    else {
-        tcp_client.kick(TextComponent::text("Invalid key")).await;
-        return;
-    };
-
-    if challenge_response != challenge {
-        tcp_client
-            .kick(TextComponent::text("Invalid challenge response"))
+        } else {
+            self.finish_login(&GameProfile {
+                id,
+                name: packet.name.clone(),
+                properties: vec![],
+                profile_actions: None,
+            })
             .await;
-        return;
+        }
     }
 
-    let Ok(secret_key) = tcp_client
-        .server
-        .key_store
-        .private_key
-        .decrypt(Pkcs1v15Encrypt, &packet.key)
-    else {
-        tcp_client.kick(TextComponent::text("Invalid key")).await;
-        return;
-    };
+    pub async fn handle_key(&self, packet: SKey) {
+        let challenge = self.challenge.load();
+        if challenge.is_none() {
+            self.kick(TextComponent::text("No challenge found")).await;
+        }
+        let challenge = challenge.unwrap();
 
-    let secret_key: [u8; 16] = match secret_key.try_into() {
-        Ok(secret_key) => secret_key,
-        Err(_) => {
-            tcp_client.kick(TextComponent::text("Invalid key")).await;
+        let Ok(challenge_response) = self
+            .server
+            .key_store
+            .private_key
+            .decrypt(Pkcs1v15Encrypt, &packet.challenge)
+        else {
+            self.kick(TextComponent::text("Invalid key")).await;
+            return;
+        };
+
+        if challenge_response != challenge {
+            self.kick(TextComponent::text("Invalid challenge response"))
+                .await;
             return;
         }
-    };
 
-    let Ok(_) = tcp_client
-        .connection_updates
-        .send(ConnectionUpdate::EnableEncryption(secret_key))
-    else {
-        tcp_client
-            .kick(TextComponent::text("Failed to send connection update"))
-            .await;
-        return;
-    };
+        let Ok(secret_key) = self
+            .server
+            .key_store
+            .private_key
+            .decrypt(Pkcs1v15Encrypt, &packet.key)
+        else {
+            self.kick(TextComponent::text("Invalid key")).await;
+            return;
+        };
 
-    tcp_client.connection_update_enabled.notified().await;
+        let secret_key: [u8; 16] = match secret_key.try_into() {
+            Ok(secret_key) => secret_key,
+            Err(_) => {
+                self.kick(TextComponent::text("Invalid key")).await;
+                return;
+            }
+        };
 
-    let mut gameprofile = tcp_client.gameprofile.lock().await;
+        let Ok(_) = self
+            .connection_updates
+            .send(ConnectionUpdate::EnableEncryption(secret_key))
+        else {
+            self.kick(TextComponent::text("Failed to send connection update"))
+                .await;
+            return;
+        };
 
-    let Some(profile) = gameprofile.as_mut() else {
-        tcp_client.kick(TextComponent::text("No GameProfile")).await;
-        return;
-    };
+        self.connection_updated.notified().await;
 
-    if STEEL_CONFIG.online_mode {
-        let server_hash = &Sha1::new()
-            .chain_update(secret_key)
-            .chain_update(&tcp_client.server.key_store.public_key_der)
-            .finalize();
+        let mut gameprofile = self.gameprofile.lock().await;
 
-        let server_hash = BigInt::from_signed_bytes_be(server_hash).to_str_radix(16);
+        let Some(profile) = gameprofile.as_mut() else {
+            self.kick(TextComponent::text("No GameProfile")).await;
+            return;
+        };
 
-        match mojang_authenticate(&profile.name, &server_hash).await {
-            Ok(new_profile) => *profile = new_profile,
-            Err(error) => {
-                tcp_client
-                    .kick(match error {
+        if STEEL_CONFIG.online_mode {
+            let server_hash = &Sha1::new()
+                .chain_update(secret_key)
+                .chain_update(&self.server.key_store.public_key_der)
+                .finalize();
+
+            let server_hash = BigInt::from_signed_bytes_be(server_hash).to_str_radix(16);
+
+            match mojang_authenticate(&profile.name, &server_hash).await {
+                Ok(new_profile) => *profile = new_profile,
+                Err(error) => {
+                    self.kick(match error {
                         AuthError::FailedResponse => {
                             TextComponent::translate("multiplayer.disconnect.authservers_down", [])
                         }
@@ -165,45 +151,38 @@ pub async fn handle_key(tcp_client: &JavaTcpClient, packet: &SKeyPacket) {
                         e => TextComponent::text(e.to_string()),
                     })
                     .await;
+                }
             }
         }
+
+        //TODO: Check for duplicate player UUID or name
+
+        self.finish_login(profile).await;
     }
 
-    //TODO: Check for duplicate player UUID or name
+    pub async fn finish_login(&self, profile: &GameProfile) {
+        if let Some(compression) = STEEL_CONFIG.compression {
+            self.send_bare_packet_now(CLoginCompression::new(compression.threshold as i32))
+                .await;
+            self.compression_info.store(Some(compression));
+            self.connection_updates
+                .send(ConnectionUpdate::EnableCompression(compression))
+                .unwrap();
+        }
 
-    finish_login(tcp_client, profile).await;
-}
+        //TODO: Here compression isn't awaited, if this becomes a problem in the future look here.
 
-pub async fn finish_login(tcp_client: &JavaTcpClient, profile: &GameProfile) {
-    if let Some(compression) = STEEL_CONFIG.compression {
-        tcp_client
-            .send_packet_now(CLoginCompressionPacket::new(compression.threshold as i32))
-            .await;
-        tcp_client.compression_info.store(Some(compression));
-        tcp_client
-            .connection_updates
-            .send(ConnectionUpdate::EnableCompression(compression))
-            .unwrap();
-    }
-    tcp_client.can_process_next_packet.notify_waiters();
-    tcp_client.connection_update_enabled.notified().await;
-
-    tcp_client
-        .send_packet_now(CLoginFinishedPacket::new(
+        self.send_bare_packet_now(CLoginFinished::new(
             profile.id,
             profile.name.clone(),
             profile.properties.clone(),
         ))
         .await;
-}
+    }
 
-pub async fn handle_login_acknowledged(
-    tcp_client: &JavaTcpClient,
-    _packet: &SLoginAcknowledgedPacket,
-) {
-    tcp_client
-        .connection_protocol
-        .store(ConnectionProtocol::CONFIGURATION);
+    pub async fn handle_login_acknowledged(&self, _packet: SLoginAcknowledged) {
+        self.connection_protocol.store(ConnectionProtocol::Config);
 
-    config::start_configuration(tcp_client).await;
+        self.start_configuration().await;
+    }
 }

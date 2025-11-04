@@ -1,1 +1,4 @@
-pub mod c_login_packet;
+mod c_login;
+
+pub use c_login::CLogin;
+pub use c_login::CommonPlayerSpawnInfo;
