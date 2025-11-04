@@ -240,7 +240,6 @@ impl JavaTcpClient {
                     }
                 }
             }
-            log::info!("outgoing_loop_exit")
         });
     }
 
@@ -250,11 +249,10 @@ impl JavaTcpClient {
     ) {
         let cancel_token = self.cancel_token.clone();
         let id = self.id;
-        let connection_protocol = self.connection_protocol.clone();
         let mut connection_updates_recv = self.connection_updates.subscribe();
         let connection_updated = self.connection_updated.clone();
 
-        let this = self.clone();
+        let self_clone = self.clone();
 
         self.tasks.spawn(async move {
             loop {
@@ -265,8 +263,8 @@ impl JavaTcpClient {
                     packet = net_reader.get_raw_packet() => {
                         match packet {
                             Ok(packet) => {
-                                log::info!("Received packet: {:?}, protocol: {:?}", packet.id, connection_protocol.load());
-                                if let Err(err) = this.process_packet(packet).await {
+                                //log::info!("Received packet: {:?}, protocol: {:?}", packet.id, connection_protocol.load());
+                                if let Err(err) = self_clone.process_packet(packet).await {
                                     log::warn!(
                                         "Failed to get packet from client {}: {}",
                                         id,
@@ -304,7 +302,6 @@ impl JavaTcpClient {
                     }
                 }
             }
-            log::info!("incoming_loop_exit");
         });
     }
 
