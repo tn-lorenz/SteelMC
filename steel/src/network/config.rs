@@ -8,7 +8,7 @@ use steel_protocol::packets::config::SSelectKnownPacks;
 use steel_protocol::packets::shared_implementation::KnownPack;
 use steel_protocol::utils::ConnectionProtocol;
 
-use steel_utils::ResourceLocation;
+use steel_utils::Identifier;
 use steel_world::player::Player;
 use steel_world::server::WorldServer;
 
@@ -28,7 +28,7 @@ impl JavaTcpClient {
 
     pub async fn start_configuration(&self) {
         self.send_bare_packet_now(CCustomPayload::new(
-            ResourceLocation::vanilla_static("brand"),
+            Identifier::vanilla_static("brand"),
             Box::new(*BRAND_PAYLOAD),
         ))
         .await;

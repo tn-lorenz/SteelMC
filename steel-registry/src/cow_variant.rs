@@ -1,13 +1,13 @@
 use std::collections::HashMap;
-use steel_utils::ResourceLocation;
+use steel_utils::Identifier;
 
 use crate::RegistryExt;
 
 /// Represents a full cow variant definition from a data pack JSON file.
 #[derive(Debug)]
 pub struct CowVariant {
-    pub key: ResourceLocation,
-    pub asset_id: ResourceLocation,
+    pub key: Identifier,
+    pub asset_id: Identifier,
     pub model: CowModelType,
     pub spawn_conditions: &'static [SpawnConditionEntry],
 }
@@ -39,7 +39,7 @@ pub type CowVariantRef = &'static CowVariant;
 
 pub struct CowVariantRegistry {
     cow_variants_by_id: Vec<CowVariantRef>,
-    cow_variants_by_key: HashMap<ResourceLocation, usize>,
+    cow_variants_by_key: HashMap<Identifier, usize>,
     allows_registering: bool,
 }
 
@@ -73,7 +73,7 @@ impl CowVariantRegistry {
             .expect("Cow variant not found")
     }
 
-    pub fn by_key(&self, key: &ResourceLocation) -> Option<CowVariantRef> {
+    pub fn by_key(&self, key: &Identifier) -> Option<CowVariantRef> {
         self.cow_variants_by_key
             .get(key)
             .and_then(|id| self.by_id(*id))

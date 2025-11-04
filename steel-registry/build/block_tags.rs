@@ -121,7 +121,7 @@ pub(crate) fn build() -> TokenStream {
 
     stream.extend(quote! {
         use crate::blocks::BlockRegistry;
-        use steel_utils::ResourceLocation;
+        use steel_utils::Identifier;
     });
 
     // Generate const arrays for each tag
@@ -149,7 +149,7 @@ pub(crate) fn build() -> TokenStream {
 
         register_stream.extend(quote! {
             registry.register_tag(
-                ResourceLocation::vanilla_static(#tag_key),
+                Identifier::vanilla_static(#tag_key),
                 #tag_ident
             );
         });

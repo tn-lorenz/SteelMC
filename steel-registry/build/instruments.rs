@@ -4,11 +4,11 @@ use heck::ToShoutySnakeCase;
 use proc_macro2::{Ident, Span, TokenStream};
 use quote::quote;
 use serde::Deserialize;
-use steel_utils::ResourceLocation;
+use steel_utils::Identifier;
 
 #[derive(Deserialize, Debug)]
 pub struct InstrumentJson {
-    sound_event: ResourceLocation,
+    sound_event: Identifier,
     use_duration: f32,
     range: f32,
     description: TextComponentJson,
@@ -19,10 +19,10 @@ pub struct TextComponentJson {
     translate: String,
 }
 
-fn generate_resource_location(resource: &ResourceLocation) -> TokenStream {
+fn generate_resource_location(resource: &Identifier) -> TokenStream {
     let namespace = resource.namespace.as_ref();
     let path = resource.path.as_ref();
-    quote! { ResourceLocation { namespace: Cow::Borrowed(#namespace), path: Cow::Borrowed(#path) } }
+    quote! { Identifier { namespace: Cow::Borrowed(#namespace), path: Cow::Borrowed(#path) } }
 }
 
 fn generate_text_component(component: &TextComponentJson) -> TokenStream {
@@ -64,7 +64,7 @@ pub(crate) fn build() -> TokenStream {
         use crate::instrument::{
             Instrument, InstrumentRegistry,
         };
-        use steel_utils::ResourceLocation;
+        use steel_utils::Identifier;
         use steel_utils::text::TextComponent;
         use std::borrow::Cow;
     });
@@ -75,7 +75,7 @@ pub(crate) fn build() -> TokenStream {
             Ident::new(&instrument_name.to_shouty_snake_case(), Span::call_site());
         let instrument_name_str = instrument_name.clone();
 
-        let key = quote! { ResourceLocation::vanilla_static(#instrument_name_str) };
+        let key = quote! { Identifier::vanilla_static(#instrument_name_str) };
         let sound_event = generate_resource_location(&instrument.sound_event);
         let use_duration = instrument.use_duration;
         let range = instrument.range;

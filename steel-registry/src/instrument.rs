@@ -1,5 +1,5 @@
 use std::collections::HashMap;
-use steel_utils::ResourceLocation;
+use steel_utils::Identifier;
 use steel_utils::text::TextComponent;
 
 use crate::RegistryExt;
@@ -8,8 +8,8 @@ use crate::RegistryExt;
 /// primarily used for Goat Horns.
 #[derive(Debug)]
 pub struct Instrument {
-    pub key: ResourceLocation,
-    pub sound_event: ResourceLocation,
+    pub key: Identifier,
+    pub sound_event: Identifier,
     pub use_duration: f32,
     pub range: f32,
     pub description: TextComponent,
@@ -19,7 +19,7 @@ pub type InstrumentRef = &'static Instrument;
 
 pub struct InstrumentRegistry {
     instruments_by_id: Vec<InstrumentRef>,
-    instruments_by_key: HashMap<ResourceLocation, usize>,
+    instruments_by_key: HashMap<Identifier, usize>,
     allows_registering: bool,
 }
 
@@ -53,7 +53,7 @@ impl InstrumentRegistry {
             .expect("Instrument not found")
     }
 
-    pub fn by_key(&self, key: &ResourceLocation) -> Option<InstrumentRef> {
+    pub fn by_key(&self, key: &Identifier) -> Option<InstrumentRef> {
         self.instruments_by_key
             .get(key)
             .and_then(|id| self.by_id(*id))

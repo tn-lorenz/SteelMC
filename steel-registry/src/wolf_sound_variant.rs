@@ -1,25 +1,25 @@
 use std::collections::HashMap;
-use steel_utils::ResourceLocation;
+use steel_utils::Identifier;
 
 use crate::RegistryExt;
 
 /// Represents a set of sounds for a wolf variant from a data pack JSON file.
 #[derive(Debug)]
 pub struct WolfSoundVariant {
-    pub key: ResourceLocation,
-    pub ambient_sound: ResourceLocation,
-    pub death_sound: ResourceLocation,
-    pub growl_sound: ResourceLocation,
-    pub hurt_sound: ResourceLocation,
-    pub pant_sound: ResourceLocation,
-    pub whine_sound: ResourceLocation,
+    pub key: Identifier,
+    pub ambient_sound: Identifier,
+    pub death_sound: Identifier,
+    pub growl_sound: Identifier,
+    pub hurt_sound: Identifier,
+    pub pant_sound: Identifier,
+    pub whine_sound: Identifier,
 }
 
 pub type WolfSoundVariantRef = &'static WolfSoundVariant;
 
 pub struct WolfSoundVariantRegistry {
     wolf_sound_variants_by_id: Vec<WolfSoundVariantRef>,
-    wolf_sound_variants_by_key: HashMap<ResourceLocation, usize>,
+    wolf_sound_variants_by_key: HashMap<Identifier, usize>,
     allows_registering: bool,
 }
 
@@ -54,7 +54,7 @@ impl WolfSoundVariantRegistry {
             .expect("Wolf sound variant not found")
     }
 
-    pub fn by_key(&self, key: &ResourceLocation) -> Option<WolfSoundVariantRef> {
+    pub fn by_key(&self, key: &Identifier) -> Option<WolfSoundVariantRef> {
         self.wolf_sound_variants_by_key
             .get(key)
             .and_then(|id| self.by_id(*id))

@@ -1,12 +1,12 @@
 use std::collections::HashMap;
 
-use steel_utils::ResourceLocation;
+use steel_utils::Identifier;
 
 use crate::{RegistryExt, blocks::BlockRef, data_components::DataComponentMap};
 
 #[derive(Debug)]
 pub struct Item {
-    pub key: ResourceLocation,
+    pub key: Identifier,
     pub components: DataComponentMap,
 }
 
@@ -20,7 +20,7 @@ impl Item {
 
     pub fn from_block_custom_name(_block: BlockRef, name: &'static str) -> Self {
         Self {
-            key: ResourceLocation::vanilla_static(name),
+            key: Identifier::vanilla_static(name),
             components: DataComponentMap::common_item_components(),
         }
     }
@@ -30,8 +30,8 @@ pub type ItemRef = &'static Item;
 
 pub struct ItemRegistry {
     items_by_id: Vec<ItemRef>,
-    items_by_key: HashMap<ResourceLocation, usize>,
-    tags: HashMap<ResourceLocation, Vec<ItemRef>>,
+    items_by_key: HashMap<Identifier, usize>,
+    tags: HashMap<Identifier, Vec<ItemRef>>,
     allows_registering: bool,
 }
 
@@ -71,7 +71,7 @@ impl ItemRegistry {
         self.items_by_key.get(&item.key).expect("Item not found")
     }
 
-    pub fn by_key(&self, key: &ResourceLocation) -> Option<ItemRef> {
+    pub fn by_key(&self, key: &Identifier) -> Option<ItemRef> {
         self.items_by_key.get(key).and_then(|id| self.by_id(*id))
     }
 
@@ -94,21 +94,21 @@ impl ItemRegistry {
 
     /// Registers a tag with a list of item keys.
     /// Item keys that don't exist in the registry are silently skipped.
-    pub fn register_tag(&mut self, tag: ResourceLocation, item_keys: &[&'static str]) {
+    pub fn register_tag(&mut self, tag: Identifier, item_keys: &[&'static str]) {
         if !self.allows_registering {
             panic!("Cannot register tags after registry has been frozen");
         }
 
         let items: Vec<ItemRef> = item_keys
             .iter()
-            .filter_map(|key| self.by_key(&ResourceLocation::vanilla_static(key)))
+            .filter_map(|key| self.by_key(&Identifier::vanilla_static(key)))
             .collect();
 
         self.tags.insert(tag, items);
     }
 
     /// Checks if an item is in a given tag.
-    pub fn is_in_tag(&self, item: ItemRef, tag: &ResourceLocation) -> bool {
+    pub fn is_in_tag(&self, item: ItemRef, tag: &Identifier) -> bool {
         self.tags
             .get(tag)
             .map(|items| {
@@ -120,12 +120,12 @@ impl ItemRegistry {
     }
 
     /// Gets all items in a tag.
-    pub fn get_tag(&self, tag: &ResourceLocation) -> Option<&[ItemRef]> {
+    pub fn get_tag(&self, tag: &Identifier) -> Option<&[ItemRef]> {
         self.tags.get(tag).map(|v| v.as_slice())
     }
 
     /// Iterates over all items in a tag.
-    pub fn iter_tag(&self, tag: &ResourceLocation) -> impl Iterator<Item = ItemRef> + '_ {
+    pub fn iter_tag(&self, tag: &Identifier) -> impl Iterator<Item = ItemRef> + '_ {
         self.tags
             .get(tag)
             .map(|v| v.iter().copied())
@@ -134,7 +134,7 @@ impl ItemRegistry {
     }
 
     /// Gets all tag keys.
-    pub fn tag_keys(&self) -> impl Iterator<Item = &ResourceLocation> + '_ {
+    pub fn tag_keys(&self) -> impl Iterator<Item = &Identifier> + '_ {
         self.tags.keys()
     }
 }

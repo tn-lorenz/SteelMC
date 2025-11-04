@@ -4,13 +4,13 @@ use heck::ToShoutySnakeCase;
 use proc_macro2::{Ident, Span, TokenStream};
 use quote::quote;
 use serde::Deserialize;
-use steel_utils::ResourceLocation;
+use steel_utils::Identifier;
 
 #[derive(Deserialize, Debug)]
 pub struct PaintingVariantJson {
     width: i32,
     height: i32,
-    asset_id: ResourceLocation,
+    asset_id: Identifier,
     #[serde(default)]
     title: Option<TextComponentJson>,
     #[serde(default)]
@@ -24,10 +24,10 @@ pub struct TextComponentJson {
     color: Option<String>,
 }
 
-fn generate_resource_location(resource: &ResourceLocation) -> TokenStream {
+fn generate_resource_location(resource: &Identifier) -> TokenStream {
     let namespace = resource.namespace.as_ref();
     let path = resource.path.as_ref();
-    quote! { ResourceLocation { namespace: Cow::Borrowed(#namespace), path: Cow::Borrowed(#path) } }
+    quote! { Identifier { namespace: Cow::Borrowed(#namespace), path: Cow::Borrowed(#path) } }
 }
 
 fn generate_option<T, F>(opt: &Option<T>, f: F) -> TokenStream
@@ -115,7 +115,7 @@ pub(crate) fn build() -> TokenStream {
         use crate::painting_variant::{
             PaintingVariant, PaintingVariantRegistry,
         };
-        use steel_utils::ResourceLocation;
+        use steel_utils::Identifier;
         use steel_utils::text::TextComponent;
         use steel_utils::text::color::{Color, NamedColor};
         use std::borrow::Cow;
@@ -129,7 +129,7 @@ pub(crate) fn build() -> TokenStream {
         );
         let painting_variant_name_str = painting_variant_name.clone();
 
-        let key = quote! { ResourceLocation::vanilla_static(#painting_variant_name_str) };
+        let key = quote! { Identifier::vanilla_static(#painting_variant_name_str) };
         let asset_id = generate_resource_location(&painting_variant.asset_id);
         let width = painting_variant.width;
         let height = painting_variant.height;

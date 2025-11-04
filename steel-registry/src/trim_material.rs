@@ -1,15 +1,15 @@
 use std::collections::HashMap;
-use steel_utils::ResourceLocation;
+use steel_utils::Identifier;
 
 use crate::RegistryExt;
 
 /// Represents an armor trim material definition from the data packs.
 #[derive(Debug)]
 pub struct TrimMaterial {
-    pub key: ResourceLocation,
+    pub key: Identifier,
     pub asset_name: String,
     pub description: StyledTextComponent,
-    pub override_armor_assets: HashMap<ResourceLocation, String>,
+    pub override_armor_assets: HashMap<Identifier, String>,
 }
 
 /// Represents a translatable text component that can also include styling.
@@ -23,7 +23,7 @@ pub type TrimMaterialRef = &'static TrimMaterial;
 
 pub struct TrimMaterialRegistry {
     trim_materials_by_id: Vec<TrimMaterialRef>,
-    trim_materials_by_key: HashMap<ResourceLocation, usize>,
+    trim_materials_by_key: HashMap<Identifier, usize>,
     allows_registering: bool,
 }
 
@@ -36,7 +36,7 @@ impl TrimMaterialRegistry {
         }
     }
 
-    pub fn register(&mut self, trim_material: TrimMaterialRef, key: ResourceLocation) -> usize {
+    pub fn register(&mut self, trim_material: TrimMaterialRef, key: Identifier) -> usize {
         if !self.allows_registering {
             panic!("Cannot register trim materials after the registry has been frozen");
         }
@@ -57,7 +57,7 @@ impl TrimMaterialRegistry {
             .expect("Trim material not found")
     }
 
-    pub fn by_key(&self, key: &ResourceLocation) -> Option<TrimMaterialRef> {
+    pub fn by_key(&self, key: &Identifier) -> Option<TrimMaterialRef> {
         self.trim_materials_by_key
             .get(key)
             .and_then(|id| self.by_id(*id))

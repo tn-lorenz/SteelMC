@@ -4,7 +4,7 @@ use heck::ToShoutySnakeCase;
 use proc_macro2::{Ident, Span, TokenStream};
 use quote::quote;
 use serde::Deserialize;
-use steel_utils::ResourceLocation;
+use steel_utils::Identifier;
 
 #[derive(Deserialize, Debug)]
 pub struct WolfVariantJson {
@@ -14,9 +14,9 @@ pub struct WolfVariantJson {
 
 #[derive(Deserialize, Debug)]
 pub struct WolfAssetInfo {
-    wild: ResourceLocation,
-    tame: ResourceLocation,
-    angry: ResourceLocation,
+    wild: Identifier,
+    tame: Identifier,
+    angry: Identifier,
 }
 
 #[derive(Deserialize, Debug)]
@@ -33,10 +33,10 @@ pub struct BiomeCondition {
     biomes: String,
 }
 
-fn generate_resource_location(resource: &ResourceLocation) -> TokenStream {
+fn generate_resource_location(resource: &Identifier) -> TokenStream {
     let namespace = resource.namespace.as_ref();
     let path = resource.path.as_ref();
-    quote! { ResourceLocation { namespace: Cow::Borrowed(#namespace), path: Cow::Borrowed(#path) } }
+    quote! { Identifier { namespace: Cow::Borrowed(#namespace), path: Cow::Borrowed(#path) } }
 }
 
 fn generate_option<T, F>(opt: &Option<T>, f: F) -> TokenStream
@@ -108,7 +108,7 @@ pub(crate) fn build() -> TokenStream {
         use crate::wolf_variant::{
             WolfVariant, WolfVariantRegistry, WolfAssetInfo, SpawnConditionEntry, BiomeCondition,
         };
-        use steel_utils::ResourceLocation;
+        use steel_utils::Identifier;
         use std::borrow::Cow;
     });
 
@@ -118,7 +118,7 @@ pub(crate) fn build() -> TokenStream {
             Ident::new(&wolf_variant_name.to_shouty_snake_case(), Span::call_site());
         let wolf_variant_name_str = wolf_variant_name.clone();
 
-        let key = quote! { ResourceLocation::vanilla_static(#wolf_variant_name_str) };
+        let key = quote! { Identifier::vanilla_static(#wolf_variant_name_str) };
         let wild = generate_resource_location(&wolf_variant.assets.wild);
         let tame = generate_resource_location(&wolf_variant.assets.tame);
         let angry = generate_resource_location(&wolf_variant.assets.angry);

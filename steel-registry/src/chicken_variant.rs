@@ -1,13 +1,13 @@
 use std::collections::HashMap;
-use steel_utils::ResourceLocation;
+use steel_utils::Identifier;
 
 use crate::RegistryExt;
 
 /// Represents a full chicken variant definition from a data pack JSON file.
 #[derive(Debug)]
 pub struct ChickenVariant {
-    pub key: ResourceLocation,
-    pub asset_id: ResourceLocation,
+    pub key: Identifier,
+    pub asset_id: Identifier,
     pub model: ChickenModelType,
     pub spawn_conditions: &'static [SpawnConditionEntry],
 }
@@ -38,7 +38,7 @@ pub type ChickenVariantRef = &'static ChickenVariant;
 
 pub struct ChickenVariantRegistry {
     chicken_variants_by_id: Vec<ChickenVariantRef>,
-    chicken_variants_by_key: HashMap<ResourceLocation, usize>,
+    chicken_variants_by_key: HashMap<Identifier, usize>,
     allows_registering: bool,
 }
 
@@ -73,7 +73,7 @@ impl ChickenVariantRegistry {
             .expect("Chicken variant not found")
     }
 
-    pub fn by_key(&self, key: &ResourceLocation) -> Option<ChickenVariantRef> {
+    pub fn by_key(&self, key: &Identifier) -> Option<ChickenVariantRef> {
         self.chicken_variants_by_key
             .get(key)
             .and_then(|id| self.by_id(*id))

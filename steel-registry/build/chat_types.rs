@@ -122,7 +122,7 @@ pub(crate) fn build() -> TokenStream {
         use crate::chat_type::{
             ChatType, ChatTypeDecoration, ChatTypeRegistry, ChatStyle,
         };
-        use steel_utils::ResourceLocation;
+        use steel_utils::Identifier;
     });
 
     // Generate static chat type definitions
@@ -130,7 +130,7 @@ pub(crate) fn build() -> TokenStream {
         let chat_type_ident = Ident::new(&chat_type_name.to_shouty_snake_case(), Span::call_site());
         let chat_type_name_str = chat_type_name.clone();
 
-        let key = quote! { ResourceLocation::vanilla_static(#chat_type_name_str) };
+        let key = quote! { Identifier::vanilla_static(#chat_type_name_str) };
         let chat = generate_chat_type_decoration(&chat_type.chat);
         let narration = generate_chat_type_decoration(&chat_type.narration);
 

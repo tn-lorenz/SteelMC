@@ -4,18 +4,18 @@ use heck::ToShoutySnakeCase;
 use proc_macro2::{Ident, Span, TokenStream};
 use quote::quote;
 use serde::Deserialize;
-use steel_utils::ResourceLocation;
+use steel_utils::Identifier;
 
 #[derive(Deserialize, Debug)]
 pub struct BannerPatternJson {
-    asset_id: ResourceLocation,
+    asset_id: Identifier,
     translation_key: String,
 }
 
-fn generate_resource_location(resource: &ResourceLocation) -> TokenStream {
+fn generate_resource_location(resource: &Identifier) -> TokenStream {
     let namespace = resource.namespace.as_ref();
     let path = resource.path.as_ref();
-    quote! { ResourceLocation { namespace: Cow::Borrowed(#namespace), path: Cow::Borrowed(#path) } }
+    quote! { Identifier { namespace: Cow::Borrowed(#namespace), path: Cow::Borrowed(#path) } }
 }
 
 pub(crate) fn build() -> TokenStream {
@@ -49,7 +49,7 @@ pub(crate) fn build() -> TokenStream {
 
     stream.extend(quote! {
         use crate::banner_pattern::{BannerPattern, BannerPatternRegistry};
-        use steel_utils::ResourceLocation;
+        use steel_utils::Identifier;
         use std::borrow::Cow;
     });
 
@@ -61,7 +61,7 @@ pub(crate) fn build() -> TokenStream {
         );
         let banner_pattern_name_str = banner_pattern_name.clone();
 
-        let key = quote! { ResourceLocation::vanilla_static(#banner_pattern_name_str) };
+        let key = quote! { Identifier::vanilla_static(#banner_pattern_name_str) };
         let asset_id = generate_resource_location(&banner_pattern.asset_id);
         let translation_key = banner_pattern.translation_key.as_str();
 

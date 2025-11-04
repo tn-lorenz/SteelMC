@@ -108,7 +108,7 @@ pub(crate) fn build() -> TokenStream {
         use crate::damage_type::{
             DamageType, DamageTypeRegistry, DamageScaling, DamageEffects, DeathMessageType,
         };
-        use steel_utils::ResourceLocation;
+        use steel_utils::Identifier;
     });
 
     // Generate static damage type definitions
@@ -117,7 +117,7 @@ pub(crate) fn build() -> TokenStream {
             Ident::new(&damage_type_name.to_shouty_snake_case(), Span::call_site());
         let damage_type_name_str = damage_type_name.clone();
 
-        let key = quote! { ResourceLocation::vanilla_static(#damage_type_name_str) };
+        let key = quote! { Identifier::vanilla_static(#damage_type_name_str) };
         let message_id = damage_type.message_id.as_str();
         let scaling = generate_damage_scaling(damage_type.scaling);
         let exhaustion = damage_type.exhaustion;

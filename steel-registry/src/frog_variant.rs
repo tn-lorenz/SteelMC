@@ -1,13 +1,13 @@
 use std::collections::HashMap;
-use steel_utils::ResourceLocation;
+use steel_utils::Identifier;
 
 use crate::RegistryExt;
 
 /// Represents a full frog variant definition from a data pack JSON file.
 #[derive(Debug)]
 pub struct FrogVariant {
-    pub key: ResourceLocation,
-    pub asset_id: ResourceLocation,
+    pub key: Identifier,
+    pub asset_id: Identifier,
     pub spawn_conditions: &'static [SpawnConditionEntry],
 }
 
@@ -29,7 +29,7 @@ pub type FrogVariantRef = &'static FrogVariant;
 
 pub struct FrogVariantRegistry {
     frog_variants_by_id: Vec<FrogVariantRef>,
-    frog_variants_by_key: HashMap<ResourceLocation, usize>,
+    frog_variants_by_key: HashMap<Identifier, usize>,
     allows_registering: bool,
 }
 
@@ -64,7 +64,7 @@ impl FrogVariantRegistry {
             .expect("Frog variant not found")
     }
 
-    pub fn by_key(&self, key: &ResourceLocation) -> Option<FrogVariantRef> {
+    pub fn by_key(&self, key: &Identifier) -> Option<FrogVariantRef> {
         self.frog_variants_by_key
             .get(key)
             .and_then(|id| self.by_id(*id))

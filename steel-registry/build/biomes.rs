@@ -4,7 +4,7 @@ use heck::ToShoutySnakeCase;
 use proc_macro2::{Ident, Span, TokenStream};
 use quote::quote;
 use serde::{Deserialize, Serialize};
-use steel_utils::ResourceLocation;
+use steel_utils::Identifier;
 
 #[derive(Serialize, Deserialize, Debug, Clone)]
 #[serde(untagged)]
@@ -44,10 +44,10 @@ pub struct BiomeJson {
     #[serde(default)]
     spawners: HashMap<String, Vec<SpawnerData>>,
     #[serde(default)]
-    spawn_costs: HashMap<ResourceLocation, SpawnCost>,
+    spawn_costs: HashMap<Identifier, SpawnCost>,
 
-    carvers: VecOrSingle<ResourceLocation>,
-    features: Vec<Vec<ResourceLocation>>,
+    carvers: VecOrSingle<Identifier>,
+    features: Vec<Vec<Identifier>>,
 }
 
 #[derive(Serialize, Deserialize, Debug)]
@@ -69,7 +69,7 @@ pub struct BiomeEffects {
     music: Option<Vec<WeightedMusic>>,
 
     #[serde(default)]
-    ambient_sound: Option<ResourceLocation>,
+    ambient_sound: Option<Identifier>,
     #[serde(default)]
     additions_sound: Option<AdditionsSound>,
     #[serde(default)]
@@ -81,7 +81,7 @@ pub struct BiomeEffects {
 #[derive(Serialize, Deserialize, Debug)]
 pub struct SpawnerData {
     #[serde(rename = "type")]
-    entity_type: ResourceLocation,
+    entity_type: Identifier,
     weight: i32,
     #[serde(rename = "minCount")]
     min_count: i32,
@@ -123,18 +123,18 @@ pub struct Music {
     replace_current_music: bool,
     max_delay: i32,
     min_delay: i32,
-    sound: ResourceLocation,
+    sound: Identifier,
 }
 
 #[derive(Serialize, Deserialize, Debug)]
 pub struct AdditionsSound {
-    sound: ResourceLocation,
+    sound: Identifier,
     tick_chance: f64,
 }
 
 #[derive(Serialize, Deserialize, Debug)]
 pub struct MoodSound {
-    sound: ResourceLocation,
+    sound: Identifier,
     tick_delay: i32,
     block_search_extent: i32,
     offset: f64,
@@ -149,7 +149,7 @@ pub struct Particle {
 #[derive(Serialize, Deserialize, Debug)]
 pub struct ParticleOptions {
     #[serde(rename = "type")]
-    particle_type: ResourceLocation,
+    particle_type: Identifier,
 }
 
 fn generate_temperature_modifier(modifier: &TemperatureModifier) -> TokenStream {
@@ -167,10 +167,10 @@ fn generate_grass_color_modifier(modifier: &GrassColorModifier) -> TokenStream {
     }
 }
 
-fn generate_resource_location(resource: &ResourceLocation) -> TokenStream {
+fn generate_resource_location(resource: &Identifier) -> TokenStream {
     let namespace = resource.namespace.as_ref();
     let path = resource.path.as_ref();
-    quote! { ResourceLocation { namespace: Cow::Borrowed(#namespace), path: Cow::Borrowed(#path) } }
+    quote! { Identifier { namespace: Cow::Borrowed(#namespace), path: Cow::Borrowed(#path) } }
 }
 
 fn generate_option<T, F>(opt: &Option<T>, f: F) -> TokenStream
@@ -208,7 +208,7 @@ where
     quote! { HashMap::from([#(#entries),*]) }
 }
 
-fn generate_hashmap_resource<T, F>(map: &HashMap<ResourceLocation, T>, f: F) -> TokenStream
+fn generate_hashmap_resource<T, F>(map: &HashMap<Identifier, T>, f: F) -> TokenStream
 where
     F: Fn(&T) -> TokenStream,
 {
@@ -387,7 +387,7 @@ pub(crate) fn build() -> TokenStream {
             SpawnerData, SpawnCost, WeightedMusic, Music, AdditionsSound, MoodSound,
             Particle, ParticleOptions,
         };
-        use steel_utils::ResourceLocation;
+        use steel_utils::Identifier;
         use std::borrow::Cow;
         use std::sync::LazyLock;
         use std::collections::HashMap;
@@ -398,7 +398,7 @@ pub(crate) fn build() -> TokenStream {
         let biome_ident = Ident::new(&biome_name.to_shouty_snake_case(), Span::call_site());
         let biome_name_str = biome_name.clone();
 
-        let key = quote! { ResourceLocation::vanilla_static(#biome_name_str) };
+        let key = quote! { Identifier::vanilla_static(#biome_name_str) };
         let has_precipitation = biome.has_precipitation;
         let temperature = biome.temperature;
         let downfall = biome.downfall;

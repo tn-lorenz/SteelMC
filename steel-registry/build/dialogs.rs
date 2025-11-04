@@ -95,7 +95,7 @@ pub(crate) fn build() -> TokenStream {
         use crate::dialog::{
             Dialog, DialogList, ServerLinks, DialogRegistry, ExitAction,
         };
-        use steel_utils::ResourceLocation;
+        use steel_utils::Identifier;
         use steel_utils::text::TextComponent;
     });
 
@@ -104,7 +104,7 @@ pub(crate) fn build() -> TokenStream {
         let dialog_ident = Ident::new(&dialog_name.to_shouty_snake_case(), Span::call_site());
         let dialog_name_str = dialog_name.clone();
 
-        let key = quote! { ResourceLocation::vanilla_static(#dialog_name_str) };
+        let key = quote! { Identifier::vanilla_static(#dialog_name_str) };
 
         match dialog {
             DialogJson::DialogList(dialog_list) => {
@@ -153,7 +153,7 @@ pub(crate) fn build() -> TokenStream {
     for (dialog_name, _) in &dialogs {
         let dialog_ident = Ident::new(&dialog_name.to_shouty_snake_case(), Span::call_site());
         let dialog_name_str = dialog_name.clone();
-        let key = quote! { ResourceLocation::vanilla_static(#dialog_name_str) };
+        let key = quote! { Identifier::vanilla_static(#dialog_name_str) };
         register_stream.extend(quote! {
             registry.register(#key, #dialog_ident);
         });

@@ -1,12 +1,12 @@
 use std::collections::HashMap;
-use steel_utils::ResourceLocation;
+use steel_utils::Identifier;
 
 use crate::RegistryExt;
 
 /// Represents a full wolf variant definition from a data pack JSON file.
 #[derive(Debug)]
 pub struct WolfVariant {
-    pub key: ResourceLocation,
+    pub key: Identifier,
     pub assets: WolfAssetInfo,
     pub spawn_conditions: &'static [SpawnConditionEntry],
 }
@@ -14,9 +14,9 @@ pub struct WolfVariant {
 /// Contains the texture resource locations for a wolf variant.
 #[derive(Debug)]
 pub struct WolfAssetInfo {
-    pub wild: ResourceLocation,
-    pub tame: ResourceLocation,
-    pub angry: ResourceLocation,
+    pub wild: Identifier,
+    pub tame: Identifier,
+    pub angry: Identifier,
 }
 
 /// A single entry in the list of spawn conditions.
@@ -37,7 +37,7 @@ pub type WolfVariantRef = &'static WolfVariant;
 
 pub struct WolfVariantRegistry {
     wolf_variants_by_id: Vec<WolfVariantRef>,
-    wolf_variants_by_key: HashMap<ResourceLocation, usize>,
+    wolf_variants_by_key: HashMap<Identifier, usize>,
     allows_registering: bool,
 }
 
@@ -72,7 +72,7 @@ impl WolfVariantRegistry {
             .expect("Wolf variant not found")
     }
 
-    pub fn by_key(&self, key: &ResourceLocation) -> Option<WolfVariantRef> {
+    pub fn by_key(&self, key: &Identifier) -> Option<WolfVariantRef> {
         self.wolf_variants_by_key
             .get(key)
             .and_then(|id| self.by_id(*id))

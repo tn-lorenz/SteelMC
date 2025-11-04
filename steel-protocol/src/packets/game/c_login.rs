@@ -1,6 +1,6 @@
 use steel_macros::{ClientPacket, WriteTo};
 use steel_registry::packets::play::C_LOGIN;
-use steel_utils::{BlockPos, ResourceLocation, types::GameType};
+use steel_utils::{BlockPos, Identifier, types::GameType};
 
 use crate::packet_traits::WriteTo;
 
@@ -8,7 +8,7 @@ use crate::packet_traits::WriteTo;
 pub struct CommonPlayerSpawnInfo {
     #[write_as(as = "var_int")]
     pub dimension_type: i32,
-    pub dimension: ResourceLocation,
+    pub dimension: Identifier,
     pub seed: i64,
     #[write_as(as = "byte")]
     pub game_type: GameType,
@@ -16,7 +16,7 @@ pub struct CommonPlayerSpawnInfo {
     pub previous_game_type: Option<GameType>,
     pub is_debug: bool,
     pub is_flat: bool,
-    pub last_death_location: Option<(ResourceLocation, BlockPos)>,
+    pub last_death_location: Option<(Identifier, BlockPos)>,
     #[write_as(as = "var_int")]
     pub portal_cooldown: i32,
     #[write_as(as = "var_int")]
@@ -30,7 +30,7 @@ impl WriteTo for BlockPos {
     }
 }
 
-impl WriteTo for (ResourceLocation, BlockPos) {
+impl WriteTo for (Identifier, BlockPos) {
     fn write(&self, writer: &mut impl std::io::Write) -> Result<(), std::io::Error> {
         self.0.write(writer)?;
         self.1.write(writer)?;
@@ -44,7 +44,7 @@ pub struct CLogin {
     pub player_id: i32,
     pub hardcore: bool,
     #[write_as(as = "vec")]
-    pub levels: Vec<ResourceLocation>,
+    pub levels: Vec<Identifier>,
     #[write_as(as = "var_int")]
     pub max_players: i32,
     #[write_as(as = "var_int")]

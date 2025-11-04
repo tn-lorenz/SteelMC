@@ -1,12 +1,12 @@
 use std::collections::HashMap;
-use steel_utils::ResourceLocation;
+use steel_utils::Identifier;
 
 use crate::RegistryExt;
 
 /// Represents a chat type definition from the data packs.
 #[derive(Debug)]
 pub struct ChatType {
-    pub key: ResourceLocation,
+    pub key: Identifier,
     pub chat: ChatTypeDecoration,
     pub narration: ChatTypeDecoration,
 }
@@ -34,7 +34,7 @@ pub type ChatTypeRef = &'static ChatType;
 
 pub struct ChatTypeRegistry {
     chat_types_by_id: Vec<ChatTypeRef>,
-    chat_types_by_key: HashMap<ResourceLocation, usize>,
+    chat_types_by_key: HashMap<Identifier, usize>,
     allows_registering: bool,
 }
 
@@ -68,7 +68,7 @@ impl ChatTypeRegistry {
             .expect("Chat type not found")
     }
 
-    pub fn by_key(&self, key: &ResourceLocation) -> Option<ChatTypeRef> {
+    pub fn by_key(&self, key: &Identifier) -> Option<ChatTypeRef> {
         self.chat_types_by_key
             .get(key)
             .and_then(|id| self.by_id(*id))

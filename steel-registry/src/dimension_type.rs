@@ -1,12 +1,12 @@
 use std::collections::HashMap;
-use steel_utils::ResourceLocation;
+use steel_utils::Identifier;
 
 use crate::RegistryExt;
 
 /// Represents a full dimension type definition from a data pack JSON file.
 #[derive(Debug)]
 pub struct DimensionType {
-    pub key: ResourceLocation,
+    pub key: Identifier,
     pub fixed_time: Option<i64>,
     pub has_skylight: bool,
     pub has_ceiling: bool,
@@ -19,7 +19,7 @@ pub struct DimensionType {
     pub height: i32,
     pub logical_height: i32,
     pub infiniburn: &'static str,
-    pub effects: ResourceLocation,
+    pub effects: Identifier,
     pub ambient_light: f32,
     pub cloud_height: Option<i32>,
     pub piglin_safe: bool,
@@ -43,7 +43,7 @@ pub type DimensionTypeRef = &'static DimensionType;
 
 pub struct DimensionTypeRegistry {
     dimension_types_by_id: Vec<DimensionTypeRef>,
-    dimension_types_by_key: HashMap<ResourceLocation, usize>,
+    dimension_types_by_key: HashMap<Identifier, usize>,
     allows_registering: bool,
 }
 
@@ -78,7 +78,7 @@ impl DimensionTypeRegistry {
             .expect("Dimension type not found")
     }
 
-    pub fn by_key(&self, key: &ResourceLocation) -> Option<DimensionTypeRef> {
+    pub fn by_key(&self, key: &Identifier) -> Option<DimensionTypeRef> {
         self.dimension_types_by_key
             .get(key)
             .and_then(|id| self.by_id(*id))

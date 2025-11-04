@@ -304,7 +304,7 @@ pub(crate) fn build() -> TokenStream {
             blocks::{behaviour::{BlockBehaviourProperties, PushReaction}, Block, offset, BlockRegistry},
             blocks::properties::{self, BlockStateProperties, NoteBlockInstrument}
         };
-        use steel_utils::ResourceLocation;
+        use steel_utils::Identifier;
     });
 
     // Create default properties for comparison
@@ -332,7 +332,7 @@ pub(crate) fn build() -> TokenStream {
 
         stream.extend(quote! {
             pub const #block_name: &Block = &Block::new(
-                ResourceLocation::vanilla_static(#block_name_str),
+                Identifier::vanilla_static(#block_name_str),
                 BlockBehaviourProperties::new()#(#builder_calls)*,
                 &[
                     #(#properties),*

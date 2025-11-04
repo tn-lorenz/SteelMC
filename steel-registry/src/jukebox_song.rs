@@ -1,5 +1,5 @@
 use std::collections::HashMap;
-use steel_utils::ResourceLocation;
+use steel_utils::Identifier;
 use steel_utils::text::TextComponent;
 
 use crate::RegistryExt;
@@ -7,8 +7,8 @@ use crate::RegistryExt;
 /// Represents a jukebox song definition from a data pack JSON file.
 #[derive(Debug)]
 pub struct JukeboxSong {
-    pub key: ResourceLocation,
-    pub sound_event: ResourceLocation,
+    pub key: Identifier,
+    pub sound_event: Identifier,
     pub description: TextComponent,
     pub length_in_seconds: f32,
     pub comparator_output: i32,
@@ -18,7 +18,7 @@ pub type JukeboxSongRef = &'static JukeboxSong;
 
 pub struct JukeboxSongRegistry {
     jukebox_songs_by_id: Vec<JukeboxSongRef>,
-    jukebox_songs_by_key: HashMap<ResourceLocation, usize>,
+    jukebox_songs_by_key: HashMap<Identifier, usize>,
     allows_registering: bool,
 }
 
@@ -53,7 +53,7 @@ impl JukeboxSongRegistry {
             .expect("Jukebox song not found")
     }
 
-    pub fn by_key(&self, key: &ResourceLocation) -> Option<JukeboxSongRef> {
+    pub fn by_key(&self, key: &Identifier) -> Option<JukeboxSongRef> {
         self.jukebox_songs_by_key
             .get(key)
             .and_then(|id| self.by_id(*id))

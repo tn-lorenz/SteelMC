@@ -5,7 +5,7 @@ use std::{
 
 use simdnbt::owned::NbtTag;
 use steel_macros::{ReadFrom, WriteTo};
-use steel_utils::{ResourceLocation, text::TextComponent};
+use steel_utils::{Identifier, text::TextComponent};
 use uuid::Uuid;
 
 use crate::{
@@ -40,14 +40,14 @@ impl WriteTo for Uuid {
     }
 }
 
-impl ReadFrom for ResourceLocation {
+impl ReadFrom for Identifier {
     fn read(data: &mut impl io::Read) -> Result<Self> {
-        ResourceLocation::from_str(&String::read_prefixed::<VarInt>(data)?)
+        Identifier::from_str(&String::read_prefixed::<VarInt>(data)?)
             .map_err(|e| std::io::Error::other(e.to_string()))
     }
 }
 
-impl WriteTo for ResourceLocation {
+impl WriteTo for Identifier {
     fn write(&self, writer: &mut impl Write) -> Result<()> {
         self.to_string().write_prefixed::<VarInt>(writer)?;
         Ok(())

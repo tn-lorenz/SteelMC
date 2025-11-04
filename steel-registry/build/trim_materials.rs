@@ -4,14 +4,14 @@ use heck::ToShoutySnakeCase;
 use proc_macro2::{Ident, Span, TokenStream};
 use quote::quote;
 use serde::Deserialize;
-use steel_utils::ResourceLocation;
+use steel_utils::Identifier;
 
 #[derive(Deserialize, Debug)]
 pub struct TrimMaterialJson {
     asset_name: String,
     description: StyledTextComponent,
     #[serde(default)]
-    override_armor_assets: HashMap<ResourceLocation, String>,
+    override_armor_assets: HashMap<Identifier, String>,
 }
 
 #[derive(Deserialize, Debug)]
@@ -21,10 +21,10 @@ pub struct StyledTextComponent {
     color: Option<String>,
 }
 
-fn generate_resource_location(resource: &ResourceLocation) -> TokenStream {
+fn generate_resource_location(resource: &Identifier) -> TokenStream {
     let namespace = resource.namespace.as_ref();
     let path = resource.path.as_ref();
-    quote! { ResourceLocation { namespace: Cow::Borrowed(#namespace), path: Cow::Borrowed(#path) } }
+    quote! { Identifier { namespace: Cow::Borrowed(#namespace), path: Cow::Borrowed(#path) } }
 }
 
 fn generate_option<T, F>(opt: &Option<T>, f: F) -> TokenStream
@@ -40,7 +40,7 @@ where
     }
 }
 
-fn generate_hashmap_resource_string(map: &HashMap<ResourceLocation, String>) -> TokenStream {
+fn generate_hashmap_resource_string(map: &HashMap<Identifier, String>) -> TokenStream {
     let entries: Vec<_> = map
         .iter()
         .map(|(k, v)| {
@@ -83,7 +83,7 @@ pub(crate) fn build() -> TokenStream {
         use crate::trim_material::{
             TrimMaterial, TrimMaterialRegistry, StyledTextComponent,
         };
-        use steel_utils::ResourceLocation;
+        use steel_utils::Identifier;
         use std::borrow::Cow;
         use std::sync::LazyLock;
         use std::collections::HashMap;
@@ -97,7 +97,7 @@ pub(crate) fn build() -> TokenStream {
         );
         let trim_material_name_str = trim_material_name.clone();
 
-        let key = quote! { ResourceLocation::vanilla_static(#trim_material_name_str) };
+        let key = quote! { Identifier::vanilla_static(#trim_material_name_str) };
         let asset_name = &trim_material.asset_name;
         let translate = &trim_material.description.translate;
         let color = generate_option(&trim_material.description.color, |s| {

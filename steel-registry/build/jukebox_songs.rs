@@ -4,11 +4,11 @@ use heck::ToShoutySnakeCase;
 use proc_macro2::{Ident, Span, TokenStream};
 use quote::quote;
 use serde::Deserialize;
-use steel_utils::ResourceLocation;
+use steel_utils::Identifier;
 
 #[derive(Deserialize, Debug)]
 pub struct JukeboxSongJson {
-    sound_event: ResourceLocation,
+    sound_event: Identifier,
     description: TextComponentJson,
     length_in_seconds: f32,
     comparator_output: i32,
@@ -19,10 +19,10 @@ pub struct TextComponentJson {
     translate: String,
 }
 
-fn generate_resource_location(resource: &ResourceLocation) -> TokenStream {
+fn generate_resource_location(resource: &Identifier) -> TokenStream {
     let namespace = resource.namespace.as_ref();
     let path = resource.path.as_ref();
-    quote! { ResourceLocation { namespace: Cow::Borrowed(#namespace), path: Cow::Borrowed(#path) } }
+    quote! { Identifier { namespace: Cow::Borrowed(#namespace), path: Cow::Borrowed(#path) } }
 }
 
 fn generate_text_component(component: &TextComponentJson) -> TokenStream {
@@ -64,7 +64,7 @@ pub(crate) fn build() -> TokenStream {
         use crate::jukebox_song::{
             JukeboxSong, JukeboxSongRegistry,
         };
-        use steel_utils::ResourceLocation;
+        use steel_utils::Identifier;
         use steel_utils::text::TextComponent;
         use std::borrow::Cow;
     });
@@ -82,7 +82,7 @@ pub(crate) fn build() -> TokenStream {
         };
         let jukebox_song_name_str = jukebox_song_name.clone();
 
-        let key = quote! { ResourceLocation::vanilla_static(#jukebox_song_name_str) };
+        let key = quote! { Identifier::vanilla_static(#jukebox_song_name_str) };
         let sound_event = generate_resource_location(&jukebox_song.sound_event);
         let description = generate_text_component(&jukebox_song.description);
         let length_in_seconds = jukebox_song.length_in_seconds;

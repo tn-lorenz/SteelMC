@@ -1,5 +1,5 @@
 use std::collections::HashMap;
-use steel_utils::ResourceLocation;
+use steel_utils::Identifier;
 use steel_utils::text::TextComponent;
 
 use crate::RegistryExt;
@@ -7,10 +7,10 @@ use crate::RegistryExt;
 /// Represents a painting variant definition from a data pack JSON file.
 #[derive(Debug)]
 pub struct PaintingVariant {
-    pub key: ResourceLocation,
+    pub key: Identifier,
     pub width: i32,
     pub height: i32,
-    pub asset_id: ResourceLocation,
+    pub asset_id: Identifier,
     pub title: Option<TextComponent>,
     pub author: Option<TextComponent>,
 }
@@ -19,7 +19,7 @@ pub type PaintingVariantRef = &'static PaintingVariant;
 
 pub struct PaintingVariantRegistry {
     painting_variants_by_id: Vec<PaintingVariantRef>,
-    painting_variants_by_key: HashMap<ResourceLocation, usize>,
+    painting_variants_by_key: HashMap<Identifier, usize>,
     allows_registering: bool,
 }
 
@@ -54,7 +54,7 @@ impl PaintingVariantRegistry {
             .expect("Painting variant not found")
     }
 
-    pub fn by_key(&self, key: &ResourceLocation) -> Option<PaintingVariantRef> {
+    pub fn by_key(&self, key: &Identifier) -> Option<PaintingVariantRef> {
         self.painting_variants_by_key
             .get(key)
             .and_then(|id| self.by_id(*id))

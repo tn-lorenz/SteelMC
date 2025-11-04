@@ -4,7 +4,7 @@ use heck::ToShoutySnakeCase;
 use proc_macro2::{Ident, Span, TokenStream};
 use quote::quote;
 use serde::Deserialize;
-use steel_utils::ResourceLocation;
+use steel_utils::Identifier;
 
 #[derive(Deserialize, Debug)]
 pub struct DimensionTypeJson {
@@ -22,7 +22,7 @@ pub struct DimensionTypeJson {
     logical_height: i32,
     infiniburn: String,
     #[serde(default = "default_effects")]
-    effects: ResourceLocation,
+    effects: Identifier,
     ambient_light: f32,
     #[serde(default)]
     cloud_height: Option<i32>,
@@ -44,17 +44,17 @@ pub enum MonsterSpawnLightLevelJson {
     },
 }
 
-fn default_effects() -> ResourceLocation {
-    ResourceLocation {
+fn default_effects() -> Identifier {
+    Identifier {
         namespace: "minecraft".into(),
         path: "overworld".into(),
     }
 }
 
-fn generate_resource_location(resource: &ResourceLocation) -> TokenStream {
+fn generate_resource_location(resource: &Identifier) -> TokenStream {
     let namespace = resource.namespace.as_ref();
     let path = resource.path.as_ref();
-    quote! { ResourceLocation { namespace: Cow::Borrowed(#namespace), path: Cow::Borrowed(#path) } }
+    quote! { Identifier { namespace: Cow::Borrowed(#namespace), path: Cow::Borrowed(#path) } }
 }
 
 fn generate_option<T, F>(opt: &Option<T>, f: F) -> TokenStream
@@ -125,7 +125,7 @@ pub(crate) fn build() -> TokenStream {
         use crate::dimension_type::{
             DimensionType, DimensionTypeRegistry, MonsterSpawnLightLevel,
         };
-        use steel_utils::ResourceLocation;
+        use steel_utils::Identifier;
         use std::borrow::Cow;
     });
 
@@ -137,7 +137,7 @@ pub(crate) fn build() -> TokenStream {
         );
         let dimension_type_name_str = dimension_type_name.clone();
 
-        let key = quote! { ResourceLocation::vanilla_static(#dimension_type_name_str) };
+        let key = quote! { Identifier::vanilla_static(#dimension_type_name_str) };
         let fixed_time = generate_option(&dimension_type.fixed_time, |t| quote! { #t });
         let has_skylight = dimension_type.has_skylight;
         let has_ceiling = dimension_type.has_ceiling;

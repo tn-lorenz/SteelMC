@@ -9,7 +9,7 @@ use crate::blocks::properties::{DynProperty, Property};
 
 #[derive(Debug)]
 pub struct Block {
-    pub key: ResourceLocation,
+    pub key: Identifier,
     pub behaviour: BlockBehaviourProperties,
     pub properties: &'static [&'static dyn DynProperty],
     pub default_state_offset: u16,
@@ -17,7 +17,7 @@ pub struct Block {
 
 impl Block {
     pub const fn new(
-        key: ResourceLocation,
+        key: Identifier,
         behaviour: BlockBehaviourProperties,
         properties: &'static [&'static dyn DynProperty],
     ) -> Self {
@@ -67,8 +67,8 @@ pub type BlockRef = &'static Block;
 // The central registry for all blocks.
 pub struct BlockRegistry {
     blocks_by_id: Vec<BlockRef>,
-    blocks_by_key: HashMap<ResourceLocation, usize>,
-    tags: HashMap<ResourceLocation, Vec<BlockRef>>,
+    blocks_by_key: HashMap<Identifier, usize>,
+    tags: HashMap<Identifier, Vec<BlockRef>>,
     allows_registering: bool,
     pub state_to_block_lookup: Vec<BlockRef>,
     /// Maps state IDs to block IDs (parallel to state_to_block_lookup for O(1) lookup)
@@ -152,7 +152,7 @@ impl BlockRegistry {
     }
 
     // Retrieves a block by its name.
-    pub fn by_key(&self, key: &ResourceLocation) -> Option<BlockRef> {
+    pub fn by_key(&self, key: &Identifier) -> Option<BlockRef> {
         self.blocks_by_key.get(key).and_then(|id| self.by_id(*id))
     }
 
@@ -302,21 +302,21 @@ impl BlockRegistry {
 
     /// Registers a tag with a list of block keys.
     /// Block keys that don't exist in the registry are silently skipped.
-    pub fn register_tag(&mut self, tag: ResourceLocation, block_keys: &[&'static str]) {
+    pub fn register_tag(&mut self, tag: Identifier, block_keys: &[&'static str]) {
         if !self.allows_registering {
             panic!("Cannot register tags after registry has been frozen");
         }
 
         let blocks: Vec<BlockRef> = block_keys
             .iter()
-            .filter_map(|key| self.by_key(&ResourceLocation::vanilla_static(key)))
+            .filter_map(|key| self.by_key(&Identifier::vanilla_static(key)))
             .collect();
 
         self.tags.insert(tag, blocks);
     }
 
     /// Checks if a block is in a given tag.
-    pub fn is_in_tag(&self, block: BlockRef, tag: &ResourceLocation) -> bool {
+    pub fn is_in_tag(&self, block: BlockRef, tag: &Identifier) -> bool {
         self.tags
             .get(tag)
             .map(|blocks| {
@@ -328,12 +328,12 @@ impl BlockRegistry {
     }
 
     /// Gets all blocks in a tag.
-    pub fn get_tag(&self, tag: &ResourceLocation) -> Option<&[BlockRef]> {
+    pub fn get_tag(&self, tag: &Identifier) -> Option<&[BlockRef]> {
         self.tags.get(tag).map(|v| v.as_slice())
     }
 
     /// Iterates over all blocks in a tag.
-    pub fn iter_tag(&self, tag: &ResourceLocation) -> impl Iterator<Item = BlockRef> + '_ {
+    pub fn iter_tag(&self, tag: &Identifier) -> impl Iterator<Item = BlockRef> + '_ {
         self.tags
             .get(tag)
             .map(|v| v.iter().copied())
@@ -342,7 +342,7 @@ impl BlockRegistry {
     }
 
     /// Gets all tag keys.
-    pub fn tag_keys(&self) -> impl Iterator<Item = &ResourceLocation> + '_ {
+    pub fn tag_keys(&self) -> impl Iterator<Item = &Identifier> + '_ {
         self.tags.keys()
     }
 }
@@ -385,4 +385,4 @@ macro_rules! offset {
 
 /// Re-export for easier access
 pub use offset;
-use steel_utils::{BlockStateId, ResourceLocation};
+use steel_utils::{BlockStateId, Identifier};

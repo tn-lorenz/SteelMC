@@ -1,13 +1,13 @@
 use std::collections::HashMap;
-use steel_utils::ResourceLocation;
+use steel_utils::Identifier;
 
 use crate::RegistryExt;
 
 /// Represents a full pig variant definition from a data pack JSON file.
 #[derive(Debug)]
 pub struct PigVariant {
-    pub key: ResourceLocation,
-    pub asset_id: ResourceLocation,
+    pub key: Identifier,
+    pub asset_id: Identifier,
     pub model: PigModelType,
     pub spawn_conditions: &'static [SpawnConditionEntry],
 }
@@ -38,7 +38,7 @@ pub type PigVariantRef = &'static PigVariant;
 
 pub struct PigVariantRegistry {
     pig_variants_by_id: Vec<PigVariantRef>,
-    pig_variants_by_key: HashMap<ResourceLocation, usize>,
+    pig_variants_by_key: HashMap<Identifier, usize>,
     allows_registering: bool,
 }
 
@@ -72,7 +72,7 @@ impl PigVariantRegistry {
             .expect("Pig variant not found")
     }
 
-    pub fn by_key(&self, key: &ResourceLocation) -> Option<PigVariantRef> {
+    pub fn by_key(&self, key: &Identifier) -> Option<PigVariantRef> {
         self.pig_variants_by_key
             .get(key)
             .and_then(|id| self.by_id(*id))

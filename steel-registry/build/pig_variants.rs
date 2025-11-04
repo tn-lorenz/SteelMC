@@ -4,11 +4,11 @@ use heck::ToShoutySnakeCase;
 use proc_macro2::{Ident, Span, TokenStream};
 use quote::quote;
 use serde::Deserialize;
-use steel_utils::ResourceLocation;
+use steel_utils::Identifier;
 
 #[derive(Deserialize, Debug)]
 pub struct PigVariantJson {
-    asset_id: ResourceLocation,
+    asset_id: Identifier,
     #[serde(default)]
     model: String,
     spawn_conditions: Vec<SpawnConditionEntry>,
@@ -28,10 +28,10 @@ pub struct BiomeCondition {
     biomes: String,
 }
 
-fn generate_resource_location(resource: &ResourceLocation) -> TokenStream {
+fn generate_resource_location(resource: &Identifier) -> TokenStream {
     let namespace = resource.namespace.as_ref();
     let path = resource.path.as_ref();
-    quote! { ResourceLocation { namespace: Cow::Borrowed(#namespace), path: Cow::Borrowed(#path) } }
+    quote! { Identifier { namespace: Cow::Borrowed(#namespace), path: Cow::Borrowed(#path) } }
 }
 
 fn generate_option<T, F>(opt: &Option<T>, f: F) -> TokenStream
@@ -110,7 +110,7 @@ pub(crate) fn build() -> TokenStream {
         use crate::pig_variant::{
             PigVariant, PigVariantRegistry, PigModelType, SpawnConditionEntry, BiomeCondition,
         };
-        use steel_utils::ResourceLocation;
+        use steel_utils::Identifier;
         use std::borrow::Cow;
     });
 
@@ -120,7 +120,7 @@ pub(crate) fn build() -> TokenStream {
             Ident::new(&pig_variant_name.to_shouty_snake_case(), Span::call_site());
         let pig_variant_name_str = pig_variant_name.clone();
 
-        let key = quote! { ResourceLocation::vanilla_static(#pig_variant_name_str) };
+        let key = quote! { Identifier::vanilla_static(#pig_variant_name_str) };
         let asset_id = generate_resource_location(&pig_variant.asset_id);
         let model = generate_pig_model_type(&pig_variant.model);
 

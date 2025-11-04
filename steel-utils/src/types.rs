@@ -57,23 +57,23 @@ impl From<GameType> for i8 {
 }
 
 #[derive(Debug, Clone, PartialEq, Eq, Hash)]
-pub struct ResourceLocation {
+pub struct Identifier {
     pub namespace: Cow<'static, str>,
     pub path: Cow<'static, str>,
 }
 
-impl ResourceLocation {
+impl Identifier {
     pub const VANILLA_NAMESPACE: &'static str = "minecraft";
 
     pub fn vanilla(path: String) -> Self {
-        ResourceLocation {
+        Identifier {
             namespace: Cow::Borrowed(Self::VANILLA_NAMESPACE),
             path: Cow::Owned(path),
         }
     }
 
     pub const fn vanilla_static(path: &'static str) -> Self {
-        ResourceLocation {
+        Identifier {
             namespace: Cow::Borrowed(Self::VANILLA_NAMESPACE),
             path: Cow::Borrowed(path),
         }
@@ -109,13 +109,13 @@ impl ResourceLocation {
     }
 }
 
-impl Display for ResourceLocation {
+impl Display for Identifier {
     fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
         write!(f, "{}:{}", self.namespace, self.path)
     }
 }
 
-impl FromStr for ResourceLocation {
+impl FromStr for Identifier {
     type Err = String;
 
     fn from_str(s: &str) -> Result<Self, Self::Err> {
@@ -124,21 +124,21 @@ impl FromStr for ResourceLocation {
             return Err(format!("Invalid resource location: {}", s));
         }
 
-        if !ResourceLocation::validate_namespace(parts[0]) {
+        if !Identifier::validate_namespace(parts[0]) {
             return Err(format!("Invalid namespace: {}", parts[0]));
         }
 
-        if !ResourceLocation::validate_path(parts[1]) {
+        if !Identifier::validate_path(parts[1]) {
             return Err(format!("Invalid path: {}", parts[1]));
         }
 
-        Ok(ResourceLocation {
+        Ok(Identifier {
             namespace: Cow::Owned(parts[0].to_string()),
             path: Cow::Owned(parts[1].to_string()),
         })
     }
 }
-impl Serialize for ResourceLocation {
+impl Serialize for Identifier {
     fn serialize<S>(&self, serializer: S) -> Result<S::Ok, S::Error>
     where
         S: serde::Serializer,
@@ -147,12 +147,12 @@ impl Serialize for ResourceLocation {
     }
 }
 
-impl<'de> Deserialize<'de> for ResourceLocation {
+impl<'de> Deserialize<'de> for Identifier {
     fn deserialize<D>(deserializer: D) -> Result<Self, D::Error>
     where
         D: serde::Deserializer<'de>,
     {
         let s = String::deserialize(deserializer)?;
-        ResourceLocation::from_str(&s).map_err(serde::de::Error::custom)
+        Identifier::from_str(&s).map_err(serde::de::Error::custom)
     }
 }

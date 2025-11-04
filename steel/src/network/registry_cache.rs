@@ -17,7 +17,7 @@ use steel_registry::{
     TRIM_MATERIAL_REGISTRY, TRIM_PATTERN_REGISTRY, WOLF_SOUND_VARIANT_REGISTRY,
     WOLF_VARIANT_REGISTRY,
 };
-use steel_utils::ResourceLocation;
+use steel_utils::Identifier;
 
 use crate::STEEL_CONFIG;
 
@@ -75,7 +75,7 @@ impl RegistryCache {
         add_registry!(BANNER_PATTERN_REGISTRY, banner_patterns);
 
         // TODO: Add enchantments when implemented in the registry
-        //add_registry!(ResourceLocation::vanilla_static("enchantments"), enchantments);
+        //add_registry!(Identifier::vanilla_static("enchantments"), enchantments);
 
         add_registry!(JUKEBOX_SONG_REGISTRY, jukebox_songs);
         add_registry!(INSTRUMENT_REGISTRY, instruments);
@@ -84,13 +84,11 @@ impl RegistryCache {
     }
 
     fn build_tags_packet(registry: &Registry) -> CUpdateTags {
-        let mut tags_by_registry: HashMap<
-            ResourceLocation,
-            HashMap<ResourceLocation, Vec<VarInt>>,
-        > = HashMap::new();
+        let mut tags_by_registry: HashMap<Identifier, HashMap<Identifier, Vec<VarInt>>> =
+            HashMap::new();
 
         // Build block tags
-        let mut block_tags: HashMap<ResourceLocation, Vec<VarInt>> = HashMap::new();
+        let mut block_tags: HashMap<Identifier, Vec<VarInt>> = HashMap::new();
         for tag_key in registry.blocks.tag_keys() {
             let mut block_ids = Vec::new();
 
@@ -105,7 +103,7 @@ impl RegistryCache {
         tags_by_registry.insert(BLOCKS_REGISTRY, block_tags);
 
         // Build item tags
-        let mut item_tags: HashMap<ResourceLocation, Vec<VarInt>> = HashMap::new();
+        let mut item_tags: HashMap<Identifier, Vec<VarInt>> = HashMap::new();
         for tag_key in registry.items.tag_keys() {
             let mut item_ids = Vec::new();
 

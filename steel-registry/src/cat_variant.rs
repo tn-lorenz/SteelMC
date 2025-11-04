@@ -1,13 +1,13 @@
 use std::collections::HashMap;
-use steel_utils::ResourceLocation;
+use steel_utils::Identifier;
 
 use crate::RegistryExt;
 
 /// Represents a full cat variant definition from a data pack JSON file.
 #[derive(Debug)]
 pub struct CatVariant {
-    pub key: ResourceLocation,
-    pub asset_id: ResourceLocation,
+    pub key: Identifier,
+    pub asset_id: Identifier,
     pub spawn_conditions: &'static [SpawnConditionEntry],
 }
 
@@ -30,7 +30,7 @@ pub type CatVariantRef = &'static CatVariant;
 
 pub struct CatVariantRegistry {
     cat_variants_by_id: Vec<CatVariantRef>,
-    cat_variants_by_key: HashMap<ResourceLocation, usize>,
+    cat_variants_by_key: HashMap<Identifier, usize>,
     allows_registering: bool,
 }
 
@@ -64,7 +64,7 @@ impl CatVariantRegistry {
             .expect("Cat variant not found")
     }
 
-    pub fn by_key(&self, key: &ResourceLocation) -> Option<CatVariantRef> {
+    pub fn by_key(&self, key: &Identifier) -> Option<CatVariantRef> {
         self.cat_variants_by_key
             .get(key)
             .and_then(|id| self.by_id(*id))

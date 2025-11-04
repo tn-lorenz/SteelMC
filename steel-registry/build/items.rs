@@ -115,7 +115,7 @@ pub(crate) fn build() -> TokenStream {
 
             item_construction.extend(quote! {
                 #item_ident: Item {
-                    key: ResourceLocation::vanilla_static(#item_name_str),
+                    key: Identifier::vanilla_static(#item_name_str),
                     components: DataComponentMap::common_item_components()
                         #(#builder_calls)*,
                 },
@@ -137,7 +137,7 @@ pub(crate) fn build() -> TokenStream {
             vanilla_blocks,
             items::{Item, ItemRegistry},
         };
-        use steel_utils::ResourceLocation;
+        use steel_utils::Identifier;
         use std::sync::LazyLock;
 
         pub static ITEMS: LazyLock<Items> = LazyLock::new(Items::init);

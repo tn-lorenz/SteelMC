@@ -1,13 +1,13 @@
 use std::collections::HashMap;
-use steel_utils::ResourceLocation;
+use steel_utils::Identifier;
 
 use crate::RegistryExt;
 
 /// Represents a banner pattern definition from a data pack JSON file.
 #[derive(Debug)]
 pub struct BannerPattern {
-    pub key: ResourceLocation,
-    pub asset_id: ResourceLocation,
+    pub key: Identifier,
+    pub asset_id: Identifier,
     pub translation_key: &'static str,
 }
 
@@ -15,7 +15,7 @@ pub type BannerPatternRef = &'static BannerPattern;
 
 pub struct BannerPatternRegistry {
     banner_patterns_by_id: Vec<BannerPatternRef>,
-    banner_patterns_by_key: HashMap<ResourceLocation, usize>,
+    banner_patterns_by_key: HashMap<Identifier, usize>,
     allows_registering: bool,
 }
 
@@ -50,7 +50,7 @@ impl BannerPatternRegistry {
             .expect("Banner pattern not found")
     }
 
-    pub fn by_key(&self, key: &ResourceLocation) -> Option<BannerPatternRef> {
+    pub fn by_key(&self, key: &Identifier) -> Option<BannerPatternRef> {
         self.banner_patterns_by_key
             .get(key)
             .and_then(|id| self.by_id(*id))

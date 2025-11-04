@@ -1,6 +1,6 @@
 use std::{any::Any, collections::HashMap, fmt::Debug, marker::PhantomData};
 
-use steel_utils::ResourceLocation;
+use steel_utils::Identifier;
 
 use crate::{
     RegistryExt,
@@ -22,12 +22,12 @@ impl<T: 'static + Send + Sync + Debug> ComponentValue for T {
 
 //TODO: Implement codecs, also one for persistent storage and one for network.
 pub struct DataComponentType<T> {
-    pub key: ResourceLocation,
+    pub key: Identifier,
     _phantom: PhantomData<T>,
 }
 
 impl<T> DataComponentType<T> {
-    pub const fn new(key: ResourceLocation) -> Self {
+    pub const fn new(key: Identifier) -> Self {
         Self {
             key,
             _phantom: PhantomData,
@@ -36,7 +36,7 @@ impl<T> DataComponentType<T> {
 }
 
 pub struct DataComponentRegistry {
-    components_by_key: HashMap<ResourceLocation, usize>,
+    components_by_key: HashMap<Identifier, usize>,
     allows_registering: bool,
 }
 
@@ -77,7 +77,7 @@ impl RegistryExt for DataComponentRegistry {
 
 #[derive(Debug)]
 pub struct DataComponentMap {
-    map: Vec<(ResourceLocation, Box<dyn ComponentValue>)>,
+    map: Vec<(Identifier, Box<dyn ComponentValue>)>,
 }
 
 impl Default for DataComponentMap {

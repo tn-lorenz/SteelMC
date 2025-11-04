@@ -1,12 +1,12 @@
 use std::collections::HashMap;
-use steel_utils::ResourceLocation;
+use steel_utils::Identifier;
 
 use crate::RegistryExt;
 
 /// Represents a damage type definition from a data pack JSON file.
 #[derive(Debug)]
 pub struct DamageType {
-    pub key: ResourceLocation,
+    pub key: Identifier,
     pub message_id: &'static str,
     pub scaling: DamageScaling,
     pub exhaustion: f32,
@@ -45,7 +45,7 @@ pub type DamageTypeRef = &'static DamageType;
 
 pub struct DamageTypeRegistry {
     damage_types_by_id: Vec<DamageTypeRef>,
-    damage_types_by_key: HashMap<ResourceLocation, usize>,
+    damage_types_by_key: HashMap<Identifier, usize>,
     allows_registering: bool,
 }
 
@@ -79,7 +79,7 @@ impl DamageTypeRegistry {
             .expect("Damage type not found")
     }
 
-    pub fn by_key(&self, key: &ResourceLocation) -> Option<DamageTypeRef> {
+    pub fn by_key(&self, key: &Identifier) -> Option<DamageTypeRef> {
         self.damage_types_by_key
             .get(key)
             .and_then(|id| self.by_id(*id))

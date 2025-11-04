@@ -1,11 +1,11 @@
 use std::collections::HashMap;
-use steel_utils::ResourceLocation;
+use steel_utils::Identifier;
 
 use crate::RegistryExt;
 
 #[derive(Debug)]
 pub struct Biome {
-    pub key: ResourceLocation,
+    pub key: Identifier,
     pub has_precipitation: bool,
     pub temperature: f32,
     pub downfall: f32,
@@ -13,9 +13,9 @@ pub struct Biome {
     pub effects: BiomeEffects,
     pub creature_spawn_probability: f32,
     pub spawners: HashMap<String, Vec<SpawnerData>>,
-    pub spawn_costs: HashMap<ResourceLocation, SpawnCost>,
-    pub carvers: Vec<ResourceLocation>,
-    pub features: Vec<Vec<ResourceLocation>>,
+    pub spawn_costs: HashMap<Identifier, SpawnCost>,
+    pub carvers: Vec<Identifier>,
+    pub features: Vec<Vec<Identifier>>,
 }
 
 #[derive(Debug)]
@@ -28,7 +28,7 @@ pub struct BiomeEffects {
     pub grass_color: Option<i32>,
     pub grass_color_modifier: GrassColorModifier,
     pub music: Option<Vec<WeightedMusic>>,
-    pub ambient_sound: Option<ResourceLocation>,
+    pub ambient_sound: Option<Identifier>,
     pub additions_sound: Option<AdditionsSound>,
     pub mood_sound: Option<MoodSound>,
     pub particle: Option<Particle>,
@@ -36,7 +36,7 @@ pub struct BiomeEffects {
 
 #[derive(Debug)]
 pub struct SpawnerData {
-    pub entity_type: ResourceLocation,
+    pub entity_type: Identifier,
     pub weight: i32,
     pub min_count: i32,
     pub max_count: i32,
@@ -73,18 +73,18 @@ pub struct Music {
     pub replace_current_music: bool,
     pub max_delay: i32,
     pub min_delay: i32,
-    pub sound: ResourceLocation,
+    pub sound: Identifier,
 }
 
 #[derive(Debug)]
 pub struct AdditionsSound {
-    pub sound: ResourceLocation,
+    pub sound: Identifier,
     pub tick_chance: f64,
 }
 
 #[derive(Debug)]
 pub struct MoodSound {
-    pub sound: ResourceLocation,
+    pub sound: Identifier,
     pub tick_delay: i32,
     pub block_search_extent: i32,
     pub offset: f64,
@@ -98,14 +98,14 @@ pub struct Particle {
 
 #[derive(Debug)]
 pub struct ParticleOptions {
-    pub particle_type: ResourceLocation,
+    pub particle_type: Identifier,
 }
 
 pub type BiomeRef = &'static Biome;
 
 pub struct BiomeRegistry {
     biomes_by_id: Vec<BiomeRef>,
-    biomes_by_key: HashMap<ResourceLocation, usize>,
+    biomes_by_key: HashMap<Identifier, usize>,
     allows_registering: bool,
 }
 
@@ -118,7 +118,7 @@ impl BiomeRegistry {
         }
     }
 
-    pub fn register(&mut self, biome: BiomeRef, key: ResourceLocation) -> usize {
+    pub fn register(&mut self, biome: BiomeRef, key: Identifier) -> usize {
         if !self.allows_registering {
             panic!("Cannot register biomes after the registry has been frozen");
         }
@@ -137,11 +137,11 @@ impl BiomeRegistry {
         self.biomes_by_key.get(&biome.key).expect("Biome not found")
     }
 
-    pub fn get(&self, key: &ResourceLocation) -> Option<BiomeRef> {
+    pub fn get(&self, key: &Identifier) -> Option<BiomeRef> {
         self.biomes_by_key.get(key).and_then(|id| self.by_id(*id))
     }
 
-    pub fn by_key(&self, key: &ResourceLocation) -> Option<BiomeRef> {
+    pub fn by_key(&self, key: &Identifier) -> Option<BiomeRef> {
         self.get(key)
     }
 

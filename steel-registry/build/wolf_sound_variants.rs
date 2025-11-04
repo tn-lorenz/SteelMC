@@ -4,22 +4,22 @@ use heck::ToShoutySnakeCase;
 use proc_macro2::{Ident, Span, TokenStream};
 use quote::quote;
 use serde::Deserialize;
-use steel_utils::ResourceLocation;
+use steel_utils::Identifier;
 
 #[derive(Deserialize, Debug)]
 pub struct WolfSoundVariantJson {
-    ambient_sound: ResourceLocation,
-    death_sound: ResourceLocation,
-    growl_sound: ResourceLocation,
-    hurt_sound: ResourceLocation,
-    pant_sound: ResourceLocation,
-    whine_sound: ResourceLocation,
+    ambient_sound: Identifier,
+    death_sound: Identifier,
+    growl_sound: Identifier,
+    hurt_sound: Identifier,
+    pant_sound: Identifier,
+    whine_sound: Identifier,
 }
 
-fn generate_resource_location(resource: &ResourceLocation) -> TokenStream {
+fn generate_resource_location(resource: &Identifier) -> TokenStream {
     let namespace = resource.namespace.as_ref();
     let path = resource.path.as_ref();
-    quote! { ResourceLocation { namespace: Cow::Borrowed(#namespace), path: Cow::Borrowed(#path) } }
+    quote! { Identifier { namespace: Cow::Borrowed(#namespace), path: Cow::Borrowed(#path) } }
 }
 
 pub(crate) fn build() -> TokenStream {
@@ -55,7 +55,7 @@ pub(crate) fn build() -> TokenStream {
         use crate::wolf_sound_variant::{
             WolfSoundVariant, WolfSoundVariantRegistry,
         };
-        use steel_utils::ResourceLocation;
+        use steel_utils::Identifier;
         use std::borrow::Cow;
     });
 
@@ -67,7 +67,7 @@ pub(crate) fn build() -> TokenStream {
         );
         let wolf_sound_variant_name_str = wolf_sound_variant_name.clone();
 
-        let key = quote! { ResourceLocation::vanilla_static(#wolf_sound_variant_name_str) };
+        let key = quote! { Identifier::vanilla_static(#wolf_sound_variant_name_str) };
         let ambient_sound = generate_resource_location(&wolf_sound_variant.ambient_sound);
         let death_sound = generate_resource_location(&wolf_sound_variant.death_sound);
         let growl_sound = generate_resource_location(&wolf_sound_variant.growl_sound);

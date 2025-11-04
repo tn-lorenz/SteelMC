@@ -4,7 +4,7 @@ use std::sync::Arc;
 
 use steel_protocol::packets::game::{CLogin, CommonPlayerSpawnInfo};
 use steel_registry::Registry;
-use steel_utils::ResourceLocation;
+use steel_utils::Identifier;
 use steel_utils::types::GameType;
 use steel_world::player::Player;
 use steel_world::server::WorldServer;
@@ -46,7 +46,7 @@ impl WorldServer for Server {
         player.enqueue_packet(CLogin {
             player_id: 0,
             hardcore: false,
-            levels: vec![ResourceLocation::vanilla_static("overworld")],
+            levels: vec![Identifier::vanilla_static("overworld")],
             max_players: 5,
             chunk_radius: i32::from(STEEL_CONFIG.view_distance),
             simulation_distance: i32::from(STEEL_CONFIG.simulation_distance),
@@ -55,7 +55,7 @@ impl WorldServer for Server {
             do_limited_crafting: false,
             common_player_spawn_info: CommonPlayerSpawnInfo {
                 dimension_type: 0,
-                dimension: ResourceLocation::vanilla_static("overworld"),
+                dimension: Identifier::vanilla_static("overworld"),
                 seed: 0,
                 game_type: GameType::Survival,
                 previous_game_type: None,

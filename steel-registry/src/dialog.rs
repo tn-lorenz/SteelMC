@@ -1,5 +1,5 @@
 use std::collections::HashMap;
-use steel_utils::ResourceLocation;
+use steel_utils::Identifier;
 use steel_utils::text::TextComponent;
 
 use crate::RegistryExt;
@@ -14,7 +14,7 @@ pub enum Dialog {
 /// A dialog that displays a list of other dialogs.
 #[derive(Debug)]
 pub struct DialogList {
-    pub key: ResourceLocation,
+    pub key: Identifier,
     pub button_width: i32,
     pub columns: i32,
     pub dialogs: &'static str,
@@ -26,7 +26,7 @@ pub struct DialogList {
 /// A dialog that displays server links.
 #[derive(Debug)]
 pub struct ServerLinks {
-    pub key: ResourceLocation,
+    pub key: Identifier,
     pub button_width: i32,
     pub columns: i32,
     pub exit_action: ExitAction,
@@ -45,7 +45,7 @@ pub type DialogRef = &'static Dialog;
 
 pub struct DialogRegistry {
     dialogs_by_id: Vec<DialogRef>,
-    dialogs_by_key: HashMap<ResourceLocation, usize>,
+    dialogs_by_key: HashMap<Identifier, usize>,
     allows_registering: bool,
 }
 
@@ -58,7 +58,7 @@ impl DialogRegistry {
         }
     }
 
-    pub fn register(&mut self, key: ResourceLocation, dialog: DialogRef) -> usize {
+    pub fn register(&mut self, key: Identifier, dialog: DialogRef) -> usize {
         if !self.allows_registering {
             panic!("Cannot register dialogs after the registry has been frozen");
         }
@@ -81,7 +81,7 @@ impl DialogRegistry {
         self.dialogs_by_key.get(key).expect("Dialog not found")
     }
 
-    pub fn by_key(&self, key: &ResourceLocation) -> Option<DialogRef> {
+    pub fn by_key(&self, key: &Identifier) -> Option<DialogRef> {
         self.dialogs_by_key.get(key).and_then(|id| self.by_id(*id))
     }
 

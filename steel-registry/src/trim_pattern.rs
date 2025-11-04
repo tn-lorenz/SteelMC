@@ -1,5 +1,5 @@
 use std::collections::HashMap;
-use steel_utils::ResourceLocation;
+use steel_utils::Identifier;
 use steel_utils::text::TextComponent;
 
 use crate::RegistryExt;
@@ -7,8 +7,8 @@ use crate::RegistryExt;
 /// Represents an armor trim pattern definition from the data packs.
 #[derive(Debug)]
 pub struct TrimPattern {
-    pub key: ResourceLocation,
-    pub asset_id: ResourceLocation,
+    pub key: Identifier,
+    pub asset_id: Identifier,
     pub description: TextComponent,
     pub decal: bool,
 }
@@ -17,7 +17,7 @@ pub type TrimPatternRef = &'static TrimPattern;
 
 pub struct TrimPatternRegistry {
     trim_patterns_by_id: Vec<TrimPatternRef>,
-    trim_patterns_by_key: HashMap<ResourceLocation, usize>,
+    trim_patterns_by_key: HashMap<Identifier, usize>,
     allows_registering: bool,
 }
 
@@ -52,7 +52,7 @@ impl TrimPatternRegistry {
             .expect("Trim pattern not found")
     }
 
-    pub fn by_key(&self, key: &ResourceLocation) -> Option<TrimPatternRef> {
+    pub fn by_key(&self, key: &Identifier) -> Option<TrimPatternRef> {
         self.trim_patterns_by_key
             .get(key)
             .and_then(|id| self.by_id(*id))

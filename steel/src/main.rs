@@ -1,7 +1,7 @@
 use log::LevelFilter;
 use simplelog::{ColorChoice, Config, TermLogger, TerminalMode};
 use steel::SteelServer;
-use steel_utils::ResourceLocation;
+use steel_utils::Identifier;
 
 #[tokio::main]
 async fn main() {
@@ -21,7 +21,7 @@ async fn main() {
             .server
             .registry
             .items
-            .get_tag(&ResourceLocation::vanilla_static("swords"))
+            .get_tag(&Identifier::vanilla_static("swords"))
             .unwrap()
             .iter()
             .map(|b| b.key.path.to_string())

@@ -7,7 +7,7 @@
 )]
 #![allow(internal_features)]
 
-use steel_utils::ResourceLocation;
+use steel_utils::Identifier;
 
 use crate::{
     banner_pattern::BannerPatternRegistry,
@@ -150,38 +150,29 @@ pub trait RegistryExt {
     fn freeze(&mut self);
 }
 
-pub const BLOCKS_REGISTRY: ResourceLocation = ResourceLocation::vanilla_static("block");
-pub const ITEMS_REGISTRY: ResourceLocation = ResourceLocation::vanilla_static("item");
-pub const BIOMES_REGISTRY: ResourceLocation = ResourceLocation::vanilla_static("worldgen/biome");
-pub const CHAT_TYPE_REGISTRY: ResourceLocation = ResourceLocation::vanilla_static("chat_type");
-pub const TRIM_PATTERN_REGISTRY: ResourceLocation =
-    ResourceLocation::vanilla_static("trim_pattern");
-pub const TRIM_MATERIAL_REGISTRY: ResourceLocation =
-    ResourceLocation::vanilla_static("trim_material");
-pub const WOLF_VARIANT_REGISTRY: ResourceLocation =
-    ResourceLocation::vanilla_static("wolf_variant");
-pub const WOLF_SOUND_VARIANT_REGISTRY: ResourceLocation =
-    ResourceLocation::vanilla_static("wolf_sound_variant");
-pub const PIG_VARIANT_REGISTRY: ResourceLocation = ResourceLocation::vanilla_static("pig_variant");
-pub const FROG_VARIANT_REGISTRY: ResourceLocation =
-    ResourceLocation::vanilla_static("frog_variant");
-pub const CAT_VARIANT_REGISTRY: ResourceLocation = ResourceLocation::vanilla_static("cat_variant");
-pub const COW_VARIANT_REGISTRY: ResourceLocation = ResourceLocation::vanilla_static("cow_variant");
-pub const CHICKEN_VARIANT_REGISTRY: ResourceLocation =
-    ResourceLocation::vanilla_static("chicken_variant");
-pub const PAINTING_VARIANT_REGISTRY: ResourceLocation =
-    ResourceLocation::vanilla_static("painting_variant");
-pub const DIMENSION_TYPE_REGISTRY: ResourceLocation =
-    ResourceLocation::vanilla_static("dimension_type");
-pub const DAMAGE_TYPE_REGISTRY: ResourceLocation = ResourceLocation::vanilla_static("damage_type");
-pub const BANNER_PATTERN_REGISTRY: ResourceLocation =
-    ResourceLocation::vanilla_static("banner_pattern");
+pub const BLOCKS_REGISTRY: Identifier = Identifier::vanilla_static("block");
+pub const ITEMS_REGISTRY: Identifier = Identifier::vanilla_static("item");
+pub const BIOMES_REGISTRY: Identifier = Identifier::vanilla_static("worldgen/biome");
+pub const CHAT_TYPE_REGISTRY: Identifier = Identifier::vanilla_static("chat_type");
+pub const TRIM_PATTERN_REGISTRY: Identifier = Identifier::vanilla_static("trim_pattern");
+pub const TRIM_MATERIAL_REGISTRY: Identifier = Identifier::vanilla_static("trim_material");
+pub const WOLF_VARIANT_REGISTRY: Identifier = Identifier::vanilla_static("wolf_variant");
+pub const WOLF_SOUND_VARIANT_REGISTRY: Identifier =
+    Identifier::vanilla_static("wolf_sound_variant");
+pub const PIG_VARIANT_REGISTRY: Identifier = Identifier::vanilla_static("pig_variant");
+pub const FROG_VARIANT_REGISTRY: Identifier = Identifier::vanilla_static("frog_variant");
+pub const CAT_VARIANT_REGISTRY: Identifier = Identifier::vanilla_static("cat_variant");
+pub const COW_VARIANT_REGISTRY: Identifier = Identifier::vanilla_static("cow_variant");
+pub const CHICKEN_VARIANT_REGISTRY: Identifier = Identifier::vanilla_static("chicken_variant");
+pub const PAINTING_VARIANT_REGISTRY: Identifier = Identifier::vanilla_static("painting_variant");
+pub const DIMENSION_TYPE_REGISTRY: Identifier = Identifier::vanilla_static("dimension_type");
+pub const DAMAGE_TYPE_REGISTRY: Identifier = Identifier::vanilla_static("damage_type");
+pub const BANNER_PATTERN_REGISTRY: Identifier = Identifier::vanilla_static("banner_pattern");
 //TODO: Add enchantments
-//pub const ENCHANTMENT_REGISTRY: ResourceLocation = ResourceLocation::vanilla_static("enchantment");
-pub const JUKEBOX_SONG_REGISTRY: ResourceLocation =
-    ResourceLocation::vanilla_static("jukebox_song");
-pub const INSTRUMENT_REGISTRY: ResourceLocation = ResourceLocation::vanilla_static("instrument");
-pub const DIALOG_REGISTRY: ResourceLocation = ResourceLocation::vanilla_static("dialog");
+//pub const ENCHANTMENT_REGISTRY: Identifier = Identifier::vanilla_static("enchantment");
+pub const JUKEBOX_SONG_REGISTRY: Identifier = Identifier::vanilla_static("jukebox_song");
+pub const INSTRUMENT_REGISTRY: Identifier = Identifier::vanilla_static("instrument");
+pub const DIALOG_REGISTRY: Identifier = Identifier::vanilla_static("dialog");
 
 pub struct Registry {
     pub blocks: BlockRegistry,
