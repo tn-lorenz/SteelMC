@@ -1,6 +1,6 @@
 use std::io::{Read, Write};
 
-use crate::packet_traits::{PrefixedRead, PrefixedWrite, ReadFrom, WriteTo};
+use crate::serial::{PrefixedRead, PrefixedWrite, ReadFrom, WriteTo};
 
 use super::VarInt;
 
