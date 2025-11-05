@@ -51,7 +51,7 @@ fn default_effects() -> Identifier {
     }
 }
 
-fn generate_resource_location(resource: &Identifier) -> TokenStream {
+fn generate_identifier(resource: &Identifier) -> TokenStream {
     let namespace = resource.namespace.as_ref();
     let path = resource.path.as_ref();
     quote! { Identifier { namespace: Cow::Borrowed(#namespace), path: Cow::Borrowed(#path) } }
@@ -150,7 +150,7 @@ pub(crate) fn build() -> TokenStream {
         let height = dimension_type.height;
         let logical_height = dimension_type.logical_height;
         let infiniburn = dimension_type.infiniburn.as_str();
-        let effects = generate_resource_location(&dimension_type.effects);
+        let effects = generate_identifier(&dimension_type.effects);
         let ambient_light = dimension_type.ambient_light;
         let cloud_height = generate_option(&dimension_type.cloud_height, |h| quote! { #h });
         let piglin_safe = dimension_type.piglin_safe;

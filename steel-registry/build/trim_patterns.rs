@@ -19,7 +19,7 @@ pub struct TextComponent {
     translate: String,
 }
 
-fn generate_resource_location(resource: &Identifier) -> TokenStream {
+fn generate_identifier(resource: &Identifier) -> TokenStream {
     let namespace = resource.namespace.as_ref();
     let path = resource.path.as_ref();
     quote! { Identifier { namespace: Cow::Borrowed(#namespace), path: Cow::Borrowed(#path) } }
@@ -69,7 +69,7 @@ pub(crate) fn build() -> TokenStream {
         let trim_pattern_name_str = trim_pattern_name.clone();
 
         let key = quote! { Identifier::vanilla_static(#trim_pattern_name_str) };
-        let asset_id = generate_resource_location(&trim_pattern.asset_id);
+        let asset_id = generate_identifier(&trim_pattern.asset_id);
         let translate = &trim_pattern.description.translate;
         let decal = trim_pattern.decal;
 

@@ -24,7 +24,7 @@ pub struct TextComponentJson {
     color: Option<String>,
 }
 
-fn generate_resource_location(resource: &Identifier) -> TokenStream {
+fn generate_identifier(resource: &Identifier) -> TokenStream {
     let namespace = resource.namespace.as_ref();
     let path = resource.path.as_ref();
     quote! { Identifier { namespace: Cow::Borrowed(#namespace), path: Cow::Borrowed(#path) } }
@@ -130,7 +130,7 @@ pub(crate) fn build() -> TokenStream {
         let painting_variant_name_str = painting_variant_name.clone();
 
         let key = quote! { Identifier::vanilla_static(#painting_variant_name_str) };
-        let asset_id = generate_resource_location(&painting_variant.asset_id);
+        let asset_id = generate_identifier(&painting_variant.asset_id);
         let width = painting_variant.width;
         let height = painting_variant.height;
         let title = generate_option(&painting_variant.title, generate_text_component);

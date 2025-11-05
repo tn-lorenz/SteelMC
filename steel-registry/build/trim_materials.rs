@@ -21,7 +21,7 @@ pub struct StyledTextComponent {
     color: Option<String>,
 }
 
-fn generate_resource_location(resource: &Identifier) -> TokenStream {
+fn generate_identifier(resource: &Identifier) -> TokenStream {
     let namespace = resource.namespace.as_ref();
     let path = resource.path.as_ref();
     quote! { Identifier { namespace: Cow::Borrowed(#namespace), path: Cow::Borrowed(#path) } }
@@ -44,7 +44,7 @@ fn generate_hashmap_resource_string(map: &HashMap<Identifier, String>) -> TokenS
     let entries: Vec<_> = map
         .iter()
         .map(|(k, v)| {
-            let key = generate_resource_location(k);
+            let key = generate_identifier(k);
             quote! { (#key, #v.to_string()) }
         })
         .collect();

@@ -39,7 +39,7 @@ pub struct RangeJson {
     max: Option<f32>,
 }
 
-fn generate_resource_location(resource: &Identifier) -> TokenStream {
+fn generate_identifier(resource: &Identifier) -> TokenStream {
     let namespace = resource.namespace.as_ref();
     let path = resource.path.as_ref();
     quote! { Identifier { namespace: Cow::Borrowed(#namespace), path: Cow::Borrowed(#path) } }
@@ -148,7 +148,7 @@ pub(crate) fn build() -> TokenStream {
         let cat_variant_name_str = cat_variant_name.clone();
 
         let key = quote! { Identifier::vanilla_static(#cat_variant_name_str) };
-        let asset_id = generate_resource_location(&cat_variant.asset_id);
+        let asset_id = generate_identifier(&cat_variant.asset_id);
 
         let spawn_conditions: Vec<_> = cat_variant
             .spawn_conditions

@@ -7,7 +7,7 @@ use steel_utils::serial::ReadFrom;
 
 #[derive(ReadFrom, ServerPacket, Clone, Debug)]
 pub struct SCustomPayload {
-    pub resource_location: Identifier,
+    pub identifier: Identifier,
     //#[read_as(as = "vec")]
     pub payload: Payload,
 }

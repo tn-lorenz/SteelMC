@@ -16,7 +16,7 @@ pub struct WolfSoundVariantJson {
     whine_sound: Identifier,
 }
 
-fn generate_resource_location(resource: &Identifier) -> TokenStream {
+fn generate_identifier(resource: &Identifier) -> TokenStream {
     let namespace = resource.namespace.as_ref();
     let path = resource.path.as_ref();
     quote! { Identifier { namespace: Cow::Borrowed(#namespace), path: Cow::Borrowed(#path) } }
@@ -68,12 +68,12 @@ pub(crate) fn build() -> TokenStream {
         let wolf_sound_variant_name_str = wolf_sound_variant_name.clone();
 
         let key = quote! { Identifier::vanilla_static(#wolf_sound_variant_name_str) };
-        let ambient_sound = generate_resource_location(&wolf_sound_variant.ambient_sound);
-        let death_sound = generate_resource_location(&wolf_sound_variant.death_sound);
-        let growl_sound = generate_resource_location(&wolf_sound_variant.growl_sound);
-        let hurt_sound = generate_resource_location(&wolf_sound_variant.hurt_sound);
-        let pant_sound = generate_resource_location(&wolf_sound_variant.pant_sound);
-        let whine_sound = generate_resource_location(&wolf_sound_variant.whine_sound);
+        let ambient_sound = generate_identifier(&wolf_sound_variant.ambient_sound);
+        let death_sound = generate_identifier(&wolf_sound_variant.death_sound);
+        let growl_sound = generate_identifier(&wolf_sound_variant.growl_sound);
+        let hurt_sound = generate_identifier(&wolf_sound_variant.hurt_sound);
+        let pant_sound = generate_identifier(&wolf_sound_variant.pant_sound);
+        let whine_sound = generate_identifier(&wolf_sound_variant.whine_sound);
 
         stream.extend(quote! {
             pub const #wolf_sound_variant_ident: &WolfSoundVariant = &WolfSoundVariant {

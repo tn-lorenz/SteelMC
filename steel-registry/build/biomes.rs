@@ -167,7 +167,7 @@ fn generate_grass_color_modifier(modifier: &GrassColorModifier) -> TokenStream {
     }
 }
 
-fn generate_resource_location(resource: &Identifier) -> TokenStream {
+fn generate_identifier(resource: &Identifier) -> TokenStream {
     let namespace = resource.namespace.as_ref();
     let path = resource.path.as_ref();
     quote! { Identifier { namespace: Cow::Borrowed(#namespace), path: Cow::Borrowed(#path) } }
@@ -215,7 +215,7 @@ where
     let entries: Vec<_> = map
         .iter()
         .map(|(k, v)| {
-            let key = generate_resource_location(k);
+            let key = generate_identifier(k);
             let val = f(v);
             quote! { (#key, #val) }
         })
@@ -224,7 +224,7 @@ where
 }
 
 fn generate_spawner_data(data: &SpawnerData) -> TokenStream {
-    let entity_type = generate_resource_location(&data.entity_type);
+    let entity_type = generate_identifier(&data.entity_type);
     let weight = data.weight;
     let min_count = data.min_count;
     let max_count = data.max_count;
@@ -252,7 +252,7 @@ fn generate_spawn_cost(cost: &SpawnCost) -> TokenStream {
 }
 
 fn generate_particle(particle: &Particle) -> TokenStream {
-    let particle_type = generate_resource_location(&particle.options.particle_type);
+    let particle_type = generate_identifier(&particle.options.particle_type);
     let probability = particle.probability;
 
     quote! {
@@ -266,7 +266,7 @@ fn generate_particle(particle: &Particle) -> TokenStream {
 }
 
 fn generate_mood_sound(mood: &MoodSound) -> TokenStream {
-    let sound = generate_resource_location(&mood.sound);
+    let sound = generate_identifier(&mood.sound);
     let tick_delay = mood.tick_delay;
     let block_search_extent = mood.block_search_extent;
     let offset = mood.offset;
@@ -282,7 +282,7 @@ fn generate_mood_sound(mood: &MoodSound) -> TokenStream {
 }
 
 fn generate_additions_sound(additions: &AdditionsSound) -> TokenStream {
-    let sound = generate_resource_location(&additions.sound);
+    let sound = generate_identifier(&additions.sound);
     let tick_chance = additions.tick_chance;
 
     quote! {
@@ -297,7 +297,7 @@ fn generate_music(music: &Music) -> TokenStream {
     let replace_current_music = music.replace_current_music;
     let max_delay = music.max_delay;
     let min_delay = music.min_delay;
-    let sound = generate_resource_location(&music.sound);
+    let sound = generate_identifier(&music.sound);
 
     quote! {
         Music {
@@ -330,7 +330,7 @@ fn generate_biome_effects(effects: &BiomeEffects) -> TokenStream {
     let grass_color = generate_option(&effects.grass_color, |&v| quote! { #v });
     let grass_color_modifier = generate_grass_color_modifier(&effects.grass_color_modifier);
     let music = generate_option(&effects.music, |m| generate_vec(m, generate_weighted_music));
-    let ambient_sound = generate_option(&effects.ambient_sound, generate_resource_location);
+    let ambient_sound = generate_option(&effects.ambient_sound, generate_identifier);
     let additions_sound = generate_option(&effects.additions_sound, generate_additions_sound);
     let mood_sound = generate_option(&effects.mood_sound, generate_mood_sound);
     let particle = generate_option(&effects.particle, generate_particle);
@@ -408,12 +408,9 @@ pub(crate) fn build() -> TokenStream {
         let spawners =
             generate_hashmap_string(&biome.spawners, |v| generate_vec(v, generate_spawner_data));
         let spawn_costs = generate_hashmap_resource(&biome.spawn_costs, generate_spawn_cost);
-        let carvers = generate_vec(
-            &biome.carvers.clone().into_vec(),
-            generate_resource_location,
-        );
+        let carvers = generate_vec(&biome.carvers.clone().into_vec(), generate_identifier);
         let features = generate_vec(&biome.features, |inner_vec| {
-            generate_vec(inner_vec, generate_resource_location)
+            generate_vec(inner_vec, generate_identifier)
         });
 
         stream.extend(quote! {

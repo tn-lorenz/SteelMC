@@ -33,7 +33,7 @@ pub struct BiomeCondition {
     biomes: String,
 }
 
-fn generate_resource_location(resource: &Identifier) -> TokenStream {
+fn generate_identifier(resource: &Identifier) -> TokenStream {
     let namespace = resource.namespace.as_ref();
     let path = resource.path.as_ref();
     quote! { Identifier { namespace: Cow::Borrowed(#namespace), path: Cow::Borrowed(#path) } }
@@ -119,9 +119,9 @@ pub(crate) fn build() -> TokenStream {
         let wolf_variant_name_str = wolf_variant_name.clone();
 
         let key = quote! { Identifier::vanilla_static(#wolf_variant_name_str) };
-        let wild = generate_resource_location(&wolf_variant.assets.wild);
-        let tame = generate_resource_location(&wolf_variant.assets.tame);
-        let angry = generate_resource_location(&wolf_variant.assets.angry);
+        let wild = generate_identifier(&wolf_variant.assets.wild);
+        let tame = generate_identifier(&wolf_variant.assets.tame);
+        let angry = generate_identifier(&wolf_variant.assets.angry);
 
         let spawn_conditions: Vec<_> = wolf_variant
             .spawn_conditions

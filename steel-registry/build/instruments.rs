@@ -19,7 +19,7 @@ pub struct TextComponentJson {
     translate: String,
 }
 
-fn generate_resource_location(resource: &Identifier) -> TokenStream {
+fn generate_identifier(resource: &Identifier) -> TokenStream {
     let namespace = resource.namespace.as_ref();
     let path = resource.path.as_ref();
     quote! { Identifier { namespace: Cow::Borrowed(#namespace), path: Cow::Borrowed(#path) } }
@@ -76,7 +76,7 @@ pub(crate) fn build() -> TokenStream {
         let instrument_name_str = instrument_name.clone();
 
         let key = quote! { Identifier::vanilla_static(#instrument_name_str) };
-        let sound_event = generate_resource_location(&instrument.sound_event);
+        let sound_event = generate_identifier(&instrument.sound_event);
         let use_duration = instrument.use_duration;
         let range = instrument.range;
         let description = generate_text_component(&instrument.description);

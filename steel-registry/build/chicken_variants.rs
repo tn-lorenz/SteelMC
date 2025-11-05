@@ -28,7 +28,7 @@ pub struct BiomeCondition {
     biomes: String,
 }
 
-fn generate_resource_location(resource: &Identifier) -> TokenStream {
+fn generate_identifier(resource: &Identifier) -> TokenStream {
     let namespace = resource.namespace.as_ref();
     let path = resource.path.as_ref();
     quote! { Identifier { namespace: Cow::Borrowed(#namespace), path: Cow::Borrowed(#path) } }
@@ -124,7 +124,7 @@ pub(crate) fn build() -> TokenStream {
         let chicken_variant_name_str = chicken_variant_name.clone();
 
         let key = quote! { Identifier::vanilla_static(#chicken_variant_name_str) };
-        let asset_id = generate_resource_location(&chicken_variant.asset_id);
+        let asset_id = generate_identifier(&chicken_variant.asset_id);
         let model = generate_chicken_model_type(&chicken_variant.model);
 
         let spawn_conditions: Vec<_> = chicken_variant

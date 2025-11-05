@@ -26,7 +26,7 @@ pub struct BiomeCondition {
     biomes: String,
 }
 
-fn generate_resource_location(resource: &Identifier) -> TokenStream {
+fn generate_identifier(resource: &Identifier) -> TokenStream {
     let namespace = resource.namespace.as_ref();
     let path = resource.path.as_ref();
     quote! { Identifier { namespace: Cow::Borrowed(#namespace), path: Cow::Borrowed(#path) } }
@@ -112,7 +112,7 @@ pub(crate) fn build() -> TokenStream {
         let frog_variant_name_str = frog_variant_name.clone();
 
         let key = quote! { Identifier::vanilla_static(#frog_variant_name_str) };
-        let asset_id = generate_resource_location(&frog_variant.asset_id);
+        let asset_id = generate_identifier(&frog_variant.asset_id);
 
         let spawn_conditions: Vec<_> = frog_variant
             .spawn_conditions

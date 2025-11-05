@@ -12,7 +12,7 @@ pub struct BannerPatternJson {
     translation_key: String,
 }
 
-fn generate_resource_location(resource: &Identifier) -> TokenStream {
+fn generate_identifier(resource: &Identifier) -> TokenStream {
     let namespace = resource.namespace.as_ref();
     let path = resource.path.as_ref();
     quote! { Identifier { namespace: Cow::Borrowed(#namespace), path: Cow::Borrowed(#path) } }
@@ -62,7 +62,7 @@ pub(crate) fn build() -> TokenStream {
         let banner_pattern_name_str = banner_pattern_name.clone();
 
         let key = quote! { Identifier::vanilla_static(#banner_pattern_name_str) };
-        let asset_id = generate_resource_location(&banner_pattern.asset_id);
+        let asset_id = generate_identifier(&banner_pattern.asset_id);
         let translation_key = banner_pattern.translation_key.as_str();
 
         stream.extend(quote! {

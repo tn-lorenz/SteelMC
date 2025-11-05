@@ -6,15 +6,15 @@ use steel_utils::Identifier;
 #[derive(WriteTo, ClientPacket, Clone, Debug)]
 #[packet_id(Config = C_CUSTOM_PAYLOAD, Play = PLAY_C_CUSTOM_PAYLOAD)]
 pub struct CCustomPayload {
-    pub resource_location: Identifier,
+    pub identifier: Identifier,
     #[write_as(as = "vec")]
     pub payload: Box<[u8]>,
 }
 
 impl CCustomPayload {
-    pub fn new(resource_location: Identifier, payload: Box<[u8]>) -> Self {
+    pub fn new(identifier: Identifier, payload: Box<[u8]>) -> Self {
         Self {
-            resource_location,
+            identifier,
             payload,
         }
     }
