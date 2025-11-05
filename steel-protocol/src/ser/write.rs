@@ -3,7 +3,12 @@ use std::{
     io::{Result, Write},
 };
 
-use crate::{codec::VarInt, packet_traits::WriteTo};
+use steel_utils::BlockPos;
+
+use crate::{
+    codec::VarInt,
+    packet_traits::{PrefixedWrite, WriteTo},
+};
 
 impl WriteTo for bool {
     fn write(&self, writer: &mut impl Write) -> Result<()> {
@@ -80,6 +85,13 @@ impl<T: WriteTo, const N: usize> WriteTo for [T; N] {
     }
 }
 
+impl<T: WriteTo, Z: WriteTo> WriteTo for (T, Z) {
+    fn write(&self, writer: &mut impl Write) -> Result<()> {
+        self.0.write(writer)?;
+        self.1.write(writer)
+    }
+}
+
 impl<K: WriteTo, V: WriteTo> WriteTo for HashMap<K, V> {
     fn write(&self, writer: &mut impl Write) -> Result<()> {
         VarInt(self.len() as i32).write(writer)?;
@@ -91,12 +103,14 @@ impl<K: WriteTo, V: WriteTo> WriteTo for HashMap<K, V> {
     }
 }
 
-impl<V: WriteTo> WriteTo for Vec<V> {
+impl<T: WriteTo> WriteTo for Vec<T> {
     fn write(&self, writer: &mut impl Write) -> Result<()> {
-        VarInt(self.len() as i32).write(writer)?;
-        for v in self {
-            v.write(writer)?;
-        }
-        Ok(())
+        self.write_prefixed::<VarInt>(writer)
+    }
+}
+
+impl WriteTo for BlockPos {
+    fn write(&self, writer: &mut impl Write) -> Result<()> {
+        self.as_i64().write(writer)
     }
 }
