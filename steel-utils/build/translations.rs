@@ -18,22 +18,6 @@ fn count_parameters(text: &str) -> usize {
     sequential.max(positional)
 }
 
-/// Convert a translation key to a valid Rust constant name
-/// Preserves the distinction between dots and camelCase
-fn key_to_const_name(key: &str) -> String {
-    // Split by dots and convert each segment separately to preserve camelCase
-    let segments: Vec<String> = key
-        .split('.')
-        .map(|segment| {
-            // Convert segment to SHOUTY_SNAKE_CASE
-            segment.to_shouty_snake_case()
-        })
-        .collect();
-
-    // Join with double underscores to distinguish from camelCase-generated underscores
-    segments.join("_").replace('-', "_")
-}
-
 /// Escape a string for use in Rust string literals
 fn escape_string(s: &str) -> String {
     s.replace('\\', "\\\\")
@@ -93,7 +77,7 @@ pub(crate) fn build() -> TokenStream {
             continue;
         }
 
-        let mut const_name_str = key_to_const_name(key);
+        let mut const_name_str = key.to_shouty_snake_case();
 
         // Handle collisions by appending a number
         if let Some(count) = used_names.get_mut(&const_name_str) {
