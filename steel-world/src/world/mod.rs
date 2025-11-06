@@ -1,14 +1,13 @@
 use std::sync::Arc;
 
-use scc::{HashIndex, HashMap};
-use steel_utils::{ChunkPos, locks::SteelRwLock};
+use scc::HashMap;
 
-use crate::{ChunkData, player::Player};
+use crate::{ChunkMap, player::Player};
 
 mod world_entities;
 
 pub struct World {
-    pub loaded_chunks: HashIndex<ChunkPos, SteelRwLock<ChunkData>>,
+    pub chunk_map: ChunkMap,
     pub players: HashMap<uuid::Uuid, Arc<Player>>,
 }
 
@@ -16,7 +15,7 @@ impl World {
     #[allow(clippy::new_without_default)]
     pub fn new() -> Self {
         Self {
-            loaded_chunks: HashIndex::new(),
+            chunk_map: ChunkMap::new(),
             players: HashMap::new(),
         }
     }
