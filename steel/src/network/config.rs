@@ -62,7 +62,7 @@ impl JavaTcpClient {
     pub async fn handle_finish_configuration(&self, _packet: SFinishConfiguration) {
         self.protocol.store(ConnectionProtocol::Play);
 
-        self.server.add_player(Player::new(
+        let player = self.server.add_player(Player::new(
             self.gameprofile
                 .lock()
                 .await
@@ -71,5 +71,7 @@ impl JavaTcpClient {
             self.outgoing_queue.clone(),
             self.cancel_token.clone(),
         ));
+
+        self.player.set(player).unwrap();
     }
 }

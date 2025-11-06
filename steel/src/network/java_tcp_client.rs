@@ -1,4 +1,8 @@
-use std::{io::Cursor, net::SocketAddr, sync::Arc};
+use std::{
+    io::Cursor,
+    net::SocketAddr,
+    sync::{Arc, Weak},
+};
 
 use crossbeam::atomic::AtomicCell;
 use steel_protocol::{
@@ -8,6 +12,7 @@ use steel_protocol::{
     packets::{
         common::{CDisconnect, SClientInformation, SCustomPayload},
         config::{SFinishConfiguration, SSelectKnownPacks},
+        game::SClientTickEnd,
         handshake::{ClientIntent, SClientIntention},
         login::{CLoginDisconnect, SHello, SKey, SLoginAcknowledged},
         status::{SPingRequest, SStatusRequest},
@@ -16,7 +21,7 @@ use steel_protocol::{
 };
 use steel_registry::packets::{config, handshake, login, play, status};
 use steel_utils::text::TextComponent;
-use steel_world::player::GameProfile;
+use steel_world::player::{GameProfile, Player};
 use tokio::{
     io::{BufReader, BufWriter},
     net::{
@@ -25,7 +30,7 @@ use tokio::{
     },
     select,
     sync::{
-        Mutex, Notify,
+        Mutex, Notify, OnceCell,
         broadcast::{self, Sender, error::RecvError},
         mpsc::{self, UnboundedReceiver, UnboundedSender},
     },
@@ -67,6 +72,7 @@ pub struct JavaTcpClient {
 
     pub(crate) connection_updates: Sender<ConnectionUpdate>,
     pub(crate) connection_updated: Arc<Notify>,
+    pub player: OnceCell<Weak<Player>>,
 }
 
 impl JavaTcpClient {
@@ -101,6 +107,7 @@ impl JavaTcpClient {
             challenge: AtomicCell::new(None),
             connection_updates,
             connection_updated: Arc::new(Notify::new()),
+            player: OnceCell::new(),
         };
 
         (client, recv, TCPNetworkDecoder::new(BufReader::new(read)))
@@ -379,6 +386,9 @@ impl JavaTcpClient {
         match packet.id {
             play::C_CUSTOM_PAYLOAD => {
                 self.handle_custom_payload(SCustomPayload::read_packet(data)?);
+            }
+            play::S_CLIENT_TICK_END => {
+                self.handle_client_tick_end(SClientTickEnd::read_packet(data)?);
             }
             id => log::info!("play packet id {id} is not known"),
         }
