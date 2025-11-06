@@ -1,13 +1,17 @@
 use serde::{Deserialize, Serialize};
-use std::borrow::Cow;
+use std::{
+    borrow::Cow,
+    fmt::{self, Display},
+};
 
-use crate::text::{locale::Locale, style::Style};
+use crate::text::{style::Style, translation::TranslatedMessage};
 
 pub mod click;
 pub mod color;
 pub mod hover;
 pub mod locale;
 pub mod style;
+pub mod translation;
 
 #[derive(Clone, Debug, Serialize, Deserialize, PartialEq, Eq, Hash)]
 #[serde(rename_all = "camelCase")]
@@ -44,13 +48,18 @@ pub enum TextContent {
     /// A keybind identifier
     /// https://minecraft.wiki/w/Controls#Configurable_controls
     Keybind { keybind: Cow<'static, str> },
-    /// A custom translation key
-    #[serde(skip)]
-    Custom {
-        key: Cow<'static, str>,
-        locale: Locale,
-        with: Vec<TextComponent>,
-    },
+}
+
+impl From<String> for TextComponent {
+    fn from(value: String) -> Self {
+        Self::text(value)
+    }
+}
+
+impl From<&'static str> for TextComponent {
+    fn from(value: &'static str) -> Self {
+        Self::text(value)
+    }
 }
 
 impl TextComponent {
@@ -62,14 +71,11 @@ impl TextComponent {
         }
     }
 
-    pub fn translate<K: Into<Cow<'static, str>>, W: Into<Vec<TextComponent>>>(
-        key: K,
-        with: W,
-    ) -> Self {
+    pub fn translate(message: TranslatedMessage) -> Self {
         Self {
             content: TextContent::Translate {
-                translate: key.into(),
-                with: with.into(),
+                translate: Cow::Borrowed(message.key()),
+                with: message.args().into(),
             },
             style: Style::default(),
             extra: vec![],
@@ -122,6 +128,15 @@ impl TextComponent {
                 shadow_color: None,
             },
             extra: Vec::new(),
+        }
+    }
+}
+
+impl Display for TextComponent {
+    fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
+        match &self.content {
+            TextContent::Text { text } => write!(f, "{}", text),
+            _ => unimplemented!(),
         }
     }
 }

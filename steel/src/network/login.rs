@@ -6,6 +6,7 @@ use steel_protocol::{
     packets::login::{CHello, CLoginCompression, CLoginFinished, SHello, SKey, SLoginAcknowledged},
     utils::ConnectionProtocol,
 };
+use steel_registry::translations;
 use steel_utils::text::TextComponent;
 use steel_world::player::GameProfile;
 use uuid::Uuid;
@@ -144,12 +145,11 @@ impl JavaTcpClient {
                 Ok(new_profile) => *profile = new_profile,
                 Err(error) => {
                     self.kick(match error {
-                        AuthError::FailedResponse => {
-                            TextComponent::translate("multiplayer.disconnect.authservers_down", [])
-                        }
+                        AuthError::FailedResponse => TextComponent::translate(
+                            translations::MULTIPLAYER_DISCONNECT_AUTHSERVERS_DOWN.message(),
+                        ),
                         AuthError::UnverifiedUsername => TextComponent::translate(
-                            "multiplayer.disconnect.unverified_username",
-                            [],
+                            translations::MULTIPLAYER_DISCONNECT_UNVERIFIED_USERNAME.message(),
                         ),
                         e => TextComponent::text(e.to_string()),
                     })

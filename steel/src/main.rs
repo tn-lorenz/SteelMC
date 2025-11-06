@@ -1,6 +1,7 @@
 use log::LevelFilter;
 use simplelog::{ColorChoice, Config, TermLogger, TerminalMode};
 use steel::SteelServer;
+use steel_registry::translations;
 use steel_utils::Identifier;
 
 #[tokio::main]
@@ -26,6 +27,13 @@ async fn main() {
             .iter()
             .map(|b| b.key.path.to_string())
             .collect::<Vec<String>>()
+    );
+
+    log::info!(
+        "{:?}",
+        translations::DEATH_ATTACK_ANVIL_PLAYER
+            .message("4LVE", "Borrow Checker")
+            .format()
     );
 
     server.start().await;
