@@ -1,8 +1,7 @@
 use log::LevelFilter;
 use simplelog::{ColorChoice, Config, TermLogger, TerminalMode};
 use steel::SteelServer;
-use steel_registry::translations;
-use steel_utils::Identifier;
+use steel_utils::{Identifier, translations};
 
 #[tokio::main]
 async fn main() {
@@ -32,7 +31,7 @@ async fn main() {
     log::info!(
         "{:?}",
         translations::DEATH_ATTACK_ANVIL_PLAYER
-            .message("4LVE", "Borrow Checker")
+            .message(["4LVE", "Borrow Checker"])
             .format()
     );
 

@@ -146,10 +146,6 @@ pub mod vanilla_dialogs;
 #[path = "generated/vanilla_packets.rs"]
 pub mod packets;
 
-#[rustfmt::skip]
-#[path = "generated/vanilla_translations.rs"]
-pub mod translations;
-
 pub trait RegistryExt {
     fn freeze(&mut self);
 }

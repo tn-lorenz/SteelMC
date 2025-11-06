@@ -15,6 +15,10 @@ pub mod serial;
 pub mod text;
 pub mod types;
 
+#[rustfmt::skip]
+#[path = "generated/vanilla_translations.rs"]
+pub mod translations;
+
 pub use front_vec::FrontVec;
 pub use types::BlockPos;
 pub use types::BlockStateId;

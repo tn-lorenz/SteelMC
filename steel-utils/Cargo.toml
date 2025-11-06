@@ -2,6 +2,7 @@
 name = "steel-utils"
 version.workspace = true
 edition.workspace = true
+build = "build/build.rs"
 
 [dependencies]
 tokio.workspace = true
@@ -10,3 +11,11 @@ serde_json.workspace = true
 num-traits = "0.2.19"
 simdnbt.workspace = true
 uuid.workspace = true
+phf = { version = "0.13.1", features = ["macros"] }
+
+[build-dependencies]
+heck = "0.5.0"
+proc-macro2.workspace = true
+quote.workspace = true
+serde_json.workspace = true
+phf_codegen = "0.13.1"

@@ -19,7 +19,6 @@ mod jukebox_songs;
 mod packets;
 mod painting_variants;
 mod pig_variants;
-mod translations;
 mod trim_materials;
 mod trim_patterns;
 mod wolf_sound_variants;
@@ -52,7 +51,7 @@ const DAMAGE_TYPES: &str = "damage_types";
 const JUKEBOX_SONGS: &str = "jukebox_songs";
 const INSTRUMENTS: &str = "instruments";
 const DIALOGS: &str = "dialogs";
-const TRANSLATIONS: &str = "translations";
+// const TRANSLATIONS: &str = "translations";
 
 pub fn main() {
     if !Path::new(OUT_DIR).exists() {
@@ -83,7 +82,7 @@ pub fn main() {
         (jukebox_songs::build(), JUKEBOX_SONGS),
         (instruments::build(), INSTRUMENTS),
         (dialogs::build(), DIALOGS),
-        (translations::build(), TRANSLATIONS),
+        // (translations::build(), TRANSLATIONS),
     ];
 
     for (content, file_name) in vanilla_builds {

@@ -44,3 +44,26 @@ pub struct Style {
     )]
     pub shadow_color: Option<ARGBColor>,
 }
+
+impl Style {
+    pub const fn new() -> Self {
+        Self {
+            color: None,
+            bold: None,
+            italic: None,
+            underlined: None,
+            strikethrough: None,
+            obfuscated: None,
+            insertion: None,
+            click_event: None,
+            hover_event: None,
+            font: None,
+            shadow_color: None,
+        }
+    }
+
+    pub const fn color(mut self, color: Color) -> Self {
+        self.color = Some(color);
+        self
+    }
+}
