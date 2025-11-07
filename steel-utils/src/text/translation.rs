@@ -33,6 +33,7 @@ impl<const ARGS: usize> Translation<ARGS> {
 #[derive(Clone, Debug, Serialize, Deserialize, PartialEq, Eq, Hash)]
 pub struct TranslatedMessage {
     pub key: Cow<'static, str>,
+    pub fallback: Option<Cow<'static, str>>,
     pub args: Option<Box<[TextComponent]>>,
 }
 
@@ -43,6 +44,7 @@ impl TranslatedMessage {
         Self {
             key: Cow::Borrowed(key),
             args,
+            fallback: None,
         }
     }
 

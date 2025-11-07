@@ -1,10 +1,11 @@
 use serde::{Deserialize, Deserializer, Serialize};
+use simdnbt::{ToNbtTag, owned::NbtTag};
 
 #[derive(Debug, Deserialize, Clone, Copy, Eq, Hash, PartialEq)]
 pub struct RGBColor {
-    red: u8,
-    green: u8,
-    blue: u8,
+    pub red: u8,
+    pub green: u8,
+    pub blue: u8,
 }
 
 impl RGBColor {
@@ -41,6 +42,19 @@ impl ARGBColor {
     }
 }
 
+/// Converts the ARGB color to an NbtTag::Int of the ARGB hex code as decimal.
+///
+/// Formula: (Alpha << 24) + (Red << 16) + (Green << 8) + Blue
+impl ToNbtTag for ARGBColor {
+    fn to_nbt_tag(self) -> NbtTag {
+        let value: i32 = ((self.alpha as i32) << 24)
+            | ((self.red as i32) << 16)
+            | ((self.green as i32) << 8)
+            | (self.blue as i32);
+        NbtTag::Int(value)
+    }
+}
+
 impl Serialize for ARGBColor {
     fn serialize<S: serde::Serializer>(&self, serializer: S) -> Result<S::Ok, S::Error> {
         serializer.serialize_bytes([self.alpha, self.red, self.green, self.blue].as_ref())
@@ -67,6 +81,30 @@ pub enum NamedColor {
     LightPurple,
     Yellow,
     White,
+}
+
+#[allow(clippy::to_string_trait_impl)]
+impl ToString for NamedColor {
+    fn to_string(&self) -> String {
+        match self {
+            NamedColor::Black => "black".to_string(),
+            NamedColor::DarkBlue => "dark_blue".to_string(),
+            NamedColor::DarkGreen => "dark_green".to_string(),
+            NamedColor::DarkAqua => "dark_aqua".to_string(),
+            NamedColor::DarkRed => "dark_red".to_string(),
+            NamedColor::DarkPurple => "dark_purple".to_string(),
+            NamedColor::Gold => "gold".to_string(),
+            NamedColor::Gray => "gray".to_string(),
+            NamedColor::DarkGray => "dark_gray".to_string(),
+            NamedColor::Blue => "blue".to_string(),
+            NamedColor::Green => "green".to_string(),
+            NamedColor::Aqua => "aqua".to_string(),
+            NamedColor::Red => "red".to_string(),
+            NamedColor::LightPurple => "light_purple".to_string(),
+            NamedColor::Yellow => "yellow".to_string(),
+            NamedColor::White => "white".to_string(),
+        }
+    }
 }
 
 impl TryFrom<&str> for NamedColor {

@@ -3,7 +3,7 @@ use std::{
     io::{Result, Write},
 };
 
-use simdnbt::owned::NbtTag;
+use simdnbt::{ToNbtTag, owned::NbtTag};
 use uuid::Uuid;
 
 use crate::{
@@ -119,8 +119,9 @@ impl WriteTo for BlockPos {
 }
 
 impl WriteTo for TextComponent {
-    fn write(&self, _writer: &mut impl Write) -> Result<()> {
-        todo!()
+    fn write(&self, writer: &mut impl Write) -> Result<()> {
+        WriteTo::write(&self.clone().to_nbt_tag(), writer)?;
+        Ok(())
     }
 }
 

@@ -29,7 +29,7 @@ async fn main() {
     );
 
     log::info!(
-        "{:?}",
+        "{}",
         translations::DEATH_ATTACK_ANVIL_PLAYER
             .message(["4LVE", "Borrow Checker"])
             .format()

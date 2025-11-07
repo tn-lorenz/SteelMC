@@ -1596,6 +1596,7 @@ name = "steel-utils"
 version = "0.0.0"
 dependencies = [
  "heck",
+ "log",
  "num-traits",
  "phf",
  "phf_codegen",

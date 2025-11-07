@@ -1,10 +1,7 @@
 use serde::{Deserialize, Serialize};
+use simdnbt::{ToNbtTag, owned::NbtCompound};
 
-use crate::text::{
-    click::ClickEvent,
-    color::{ARGBColor, Color},
-    hover::HoverEvent,
-};
+use crate::text::color::{ARGBColor, Color};
 
 #[derive(Clone, Debug, Serialize, Deserialize, Default, PartialEq, Eq, Hash)]
 pub struct Style {
@@ -28,12 +25,6 @@ pub struct Style {
     /// When the text is shift-clicked by a player, this string is inserted in their chat input. It does not overwrite any existing text the player was writing. This only works in chat messages.
     #[serde(default, skip_serializing_if = "Option::is_none")]
     pub insertion: Option<String>,
-    /// Allows for events to occur when the player clicks on text. Only works in chat.
-    #[serde(default, skip_serializing_if = "Option::is_none")]
-    pub click_event: Option<ClickEvent>,
-    /// Allows for a tooltip to be displayed when the player hovers their mouse over text.
-    #[serde(default, skip_serializing_if = "Option::is_none")]
-    pub hover_event: Option<HoverEvent>,
     /// Allows you to change the font of the text.
     #[serde(default, skip_serializing_if = "Option::is_none")]
     pub font: Option<String>,
@@ -55,8 +46,6 @@ impl Style {
             strikethrough: None,
             obfuscated: None,
             insertion: None,
-            click_event: None,
-            hover_event: None,
             font: None,
             shadow_color: None,
         }
@@ -65,5 +54,62 @@ impl Style {
     pub const fn color(mut self, color: Color) -> Self {
         self.color = Some(color);
         self
+    }
+
+    pub const fn shadow_color(mut self, shadow_color: ARGBColor) -> Self {
+        self.shadow_color = Some(shadow_color);
+        self
+    }
+
+    pub fn into_nbt_compound(self) -> NbtCompound {
+        let mut compound = NbtCompound::new();
+        if let Some(color) = self.color {
+            let color = match color {
+                Color::Named(color) => Some(color.to_string()),
+                Color::Rgb(color) => Some(format!(
+                    "#{:02X}{:02X}{:02X}",
+                    color.red, color.green, color.blue
+                )),
+                //TODO: A reset should reset the whole style
+                Color::Reset => None,
+            };
+            if let Some(color) = color {
+                compound.insert("color", color);
+            }
+        }
+
+        if let Some(bold) = self.bold {
+            compound.insert("bold", bold);
+        }
+
+        if let Some(italic) = self.italic {
+            compound.insert("italic", italic);
+        }
+
+        if let Some(underlined) = self.underlined {
+            compound.insert("underlined", underlined);
+        }
+
+        if let Some(strikethrough) = self.strikethrough {
+            compound.insert("strikethrough", strikethrough);
+        }
+
+        if let Some(obfuscated) = self.obfuscated {
+            compound.insert("obfuscated", obfuscated);
+        }
+
+        if let Some(insertion) = self.insertion {
+            compound.insert("insertion", insertion);
+        }
+
+        if let Some(font) = self.font {
+            compound.insert("font", font);
+        }
+
+        if let Some(shadow_color) = self.shadow_color {
+            compound.insert("shadow_color", shadow_color.to_nbt_tag());
+        }
+
+        compound
     }
 }

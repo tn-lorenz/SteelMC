@@ -12,6 +12,7 @@ num-traits = "0.2.19"
 simdnbt.workspace = true
 uuid.workspace = true
 phf = { version = "0.13.1", features = ["macros"] }
+log.workspace = true
 
 [build-dependencies]
 heck = "0.5.0"
