@@ -1,0 +1,6 @@
+[files]
+extend-exclude = ["**/build_assets/**"]
+
+[type.locale]
+extend-glob = ["**/locale.rs"]
+check-file = false

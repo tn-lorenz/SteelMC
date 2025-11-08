@@ -9,7 +9,7 @@ use crate::chunk::{
 
 pub type ChunkStageHolder = (ChunkStatus, Arc<ChunkAccses>);
 
-// Holds a ChunkAccsess
+// Holds a ChunkAccess
 pub struct ChunkHolder {
     // Will hold None if the chunk is cancelled.
     chunk_access: watch::Receiver<Option<ChunkStageHolder>>,
@@ -40,7 +40,7 @@ impl ChunkHolder {
     pub async fn as_full(&self) -> Option<Arc<ChunkAccses>> {
         let mut subscriber = self.sender.subscribe();
         loop {
-            let chunk_access = subscriber.borrow();
+            let chunk_access = subscriber.borrow_and_update();
             match &*chunk_access {
                 Some((ChunkStatus::Full, chunk)) => {
                     return Some(chunk.clone());

@@ -8,7 +8,7 @@ type Cube<T, const DIM: usize> = [[[T; DIM]; DIM]; DIM];
 #[derive(Debug, Clone)]
 pub struct HeterogeneousPalette<V: Hash + Eq + Copy, const DIM: usize> {
     cube: Box<Cube<V, DIM>>,
-    // Keeps track of how many diffrent times each value appears in the cube. (value, count)
+    // Keeps track of how many different times each value appears in the cube. (value, count)
     palette: Vec<(V, u16)>,
 }
 

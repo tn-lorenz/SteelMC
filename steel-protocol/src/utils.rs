@@ -46,7 +46,7 @@ pub enum ConnectionProtocol {
     Status,
     /// The login protocol. This is the first protocol the client switches to to join a server. It handles authentication with the mojang servers. After it is complete, the connection is switched to the PLAY protocol.
     Login,
-    /// The configuration protocol. Used for syncing regestered registries.
+    /// The configuration protocol. Used for syncing registered registries.
     Config,
 }
 

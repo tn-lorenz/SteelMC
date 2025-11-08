@@ -51,7 +51,7 @@ impl VarInt {
         Ok(())
     }
 
-    // We could just get the writen size in place,
+    // We could just get the written size in place,
     // but in our use case its already calculated
     pub fn set_in_front(&self, vec: &mut FrontVec, varint_size: usize) {
         // No heap allocation :)

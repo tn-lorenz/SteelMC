@@ -336,7 +336,7 @@ pub fn write_to_derive(input: TokenStream) -> TokenStream {
             }
 
             let writer = match write_strategy.as_deref() {
-                // Specialiced implementation
+                // Specialised implementation
                 Some("var_int") => {
                     quote! {
                         steel_utils::codec::VarInt(*self as i32).write(writer)?;

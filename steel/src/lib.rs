@@ -72,7 +72,7 @@ impl SteelServer {
                     let java_client = Arc::new(java_client);
                     java_client.start_outgoing_packet_task(sender_recv);
                     java_client.start_incoming_packet_task(net_reader);
-                    // Java_client won't drop untill the incoming and outcoming task close
+                    // Java_client won't drop until the incoming and outcoming task close
                     // So we dont need to care about them here anymore
                 }
             }

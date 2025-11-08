@@ -18,6 +18,8 @@ jobs:
           toolchain: nightly
           components: clippy, rustfmt
           override: true
+      - name: Spell Check Repo
+        uses: crate-ci/typos@v1.39.0
       - uses: Swatinem/rust-cache@v2
       - run: cargo fmt --check
       - run: cargo clippy --release --all-targets --all-features

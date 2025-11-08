@@ -92,7 +92,7 @@ impl DataComponentMap {
     }
 
     pub fn common_item_components() -> Self {
-        //TODO: Some components stil have todo values, we should implement them
+        //TODO: Some components still have todo values, we should implement them
 
         Self {
             map: vec![

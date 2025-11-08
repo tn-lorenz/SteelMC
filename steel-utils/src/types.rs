@@ -12,7 +12,7 @@ use crate::{
     serial::{ReadFrom, WriteTo},
 };
 
-// Usefull for early developement
+// Useful for early development
 pub type Todo = ();
 
 // A raw block state id. Using the registry this id can be derived into a block and it's current properties.

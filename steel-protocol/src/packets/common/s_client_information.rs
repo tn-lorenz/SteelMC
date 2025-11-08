@@ -1,7 +1,7 @@
 use steel_macros::{ReadFrom, ServerPacket};
 
 #[derive(ReadFrom, Clone, Debug)]
-pub enum ChatVisiblity {
+pub enum ChatVisibility {
     Full = 0,
     System = 1,
     Hidden = 2,
@@ -26,7 +26,7 @@ pub struct SClientInformation {
     pub language: String,
     #[read_as(as = "var_int")]
     pub view_distance: i32,
-    pub chat_visibility: ChatVisiblity,
+    pub chat_visibility: ChatVisibility,
     pub chat_colors: bool,
     #[read_as(as = "var_int")]
     pub model_customisation: i32,
