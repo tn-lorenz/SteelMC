@@ -1,58 +1,61 @@
-use std::sync::Arc;
+use steel_utils::BlockStateId;
 
-use tokio::sync::watch;
+use crate::chunk::{level_chunk::LevelChunk, proto_chunk::ProtoChunk};
 
-use crate::chunk::{
-    level_chunk::LevelChunk,
-    proto_chunk::{ChunkAccses, ChunkStatus, ProtoChunk},
-};
-
-// Holds a ChunkAccsess
-pub struct ChunkHolder {
-    // Will hold None if the chunk is cancelled.
-    chunk_access: watch::Receiver<Option<(ChunkStatus, ChunkAccses)>>,
-    sender: watch::Sender<Option<(ChunkStatus, ChunkAccses)>>,
+pub enum ChunkStatus {
+    Empty,
+    StructureStarts,
+    StructureReferences,
+    Biomes,
+    Noise,
+    Surface,
+    Carvers,
+    Features,
+    InitializeLight,
+    Light,
+    Spawn,
+    Full,
 }
 
-impl ChunkHolder {
-    pub fn new(proto_chunk: ProtoChunk) -> Self {
-        let (sender, receiver) = watch::channel(Some((
-            ChunkStatus::Empty,
-            ChunkAccses::Proto(Arc::new(proto_chunk)),
-        )));
-        Self {
-            chunk_access: receiver,
-            sender,
+pub enum ChunkAccses {
+    Full(LevelChunk),
+    Proto(ProtoChunk),
+}
+
+impl ChunkAccses {
+    pub fn into_full(self) -> Self {
+        match self {
+            Self::Proto(proto_chunk) => Self::Full(LevelChunk::from_proto(proto_chunk)),
+            Self::Full(_) => unreachable!(),
         }
     }
 
-    // Will return None if the chunk is not full or is cancelled.
-    pub fn try_get_full(&self) -> Option<Arc<LevelChunk>> {
-        match &*self.chunk_access.borrow() {
-            Some((ChunkStatus::Full, ChunkAccses::Full(full_chunk))) => Some(full_chunk.clone()),
-            _ => None,
-        }
+    pub async fn get_relative_block(
+        &self,
+        relative_x: usize,
+        relative_y: usize,
+        relative_z: usize,
+    ) -> Option<BlockStateId> {
+        let sections = match self {
+            Self::Full(chunk) => chunk.sections.read().await,
+            Self::Proto(proto_chunk) => proto_chunk.sections.read().await,
+        };
+
+        sections.get_relative_block(relative_x, relative_y, relative_z)
     }
 
-    // Will wait until this chunk has reached the Full status. Will return None if the chunk generation iss cancelled.
-    pub async fn as_full(&self) -> Option<Arc<LevelChunk>> {
-        let mut subscriber = self.sender.subscribe();
-        loop {
-            let chunk_access = subscriber.borrow();
-            match &*chunk_access {
-                Some((ChunkStatus::Full, ChunkAccses::Full(full_chunk))) => {
-                    return Some(full_chunk.clone());
-                }
-                Some((_, _)) => {}
-                None => {
-                    return None;
-                }
-            }
-            drop(chunk_access);
-            if let Err(e) = subscriber.changed().await {
-                log::error!("Failed to wait for chunk access: {e}");
-                return None;
-            }
-        }
+    pub async fn set_relative_block(
+        &self,
+        relative_x: usize,
+        relative_y: usize,
+        relative_z: usize,
+        value: BlockStateId,
+    ) {
+        let mut sections = match self {
+            Self::Full(chunk) => chunk.sections.write().await,
+            Self::Proto(proto_chunk) => proto_chunk.sections.write().await,
+        };
+
+        sections.set_relative_block(relative_x, relative_y, relative_z, value);
     }
 }

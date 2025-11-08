@@ -14,7 +14,7 @@ impl<'a> ChunkPacketData<'a> {
     pub async fn extract_chunk_data(&self) -> Vec<u8> {
         let mut buf = Vec::new();
 
-        for section in &self.chunk.data.read().await.sections {
+        for section in &self.chunk.sections.read().await.sections {
             section.write(&mut buf);
         }
 

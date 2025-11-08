@@ -40,7 +40,7 @@ impl Block {
     /// const REPEATER: Block = Block::new("repeater", props, &[...])
     ///     .with_default_state(4);
     /// ```
-    pub const fn with_default_state(mut self, offset: u16) -> Self {
+    pub(crate) const fn with_default_state(mut self, offset: u16) -> Self {
         self.default_state_offset = offset;
 
         self

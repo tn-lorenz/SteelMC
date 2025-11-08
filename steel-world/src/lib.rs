@@ -1,6 +1,7 @@
-use crate::chunk::chunk_access::ChunkHolder;
 use scc::HashIndex;
 use steel_utils::ChunkPos;
+
+use crate::chunk::chunk_holder::ChunkHolder;
 
 pub mod chunk;
 pub mod player;
