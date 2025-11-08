@@ -101,7 +101,7 @@ pub struct EncodedPacket {
 }
 
 impl EncodedPacket {
-    fn from_data_uncompressed(mut packet_data: FrontVec) -> Result<Self, PacketError> {
+    pub fn from_data_uncompressed(mut packet_data: FrontVec) -> Result<Self, PacketError> {
         let data_len = packet_data.len();
         let varint_size = VarInt::written_size(data_len as _);
 
@@ -178,11 +178,11 @@ impl EncodedPacket {
 
     pub async fn from_bare<P: ClientPacket>(
         packet: P,
-        compression_info: Option<CompressionInfo>,
+        compression: Option<CompressionInfo>,
         protocol: ConnectionProtocol,
     ) -> Result<Self, PacketError> {
         let buf = Self::write_vec(packet, protocol)?;
-        Self::from_data(buf, compression_info).await
+        Self::from_data(buf, compression).await
     }
 
     pub fn write_vec<P: ClientPacket>(
