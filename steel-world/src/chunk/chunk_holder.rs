@@ -78,7 +78,7 @@ impl ChunkHolder {
                     ChunkAccses::Full(LevelChunk::from_proto(proto_chunk)),
                 )),
                 _ => {
-                    panic!("Cannot upgrade a chunk that is not empty");
+                    panic!("Cannot upgrade a chunk that is not at full and at ProtoChunk status");
                 }
             });
         });
