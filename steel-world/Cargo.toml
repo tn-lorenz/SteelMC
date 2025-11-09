@@ -13,3 +13,4 @@ serde.workspace = true
 tokio.workspace = true
 tokio-util.workspace = true
 log.workspace = true
+replace_with = { version = "0.1.8", features = ["nightly"] }

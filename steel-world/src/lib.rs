@@ -1,4 +1,5 @@
 use scc::HashIndex;
+use std::sync::Arc;
 use steel_utils::ChunkPos;
 
 use crate::chunk::chunk_holder::ChunkHolder;
@@ -21,7 +22,7 @@ impl Level {
 }
 
 pub struct ChunkMap {
-    pub chunks: HashIndex<ChunkPos, ChunkHolder>,
+    pub chunks: HashIndex<ChunkPos, Arc<ChunkHolder>>,
 }
 
 impl Default for ChunkMap {
