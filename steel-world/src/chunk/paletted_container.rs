@@ -113,3 +113,9 @@ impl<V: Hash + Eq + Copy + Default + Debug, const DIM: usize> PalettedContainer<
 }
 
 pub type BlockPalette = PalettedContainer<BlockStateId, 16>;
+
+impl BlockPalette {
+    pub fn non_empty_block_count(&self) -> u16 {
+        todo!()
+    }
+}
