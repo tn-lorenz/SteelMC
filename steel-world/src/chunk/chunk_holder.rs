@@ -53,9 +53,12 @@ impl ChunkHolder {
     // Will return None if the chunk is not full or is cancelled.
     pub fn with_full_chunk<F, R>(&self, f: F) -> Option<R>
     where
-        F: FnOnce(&ChunkAccses) -> R,
+        F: FnOnce(&LevelChunk) -> R,
     {
-        self.with_chunk(ChunkStatus::Full, f)
+        match &*self.chunk_access.borrow() {
+            Some((ChunkStatus::Full, ChunkAccses::Full(chunk))) => Some(f(chunk)),
+            _ => None,
+        }
     }
 
     pub async fn await_chunk_and_then<F, R>(&self, status: ChunkStatus, f: F) -> Option<R>
