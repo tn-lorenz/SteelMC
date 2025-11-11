@@ -1,4 +1,4 @@
-use steel_utils::{ChunkPos, locks::SteelRwLock};
+use steel_utils::ChunkPos;
 
 use crate::chunk::section::Sections;
 
