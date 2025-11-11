@@ -13,11 +13,11 @@ async fn main() {
     )
     .unwrap();
 
-    let mut server = SteelServer::new().await;
+    let mut steel = SteelServer::new().await;
 
     log::info!(
         "{:?}",
-        server
+        steel
             .server
             .registry
             .items
@@ -35,5 +35,5 @@ async fn main() {
             .format()
     );
 
-    server.start().await;
+    steel.start().await;
 }

@@ -31,7 +31,8 @@ pub struct JavaConnection {
     id: u64,
 
     player: Weak<Player>,
-    _chunk_sender: ChunkSender,
+    #[allow(unused)]
+    chunk_sender: ChunkSender,
 }
 
 impl JavaConnection {
@@ -50,7 +51,7 @@ impl JavaConnection {
             network_writer,
             id,
             player,
-            _chunk_sender: ChunkSender::default(),
+            chunk_sender: ChunkSender::default(),
         }
     }
 

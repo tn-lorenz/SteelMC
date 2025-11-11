@@ -8,14 +8,12 @@
             "type": "string",
             "format": "uri"
         },
-        "server_address": {
-            "type": "string",
-            "description": "Server address in the format 'host:port'",
-            "pattern": "^\\d{1,3}\\.\\d{1,3}\\.\\d{1,3}\\.\\d{1,3}:\\d{1,5}$",
-            "examples": [
-                "0.0.0.0:25565",
-                "127.0.0.1:25565"
-            ]
+        "server_port": {
+            "type": "integer",
+            "description": "Server port",
+            "minimum": 1,
+            "maximum": 65000,
+            "default": 25565
         },
         "seed": {
             "type": "string",
