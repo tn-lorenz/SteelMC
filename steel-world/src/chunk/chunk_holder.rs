@@ -73,7 +73,7 @@ impl ChunkHolder {
                     return Some(f(chunk));
                 }
                 // Don't return
-                Some((_, _)) => {}
+                Some(_) => {}
                 None => {
                     return None;
                 }
