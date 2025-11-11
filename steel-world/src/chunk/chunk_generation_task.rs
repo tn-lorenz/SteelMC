@@ -14,6 +14,7 @@ pub struct ChunkGenerationTask {
     pub marked_for_cancel: AtomicBool,
 
     pub neighbor_ready: Vec<Box<dyn Future<Output = ()> + Send>>,
+    //TODO: We should make a custom struct in the future that can treat this as a fixed size array.
     pub cache: HashMap<ChunkPos, Arc<ChunkHolder>>,
     pub needs_generation: bool,
 }
