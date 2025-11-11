@@ -26,19 +26,39 @@ impl ChunkHolder {
         }
     }
 
+    pub fn with_chunk_mut<F, R>(&self, status: ChunkStatus, f: F) -> Option<R>
+    where
+        F: FnOnce(&mut ChunkAccses) -> R,
+    {
+        let mut return_value: Option<R> = None;
+        self.sender.send_modify(|chunk| match chunk {
+            Some((s, chunk)) if status <= *s => {
+                return_value = Some(f(chunk));
+            }
+            _ => {}
+        });
+        return_value
+    }
+
+    pub fn with_chunk<F, R>(&self, status: ChunkStatus, f: F) -> Option<R>
+    where
+        F: FnOnce(&ChunkAccses) -> R,
+    {
+        match &*self.chunk_access.borrow() {
+            Some((s, chunk)) if status <= *s => Some(f(chunk)),
+            _ => None,
+        }
+    }
+
     // Will return None if the chunk is not full or is cancelled.
     pub fn with_full_chunk<F, R>(&self, f: F) -> Option<R>
     where
         F: FnOnce(&ChunkAccses) -> R,
     {
-        match &*self.chunk_access.borrow() {
-            Some((ChunkStatus::Full, chunk)) => Some(f(chunk)),
-            _ => None,
-        }
+        self.with_chunk(ChunkStatus::Full, f)
     }
 
-    // Will wait until this chunk has reached the Full status. Will return None if the chunk generation iss cancelled.
-    pub async fn await_full_and_then<F, R>(&self, f: F) -> Option<R>
+    pub async fn await_chunk_and_then<F, R>(&self, status: ChunkStatus, f: F) -> Option<R>
     where
         F: FnOnce(&ChunkAccses) -> R,
     {
@@ -46,9 +66,10 @@ impl ChunkHolder {
         loop {
             let chunk_access = subscriber.borrow_and_update();
             match &*chunk_access {
-                Some((ChunkStatus::Full, chunk)) => {
+                Some((s, chunk)) if status <= *s => {
                     return Some(f(chunk));
                 }
+                // Don't return
                 Some((_, _)) => {}
                 None => {
                     return None;
@@ -62,6 +83,14 @@ impl ChunkHolder {
                 return None;
             }
         }
+    }
+
+    // Will wait until this chunk has reached the Full status. Will return None if the chunk generation iss cancelled.
+    pub async fn await_full_and_then<F, R>(&self, f: F) -> Option<R>
+    where
+        F: FnOnce(&ChunkAccses) -> R,
+    {
+        self.await_chunk_and_then(ChunkStatus::Full, f).await
     }
 
     pub async fn await_full(&self) -> Option<()> {
