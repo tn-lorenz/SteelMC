@@ -101,11 +101,11 @@ impl ChunkHolder {
     }
 
     /// # Panics
-    /// The function expects that the chunk is at Full status and at ProtoChunk (which should normally not be possible but an exception is made for a quick upgrade).
+    /// The function expects that the chunk is completed and at ProtoChunk stage
     pub fn upgrade_to_full(&self) {
         self.sender.send_modify(|chunk| {
             replace_with_or_abort(chunk, |chunk| match chunk {
-                Some((ChunkStatus::Full, ChunkAccses::Proto(proto_chunk))) => Some((
+                Some((_, ChunkAccses::Proto(proto_chunk))) => Some((
                     ChunkStatus::Full,
                     ChunkAccses::Full(LevelChunk::from_proto(proto_chunk)),
                 )),
