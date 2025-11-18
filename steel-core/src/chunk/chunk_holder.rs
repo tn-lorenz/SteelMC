@@ -1,4 +1,4 @@
-//! This module contains the `ChunkHolder` struct, which is used to hold a chunk in a watch channel.
+//! `ChunkHolder` manages chunk state and asynchronous generation tasks.
 use std::pin::Pin;
 use std::sync::Arc;
 
@@ -15,44 +15,53 @@ use crate::{
         chunk_generation_task::ChunkGenerationTask,
         chunk_pyramid::ChunkStep,
         level_chunk::LevelChunk,
-        proto_chunk::ProtoChunk,
     },
 };
 
 /// A tuple containing the chunk status and the chunk access.
 pub type ChunkStageHolder = (ChunkStatus, ChunkAccess);
 
-/// Holds a chunk in a watch channel, allowing for multiple threads to access it.
+/// The result of a chunk operation.
+pub enum ChunkResult {
+    /// The chunk is not loaded.
+    Unloaded,
+    /// The chunk operation failed.
+    Failed,
+    /// The chunk operation succeeded.
+    Ok(ChunkStageHolder),
+}
+
+/// Holds a chunk in a watch channel, allowing for concurrent access and state tracking.
 pub struct ChunkHolder {
-    // Will hold None if the chunk is cancelled.
-    chunk_access: watch::Receiver<Option<ChunkStageHolder>>,
-    sender: watch::Sender<Option<ChunkStageHolder>>,
+    chunk_access: watch::Receiver<ChunkResult>,
+    sender: watch::Sender<ChunkResult>,
     generation_task: Mutex<Option<Arc<ChunkGenerationTask>>>,
     pos: ChunkPos,
+    /// The current ticket level of the chunk.
+    pub ticket_level: Mutex<u8>,
 }
 
 impl ChunkHolder {
     /// Creates a new chunk holder.
     #[must_use]
-    pub fn new(proto_chunk: ProtoChunk, pos: ChunkPos) -> Self {
-        let (sender, receiver) =
-            watch::channel(Some((ChunkStatus::Empty, ChunkAccess::Proto(proto_chunk))));
+    pub fn new(pos: ChunkPos, ticket_level: u8) -> Self {
+        let (sender, receiver) = watch::channel(ChunkResult::Unloaded);
         Self {
             chunk_access: receiver,
             sender,
             generation_task: Mutex::new(None),
             pos,
+            ticket_level: Mutex::new(ticket_level),
         }
     }
 
-    /// Returns a future that completes when the chunk has reached the given status or None if cancelled.
+    /// Returns a future that completes when the chunk reaches the given status or is cancelled.
     #[allow(clippy::missing_panics_doc)]
     pub async fn schedule_chunk_generation_task(
         &self,
         status: ChunkStatus,
         chunk_map: Arc<ChunkMap>,
     ) -> Pin<Box<dyn Future<Output = Option<()>> + Send + '_>> {
-        // Check if the chunk is already at the given status.
         if self.with_chunk(status, |_| ()).is_some() {
             return Box::pin(future::ready(Some(())));
         }
@@ -81,14 +90,14 @@ impl ChunkHolder {
         }
     }
 
-    /// Gets mutable access to the chunk if the chunk has reached the given status.
+    /// Gets mutable access to the chunk if it has reached the given status.
     pub fn with_chunk_mut<F, R>(&self, status: ChunkStatus, f: F) -> Option<R>
     where
         F: FnOnce(&mut ChunkAccess) -> R,
     {
         let mut return_value: Option<R> = None;
         self.sender.send_modify(|chunk| match chunk {
-            Some((s, chunk)) if status <= *s => {
+            ChunkResult::Ok((s, chunk)) if status <= *s => {
                 return_value = Some(f(chunk));
             }
             _ => {}
@@ -96,32 +105,29 @@ impl ChunkHolder {
         return_value
     }
 
-    /// Gets access to the chunk if the chunk has reached the given status.
+    /// Gets access to the chunk if it has reached the given status.
     pub fn with_chunk<F, R>(&self, status: ChunkStatus, f: F) -> Option<R>
     where
         F: FnOnce(&ChunkAccess) -> R,
     {
         match &*self.chunk_access.borrow() {
-            Some((s, chunk)) if status <= *s => Some(f(chunk)),
+            ChunkResult::Ok((s, chunk)) if status <= *s => Some(f(chunk)),
             _ => None,
         }
     }
 
-    /// Gets access to the chunk if the chunk is full.
-    ///
-    /// Will return None if the chunk is not full or is cancelled.
+    /// Gets access to the chunk if it is full.
     pub fn with_full_chunk<F, R>(&self, f: F) -> Option<R>
     where
         F: FnOnce(&LevelChunk) -> R,
     {
         match &*self.chunk_access.borrow() {
-            Some((ChunkStatus::Full, ChunkAccess::Full(chunk))) => Some(f(chunk)),
+            ChunkResult::Ok((ChunkStatus::Full, ChunkAccess::Full(chunk))) => Some(f(chunk)),
             _ => None,
         }
     }
 
-    /// Waits until the chunk has reached the given status, and then calls the given function.
-    /// Returns a future so that the subscriber can be eagerly executed and the self reference can be dropped.
+    /// Waits until the chunk has reached the given status, then calls the function.
     pub fn await_chunk_and_then<F, R>(
         &self,
         status: ChunkStatus,
@@ -136,14 +142,11 @@ impl ChunkHolder {
                 {
                     let chunk_access = subscriber.borrow_and_update();
                     match &*chunk_access {
-                        Some((s, chunk)) if status <= *s => {
+                        ChunkResult::Ok((s, chunk)) if status <= *s => {
                             return Some(f(chunk));
                         }
-                        // Don't return
-                        Some(_) => {}
-                        None => {
-                            return None;
-                        }
+                        ChunkResult::Failed => return None,
+                        _ => {}
                     }
                 }
 
@@ -156,8 +159,6 @@ impl ChunkHolder {
     }
 
     /// Waits until this chunk has reached the Full status.
-    ///
-    /// Will return None if the chunk generation is cancelled.
     pub async fn await_full_and_then<F, R>(&self, f: F) -> Option<R>
     where
         F: FnOnce(&ChunkAccess) -> R,
@@ -173,34 +174,45 @@ impl ChunkHolder {
     /// Gets the persisted status of the chunk.
     pub fn persisted_status(&self) -> ChunkStatus {
         match &*self.chunk_access.borrow() {
-            Some((s, _)) => *s,
-            None => ChunkStatus::Empty,
+            ChunkResult::Ok((s, _)) => *s,
+            _ => ChunkStatus::Empty,
         }
     }
 
     /// Applies a step to the chunk.
     pub fn apply_step(
         &self,
-        _step: Arc<ChunkStep>,
+        step: Arc<ChunkStep>,
+        _chunk_map: Arc<ChunkMap>,
         _cache: Arc<StaticCache2D<Arc<ChunkHolder>>>,
     ) -> NeighborReady {
-        todo!()
+        let target_status = step.target_status;
+        let sender = self.sender.clone();
+
+        Box::pin(async move {
+            // Simulate work placeholder
+            sender.send_modify(|chunk| match chunk {
+                ChunkResult::Ok((s, _)) if *s >= target_status => {}
+                ChunkResult::Ok((s, _)) => *s = target_status,
+                ChunkResult::Unloaded | ChunkResult::Failed => {}
+            });
+
+            Some(())
+        })
     }
 
     /// Upgrades the chunk to a full chunk.
     ///
     /// # Panics
-    /// The function expects that the chunk is completed and at `ProtoChunk` stage
+    /// Panics if the chunk is not at `ProtoChunk` stage or completed.
     pub fn upgrade_to_full(&self) {
         self.sender.send_modify(|chunk| {
             replace_with_or_abort(chunk, |chunk| match chunk {
-                Some((_, ChunkAccess::Proto(proto_chunk))) => Some((
+                ChunkResult::Ok((_, ChunkAccess::Proto(proto_chunk))) => ChunkResult::Ok((
                     ChunkStatus::Full,
                     ChunkAccess::Full(LevelChunk::from_proto(proto_chunk)),
                 )),
-                _ => {
-                    panic!("Cannot upgrade a chunk that is not at full and at ProtoChunk status");
-                }
+                _ => panic!("Cannot upgrade chunk: not at ProtoChunk status"),
             });
         });
     }

@@ -7,7 +7,7 @@ use std::{
 use crate::serial::{ReadFrom, WriteTo};
 
 /// A 2D vector.
-#[derive(Clone, Copy, Debug, PartialEq, Hash, Eq, Default)]
+#[derive(Clone, Copy, Debug, PartialEq, Hash, Eq, Default, PartialOrd, Ord)]
 #[allow(missing_docs)]
 pub struct Vector2<T> {
     pub x: T,

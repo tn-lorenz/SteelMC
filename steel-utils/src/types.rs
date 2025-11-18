@@ -21,7 +21,7 @@ pub type Todo = ();
 pub struct BlockStateId(pub u16);
 
 /// A chunk position.
-#[derive(Debug, Clone, Copy, PartialEq, Eq, Hash)]
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Hash, PartialOrd, Ord)]
 pub struct ChunkPos(pub Vector2<i32>);
 
 #[allow(missing_docs)]

@@ -1,4 +1,4 @@
-//! This module contains the `ChunkGenerationTask` struct, which is used to generate chunks.
+//! `ChunkGenerationTask` handles the generation process for chunks.
 use std::{
     future::Future,
     pin::Pin,
@@ -18,27 +18,17 @@ use crate::chunk::{
     chunk_pyramid::{GENERATION_PYRAMID, LOADING_PYRAMID},
 };
 
-/// A 2D cache that is pre-filled on creation.
-/// This is a Rust equivalent of Minecraft's `StaticCache2D`, adapted for `async`.
-/// It stores elements in a flat `Vec` for cache efficiency.
+/// A pre-filled 2D cache of elements, efficient for async creation.
 pub struct StaticCache2D<T> {
     min_x: i32,
     min_z: i32,
     size: i32,
-    /// The cache is stored in a flat Vec in row-major order (Z-then-X).
+    /// Cache stored in row-major order (Z-then-X).
     cache: Vec<T>,
 }
 
 impl<T> StaticCache2D<T> {
-    /// Creates a new `StaticCache2D` by calling an async factory function for each position
-    /// in the cache's bounds and waiting for all of them to complete concurrently.
-    ///
-    /// # Arguments
-    ///
-    /// * `center_x`: The world X coordinate of the center of the cache.
-    /// * `center_z`: The world Z coordinate of the center of the cache.
-    /// * `radius`: The radius around the center to cache. The total size will be `(radius * 2 + 1)`.
-    /// * `factory`: An async function that takes world `(x, z)` coordinates and returns a value to be stored.
+    /// Creates a `StaticCache2D` by concurrently populating it via a factory.
     #[allow(clippy::missing_panics_doc)]
     pub async fn create<F, Fut>(center_x: i32, center_z: i32, radius: i32, mut factory: F) -> Self
     where
@@ -48,33 +38,27 @@ impl<T> StaticCache2D<T> {
         let size = radius * 2 + 1;
         let min_x = center_x - radius;
         let min_z = center_z - radius;
-        let mut futures = Vec::with_capacity(
-            usize::try_from(size * size).expect("Impossible to have a negative size"),
-        );
+        let cap = usize::try_from(size * size).expect("Cache size negative");
+        let mut futures = Vec::with_capacity(cap);
 
         for z_offset in 0..size {
             for x_offset in 0..size {
-                let world_x = x_offset + min_x;
-                let world_z = z_offset + min_z;
-                futures.push(factory(world_x, world_z));
+                futures.push(factory(min_x + x_offset, min_z + z_offset));
             }
         }
-
-        let cache = join_all(futures).await;
 
         Self {
             min_x,
             min_z,
             size,
-            cache,
+            cache: join_all(futures).await,
         }
     }
 
-    /// Gets a reference to an element from the cache by world coordinates.
+    /// Gets a reference to an element by world coordinates.
     ///
     /// # Panics
-    ///
-    /// Panics if the coordinates are out of the cache's bounds.
+    /// Panics if coordinates are out of bounds.
     #[must_use]
     #[allow(clippy::missing_panics_doc)]
     pub fn get(&self, x: i32, z: i32) -> &T {
@@ -82,14 +66,11 @@ impl<T> StaticCache2D<T> {
         let rel_z = z - self.min_z;
 
         if rel_x >= 0 && rel_x < self.size && rel_z >= 0 && rel_z < self.size {
-            let index = usize::try_from(rel_z * self.size + rel_x)
-                .expect("Impossible to have a negative index");
+            let index = usize::try_from(rel_z * self.size + rel_x).expect("Index error");
             &self.cache[index]
         } else {
             panic!(
-                "Requested out of range: ({}, {}), bounds are [({}, {}) to ({}, {})]",
-                x,
-                z,
+                "Out of bounds: ({x}, {z}) vs [({}, {}) to ({}, {})]",
                 self.min_x,
                 self.min_z,
                 self.min_x + self.size - 1,
@@ -99,31 +80,31 @@ impl<T> StaticCache2D<T> {
     }
 }
 
-/// A future that will be ready when the neighbor is ready.
+/// A pinned future representing a neighbor's readiness.
 pub type NeighborReady = Pin<Box<dyn Future<Output = Option<()>> + Send + Sync>>;
 
-/// A task that generates a chunk.
+/// A task responsible for driving a chunk to a target status.
 pub struct ChunkGenerationTask {
-    /// The position of the chunk.
+    /// The chunk map associated with this task.
+    pub chunk_map: Arc<ChunkMap>,
+    /// The chunk position.
     pub pos: ChunkPos,
-    /// The target status of the chunk.
+    /// The target generation status.
     pub target_status: ChunkStatus,
-    /// The status that the chunk is scheduled to be generated to. It's safe to use sync locks cause the it should never be congested with run only running once
+    /// The status scheduled for generation. Protected by a mutex for safe concurrent access.
     pub scheduled_status: parking_lot::Mutex<Option<ChunkStatus>>,
-    /// Whether the task is marked for cancellation.
+    /// Flag indicating if the task is cancelled.
     pub marked_for_cancel: AtomicBool,
-
-    /// A list of futures that will be ready when the neighbors are ready. It's safe to use sync locks cause the it should never be congested with run only running once
+    /// Futures for neighbors. Protected by a mutex.
     pub neighbor_ready: parking_lot::Mutex<Vec<NeighborReady>>,
-    //TODO: We should make a custom struct in the future that can treat this as a fixed size array.
-    /// A cache of chunks that are needed for generation.
+    /// Cache of required chunks.
     pub cache: Arc<StaticCache2D<Arc<ChunkHolder>>>,
-    /// Whether the chunk needs to be generated.
+    /// Whether generation is required for this task.
     pub needs_generation: AtomicBool,
 }
 
 impl ChunkGenerationTask {
-    /// Creates a new chunk generation task.
+    /// Creates a new generation task.
     #[must_use]
     #[allow(clippy::unwrap_used, clippy::missing_panics_doc)]
     pub async fn new(pos: ChunkPos, target_status: ChunkStatus, chunk_map: Arc<ChunkMap>) -> Self {
@@ -140,12 +121,13 @@ impl ChunkGenerationTask {
                 .chunks
                 .get_async(&ChunkPos(Vector2::new(x, y)))
                 .await
-                .expect("Chunk is required. Should be scheduled at this point")
+                .expect("Scheduled chunk required")
                 .clone()
         })
         .await;
 
         Self {
+            chunk_map,
             pos,
             target_status,
             scheduled_status: parking_lot::Mutex::new(None),
@@ -161,11 +143,10 @@ impl ChunkGenerationTask {
         self.marked_for_cancel.store(true, Ordering::Relaxed);
     }
 
-    /// Schedules a chunk in a layer.
+    /// Schedules a chunk for a specific layer.
     ///
     /// # Panics
-    ///
-    /// Panics if the chunk can't be loaded, but didn't expect to need to generate.
+    /// Panics if generation is required but not expected.
     pub fn schedule_chunk_in_layer(
         &self,
         status: ChunkStatus,
@@ -182,23 +163,25 @@ impl ChunkGenerationTask {
 
         assert!(
             !generate || needs_generation,
-            "Can't load chunk, but didn't expect to need to generate"
+            "Generation required but not expected for chunk load"
         );
 
-        let future = chunk_holder.apply_step(pyramid.get_step_to(status), self.cache.clone());
+        let future = chunk_holder.apply_step(
+            pyramid.get_step_to(status),
+            self.chunk_map.clone(),
+            self.cache.clone(),
+        );
 
         self.neighbor_ready.lock().push(future);
-
         true
     }
 
-    /// Starts tasks for neighbors.
+    /// Schedules tasks for the current layer's neighbors.
     pub fn schedule_layer(&self, status: ChunkStatus, needs_generation: bool) {
-        //TODO: this.getRadiusForLayer(status, needsGeneration)
+        // TODO: Implement dynamic radius (getRadiusForLayer)
         let radius = 1;
         for x in (self.pos.0.x - radius)..=(self.pos.0.x + radius) {
             for y in (self.pos.0.y - radius)..=(self.pos.0.y + radius) {
-                // When initialized it should always contain it's neighbors
                 let chunk_holder = self.cache.get(x, y);
                 if self.marked_for_cancel.load(Ordering::Relaxed)
                     || !self.schedule_chunk_in_layer(status, needs_generation, chunk_holder)
@@ -209,29 +192,27 @@ impl ChunkGenerationTask {
         }
     }
 
-    /// Schedules the next layer of the chunk generation. aka dependency layers
+    /// Schedules the next layer of generation dependencies.
     ///
     /// # Panics
-    ///
-    /// Panics if the scheduled status is not the next status of the current status.
+    /// Panics if the schedule is invalid.
     pub fn schedule_next_layer(&self) {
         let status_to_schedule;
         if self.scheduled_status.lock().is_none() {
             status_to_schedule = ChunkStatus::Empty;
-            //TODO: canLoadWithoutGeneration()
+            // TODO: check canLoadWithoutGeneration
         } else if !self.needs_generation.load(Ordering::Relaxed)
             && *self.scheduled_status.lock() == Some(ChunkStatus::Empty)
         {
             self.needs_generation.store(true, Ordering::Relaxed);
             status_to_schedule = ChunkStatus::Empty;
         } else {
-            // We checked if it was empty above
             status_to_schedule = self
                 .scheduled_status
                 .lock()
-                .expect("Scheduled status is required")
+                .expect("Scheduled status missing")
                 .next()
-                .expect("Next status is required");
+                .expect("Next status missing");
         }
 
         self.schedule_layer(
@@ -241,9 +222,9 @@ impl ChunkGenerationTask {
         self.scheduled_status.lock().replace(status_to_schedule);
     }
 
-    /// Runs the generation task.
+    /// Runs the generation task loop.
     pub async fn run(self: Arc<Self>) {
-        log::info!("Running generation task for chunk {:?}", self.pos);
+        log::info!("Running generation task for {:?}", self.pos);
         self.wait_for_scheduled_layers().await;
 
         if self.marked_for_cancel.load(Ordering::Relaxed)
@@ -255,14 +236,10 @@ impl ChunkGenerationTask {
         self.schedule_next_layer();
     }
 
-    /// Waits for the scheduled layers to be ready.
+    /// Waits for all scheduled neighbor tasks to complete.
     pub async fn wait_for_scheduled_layers(&self) {
         loop {
-            let future = {
-                let mut guard = self.neighbor_ready.lock();
-                guard.pop()
-            };
-
+            let future = self.neighbor_ready.lock().pop();
             if let Some(future) = future {
                 if future.await.is_none() {
                     self.mark_for_cancel();

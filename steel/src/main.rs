@@ -35,16 +35,5 @@ async fn main() {
             .format()
     );
 
-    /*
-    steel.server.worlds[0]
-        .chunk_map
-        .schedule_generation_task(ChunkStatus::Full, ChunkPos(Vector2::new(0, 0)))
-        .await;
-
-    steel.server.worlds[0]
-        .chunk_map
-        .run_generation_tasks()
-        .await; */
-
     steel.start().await;
 }
