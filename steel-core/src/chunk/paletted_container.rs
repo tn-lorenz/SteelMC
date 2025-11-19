@@ -128,6 +128,26 @@ impl BlockPalette {
     /// Gets the number of non-empty blocks in the container.
     #[must_use]
     pub fn non_empty_block_count(&self) -> u16 {
-        todo!()
+        match self {
+            Self::Homogeneous(v) => {
+                if v.0 == 0 {
+                    0
+                } else {
+                    #[allow(clippy::cast_possible_truncation)]
+                    {
+                        Self::VOLUME as u16
+                    }
+                }
+            }
+            Self::Heterogeneous(data) => {
+                let mut count = 0;
+                for (v, c) in &data.palette {
+                    if v.0 != 0 {
+                        count += c;
+                    }
+                }
+                count
+            }
+        }
     }
 }

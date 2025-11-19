@@ -11,6 +11,7 @@ pub mod chunk_pyramid;
 pub mod chunk_status_tasks;
 /// Tracks chunk levels based on ticket propagation.
 pub mod chunk_tracker;
+pub mod chunk_tracking_view;
 /// Manages chunk distance and ticket system.
 pub mod distance_manager;
 pub mod level_chunk;

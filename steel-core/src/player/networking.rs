@@ -4,12 +4,15 @@ use std::{
     sync::{Arc, Weak},
 };
 
-use crate::player::{Player, chunk_sender::ChunkSender};
+use crate::player::Player;
 use steel_protocol::{
     packet_reader::TCPNetworkDecoder,
     packet_traits::{ClientPacket, CompressionInfo, EncodedPacket, ServerPacket},
     packet_writer::TCPNetworkEncoder,
-    packets::common::SCustomPayload,
+    packets::{
+        common::SCustomPayload,
+        game::{SChunkBatchReceived, SClientTickEnd},
+    },
     utils::{ConnectionProtocol, EnqueuedPacket, PacketError, RawPacket},
 };
 use steel_registry::packets::play;
@@ -33,8 +36,6 @@ pub struct JavaConnection {
     id: u64,
 
     player: Weak<Player>,
-    #[allow(unused)]
-    chunk_sender: ChunkSender,
 }
 
 impl JavaConnection {
@@ -54,7 +55,6 @@ impl JavaConnection {
             network_writer,
             id,
             player,
-            chunk_sender: ChunkSender::default(),
         }
     }
 
@@ -100,7 +100,15 @@ impl JavaConnection {
                 player.handle_custom_payload(SCustomPayload::read_packet(data)?);
             }
             play::S_CLIENT_TICK_END => {
+                let _ = SClientTickEnd::read_packet(data)?;
                 player.handle_client_tick_end();
+            }
+            play::S_CHUNK_BATCH_RECEIVED => {
+                let packet = SChunkBatchReceived::read_packet(data)?;
+                player
+                    .chunk_sender
+                    .lock()
+                    .on_chunk_batch_received_by_client(packet.desired_chunks_per_tick);
             }
             id => log::info!("play packet id {id} is not known"),
         }

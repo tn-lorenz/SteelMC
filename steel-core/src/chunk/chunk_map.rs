@@ -4,12 +4,15 @@ use tokio::sync::Mutex;
 use tokio_util::task::TaskTracker;
 
 use crate::chunk::chunk_holder::ChunkHolder;
+use crate::chunk::chunk_tracking_view::ChunkTrackingView;
 use crate::chunk::{
     chunk_access::ChunkStatus, chunk_generation_task::ChunkGenerationTask,
     chunk_generator::SimpleChunkGenerator, chunk_pyramid::GENERATION_PYRAMID,
     chunk_tracker::MAX_LEVEL, distance_manager::DistanceManager,
     world_gen_context::WorldGenContext,
 };
+use crate::config::STEEL_CONFIG;
+use crate::player::Player;
 
 /// A map of chunks managing their state, loading, and generation.
 pub struct ChunkMap {
@@ -147,5 +150,53 @@ impl ChunkMap {
         }
 
         self.run_generation_tasks_b();
+    }
+
+    /// Updates the player's status in the chunk map.
+    pub fn update_player_status(&self, player: &Player) {
+        let current_chunk_pos = *player.last_chunk_pos.lock();
+        let view_distance = STEEL_CONFIG.view_distance;
+
+        let new_view = ChunkTrackingView::new(current_chunk_pos, i32::from(view_distance));
+        let mut last_view_guard = player.last_tracking_view.lock();
+
+        if last_view_guard.as_ref() != Some(&new_view) {
+            let mut distance_manager = self.distance_manager.blocking_lock();
+
+            let connection = &player.connection;
+
+            if let Some(last_view) = last_view_guard.as_ref() {
+                if last_view.center != new_view.center
+                    || last_view.view_distance != new_view.view_distance
+                {
+                    #[allow(clippy::cast_possible_truncation, clippy::cast_sign_loss)]
+                    distance_manager.remove_player(last_view.center, last_view.view_distance as u8);
+                    #[allow(clippy::cast_possible_truncation, clippy::cast_sign_loss)]
+                    distance_manager.add_player(new_view.center, new_view.view_distance as u8);
+                }
+
+                // We lock here to ensure we have unique access for the duration of the diff
+                ChunkTrackingView::difference(
+                    last_view,
+                    &new_view,
+                    |pos| {
+                        player.chunk_sender.lock().mark_chunk_pending_to_send(pos);
+                    },
+                    |pos| {
+                        player.chunk_sender.lock().drop_chunk(connection, pos);
+                    },
+                );
+            } else {
+                #[allow(clippy::cast_possible_truncation, clippy::cast_sign_loss)]
+                distance_manager.add_player(new_view.center, new_view.view_distance as u8);
+
+                let mut chunk_sender = player.chunk_sender.lock();
+                new_view.for_each(|pos| {
+                    chunk_sender.mark_chunk_pending_to_send(pos);
+                });
+            }
+
+            *last_view_guard = Some(new_view);
+        }
     }
 }

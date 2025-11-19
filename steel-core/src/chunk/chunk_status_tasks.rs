@@ -159,6 +159,7 @@ impl ChunkStatusTasks {
         holder: Arc<ChunkHolder>,
     ) -> Result<(), anyhow::Error> {
         //panic!("Full task");
+        //log::info!("Chunk {:?} upgraded to full", holder.get_pos());
         holder.upgrade_to_full();
         Ok(())
     }

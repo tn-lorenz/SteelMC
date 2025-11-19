@@ -28,7 +28,7 @@ pub struct TickRateManager {
 
 impl TickRateManager {
     /// Creates a new `TickRateManager` with the default tick rate (20.0 TPS).
-    #[must_use] 
+    #[must_use]
     pub fn new() -> Self {
         Self {
             tick_rate: 20.0,
@@ -59,13 +59,13 @@ impl TickRateManager {
     }
 
     /// Returns whether the server is frozen.
-    #[must_use] 
+    #[must_use]
     pub fn is_frozen(&self) -> bool {
         self.is_frozen
     }
 
     /// Returns whether the server is currently stepping forward.
-    #[must_use] 
+    #[must_use]
     pub fn is_stepping_forward(&self) -> bool {
         self.frozen_ticks_to_run > 0
     }
@@ -76,7 +76,7 @@ impl TickRateManager {
     }
 
     /// Returns whether game elements should run this tick.
-    #[must_use] 
+    #[must_use]
     pub fn runs_normally(&self) -> bool {
         self.run_game_elements
     }
@@ -147,7 +147,7 @@ impl TickRateManager {
     }
 
     /// Returns whether the server is currently sprinting.
-    #[must_use] 
+    #[must_use]
     pub fn is_sprinting(&self) -> bool {
         self.scheduled_current_sprint_ticks > 0
     }
