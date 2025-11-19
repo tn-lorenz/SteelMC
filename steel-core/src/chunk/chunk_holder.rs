@@ -208,6 +208,7 @@ impl ChunkHolder {
         let sender = self.sender.clone();
         let cache = cache.clone();
         let context = chunk_map.world_gen_context.clone();
+        // This is one of the `crate::chunk::chunk_status_tasks` functions.
         let task = step.task;
         let self_clone = self.clone();
 
@@ -256,6 +257,11 @@ impl ChunkHolder {
                             ChunkResult::Ok((s, _)) => {
                                 if *s < target_status {
                                     *s = target_status;
+                                } else if *s != ChunkStatus::Full {
+                                    panic!(
+                                        "Task completed for {:?}, but status is already at {:?}",
+                                        target_status, *s
+                                    );
                                 }
                             }
                             _ => {}
