@@ -88,7 +88,7 @@ impl TicketStorage {
     }
 
     /// Gets the lowest (best) level for a chunk.
-    #[must_use] 
+    #[must_use]
     pub fn get_level(&self, pos: ChunkPos) -> Option<u8> {
         self.tickets
             .get(&pos)

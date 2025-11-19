@@ -1,11 +1,19 @@
 //! This module contains the `Server` struct, which is the main entry point for the server.
-mod key_store;
-mod registry_cache;
+/// The key store for the server.
+pub mod key_store;
+/// The registry cache for the server.
+pub mod registry_cache;
+/// The tick rate manager for the server.
+pub mod tick_rate_manager;
+
 use std::{sync::Arc, time::Instant};
 
+use parking_lot::RwLock;
 use steel_protocol::packets::game::{CLogin, CommonPlayerSpawnInfo};
 use steel_registry::Registry;
 use steel_utils::{Identifier, types::GameType};
+use tick_rate_manager::TickRateManager;
+use tokio::task::spawn_blocking;
 
 use crate::{
     config::STEEL_CONFIG,
@@ -24,6 +32,8 @@ pub struct Server {
     pub registry_cache: RegistryCache,
     /// A list of all the worlds on the server.
     pub worlds: Vec<Arc<World>>,
+    /// The tick rate manager for the server.
+    pub tick_rate_manager: RwLock<TickRateManager>,
 }
 
 impl Server {
@@ -42,11 +52,9 @@ impl Server {
             registry,
             worlds: vec![Arc::new(World::new())],
             registry_cache,
+            tick_rate_manager: RwLock::new(TickRateManager::new()),
         }
     }
-
-    /// Runs the server.
-    pub fn run(self: Arc<Self>) {}
 
     /// Adds a player to the server.
     pub fn add_player(&self, player: Arc<Player>) {
@@ -75,5 +83,55 @@ impl Server {
             enforces_secure_chat: true,
         });
         self.worlds[0].add_player(player);
+    }
+
+    /// Runs the server tick loop.
+    pub async fn run(self: Arc<Self>) {
+        let mut next_tick_time = Instant::now();
+
+        loop {
+            let mut tick_manager = self.tick_rate_manager.write();
+            let nanoseconds_per_tick = tick_manager.nanoseconds_per_tick;
+
+            // Handle sprinting
+            let is_sprinting = tick_manager.is_sprinting();
+            let should_sprint_this_tick = if is_sprinting {
+                tick_manager.check_should_sprint_this_tick()
+            } else {
+                false
+            };
+
+            if is_sprinting && should_sprint_this_tick {
+                // If sprinting, we don't wait
+                next_tick_time = Instant::now();
+            } else {
+                // Normal wait logic
+                let now = Instant::now();
+                if now < next_tick_time {
+                    tokio::time::sleep(next_tick_time - now).await;
+                }
+                next_tick_time += std::time::Duration::from_nanos(nanoseconds_per_tick);
+            }
+
+            tick_manager.tick();
+            drop(tick_manager); // Release lock before ticking worlds to avoid deadlock if they access it
+
+            // Tick worlds
+            self.tick_worlds().await;
+
+            let mut tick_manager = self.tick_rate_manager.write();
+            if is_sprinting && should_sprint_this_tick {
+                tick_manager.end_tick_work();
+            }
+        }
+    }
+
+    async fn tick_worlds(&self) {
+        let mut tasks = Vec::with_capacity(self.worlds.len());
+        for world in &self.worlds {
+            let world_clone = world.clone();
+            tasks.push(spawn_blocking(move || world_clone.tick_b()));
+        }
+        futures::future::join_all(tasks).await;
     }
 }

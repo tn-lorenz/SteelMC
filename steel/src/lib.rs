@@ -71,6 +71,11 @@ impl SteelServer {
     pub async fn start(&mut self) {
         log::info!("Started Steel Server");
 
+        let server = self.server.clone();
+        tokio::spawn(async move {
+            server.run().await;
+        });
+
         loop {
             select! {
                 () = self.cancel_token.cancelled() => {

@@ -1,10 +1,8 @@
 //! This module contains the `ChunkPyramid`, which is used to check chunk dependencies.
 
-use core::panic;
 use std::sync::LazyLock;
-use std::{cmp::max, pin::Pin, sync::Arc};
+use std::{cmp::max, sync::Arc};
 
-use futures::Future;
 
 use crate::chunk::{
     chunk_access::ChunkStatus, chunk_generation_task::StaticCache2D, chunk_holder::ChunkHolder,
@@ -50,12 +48,9 @@ impl ChunkDependencies {
     #[must_use]
     pub fn get_radius_of(&self, status: ChunkStatus) -> usize {
         let index = status.get_index();
-        if index >= self.radius_by_dependency.len() {
-            panic!(
-                "Requesting a ChunkStatus({:?}) outside of dependency range",
-                status
-            );
-        }
+        assert!(index < self.radius_by_dependency.len(), 
+            "Requesting a ChunkStatus({status:?}) outside of dependency range"
+        );
         self.radius_by_dependency[index]
     }
 

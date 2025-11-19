@@ -1,8 +1,7 @@
 #![allow(missing_docs)]
 
-use std::{pin::Pin, sync::Arc};
+use std::sync::Arc;
 
-use futures::Future;
 use steel_utils::BlockStateId;
 
 use crate::chunk::{

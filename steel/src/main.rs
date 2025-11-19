@@ -1,10 +1,6 @@
 use log::LevelFilter;
 use simplelog::{ColorChoice, Config, TermLogger, TerminalMode};
 use steel::SteelServer;
-use steel_core::chunk::{
-    chunk_access::{ChunkAccess, ChunkStatus},
-    ticket::{Ticket, TicketType},
-};
 use steel_utils::{ChunkPos, Identifier, translations};
 use tokio::time::Instant;
 
@@ -47,12 +43,11 @@ async fn main() {
         .await
         .add_player(ChunkPos::new(0, 0), 10);
 
-    let start = Instant::now();
-
-    steel.server.worlds[0].chunk_map.tick().await;
+    let _start = Instant::now();
 
     println!("{:?}", steel.server.worlds[0].chunk_map.chunks.len());
 
+    /*
     steel.server.worlds[0]
         .chunk_map
         .chunks
@@ -71,6 +66,7 @@ async fn main() {
             _ => unreachable!(),
         })
         .await;
+     */
 
     steel.start().await;
 }

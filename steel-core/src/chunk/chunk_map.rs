@@ -50,22 +50,24 @@ impl ChunkMap {
     }
 
     /// Schedules a new generation task.
-    pub async fn schedule_generation_task(
+    pub(crate) fn schedule_generation_task_b(
         self: &Arc<Self>,
         target_status: ChunkStatus,
         pos: ChunkPos,
     ) -> Arc<ChunkGenerationTask> {
-        let task = Arc::new(ChunkGenerationTask::new(pos, target_status, self.clone()).await);
+        let task = Arc::new(ChunkGenerationTask::new(pos, target_status, self.clone()));
         self.pending_generation_tasks
-            .lock()
-            .await
+            .blocking_lock()
             .push(task.clone());
         task
     }
 
     /// Runs queued generation tasks.
-    pub async fn run_generation_tasks(&self) {
-        let mut pending = self.pending_generation_tasks.lock().await;
+    pub fn run_generation_tasks_b(&self) {
+        let mut pending = self.pending_generation_tasks.blocking_lock();
+        if pending.is_empty() {
+            return;
+        }
         log::info!("Running {} generation tasks", pending.len());
         for task in pending.drain(..) {
             self.task_tracker.spawn(async move {
@@ -76,35 +78,33 @@ impl ChunkMap {
 
     /// Updates scheduling for a chunk based on its new level.
     /// Returns the chunk holder if it is active.
-    pub async fn update_chunk_level(
+    pub fn update_chunk_level_b(
         self: &Arc<Self>,
         pos: ChunkPos,
         new_level: u8,
     ) -> Option<Arc<ChunkHolder>> {
         // Recover from unloading if possible, else create new holder.
-        let chunk_holder = if let Some(entry) = self.unloading_chunks.remove_async(&pos).await {
+        let chunk_holder = if let Some(entry) = self.unloading_chunks.remove_sync(&pos) {
             let holder = entry.1;
-            let _ = self.chunks.insert_async(pos, holder.clone()).await;
+            let _ = self.chunks.insert_sync(pos, holder.clone());
             holder
+        } else if let Some(holder) = self.chunks.get_sync(&pos) {
+            holder.get().clone()
         } else {
-            if let Some(holder) = self.chunks.get_async(&pos).await {
-                holder.get().clone()
-            } else {
-                if new_level > MAX_LEVEL {
-                    return None;
-                }
-                let holder = Arc::new(ChunkHolder::new(pos, new_level));
-                let _ = self.chunks.insert_async(pos, holder.clone()).await;
-                holder
+            if new_level > MAX_LEVEL {
+                return None;
             }
+            let holder = Arc::new(ChunkHolder::new(pos, new_level));
+            let _ = self.chunks.insert_sync(pos, holder.clone());
+            holder
         };
 
-        *chunk_holder.ticket_level.lock().await = new_level;
+        *chunk_holder.ticket_level.blocking_lock() = new_level;
 
         if new_level > MAX_LEVEL {
             log::info!("Unloading chunk at {pos:?}");
-            if let Some((_, holder)) = self.chunks.remove_async(&pos).await {
-                let _ = self.unloading_chunks.insert_async(pos, holder).await;
+            if let Some((_, holder)) = self.chunks.remove_sync(&pos) {
+                let _ = self.unloading_chunks.insert_sync(pos, holder);
             }
             None
         } else {
@@ -113,18 +113,17 @@ impl ChunkMap {
     }
 
     /// Processes chunk updates.
-    pub async fn tick(self: &Arc<Self>) {
-        let changes = self.distance_manager.lock().await.run_updates();
+    pub fn tick_b(self: &Arc<Self>) {
+        let changes = self.distance_manager.blocking_lock().run_updates();
 
         let mut updates_to_schedule = Vec::new();
 
         for (pos, _, new_level) in changes {
-            if let Some(holder) = self.update_chunk_level(pos, new_level).await {
+            if let Some(holder) = self.update_chunk_level_b(pos, new_level) {
                 updates_to_schedule.push((holder, new_level));
             }
         }
 
-        let mut futures = Vec::new();
         for (chunk_holder, new_level) in updates_to_schedule {
             // Use the generation pyramid to determine the target status for the given level.
             let target_status = if new_level > MAX_LEVEL {
@@ -143,16 +142,10 @@ impl ChunkMap {
             if let Some(status) = target_status {
                 let chunk_holder_clone = chunk_holder.clone();
                 let map_clone = self.clone();
-                futures.push(async move {
-                    let _ = chunk_holder_clone
-                        .schedule_chunk_generation_task(status, map_clone)
-                        .await;
-                });
+                let _ = chunk_holder_clone.schedule_chunk_generation_task_b(status, map_clone);
             }
         }
 
-        futures::future::join_all(futures).await;
-
-        self.run_generation_tasks().await;
+        self.run_generation_tasks_b();
     }
 }

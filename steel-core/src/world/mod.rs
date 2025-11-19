@@ -26,4 +26,9 @@ impl World {
             players: HashMap::new(),
         }
     }
+
+    /// Ticks the world.
+    pub fn tick_b(&self) {
+        self.chunk_map.tick_b();
+    }
 }

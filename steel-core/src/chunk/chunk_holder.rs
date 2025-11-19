@@ -67,7 +67,7 @@ impl ChunkHolder {
 
     /// Returns a future that completes when the chunk reaches the given status or is cancelled.
     #[allow(clippy::missing_panics_doc)]
-    pub async fn schedule_chunk_generation_task(
+    pub(crate) fn schedule_chunk_generation_task_b(
         &self,
         status: ChunkStatus,
         chunk_map: Arc<ChunkMap>,
@@ -76,21 +76,21 @@ impl ChunkHolder {
             return Box::pin(future::ready(Some(())));
         }
 
-        let task = self.generation_task.lock().await;
+        let task = self.generation_task.blocking_lock();
 
         #[allow(clippy::unwrap_used)]
         if task.is_none() || status > task.as_ref().unwrap().target_status {
             drop(task);
-            self.reschedule_chunk_task(status, chunk_map).await;
+            self.reschedule_chunk_task_b(status, chunk_map);
         }
 
         Box::pin(self.await_chunk_and_then(status, |_| ()))
     }
 
     /// Reschedules the chunk task to the given status.
-    pub async fn reschedule_chunk_task(&self, status: ChunkStatus, chunk_map: Arc<ChunkMap>) {
-        let new_task = chunk_map.schedule_generation_task(status, self.pos).await;
-        let mut old_task_guard = self.generation_task.lock().await;
+    pub(crate) fn reschedule_chunk_task_b(&self, status: ChunkStatus, chunk_map: Arc<ChunkMap>) {
+        let new_task = chunk_map.schedule_generation_task_b(status, self.pos);
+        let mut old_task_guard = self.generation_task.blocking_lock();
 
         let old_task = old_task_guard.replace(new_task);
         drop(old_task_guard);
@@ -216,20 +216,17 @@ impl ChunkHolder {
             if target_status == ChunkStatus::Empty {
                 match spawn_blocking(move || task(context, &step, &cache, self_clone)).await {
                     Ok(_) => {
-                        sender.send_modify(|chunk| match chunk {
-                            ChunkResult::Ok((s, _)) => {
-                                //log::info!("Task completed for {:?}", target_status);
+                        sender.send_modify(|chunk| if let ChunkResult::Ok((s, _)) = chunk {
+                            //log::info!("Task completed for {:?}", target_status);
 
-                                if *s < target_status {
-                                    *s = target_status;
-                                }
+                            if *s < target_status {
+                                *s = target_status;
                             }
-                            _ => {}
                         });
                         Some(())
                     }
                     Err(e) => {
-                        log::error!("Chunk generation task failed: {}", e);
+                        log::error!("Chunk generation task failed: {e}");
                         sender.send_replace(ChunkResult::Failed);
                         None
                     }
@@ -247,30 +244,25 @@ impl ChunkHolder {
 
                 let has_parent = self_clone.with_chunk(parent_status, |_| ()).is_some();
 
-                if !has_parent {
-                    panic!("Parent chunk missing");
-                }
+                assert!(has_parent, "Parent chunk missing");
 
                 match spawn_blocking(move || task(context, &step, &cache, self_clone)).await {
                     Ok(_) => {
-                        sender.send_modify(|chunk| match chunk {
-                            ChunkResult::Ok((s, _)) => {
-                                if *s < target_status {
-                                    *s = target_status;
-                                } else if *s != ChunkStatus::Full {
-                                    panic!(
-                                        "Task completed for {:?}, but status is already at {:?}",
-                                        target_status, *s
-                                    );
-                                }
+                        sender.send_modify(|chunk| if let ChunkResult::Ok((s, _)) = chunk {
+                            if *s < target_status {
+                                *s = target_status;
+                            } else if *s != ChunkStatus::Full {
+                                panic!(
+                                    "Task completed for {:?}, but status is already at {:?}",
+                                    target_status, *s
+                                );
                             }
-                            _ => {}
                         });
                         //log::info!("Task completed for {:?}", target_status);
                         Some(())
                     }
                     Err(e) => {
-                        log::error!("Chunk generation task failed: {}", e);
+                        log::error!("Chunk generation task failed: {e}");
                         sender.send_replace(ChunkResult::Failed);
                         None
                     }
@@ -282,7 +274,7 @@ impl ChunkHolder {
             match future.await {
                 Ok(result) => result,
                 Err(e) => {
-                    log::error!("Chunk generation task failed: {}", e);
+                    log::error!("Chunk generation task failed: {e}");
                     None
                 }
             }
@@ -291,7 +283,7 @@ impl ChunkHolder {
 
     fn acquire_status_bump(&self, status: ChunkStatus) -> bool {
         let status_index = status.get_index();
-        let parent_index = status.parent().map_or(usize::MAX, |s| s.get_index());
+        let parent_index = status.parent().map_or(usize::MAX, super::chunk_access::ChunkStatus::get_index);
 
         //log::info!(
         //    "Parent index: {:?}, Status index: {:?}",
@@ -313,8 +305,7 @@ impl ChunkHolder {
                     false
                 } else {
                     panic!(
-                        "Unexpected started work status: {:?} (index {}) while trying to start: {:?} (index {})",
-                        current, current, status, status_index
+                        "Unexpected started work status: {current:?} (index {current}) while trying to start: {status:?} (index {status_index})"
                     );
                 }
             }

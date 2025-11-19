@@ -1,3 +1,4 @@
+//! This module contains the `WorldGenContext` struct, which is used to provide context for chunk generation.
 use std::sync::Arc;
 
 use crate::chunk::chunk_generator::ChunkGenerator;

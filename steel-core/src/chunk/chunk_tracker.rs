@@ -57,11 +57,10 @@ impl ChunkTracker {
     }
 
     fn enqueue(&mut self, pos: ChunkPos, level: u8) {
-        if let Some(&old_level) = self.computed_levels.get(&pos) {
-            if old_level <= level {
+        if let Some(&old_level) = self.computed_levels.get(&pos)
+            && old_level <= level {
                 return;
             }
-        }
         self.computed_levels.insert(pos, level);
         self.queue.entry(level).or_default().push_back(pos);
     }

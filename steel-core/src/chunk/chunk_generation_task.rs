@@ -8,7 +8,6 @@ use std::{
     },
 };
 
-use futures::future::join_all;
 use steel_utils::ChunkPos;
 
 use crate::chunk::{
@@ -30,20 +29,19 @@ pub struct StaticCache2D<T> {
 impl<T> StaticCache2D<T> {
     /// Creates a `StaticCache2D` by concurrently populating it via a factory.
     #[allow(clippy::missing_panics_doc)]
-    pub async fn create<F, Fut>(center_x: i32, center_z: i32, radius: i32, mut factory: F) -> Self
+    pub fn create<F>(center_x: i32, center_z: i32, radius: i32, mut factory: F) -> Self
     where
-        F: FnMut(i32, i32) -> Fut,
-        Fut: Future<Output = T>,
+        F: FnMut(i32, i32) -> T,
     {
         let size = radius * 2 + 1;
         let min_x = center_x - radius;
         let min_z = center_z - radius;
         let cap = usize::try_from(size * size).expect("Cache size negative");
-        let mut futures = Vec::with_capacity(cap);
+        let mut cache = Vec::with_capacity(cap);
 
         for z_offset in 0..size {
             for x_offset in 0..size {
-                futures.push(factory(min_x + x_offset, min_z + z_offset));
+                cache.push(factory(min_x + x_offset, min_z + z_offset));
             }
         }
 
@@ -51,7 +49,7 @@ impl<T> StaticCache2D<T> {
             min_x,
             min_z,
             size,
-            cache: join_all(futures).await,
+            cache,
         }
     }
 
@@ -107,7 +105,7 @@ impl ChunkGenerationTask {
     /// Creates a new generation task.
     #[must_use]
     #[allow(clippy::unwrap_used, clippy::missing_panics_doc)]
-    pub async fn new(pos: ChunkPos, target_status: ChunkStatus, chunk_map: Arc<ChunkMap>) -> Self {
+    pub fn new(pos: ChunkPos, target_status: ChunkStatus, chunk_map: Arc<ChunkMap>) -> Self {
         let worst_case_radius = i32::try_from(
             GENERATION_PYRAMID
                 .get_step_to(target_status)
@@ -116,15 +114,13 @@ impl ChunkGenerationTask {
         )
         .unwrap();
 
-        let cache = StaticCache2D::create(pos.0.x, pos.0.y, worst_case_radius, async |x, y| {
+        let cache = StaticCache2D::create(pos.0.x, pos.0.y, worst_case_radius, |x, y| {
             chunk_map
                 .chunks
-                .get_async(&ChunkPos::new(x, y))
-                .await
+                .get_sync(&ChunkPos::new(x, y))
                 .expect("The chunkholder should be created by distance manager before the generation task is scheduled. This occurring means there is a bug in the distance manager or you called this yourself.")
                 .clone()
-        })
-        .await;
+        });
 
         Self {
             chunk_map,
@@ -305,12 +301,11 @@ impl ChunkGenerationTask {
                 if future.await.is_none() {
                     self.mark_for_cancel();
                     break;
-                } else {
-                    //log::info!(
-                    //    "Neighbor task completed for {:?}",
-                    //    self.neighbor_ready.lock().len()
-                    //);
                 }
+                //log::info!(
+                //    "Neighbor task completed for {:?}",
+                //    self.neighbor_ready.lock().len()
+                //);
             } else {
                 break;
             }
