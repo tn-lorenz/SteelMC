@@ -30,5 +30,11 @@ impl World {
     /// Ticks the world.
     pub fn tick_b(&self) {
         self.chunk_map.tick_b();
+
+        // Tick players
+        self.players.iter_sync(|_uuid, player| {
+            player.tick();
+            true
+        });
     }
 }

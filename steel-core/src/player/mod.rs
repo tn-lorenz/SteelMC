@@ -21,6 +21,9 @@ pub struct Player {
 
     /// The world the player is in.
     pub world: Arc<World>,
+
+    /// Whether the player has finished loading the client.
+    pub client_loaded: bool,
 }
 
 impl Player {
@@ -35,7 +38,23 @@ impl Player {
             connection,
 
             world,
+            client_loaded: false,
         }
+    }
+
+    /// Ticks the player.
+    pub fn tick(&self) {
+        if !self.client_loaded {
+        }
+        // TODO: Implement player ticking logic here
+        // This will include:
+        // - Checking if the player is alive
+        // - Handling movement
+        // - Updating inventory
+        // - Handling food/health regeneration
+        // - Managing game mode specific logic
+        // - Updating advancements
+        // - Handling falling
     }
 
     /// Handles a custom payload packet.
