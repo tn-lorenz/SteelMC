@@ -142,7 +142,7 @@ impl ChunkMap {
             if let Some(status) = target_status {
                 let chunk_holder_clone = chunk_holder.clone();
                 let map_clone = self.clone();
-                let _ = chunk_holder_clone.schedule_chunk_generation_task_b(status, map_clone);
+                drop(chunk_holder_clone.schedule_chunk_generation_task_b(status, map_clone));
             }
         }
 

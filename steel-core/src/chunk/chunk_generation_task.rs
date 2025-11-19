@@ -200,9 +200,12 @@ impl ChunkGenerationTask {
         } else {
             &*LOADING_PYRAMID
         };
-        pyramid
-            .get_step_to(self.target_status)
-            .get_accumulated_radius_of(status) as i32
+        i32::try_from(
+            pyramid
+                .get_step_to(self.target_status)
+                .get_accumulated_radius_of(status),
+        )
+        .expect("Radius too large")
     }
 
     /// Schedules the next layer of generation dependencies.
@@ -252,12 +255,15 @@ impl ChunkGenerationTask {
                 .get_step_to(self.target_status)
                 .accumulated_dependencies
                 .clone();
-            let range = dependencies.get_radius() as i32;
+            let range = i32::try_from(dependencies.get_radius()).expect("Radius too large");
 
             for x in (self.pos.0.x - range)..=(self.pos.0.x + range) {
                 for z in (self.pos.0.y - range)..=(self.pos.0.y + range) {
-                    let distance =
-                        std::cmp::max((self.pos.0.x - x).abs(), (self.pos.0.y - z).abs()) as usize;
+                    let distance = usize::try_from(std::cmp::max(
+                        (self.pos.0.x - x).abs(),
+                        (self.pos.0.y - z).abs(),
+                    ))
+                    .expect("Distance negative");
                     if let Some(required_status) = dependencies.get(distance) {
                         let neighbor = self.cache.get(x, z);
                         let persisted = neighbor.persisted_status();

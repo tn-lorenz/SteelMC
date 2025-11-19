@@ -3,7 +3,9 @@ use std::sync::Arc;
 
 use crate::chunk::chunk_generator::ChunkGenerator;
 
+/// Context for world generation.
 pub struct WorldGenContext {
+    /// The chunk generator to use.
     pub generator: Arc<dyn ChunkGenerator>,
     // Add other fields as needed:
     // pub level: ServerLevel,

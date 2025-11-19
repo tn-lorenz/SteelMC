@@ -22,12 +22,16 @@ use steel_utils::codec::VarInt;
 
 use crate::config::STEEL_CONFIG;
 
+/// Caches compressed registry packets to avoid re-compressing them for every player.
 pub struct RegistryCache {
+    /// The cached registry data packets.
     pub registry_packets: Arc<[EncodedPacket]>,
+    /// The cached tags packet.
     pub tags_packet: Arc<EncodedPacket>,
 }
 
 impl RegistryCache {
+    /// Creates a new `RegistryCache` from the given registry.
     pub async fn new(registry: &Registry) -> Self {
         let registry_packets = Self::build_registry_packets(registry);
         let tags_by_registry_packet = Self::build_tags_packet(registry);
@@ -128,6 +132,7 @@ impl RegistryCache {
     }
 }
 
+/// Compresses a packet.
 pub async fn compress_packet<P: ClientPacket>(packet: P) -> Result<EncodedPacket, ()> {
     let compression_info = STEEL_CONFIG.compression;
     let id = packet.get_id(ConnectionProtocol::Config);

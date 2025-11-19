@@ -190,6 +190,9 @@ impl ChunkHolder {
     }
 
     /// Applies a step to the chunk.
+    ///
+    /// # Panics
+    /// Panics if the target status is not Empty and has no parent, or if the chunk status is invalid during generation.
     pub fn apply_step(
         self: Arc<Self>,
         step: Arc<ChunkStep>,
@@ -212,43 +215,46 @@ impl ChunkHolder {
         let task = step.task;
         let self_clone = self.clone();
 
-        let future = chunk_map.task_tracker.spawn(async move {
-            if target_status == ChunkStatus::Empty {
-                match spawn_blocking(move || task(context, &step, &cache, self_clone)).await {
-                    Ok(_) => {
-                        sender.send_modify(|chunk| if let ChunkResult::Ok((s, _)) = chunk {
-                            //log::info!("Task completed for {:?}", target_status);
+        let future =
+            chunk_map.task_tracker.spawn(async move {
+                if target_status == ChunkStatus::Empty {
+                    match spawn_blocking(move || task(context, &step, &cache, self_clone)).await {
+                        Ok(_) => {
+                            sender.send_modify(|chunk| {
+                                if let ChunkResult::Ok((s, _)) = chunk {
+                                    //log::info!("Task completed for {:?}", target_status);
 
-                            if *s < target_status {
-                                *s = target_status;
-                            }
-                        });
-                        Some(())
+                                    if *s < target_status {
+                                        *s = target_status;
+                                    }
+                                }
+                            });
+                            Some(())
+                        }
+                        Err(e) => {
+                            log::error!("Chunk generation task failed: {e}");
+                            sender.send_replace(ChunkResult::Failed);
+                            None
+                        }
                     }
-                    Err(e) => {
-                        log::error!("Chunk generation task failed: {e}");
-                        sender.send_replace(ChunkResult::Failed);
-                        None
-                    }
-                }
-            } else {
-                let parent_status = target_status
-                    .parent()
-                    .expect("Target status must have parent if not Empty");
+                } else {
+                    let parent_status = target_status
+                        .parent()
+                        .expect("Target status must have parent if not Empty");
 
-                //log::info!(
-                //    "Parent status: {:?}, target status: {:?}",
-                //    parent_status,
-                //    target_status
-                //);
+                    //log::info!(
+                    //    "Parent status: {:?}, target status: {:?}",
+                    //    parent_status,
+                    //    target_status
+                    //);
 
-                let has_parent = self_clone.with_chunk(parent_status, |_| ()).is_some();
+                    let has_parent = self_clone.with_chunk(parent_status, |_| ()).is_some();
 
-                assert!(has_parent, "Parent chunk missing");
+                    assert!(has_parent, "Parent chunk missing");
 
-                match spawn_blocking(move || task(context, &step, &cache, self_clone)).await {
-                    Ok(_) => {
-                        sender.send_modify(|chunk| if let ChunkResult::Ok((s, _)) = chunk {
+                    match spawn_blocking(move || task(context, &step, &cache, self_clone)).await {
+                        Ok(_) => {
+                            sender.send_modify(|chunk| if let ChunkResult::Ok((s, _)) = chunk {
                             if *s < target_status {
                                 *s = target_status;
                             } else if *s != ChunkStatus::Full {
@@ -258,17 +264,17 @@ impl ChunkHolder {
                                 );
                             }
                         });
-                        //log::info!("Task completed for {:?}", target_status);
-                        Some(())
-                    }
-                    Err(e) => {
-                        log::error!("Chunk generation task failed: {e}");
-                        sender.send_replace(ChunkResult::Failed);
-                        None
+                            //log::info!("Task completed for {:?}", target_status);
+                            Some(())
+                        }
+                        Err(e) => {
+                            log::error!("Chunk generation task failed: {e}");
+                            sender.send_replace(ChunkResult::Failed);
+                            None
+                        }
                     }
                 }
-            }
-        });
+            });
 
         Box::pin(async move {
             match future.await {
@@ -283,7 +289,9 @@ impl ChunkHolder {
 
     fn acquire_status_bump(&self, status: ChunkStatus) -> bool {
         let status_index = status.get_index();
-        let parent_index = status.parent().map_or(usize::MAX, super::chunk_access::ChunkStatus::get_index);
+        let parent_index = status
+            .parent()
+            .map_or(usize::MAX, super::chunk_access::ChunkStatus::get_index);
 
         //log::info!(
         //    "Parent index: {:?}, Status index: {:?}",

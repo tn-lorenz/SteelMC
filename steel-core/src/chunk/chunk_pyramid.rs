@@ -3,7 +3,6 @@
 use std::sync::LazyLock;
 use std::{cmp::max, sync::Arc};
 
-
 use crate::chunk::{
     chunk_access::ChunkStatus, chunk_generation_task::StaticCache2D, chunk_holder::ChunkHolder,
     chunk_status_tasks::ChunkStatusTasks, world_gen_context::WorldGenContext,
@@ -48,7 +47,8 @@ impl ChunkDependencies {
     #[must_use]
     pub fn get_radius_of(&self, status: ChunkStatus) -> usize {
         let index = status.get_index();
-        assert!(index < self.radius_by_dependency.len(), 
+        assert!(
+            index < self.radius_by_dependency.len(),
             "Requesting a ChunkStatus({status:?}) outside of dependency range"
         );
         self.radius_by_dependency[index]
@@ -245,6 +245,7 @@ impl Builder {
     }
 }
 
+#[allow(clippy::unnecessary_wraps)]
 fn noop_task(
     _context: Arc<WorldGenContext>,
     _step: &Arc<ChunkStep>,

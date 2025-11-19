@@ -90,15 +90,18 @@ impl Server {
         let mut next_tick_time = Instant::now();
 
         loop {
-            let mut tick_manager = self.tick_rate_manager.write();
-            let nanoseconds_per_tick = tick_manager.nanoseconds_per_tick;
+            let (nanoseconds_per_tick, is_sprinting, should_sprint_this_tick) = {
+                let mut tick_manager = self.tick_rate_manager.write();
+                let nanoseconds_per_tick = tick_manager.nanoseconds_per_tick;
 
-            // Handle sprinting
-            let is_sprinting = tick_manager.is_sprinting();
-            let should_sprint_this_tick = if is_sprinting {
-                tick_manager.check_should_sprint_this_tick()
-            } else {
-                false
+                // Handle sprinting
+                let is_sprinting = tick_manager.is_sprinting();
+                let should_sprint_this_tick = if is_sprinting {
+                    tick_manager.check_should_sprint_this_tick()
+                } else {
+                    false
+                };
+                (nanoseconds_per_tick, is_sprinting, should_sprint_this_tick)
             };
 
             if is_sprinting && should_sprint_this_tick {
@@ -113,14 +116,16 @@ impl Server {
                 next_tick_time += std::time::Duration::from_nanos(nanoseconds_per_tick);
             }
 
-            tick_manager.tick();
-            drop(tick_manager); // Release lock before ticking worlds to avoid deadlock if they access it
+            {
+                let mut tick_manager = self.tick_rate_manager.write();
+                tick_manager.tick();
+            }
 
             // Tick worlds
             self.tick_worlds().await;
 
-            let mut tick_manager = self.tick_rate_manager.write();
             if is_sprinting && should_sprint_this_tick {
+                let mut tick_manager = self.tick_rate_manager.write();
                 tick_manager.end_tick_work();
             }
         }

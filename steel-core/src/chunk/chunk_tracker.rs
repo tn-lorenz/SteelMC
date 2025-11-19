@@ -109,6 +109,9 @@ impl ChunkTracker {
     }
 
     /// Processes all pending updates in the queue.
+    ///
+    /// # Panics
+    /// Panics if the queue state is inconsistent (key found but removal failed).
     pub fn process_all_updates(
         &mut self,
         _get_ticket_level: impl Fn(ChunkPos) -> u8,
@@ -118,12 +121,9 @@ impl ChunkTracker {
         loop {
             // Process levels in increasing order.
             let entry = self.queue.keys().next().copied();
-            let level = match entry {
-                Some(l) => l,
-                None => break,
-            };
+            let Some(level) = entry else { break };
 
-            let mut chunks = self.queue.remove(&level).unwrap();
+            let mut chunks = self.queue.remove(&level).expect("Queue entry must exist");
 
             while let Some(pos) = chunks.pop_front() {
                 // Check if this entry is stale or if we have a better one queued.

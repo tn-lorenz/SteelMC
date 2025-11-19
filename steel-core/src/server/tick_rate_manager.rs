@@ -32,7 +32,7 @@ impl TickRateManager {
     pub fn new() -> Self {
         Self {
             tick_rate: 20.0,
-            nanoseconds_per_tick: (1_000_000_000.0 / 20.0) as u64,
+            nanoseconds_per_tick: 50_000_000,
             is_frozen: false,
             frozen_ticks_to_run: 0,
             run_game_elements: true,
@@ -47,7 +47,10 @@ impl TickRateManager {
     /// Sets the tick rate.
     pub fn set_tick_rate(&mut self, rate: f32) {
         self.tick_rate = rate.max(1.0);
-        self.nanoseconds_per_tick = (1_000_000_000.0 / self.tick_rate) as u64;
+        #[allow(clippy::cast_possible_truncation, clippy::cast_sign_loss)]
+        {
+            self.nanoseconds_per_tick = (1_000_000_000.0 / f64::from(self.tick_rate)) as u64;
+        }
     }
 
     /// Sets the frozen state of the server.

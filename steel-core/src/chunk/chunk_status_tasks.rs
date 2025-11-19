@@ -43,6 +43,10 @@ impl ChunkStatusTasks {
         Ok(())
     }
 
+    /// Generates structure starts.
+    ///
+    /// # Panics
+    /// Panics if the chunk is not at `ChunkStatus::Empty` or higher.
     pub fn generate_structure_starts(
         _context: Arc<WorldGenContext>,
         _step: &Arc<ChunkStep>,
@@ -53,7 +57,7 @@ impl ChunkStatusTasks {
             .with_chunk_mut(ChunkStatus::Empty, |chunk| {
                 chunk.set_relative_block(1, 1, 1, BlockStateId(1));
             })
-            .unwrap();
+            .expect("Chunk not found at status Empty");
 
         Ok(())
     }
