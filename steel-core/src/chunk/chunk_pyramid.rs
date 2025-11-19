@@ -78,9 +78,7 @@ pub type ChunkStatusTask = fn(
     &Arc<ChunkStep>,
     &Arc<StaticCache2D<Arc<ChunkHolder>>>,
     Arc<ChunkHolder>,
-) -> Pin<
-    Box<dyn Future<Output = Result<(), Box<dyn std::error::Error + Send + Sync>>> + Send + Sync>,
->;
+) -> Result<(), anyhow::Error>;
 
 /// A chunk step.
 #[derive(Clone, Debug)]
@@ -257,9 +255,8 @@ fn noop_task(
     _step: &Arc<ChunkStep>,
     _cache: &Arc<StaticCache2D<Arc<ChunkHolder>>>,
     _holder: Arc<ChunkHolder>,
-) -> Pin<Box<dyn Future<Output = Result<(), Box<dyn std::error::Error + Send + Sync>>> + Send + Sync>>
-{
-    Box::pin(async move { Ok(()) })
+) -> Result<(), anyhow::Error> {
+    Ok(())
 }
 
 /// Represents the hierarchy and dependencies for chunk generation or loading.

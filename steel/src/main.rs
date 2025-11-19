@@ -45,7 +45,7 @@ async fn main() {
         .distance_manager
         .lock()
         .await
-        .add_player(ChunkPos::new(0, 0), 1);
+        .add_player(ChunkPos::new(0, 0), 10);
 
     let start = Instant::now();
 
@@ -56,7 +56,7 @@ async fn main() {
     steel.server.worlds[0]
         .chunk_map
         .chunks
-        .get_async(&ChunkPos::new(0, 0))
+        .get_async(&ChunkPos::new(0, 10))
         .await
         .unwrap()
         .get()

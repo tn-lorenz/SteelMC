@@ -7,6 +7,7 @@ use futures::{Future, future};
 use replace_with::replace_with_or_abort;
 use steel_utils::ChunkPos;
 use tokio::sync::{Mutex, watch};
+use tokio::task::spawn_blocking;
 
 use crate::chunk::chunk_generation_task::{NeighborReady, StaticCache2D};
 use crate::{
@@ -212,8 +213,8 @@ impl ChunkHolder {
 
         let future = chunk_map.task_tracker.spawn(async move {
             if target_status == ChunkStatus::Empty {
-                match task(context, &step, &cache, self_clone).await {
-                    Ok(()) => {
+                match spawn_blocking(move || task(context, &step, &cache, self_clone)).await {
+                    Ok(_) => {
                         sender.send_modify(|chunk| match chunk {
                             ChunkResult::Ok((s, _)) => {
                                 //log::info!("Task completed for {:?}", target_status);
@@ -249,8 +250,8 @@ impl ChunkHolder {
                     panic!("Parent chunk missing");
                 }
 
-                match task(context, &step, &cache, self_clone).await {
-                    Ok(()) => {
+                match spawn_blocking(move || task(context, &step, &cache, self_clone)).await {
+                    Ok(_) => {
                         sender.send_modify(|chunk| match chunk {
                             ChunkResult::Ok((s, _)) => {
                                 if *s < target_status {
@@ -271,8 +272,15 @@ impl ChunkHolder {
             }
         });
 
-        let self_clone = self.clone();
-        Box::pin(async move { self_clone.await_chunk_and_then(target_status, |_| ()).await })
+        Box::pin(async move {
+            match future.await {
+                Ok(result) => result,
+                Err(e) => {
+                    log::error!("Chunk generation task failed: {}", e);
+                    None
+                }
+            }
+        })
     }
 
     fn acquire_status_bump(&self, status: ChunkStatus) -> bool {

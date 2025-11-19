@@ -3,6 +3,7 @@
 use std::{pin::Pin, sync::Arc};
 
 use futures::Future;
+use steel_utils::BlockStateId;
 
 use crate::chunk::{
     chunk_access::{ChunkAccess, ChunkStatus},
@@ -16,49 +17,46 @@ use crate::chunk::{
 
 pub struct ChunkStatusTasks;
 
+/// All these functions are blocking.
 impl ChunkStatusTasks {
     pub fn empty(
         _context: Arc<WorldGenContext>,
         _step: &Arc<ChunkStep>,
         _cache: &Arc<StaticCache2D<Arc<ChunkHolder>>>,
         holder: Arc<ChunkHolder>,
-    ) -> Pin<
-        Box<
-            dyn Future<Output = Result<(), Box<dyn std::error::Error + Send + Sync>>> + Send + Sync,
-        >,
-    > {
-        Box::pin(async move {
-            // TODO: Check if chunk exists on disk and load it.
-            // For now, create a new empty chunk.
-            let sections = (0..24) // Standard height?
-                .map(|_| ChunkSection::new_empty())
-                .collect::<Vec<_>>()
-                .into_boxed_slice();
+    ) -> Result<(), anyhow::Error> {
+        // TODO: Check if chunk exists on disk and load it.
+        // For now, create a new empty chunk.
+        let sections = (0..24) // Standard height?
+            .map(|_| ChunkSection::new_empty())
+            .collect::<Vec<_>>()
+            .into_boxed_slice();
 
-            // TODO: Use upgrade_to_full if the loaded chunk is full.
-            let proto_chunk = ProtoChunk {
-                sections: Sections { sections },
-                pos: holder.get_pos(),
-            };
+        // TODO: Use upgrade_to_full if the loaded chunk is full.
+        let proto_chunk = ProtoChunk {
+            sections: Sections { sections },
+            pos: holder.get_pos(),
+        };
 
-            //log::info!("Inserted proto chunk for {:?}", holder.get_pos());
+        //log::info!("Inserted proto chunk for {:?}", holder.get_pos());
 
-            holder.insert_chunk(ChunkAccess::Proto(proto_chunk), ChunkStatus::Empty);
-            Ok(())
-        })
+        holder.insert_chunk(ChunkAccess::Proto(proto_chunk), ChunkStatus::Empty);
+        Ok(())
     }
 
     pub fn generate_structure_starts(
         _context: Arc<WorldGenContext>,
         _step: &Arc<ChunkStep>,
         _cache: &Arc<StaticCache2D<Arc<ChunkHolder>>>,
-        _holder: Arc<ChunkHolder>,
-    ) -> Pin<
-        Box<
-            dyn Future<Output = Result<(), Box<dyn std::error::Error + Send + Sync>>> + Send + Sync,
-        >,
-    > {
-        Box::pin(async move { Ok(()) })
+        holder: Arc<ChunkHolder>,
+    ) -> Result<(), anyhow::Error> {
+        holder
+            .with_chunk_mut(ChunkStatus::Empty, |chunk| {
+                chunk.set_relative_block(1, 1, 1, BlockStateId(1));
+            })
+            .unwrap();
+
+        Ok(())
     }
 
     pub fn generate_structure_references(
@@ -66,12 +64,8 @@ impl ChunkStatusTasks {
         _step: &Arc<ChunkStep>,
         _cache: &Arc<StaticCache2D<Arc<ChunkHolder>>>,
         _holder: Arc<ChunkHolder>,
-    ) -> Pin<
-        Box<
-            dyn Future<Output = Result<(), Box<dyn std::error::Error + Send + Sync>>> + Send + Sync,
-        >,
-    > {
-        Box::pin(async move { Ok(()) })
+    ) -> Result<(), anyhow::Error> {
+        Ok(())
     }
 
     pub fn load_structure_starts(
@@ -79,12 +73,8 @@ impl ChunkStatusTasks {
         _step: &Arc<ChunkStep>,
         _cache: &Arc<StaticCache2D<Arc<ChunkHolder>>>,
         _holder: Arc<ChunkHolder>,
-    ) -> Pin<
-        Box<
-            dyn Future<Output = Result<(), Box<dyn std::error::Error + Send + Sync>>> + Send + Sync,
-        >,
-    > {
-        Box::pin(async move { Ok(()) })
+    ) -> Result<(), anyhow::Error> {
+        Ok(())
     }
 
     pub fn generate_biomes(
@@ -92,12 +82,8 @@ impl ChunkStatusTasks {
         _step: &Arc<ChunkStep>,
         _cache: &Arc<StaticCache2D<Arc<ChunkHolder>>>,
         _holder: Arc<ChunkHolder>,
-    ) -> Pin<
-        Box<
-            dyn Future<Output = Result<(), Box<dyn std::error::Error + Send + Sync>>> + Send + Sync,
-        >,
-    > {
-        Box::pin(async move { Ok(()) })
+    ) -> Result<(), anyhow::Error> {
+        Ok(())
     }
 
     pub fn generate_noise(
@@ -105,12 +91,8 @@ impl ChunkStatusTasks {
         _step: &Arc<ChunkStep>,
         _cache: &Arc<StaticCache2D<Arc<ChunkHolder>>>,
         _holder: Arc<ChunkHolder>,
-    ) -> Pin<
-        Box<
-            dyn Future<Output = Result<(), Box<dyn std::error::Error + Send + Sync>>> + Send + Sync,
-        >,
-    > {
-        Box::pin(async move { Ok(()) })
+    ) -> Result<(), anyhow::Error> {
+        Ok(())
     }
 
     pub fn generate_surface(
@@ -118,12 +100,8 @@ impl ChunkStatusTasks {
         _step: &Arc<ChunkStep>,
         _cache: &Arc<StaticCache2D<Arc<ChunkHolder>>>,
         _holder: Arc<ChunkHolder>,
-    ) -> Pin<
-        Box<
-            dyn Future<Output = Result<(), Box<dyn std::error::Error + Send + Sync>>> + Send + Sync,
-        >,
-    > {
-        Box::pin(async move { Ok(()) })
+    ) -> Result<(), anyhow::Error> {
+        Ok(())
     }
 
     pub fn generate_carvers(
@@ -131,12 +109,8 @@ impl ChunkStatusTasks {
         _step: &Arc<ChunkStep>,
         _cache: &Arc<StaticCache2D<Arc<ChunkHolder>>>,
         _holder: Arc<ChunkHolder>,
-    ) -> Pin<
-        Box<
-            dyn Future<Output = Result<(), Box<dyn std::error::Error + Send + Sync>>> + Send + Sync,
-        >,
-    > {
-        Box::pin(async move { Ok(()) })
+    ) -> Result<(), anyhow::Error> {
+        Ok(())
     }
 
     pub fn generate_features(
@@ -144,12 +118,8 @@ impl ChunkStatusTasks {
         _step: &Arc<ChunkStep>,
         _cache: &Arc<StaticCache2D<Arc<ChunkHolder>>>,
         _holder: Arc<ChunkHolder>,
-    ) -> Pin<
-        Box<
-            dyn Future<Output = Result<(), Box<dyn std::error::Error + Send + Sync>>> + Send + Sync,
-        >,
-    > {
-        Box::pin(async move { Ok(()) })
+    ) -> Result<(), anyhow::Error> {
+        Ok(())
     }
 
     pub fn initialize_light(
@@ -157,12 +127,8 @@ impl ChunkStatusTasks {
         _step: &Arc<ChunkStep>,
         _cache: &Arc<StaticCache2D<Arc<ChunkHolder>>>,
         _holder: Arc<ChunkHolder>,
-    ) -> Pin<
-        Box<
-            dyn Future<Output = Result<(), Box<dyn std::error::Error + Send + Sync>>> + Send + Sync,
-        >,
-    > {
-        Box::pin(async move { Ok(()) })
+    ) -> Result<(), anyhow::Error> {
+        Ok(())
     }
 
     pub fn light(
@@ -170,12 +136,8 @@ impl ChunkStatusTasks {
         _step: &Arc<ChunkStep>,
         _cache: &Arc<StaticCache2D<Arc<ChunkHolder>>>,
         _holder: Arc<ChunkHolder>,
-    ) -> Pin<
-        Box<
-            dyn Future<Output = Result<(), Box<dyn std::error::Error + Send + Sync>>> + Send + Sync,
-        >,
-    > {
-        Box::pin(async move { Ok(()) })
+    ) -> Result<(), anyhow::Error> {
+        Ok(())
     }
 
     pub fn generate_spawn(
@@ -183,12 +145,8 @@ impl ChunkStatusTasks {
         _step: &Arc<ChunkStep>,
         _cache: &Arc<StaticCache2D<Arc<ChunkHolder>>>,
         _holder: Arc<ChunkHolder>,
-    ) -> Pin<
-        Box<
-            dyn Future<Output = Result<(), Box<dyn std::error::Error + Send + Sync>>> + Send + Sync,
-        >,
-    > {
-        Box::pin(async move { Ok(()) })
+    ) -> Result<(), anyhow::Error> {
+        Ok(())
     }
 
     pub fn full(
@@ -196,15 +154,9 @@ impl ChunkStatusTasks {
         _step: &Arc<ChunkStep>,
         _cache: &Arc<StaticCache2D<Arc<ChunkHolder>>>,
         holder: Arc<ChunkHolder>,
-    ) -> Pin<
-        Box<
-            dyn Future<Output = Result<(), Box<dyn std::error::Error + Send + Sync>>> + Send + Sync,
-        >,
-    > {
+    ) -> Result<(), anyhow::Error> {
         //panic!("Full task");
-        Box::pin(async move {
-            holder.upgrade_to_full();
-            Ok(())
-        })
+        holder.upgrade_to_full();
+        Ok(())
     }
 }

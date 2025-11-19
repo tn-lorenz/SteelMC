@@ -36,7 +36,7 @@ log = "0.4.28"
 simdnbt = "0.8.0"
 parking_lot = { version = "0.12.5", features = ["nightly", "send_guard"] }
 enum_dispatch = "0.3.13"
-
+anyhow = "1.0.100"
 
 [profile.release]
 lto = true
