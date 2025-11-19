@@ -2,7 +2,7 @@
 use crate::chunk::proto_chunk::ProtoChunk;
 
 /// A trait for generating chunks.
-pub trait ChunkGenerator {
+pub trait ChunkGenerator: Send + Sync {
     // TODO: Look into making the proto chunks be chunk holders instead, otherwise it holdsd the lock for the whole chunk for the whole generation process.
 
     /// Creates the structures in a chunk.
@@ -22,4 +22,16 @@ pub trait ChunkGenerator {
 
     /// Applies biome decorations to the chunk.
     fn apply_biome_decorations(&self, proto_chunk: &mut ProtoChunk);
+}
+
+/// A simple chunk generator that does nothing.
+pub struct SimpleChunkGenerator;
+
+impl ChunkGenerator for SimpleChunkGenerator {
+    fn create_structures(&self, _proto_chunk: &mut ProtoChunk) {}
+    fn create_biomes(&self, _proto_chunk: &mut ProtoChunk) {}
+    fn fill_from_noise(&self, _proto_chunk: &mut ProtoChunk) {}
+    fn build_surface(&self, _proto_chunk: &mut ProtoChunk) {}
+    fn apply_carvers(&self, _proto_chunk: &mut ProtoChunk) {}
+    fn apply_biome_decorations(&self, _proto_chunk: &mut ProtoChunk) {}
 }

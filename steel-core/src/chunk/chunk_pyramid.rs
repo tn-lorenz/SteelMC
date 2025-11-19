@@ -1,11 +1,17 @@
 //! This module contains the `ChunkPyramid`, which is used to check chunk dependencies.
 
-use crate::chunk::chunk_access::ChunkStatus;
-use crate::chunk::chunk_status_tasks::ChunkStatusTasks;
-use std::cmp::max;
-use std::sync::{Arc, LazyLock};
+use core::panic;
+use std::sync::LazyLock;
+use std::{cmp::max, pin::Pin, sync::Arc};
 
-/// A map of radius to the required chunk status.
+use futures::Future;
+
+use crate::chunk::{
+    chunk_access::ChunkStatus, chunk_generation_task::StaticCache2D, chunk_holder::ChunkHolder,
+    chunk_status_tasks::ChunkStatusTasks, world_gen_context::WorldGenContext,
+};
+
+/// A collection of chunk dependencies.
 #[derive(Debug, Clone)]
 pub struct ChunkDependencies {
     dependency_by_radius: Box<[ChunkStatus]>,
@@ -38,13 +44,17 @@ impl ChunkDependencies {
     }
 
     /// Gets the radius of the dependencies for the given status.
+    ///
+    /// # Panics
+    /// Panics if the status is outside of the dependency range.
     #[must_use]
     pub fn get_radius_of(&self, status: ChunkStatus) -> usize {
         let index = status.get_index();
         if index >= self.radius_by_dependency.len() {
-            // This would be an error in Java, but Rust prefers safe access.
-            // Returning the max radius is a possible fallback.
-            return self.get_radius();
+            panic!(
+                "Requesting a ChunkStatus({:?}) outside of dependency range",
+                status
+            );
         }
         self.radius_by_dependency[index]
     }
@@ -63,10 +73,17 @@ impl ChunkDependencies {
 }
 
 /// A task that generates a chunk.
-pub type ChunkStatusTask = fn(/* ... world gen context args ... */);
+pub type ChunkStatusTask = fn(
+    Arc<WorldGenContext>,
+    &Arc<ChunkStep>,
+    &Arc<StaticCache2D<Arc<ChunkHolder>>>,
+    Arc<ChunkHolder>,
+) -> Pin<
+    Box<dyn Future<Output = Result<(), Box<dyn std::error::Error + Send + Sync>>> + Send + Sync>,
+>;
 
 /// A chunk step.
-#[derive(Clone)]
+#[derive(Clone, Debug)]
 pub struct ChunkStep {
     /// The target status of the step.
     pub target_status: ChunkStatus,
@@ -85,6 +102,16 @@ impl ChunkStep {
     #[must_use]
     pub fn builder(status: ChunkStatus, parent: Option<Arc<ChunkStep>>) -> Builder {
         Builder::new(status, parent)
+    }
+
+    /// Gets the accumulated radius of the dependencies for the given status.
+    #[must_use]
+    pub fn get_accumulated_radius_of(&self, status: ChunkStatus) -> usize {
+        if status == self.target_status {
+            0
+        } else {
+            self.accumulated_dependencies.get_radius_of(status)
+        }
     }
 }
 
@@ -126,7 +153,7 @@ impl Builder {
             parent,
             direct_dependencies_by_radius,
             block_state_write_radius: -1,
-            task: || {},
+            task: noop_task,
         }
     }
 
@@ -225,6 +252,16 @@ impl Builder {
     }
 }
 
+fn noop_task(
+    _context: Arc<WorldGenContext>,
+    _step: &Arc<ChunkStep>,
+    _cache: &Arc<StaticCache2D<Arc<ChunkHolder>>>,
+    _holder: Arc<ChunkHolder>,
+) -> Pin<Box<dyn Future<Output = Result<(), Box<dyn std::error::Error + Send + Sync>>> + Send + Sync>>
+{
+    Box::pin(async move { Ok(()) })
+}
+
 /// Represents the hierarchy and dependencies for chunk generation or loading.
 pub struct ChunkPyramid {
     steps: Box<[Arc<ChunkStep>]>,
@@ -281,7 +318,7 @@ impl ChunkPyramidBuilder {
 /// The generation pyramid.
 pub static GENERATION_PYRAMID: LazyLock<ChunkPyramid> = LazyLock::new(|| {
     ChunkPyramidBuilder::new()
-        .step(ChunkStatus::Empty, |s| s)
+        .step(ChunkStatus::Empty, |s| s.set_task(ChunkStatusTasks::empty))
         .step(ChunkStatus::StructureStarts, |s| {
             s.set_task(ChunkStatusTasks::generate_structure_starts)
         })

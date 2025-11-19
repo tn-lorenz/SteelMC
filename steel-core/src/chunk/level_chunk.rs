@@ -4,7 +4,7 @@ use steel_utils::ChunkPos;
 use crate::chunk::{proto_chunk::ProtoChunk, section::Sections};
 
 /// A chunk that is ready to be sent to the client.
-#[derive(Debug)]
+#[derive(Debug, Clone)]
 pub struct LevelChunk {
     /// The sections of the chunk.
     pub sections: Sections,

@@ -1,5 +1,5 @@
-use std::collections::{BTreeMap, VecDeque};
-use steel_utils::{ChunkPos, math::Vector2};
+use std::collections::{BTreeMap, HashMap, VecDeque};
+use steel_utils::ChunkPos;
 
 /// A standard max level for chunks that are unloaded.
 pub const MAX_LEVEL: u8 = 66;
@@ -10,6 +10,9 @@ pub struct ChunkTracker {
     levels: BTreeMap<ChunkPos, u8>,
     /// Queue of chunks to update, keyed by level.
     queue: BTreeMap<u8, VecDeque<ChunkPos>>,
+    /// Map of chunks currently in the queue to their queued level.
+    /// Used to avoid duplicates and handle priority updates.
+    computed_levels: HashMap<ChunkPos, u8>,
 }
 
 impl Default for ChunkTracker {
@@ -25,6 +28,7 @@ impl ChunkTracker {
         Self {
             levels: BTreeMap::new(),
             queue: BTreeMap::new(),
+            computed_levels: HashMap::new(),
         }
     }
 
@@ -48,29 +52,33 @@ impl ChunkTracker {
             self.enqueue(pos, new_ticket_level);
         } else if new_ticket_level > current_level {
             // Case 2: Degradation. Re-evaluate.
-            self.compute_level(pos, get_ticket_level, true);
+            self.compute_level(pos, &get_ticket_level, true);
         }
     }
 
     fn enqueue(&mut self, pos: ChunkPos, level: u8) {
+        if let Some(&old_level) = self.computed_levels.get(&pos) {
+            if old_level <= level {
+                return;
+            }
+        }
+        self.computed_levels.insert(pos, level);
         self.queue.entry(level).or_default().push_back(pos);
     }
 
     /// Re-evaluates a chunk's level based on tickets and neighbors.
-    fn compute_level(
-        &mut self,
-        pos: ChunkPos,
-        get_ticket_level: impl Fn(ChunkPos) -> u8,
-        force_reset: bool,
-    ) {
+    fn compute_level<F>(&mut self, pos: ChunkPos, get_ticket_level: &F, force_reset: bool)
+    where
+        F: Fn(ChunkPos) -> u8,
+    {
         let old_level = self.get_level(pos);
         let mut best_level = get_ticket_level(pos);
 
         let neighbors = [
-            ChunkPos(Vector2::new(pos.0.x + 1, pos.0.y)),
-            ChunkPos(Vector2::new(pos.0.x - 1, pos.0.y)),
-            ChunkPos(Vector2::new(pos.0.x, pos.0.y + 1)),
-            ChunkPos(Vector2::new(pos.0.x, pos.0.y - 1)),
+            ChunkPos::new(pos.0.x + 1, pos.0.y),
+            ChunkPos::new(pos.0.x - 1, pos.0.y),
+            ChunkPos::new(pos.0.x, pos.0.y + 1),
+            ChunkPos::new(pos.0.x, pos.0.y - 1),
         ];
 
         for neighbor in neighbors {
@@ -95,7 +103,7 @@ impl ChunkTracker {
                 let n_level = self.get_level(neighbor);
                 if n_level == old_level + 1 {
                     // Dependent neighbor needs re-evaluation.
-                    self.compute_level(neighbor, &get_ticket_level, true);
+                    self.compute_level(neighbor, get_ticket_level, true);
                 }
             }
         }
@@ -119,24 +127,31 @@ impl ChunkTracker {
             let mut chunks = self.queue.remove(&level).unwrap();
 
             while let Some(pos) = chunks.pop_front() {
+                // Check if this entry is stale or if we have a better one queued.
+                match self.computed_levels.get(&pos) {
+                    Some(&computed) if computed != level => continue, // Stale
+                    Some(_) => {
+                        self.computed_levels.remove(&pos);
+                    } // Valid, consume
+                    None => continue, // Should not happen if logic is correct, but safe to skip
+                }
+
                 let current_level = self.get_level(pos);
 
-                if level > current_level {
+                if level >= current_level {
                     continue;
                 }
 
                 self.levels.insert(pos, level);
-                if level != current_level {
-                    changes.push((pos, current_level, level));
-                }
+                changes.push((pos, current_level, level));
 
                 if level < MAX_LEVEL {
                     let next = level + 1;
                     let neighbors = [
-                        ChunkPos(Vector2::new(pos.0.x + 1, pos.0.y)),
-                        ChunkPos(Vector2::new(pos.0.x - 1, pos.0.y)),
-                        ChunkPos(Vector2::new(pos.0.x, pos.0.y + 1)),
-                        ChunkPos(Vector2::new(pos.0.x, pos.0.y - 1)),
+                        ChunkPos::new(pos.0.x + 1, pos.0.y),
+                        ChunkPos::new(pos.0.x - 1, pos.0.y),
+                        ChunkPos::new(pos.0.x, pos.0.y + 1),
+                        ChunkPos::new(pos.0.x, pos.0.y - 1),
                     ];
 
                     for neighbor in neighbors {

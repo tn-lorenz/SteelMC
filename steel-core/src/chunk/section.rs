@@ -6,7 +6,7 @@ use steel_utils::{BlockStateId, serial::WriteTo, types::Todo};
 use crate::chunk::paletted_container::BlockPalette;
 
 /// A collection of chunk sections.
-#[derive(Debug)]
+#[derive(Debug, Clone)]
 pub struct Sections {
     /// The sections in the collection.
     pub sections: Box<[ChunkSection]>,
@@ -74,6 +74,15 @@ impl ChunkSection {
     #[must_use]
     pub fn new(states: BlockPalette) -> Self {
         Self { states, biomes: () }
+    }
+
+    /// Creates a new empty chunk section.
+    #[must_use]
+    pub fn new_empty() -> Self {
+        Self {
+            states: BlockPalette::Homogeneous(BlockStateId(0)),
+            biomes: (),
+        }
     }
 
     /// Writes the chunk section to a writer.

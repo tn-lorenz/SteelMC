@@ -24,6 +24,14 @@ pub struct BlockStateId(pub u16);
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Hash, PartialOrd, Ord)]
 pub struct ChunkPos(pub Vector2<i32>);
 
+impl ChunkPos {
+    #[must_use]
+    /// Creates a new `ChunkPos` with the given x and y coordinates.
+    pub fn new(x: i32, y: i32) -> Self {
+        Self(Vector2::new(x, y))
+    }
+}
+
 #[allow(missing_docs)]
 impl WriteTo for ChunkPos {
     fn write(&self, writer: &mut impl Write) -> io::Result<()> {

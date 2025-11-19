@@ -1,7 +1,12 @@
 use log::LevelFilter;
 use simplelog::{ColorChoice, Config, TermLogger, TerminalMode};
 use steel::SteelServer;
-use steel_utils::{Identifier, translations};
+use steel_core::chunk::{
+    chunk_access::{ChunkAccess, ChunkStatus},
+    ticket::{Ticket, TicketType},
+};
+use steel_utils::{ChunkPos, Identifier, translations};
+use tokio::time::Instant;
 
 #[tokio::main]
 async fn main() {
@@ -34,6 +39,38 @@ async fn main() {
             .message(["4LVE", "Borrow Checker"])
             .format()
     );
+
+    steel.server.worlds[0]
+        .chunk_map
+        .distance_manager
+        .lock()
+        .await
+        .add_player(ChunkPos::new(0, 0), 1);
+
+    let start = Instant::now();
+
+    steel.server.worlds[0].chunk_map.tick().await;
+
+    println!("{:?}", steel.server.worlds[0].chunk_map.chunks.len());
+
+    steel.server.worlds[0]
+        .chunk_map
+        .chunks
+        .get_async(&ChunkPos::new(0, 0))
+        .await
+        .unwrap()
+        .get()
+        .await_chunk_and_then(ChunkStatus::Full, |chunk| match chunk {
+            ChunkAccess::Full(chunk) => {
+                log::info!(
+                    "Lesgo {:?} in {:?}",
+                    chunk.sections.sections.len(),
+                    start.elapsed()
+                );
+            }
+            _ => unreachable!(),
+        })
+        .await;
 
     steel.start().await;
 }

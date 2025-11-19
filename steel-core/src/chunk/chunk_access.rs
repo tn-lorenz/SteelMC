@@ -83,6 +83,7 @@ impl ChunkStatus {
 }
 
 /// An enum that allows access to a chunk in different states.
+#[derive(Clone)]
 pub enum ChunkAccess {
     /// A fully generated chunk.
     Full(LevelChunk),

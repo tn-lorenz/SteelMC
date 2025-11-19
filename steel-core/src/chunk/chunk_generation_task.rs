@@ -9,7 +9,7 @@ use std::{
 };
 
 use futures::future::join_all;
-use steel_utils::{ChunkPos, math::Vector2};
+use steel_utils::ChunkPos;
 
 use crate::chunk::{
     chunk_access::ChunkStatus,
@@ -119,9 +119,9 @@ impl ChunkGenerationTask {
         let cache = StaticCache2D::create(pos.0.x, pos.0.y, worst_case_radius, async |x, y| {
             chunk_map
                 .chunks
-                .get_async(&ChunkPos(Vector2::new(x, y)))
+                .get_async(&ChunkPos::new(x, y))
                 .await
-                .expect("Scheduled chunk required")
+                .expect("The chunkholder should be created by distance manager before the generation task is scheduled. This occurring means there is a bug in the distance manager or you called this yourself.")
                 .clone()
         })
         .await;
@@ -154,7 +154,14 @@ impl ChunkGenerationTask {
         chunk_holder: &Arc<ChunkHolder>,
     ) -> bool {
         let persisted_status = chunk_holder.persisted_status();
-        let generate = status > persisted_status;
+
+        let generate;
+        if let Some(persisted_status) = persisted_status {
+            generate = status > persisted_status;
+        } else {
+            generate = true;
+        }
+
         let pyramid = if generate {
             &*GENERATION_PYRAMID
         } else {
@@ -166,7 +173,7 @@ impl ChunkGenerationTask {
             "Generation required but not expected for chunk load"
         );
 
-        let future = chunk_holder.apply_step(
+        let future = chunk_holder.clone().apply_step(
             pyramid.get_step_to(status),
             self.chunk_map.clone(),
             self.cache.clone(),
@@ -178,8 +185,7 @@ impl ChunkGenerationTask {
 
     /// Schedules tasks for the current layer's neighbors.
     pub fn schedule_layer(&self, status: ChunkStatus, needs_generation: bool) {
-        // TODO: Implement dynamic radius (getRadiusForLayer)
-        let radius = 1;
+        let radius = self.get_radius_for_layer(status, needs_generation);
         for x in (self.pos.0.x - radius)..=(self.pos.0.x + radius) {
             for y in (self.pos.0.y - radius)..=(self.pos.0.y + radius) {
                 let chunk_holder = self.cache.get(x, y);
@@ -192,6 +198,17 @@ impl ChunkGenerationTask {
         }
     }
 
+    fn get_radius_for_layer(&self, status: ChunkStatus, needs_generation: bool) -> i32 {
+        let pyramid = if needs_generation {
+            &*GENERATION_PYRAMID
+        } else {
+            &*LOADING_PYRAMID
+        };
+        pyramid
+            .get_step_to(self.target_status)
+            .get_accumulated_radius_of(status) as i32
+    }
+
     /// Schedules the next layer of generation dependencies.
     ///
     /// # Panics
@@ -200,9 +217,9 @@ impl ChunkGenerationTask {
         let status_to_schedule;
         if self.scheduled_status.lock().is_none() {
             status_to_schedule = ChunkStatus::Empty;
-            // TODO: check canLoadWithoutGeneration
         } else if !self.needs_generation.load(Ordering::Relaxed)
             && *self.scheduled_status.lock() == Some(ChunkStatus::Empty)
+            && !self.can_load_without_generation()
         {
             self.needs_generation.store(true, Ordering::Relaxed);
             status_to_schedule = ChunkStatus::Empty;
@@ -219,21 +236,65 @@ impl ChunkGenerationTask {
             status_to_schedule,
             self.needs_generation.load(Ordering::Relaxed),
         );
+        //log::info!("Scheduled layer: {:?}", status_to_schedule);
         self.scheduled_status.lock().replace(status_to_schedule);
+    }
+
+    fn can_load_without_generation(&self) -> bool {
+        if self.target_status == ChunkStatus::Empty {
+            return true;
+        }
+        let center = self.cache.get(self.pos.0.x, self.pos.0.y);
+        let highest_generated_status = center.persisted_status();
+
+        if let Some(highest_status) = highest_generated_status {
+            if highest_status < self.target_status {
+                return false;
+            }
+
+            let dependencies = LOADING_PYRAMID
+                .get_step_to(self.target_status)
+                .accumulated_dependencies
+                .clone();
+            let range = dependencies.get_radius() as i32;
+
+            for x in (self.pos.0.x - range)..=(self.pos.0.x + range) {
+                for z in (self.pos.0.y - range)..=(self.pos.0.y + range) {
+                    let distance =
+                        std::cmp::max((self.pos.0.x - x).abs(), (self.pos.0.y - z).abs()) as usize;
+                    if let Some(required_status) = dependencies.get(distance) {
+                        let neighbor = self.cache.get(x, z);
+                        let persisted = neighbor.persisted_status();
+                        if persisted < Some(required_status) {
+                            return false;
+                        }
+                    }
+                }
+            }
+            true
+        } else {
+            false
+        }
     }
 
     /// Runs the generation task loop.
     pub async fn run(self: Arc<Self>) {
-        log::info!("Running generation task for {:?}", self.pos);
-        self.wait_for_scheduled_layers().await;
+        //log::info!(
+        //    "Running generation task for {:?}, target status: {:?}",
+        //    self.pos,
+        //    self.target_status
+        //);
+        loop {
+            self.wait_for_scheduled_layers().await;
 
-        if self.marked_for_cancel.load(Ordering::Relaxed)
-            || self.scheduled_status.lock().unwrap_or(ChunkStatus::Empty) == self.target_status
-        {
-            return;
+            if self.marked_for_cancel.load(Ordering::Relaxed)
+                || *self.scheduled_status.lock() == Some(self.target_status)
+            {
+                return;
+            }
+
+            self.schedule_next_layer();
         }
-
-        self.schedule_next_layer();
     }
 
     /// Waits for all scheduled neighbor tasks to complete.
@@ -243,6 +304,12 @@ impl ChunkGenerationTask {
             if let Some(future) = future {
                 if future.await.is_none() {
                     self.mark_for_cancel();
+                    break;
+                } else {
+                    //log::info!(
+                    //    "Neighbor task completed for {:?}",
+                    //    self.neighbor_ready.lock().len()
+                    //);
                 }
             } else {
                 break;

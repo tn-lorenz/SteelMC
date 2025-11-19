@@ -1,6 +1,7 @@
 //! `ChunkHolder` manages chunk state and asynchronous generation tasks.
 use std::pin::Pin;
 use std::sync::Arc;
+use std::sync::atomic::{AtomicUsize, Ordering};
 
 use futures::{Future, future};
 use replace_with::replace_with_or_abort;
@@ -39,9 +40,16 @@ pub struct ChunkHolder {
     pos: ChunkPos,
     /// The current ticket level of the chunk.
     pub ticket_level: Mutex<u8>,
+    /// The highest status that has started work.
+    started_work: AtomicUsize,
 }
 
 impl ChunkHolder {
+    /// Gets the chunk position.
+    pub fn get_pos(&self) -> ChunkPos {
+        self.pos
+    }
+
     /// Creates a new chunk holder.
     #[must_use]
     pub fn new(pos: ChunkPos, ticket_level: u8) -> Self {
@@ -52,6 +60,7 @@ impl ChunkHolder {
             generation_task: Mutex::new(None),
             pos,
             ticket_level: Mutex::new(ticket_level),
+            started_work: AtomicUsize::new(usize::MAX),
         }
     }
 
@@ -172,33 +181,130 @@ impl ChunkHolder {
     }
 
     /// Gets the persisted status of the chunk.
-    pub fn persisted_status(&self) -> ChunkStatus {
+    pub fn persisted_status(&self) -> Option<ChunkStatus> {
         match &*self.chunk_access.borrow() {
-            ChunkResult::Ok((s, _)) => *s,
-            _ => ChunkStatus::Empty,
+            ChunkResult::Ok((s, _)) => Some(*s),
+            _ => None,
         }
     }
 
     /// Applies a step to the chunk.
     pub fn apply_step(
-        &self,
+        self: Arc<Self>,
         step: Arc<ChunkStep>,
-        _chunk_map: Arc<ChunkMap>,
-        _cache: Arc<StaticCache2D<Arc<ChunkHolder>>>,
+        chunk_map: Arc<ChunkMap>,
+        cache: Arc<StaticCache2D<Arc<ChunkHolder>>>,
     ) -> NeighborReady {
         let target_status = step.target_status;
-        let sender = self.sender.clone();
 
-        Box::pin(async move {
-            // Simulate work placeholder
-            sender.send_modify(|chunk| match chunk {
-                ChunkResult::Ok((s, _)) if *s >= target_status => {}
-                ChunkResult::Ok((s, _)) => *s = target_status,
-                ChunkResult::Unloaded | ChunkResult::Failed => {}
+        if !self.acquire_status_bump(target_status) {
+            let self_clone = self.clone();
+            return Box::pin(async move {
+                self_clone.await_chunk_and_then(target_status, |_| ()).await
             });
+        }
 
-            Some(())
-        })
+        let sender = self.sender.clone();
+        let cache = cache.clone();
+        let context = chunk_map.world_gen_context.clone();
+        let task = step.task;
+        let self_clone = self.clone();
+
+        let future = chunk_map.task_tracker.spawn(async move {
+            if target_status == ChunkStatus::Empty {
+                match task(context, &step, &cache, self_clone).await {
+                    Ok(()) => {
+                        sender.send_modify(|chunk| match chunk {
+                            ChunkResult::Ok((s, _)) => {
+                                //log::info!("Task completed for {:?}", target_status);
+
+                                if *s < target_status {
+                                    *s = target_status;
+                                }
+                            }
+                            _ => {}
+                        });
+                        Some(())
+                    }
+                    Err(e) => {
+                        log::error!("Chunk generation task failed: {}", e);
+                        sender.send_replace(ChunkResult::Failed);
+                        None
+                    }
+                }
+            } else {
+                let parent_status = target_status
+                    .parent()
+                    .expect("Target status must have parent if not Empty");
+
+                //log::info!(
+                //    "Parent status: {:?}, target status: {:?}",
+                //    parent_status,
+                //    target_status
+                //);
+
+                let has_parent = self_clone.with_chunk(parent_status, |_| ()).is_some();
+
+                if !has_parent {
+                    panic!("Parent chunk missing");
+                }
+
+                match task(context, &step, &cache, self_clone).await {
+                    Ok(()) => {
+                        sender.send_modify(|chunk| match chunk {
+                            ChunkResult::Ok((s, _)) => {
+                                if *s < target_status {
+                                    *s = target_status;
+                                }
+                            }
+                            _ => {}
+                        });
+                        //log::info!("Task completed for {:?}", target_status);
+                        Some(())
+                    }
+                    Err(e) => {
+                        log::error!("Chunk generation task failed: {}", e);
+                        sender.send_replace(ChunkResult::Failed);
+                        None
+                    }
+                }
+            }
+        });
+
+        let self_clone = self.clone();
+        Box::pin(async move { self_clone.await_chunk_and_then(target_status, |_| ()).await })
+    }
+
+    fn acquire_status_bump(&self, status: ChunkStatus) -> bool {
+        let status_index = status.get_index();
+        let parent_index = status.parent().map_or(usize::MAX, |s| s.get_index());
+
+        //log::info!(
+        //    "Parent index: {:?}, Status index: {:?}",
+        //    parent_index,
+        //    status_index
+        //);
+
+        let previous_started = self.started_work.compare_exchange(
+            parent_index,
+            status_index,
+            Ordering::SeqCst,
+            Ordering::SeqCst,
+        );
+
+        match previous_started {
+            Ok(_) => true,
+            Err(current) => {
+                if current != usize::MAX && current >= status_index {
+                    false
+                } else {
+                    panic!(
+                        "Unexpected started work status: {:?} (index {}) while trying to start: {:?} (index {})",
+                        current, current, status, status_index
+                    );
+                }
+            }
+        }
     }
 
     /// Upgrades the chunk to a full chunk.
@@ -214,6 +320,13 @@ impl ChunkHolder {
                 )),
                 _ => panic!("Cannot upgrade chunk: not at ProtoChunk status"),
             });
+        });
+    }
+
+    /// Inserts a chunk into the holder with a specific status.
+    pub fn insert_chunk(&self, chunk: ChunkAccess, status: ChunkStatus) {
+        self.sender.send_modify(|c| {
+            *c = ChunkResult::Ok((status, chunk));
         });
     }
 }
