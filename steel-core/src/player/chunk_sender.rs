@@ -122,7 +122,7 @@ impl Default for ChunkSender {
         Self {
             pending_chunks: HashSet::new(),
             unacknowledged_batches: 0,
-            desired_chunks_per_tick: 1000.0,
+            desired_chunks_per_tick: 32.0,
             batch_quota: 0.0,
             max_unacknowledged_batches: 1,
         }
