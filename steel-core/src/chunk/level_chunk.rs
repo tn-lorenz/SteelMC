@@ -9,7 +9,7 @@ use steel_utils::{ChunkPos, codec::BitSet};
 use crate::chunk::{proto_chunk::ProtoChunk, section::Sections};
 
 /// A chunk that is ready to be sent to the client.
-#[derive(Debug, Clone)]
+#[derive(Debug)]
 pub struct LevelChunk {
     /// The sections of the chunk.
     pub sections: Sections,

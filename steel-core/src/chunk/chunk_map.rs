@@ -1,4 +1,5 @@
 use std::sync::Arc;
+use steel_protocol::packets::game::CSetChunkCenter;
 use steel_utils::ChunkPos;
 use tokio::sync::Mutex;
 use tokio_util::task::TaskTracker;
@@ -173,6 +174,11 @@ impl ChunkMap {
                     distance_manager.remove_player(last_view.center, last_view.view_distance as u8);
                     #[allow(clippy::cast_possible_truncation, clippy::cast_sign_loss)]
                     distance_manager.add_player(new_view.center, new_view.view_distance as u8);
+
+                    connection.send_packet(CSetChunkCenter {
+                        x: new_view.center.0.x,
+                        y: new_view.center.0.y,
+                    });
                 }
 
                 // We lock here to ensure we have unique access for the duration of the diff

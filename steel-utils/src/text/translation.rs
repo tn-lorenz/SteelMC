@@ -104,3 +104,9 @@ impl TranslatedMessage {
         result
     }
 }
+
+impl From<TranslatedMessage> for TextComponent {
+    fn from(value: TranslatedMessage) -> Self {
+        TextComponent::new().translate(value)
+    }
+}

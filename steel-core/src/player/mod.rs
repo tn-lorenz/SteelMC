@@ -4,13 +4,16 @@ mod game_profile;
 /// This module contains the networking implementation for the player.
 pub mod networking;
 
-use std::sync::Arc;
+use std::sync::{
+    Arc,
+    atomic::{AtomicBool, Ordering},
+};
 
 pub use game_profile::GameProfile;
 use parking_lot::Mutex;
 
-use steel_protocol::packets::common::SCustomPayload;
-use steel_utils::{ChunkPos, math::Vector3};
+use steel_protocol::packets::{common::SCustomPayload, game::SMovePlayer};
+use steel_utils::{ChunkPos, math::Vector3, translations};
 
 use crate::{
     chunk::chunk_tracking_view::ChunkTrackingView,
@@ -29,7 +32,7 @@ pub struct Player {
     pub world: Arc<World>,
 
     /// Whether the player has finished loading the client.
-    pub client_loaded: bool,
+    pub client_loaded: AtomicBool,
 
     /// The player's position.
     pub position: Mutex<Vector3<f64>>,
@@ -53,7 +56,7 @@ impl Player {
             connection,
 
             world,
-            client_loaded: false,
+            client_loaded: AtomicBool::new(false),
             position: Mutex::new(Vector3::default()),
             last_chunk_pos: Mutex::new(ChunkPos::new(0, 0)),
             last_tracking_view: Mutex::new(None),
@@ -63,7 +66,7 @@ impl Player {
 
     /// Ticks the player.
     pub fn tick(&self) {
-        if !self.client_loaded {
+        if !self.client_loaded.load(Ordering::Relaxed) {
             //return;
         }
 
@@ -81,6 +84,8 @@ impl Player {
         self.chunk_sender
             .lock()
             .send_next_chunks(&self.connection, &self.world, chunk_pos);
+
+        self.connection.tick();
 
         // TODO: Implement player ticking logic here
         // This will include:
@@ -100,6 +105,42 @@ impl Player {
 
     /// Handles the end of a client tick.
     pub fn handle_client_tick_end(&self) {
-        log::info!("Hello from the other side!");
+        //log::info!("Hello from the other side!");
+    }
+
+    fn is_invalid_position(&self, x: f64, y: f64, z: f64, rot_x: f32, rot_y: f32) -> bool {
+        if x.is_nan() || y.is_nan() || z.is_nan() {
+            return true;
+        }
+
+        if !rot_x.is_finite() || !rot_y.is_finite() {
+            return true;
+        }
+
+        false
+    }
+
+    fn update_awaiting_teleport(&self) -> bool {
+        //TODO: Implement this
+        false
+    }
+
+    /// Handles a move player packet.
+    pub fn handle_move_player(&self, packet: SMovePlayer) {
+        if self.is_invalid_position(
+            packet.get_x(0.0),
+            packet.get_y(0.0),
+            packet.get_z(0.0),
+            packet.get_x_rot(0.0),
+            packet.get_y_rot(0.0),
+        ) {
+            self.connection
+                .disconnect(translations::MULTIPLAYER_DISCONNECT_INVALID_PLAYER_MOVEMENT.msg());
+            return;
+        }
+
+        if !self.update_awaiting_teleport() && self.client_loaded.load(Ordering::Relaxed) {
+            *self.position.lock() = packet.position;
+        }
     }
 }

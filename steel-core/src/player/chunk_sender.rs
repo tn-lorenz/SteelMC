@@ -2,7 +2,7 @@
 use std::collections::HashSet;
 
 use steel_protocol::packets::game::{
-    CChunkBatchFinished, CChunkBatchStart, CForgetLevelChunk, CLevelChunkWithLight,
+    CChunkBatchFinished, CChunkBatchStart, CForgetLevelChunk, CLevelChunkWithLight, CSetChunkCenter,
 };
 use steel_utils::ChunkPos;
 
@@ -32,10 +32,7 @@ impl ChunkSender {
     /// Drops a chunk from the client's view.
     pub fn drop_chunk(&mut self, connection: &JavaConnection, pos: ChunkPos) {
         if !self.pending_chunks.remove(&pos) && !connection.closed() {
-            connection.send_packet(CForgetLevelChunk {
-                z: pos.0.y,
-                x: pos.0.x,
-            });
+            connection.send_packet(CForgetLevelChunk { pos });
         }
     }
 
@@ -58,16 +55,17 @@ impl ChunkSender {
                     log::info!("Sending {} chunks", chunks_to_send.len());
                     self.unacknowledged_batches += 1;
                     connection.send_packet(CChunkBatchStart {});
+                    let batch_size = chunks_to_send.len();
 
-                    for chunk in &chunks_to_send {
-                        Self::send_chunk(chunk, connection);
+                    for chunk in chunks_to_send {
+                        connection.send_packet(chunk);
                     }
 
                     connection.send_packet(CChunkBatchFinished {
-                        batch_size: chunks_to_send.len() as i32,
+                        batch_size: batch_size as i32,
                     });
 
-                    self.batch_quota -= chunks_to_send.len() as f32;
+                    self.batch_quota -= batch_size as f32;
                 }
             }
         }
@@ -77,7 +75,7 @@ impl ChunkSender {
         &mut self,
         world: &World,
         player_chunk_pos: ChunkPos,
-    ) -> Vec<LevelChunk> {
+    ) -> Vec<CLevelChunkWithLight> {
         let max_batch_size = self.batch_quota.floor() as usize;
         let mut candidates: Vec<ChunkPos> = self.pending_chunks.iter().copied().collect();
 
@@ -97,7 +95,11 @@ impl ChunkSender {
 
             if let Some(holder) = world.chunk_map.chunks.get_sync(&pos) {
                 // Check if chunk is full and get it
-                if let Some(chunk) = holder.get().with_full_chunk(std::clone::Clone::clone) {
+                if let Some(chunk) = holder.get().with_full_chunk(|chunk| CLevelChunkWithLight {
+                    pos: chunk.pos,
+                    chunk_data: chunk.extract_chunk_data(),
+                    light_data: chunk.extract_light_data(),
+                }) {
                     chunks_to_send.push(chunk);
                     self.pending_chunks.remove(&pos);
                 }
@@ -105,15 +107,6 @@ impl ChunkSender {
         }
 
         chunks_to_send
-    }
-
-    /// Sends a chunk to the client.
-    pub fn send_chunk(chunk: &LevelChunk, connection: &JavaConnection) {
-        connection.send_packet(CLevelChunkWithLight {
-            pos: chunk.pos,
-            chunk_data: chunk.extract_chunk_data(),
-            light_data: chunk.extract_light_data(),
-        });
     }
 
     /// Handles the acknowledgement of a chunk batch from the client.
@@ -129,7 +122,7 @@ impl Default for ChunkSender {
         Self {
             pending_chunks: HashSet::new(),
             unacknowledged_batches: 0,
-            desired_chunks_per_tick: 9.0,
+            desired_chunks_per_tick: 1000.0,
             batch_quota: 0.0,
             max_unacknowledged_batches: 1,
         }

@@ -310,6 +310,11 @@ fn write_to_struct(s: syn::DataStruct, name: Ident, generics: &syn::Generics) ->
                     }
                 }
             }
+            Some("i64") => {
+                quote! {
+                    self.#field_name.as_i64().write(writer)?;
+                }
+            }
             Some("vec_no_prefix") => {
                 quote! {
                     for item in &self.#field_name {

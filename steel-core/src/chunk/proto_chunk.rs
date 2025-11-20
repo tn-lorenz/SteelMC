@@ -4,7 +4,7 @@ use steel_utils::ChunkPos;
 use crate::chunk::section::Sections;
 
 /// A chunk that is still being generated.
-#[derive(Debug, Clone)]
+#[derive(Debug)]
 pub struct ProtoChunk {
     /// The sections of the chunk.
     pub sections: Sections,

@@ -50,7 +50,7 @@ impl VarInt {
     /// - If the writer fails to write.
     #[allow(clippy::cast_possible_truncation, clippy::cast_sign_loss)]
     pub async fn write_async(self, write: &mut (impl AsyncWrite + Unpin)) -> Result<(), Error> {
-        let mut val = self.0;
+        let mut val = self.0 as u32;
         loop {
             let b: u8 = (val as u8) & 0b0111_1111;
             val >>= 7;
@@ -98,7 +98,7 @@ impl ReadFrom for VarInt {
 impl WriteTo for VarInt {
     #[allow(clippy::cast_possible_truncation, clippy::cast_sign_loss)]
     fn write(&self, writer: &mut impl Write) -> Result<(), Error> {
-        let mut val = self.0;
+        let mut val = self.0 as u32;
         loop {
             let b: u8 = val as u8 & 0x7F;
             val >>= 7;
@@ -139,5 +139,25 @@ impl From<i32> for VarInt {
 impl From<VarInt> for i32 {
     fn from(value: VarInt) -> i32 {
         value.0
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+    use std::io::Cursor;
+
+    #[test]
+    fn test_varint_read_write_negative() {
+        let val = VarInt(-1);
+        let mut buf = Vec::new();
+        val.write(&mut buf).expect("write failed");
+
+        // Expected VarInt encoding for -1 (0xFFFFFFFF)
+        assert_eq!(buf, vec![0xff, 0xff, 0xff, 0xff, 0x0f]);
+
+        let mut cursor = Cursor::new(buf);
+        let read_val = VarInt::read(&mut cursor).expect("read failed");
+        assert_eq!(read_val, val);
     }
 }
