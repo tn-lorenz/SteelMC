@@ -47,16 +47,6 @@ impl ChunkTrackingView {
         mut on_added: impl FnMut(ChunkPos),
         mut on_removed: impl FnMut(ChunkPos),
     ) {
-        // Optimize: if disjoint, just remove all old and add all new
-        // If overlapping, only process differences
-
-        // For simplicity in first iteration, we can just iterate.
-        // But O(N^2) is bad if we naive check.
-        // Better: iterate old, if not in new -> removed.
-        // Iterate new, if not in old -> added.
-        // Since N is small (view distance <= 32), N^2 is ~4096.
-        // A simple loop is fine.
-
         old.for_each(|pos| {
             if !new.contains(pos) {
                 on_removed(pos);

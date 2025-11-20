@@ -32,7 +32,6 @@ impl LevelChunk {
         let data = Vec::new();
 
         let mut cursor = Cursor::new(data);
-        log::info!("Writing sections {:?}", self.sections.sections.len());
         for section in &self.sections.sections {
             section.write(&mut cursor);
         }

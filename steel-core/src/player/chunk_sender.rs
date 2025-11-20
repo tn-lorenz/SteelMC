@@ -121,22 +121,6 @@ impl ChunkSender {
         if self.unacknowledged_batches > 0 {
             self.unacknowledged_batches -= 1;
         }
-
-        // Java implementation logic for desired_chunks_per_tick update:
-        // this.desiredChunksPerTick = Double.isNaN(desiredChunksPerTick) ? 0.01F : Mth.clamp(desiredChunksPerTick, 0.01F, 64.0F);
-        // For now we keep it simple or use the passed batch_size if it acts as desired rate?
-        // Wait, the packet is ChunkBatchReceived, the field is `desiredChunksPerTick` in Java's method `onChunkBatchReceivedByClient(float desiredChunksPerTick)`.
-        // The packet `CChunkBatchFinished` in my implementation has `batch_size`.
-        // The name `CChunkBatchFinished` suggests `ClientboundChunkBatchFinished`?
-        // No, `ServerboundChunkBatchReceived` is the packet FROM client TO server.
-        // In `PlayerChunkSender.java`: `onChunkBatchReceivedByClient` is called when `ServerboundChunkBatchReceivedPacket` is received.
-        // My packet name `CChunkBatchFinished` seems to correspond to `ClientboundChunkBatchFinishedPacket` (sent TO client).
-        // But I need to handle the packet FROM client.
-        // The plan said: "In `process_packet`, add case for `C_CHUNK_BATCH_FINISHED`".
-        // Wait, `CChunkBatchFinished` is clientbound. I need the Serverbound packet.
-        // The packet from client is `ChunkBatchReceived`.
-        // `steel-protocol` seems to have `CChunkBatchFinished` (Clientbound).
-        // I need to find the Serverbound packet. `ChunkBatchReceived`?
     }
 }
 

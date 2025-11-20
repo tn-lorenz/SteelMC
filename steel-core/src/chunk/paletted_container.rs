@@ -238,38 +238,6 @@ fn pack_bits(indices: &[u32], bits: usize) -> Vec<u64> {
     for (i, &index) in indices.iter().enumerate() {
         let array_index = i / values_per_long;
         let offset = (i % values_per_long) * bits;
-
-        // In `SimpleBitStorage`, values are packed from right to left within the long?
-        // Checking SimpleBitStorage.java:
-        // packedValue |= values[inputOffset + indexInLong] & this.mask;
-        // where indexInLong goes from valuesPerLong-1 down to 0.
-        // Wait, the loop is:
-        // for (int indexInLong = this.valuesPerLong - 1; indexInLong >= 0; indexInLong--) {
-        //    packedValue <<= bits;
-        //    packedValue |= values[inputOffset + indexInLong] & this.mask;
-        // }
-        // This means the LAST value in the chunk (high index) is in the LEAST significant bits of the long?
-        // NO.
-        // `packedValue` is shifted left.
-        // Initial packedValue = 0.
-        // indexInLong = 3 (say).
-        // packedValue = (packedValue << bits) | val[3]
-        // packedValue = val[3]
-        // indexInLong = 2.
-        // packedValue = (val[3] << bits) | val[2]
-        // indexInLong = 0.
-        // packedValue = (... | val[1] << bits) | val[0]
-        //
-        // So val[0] (the FIRST value in the block) ends up in the LEAST significant bits.
-        // val[valuesPerLong-1] ends up in the MOST significant bits.
-        //
-        // So: data[array_index] |= (index as u64) << offset;
-        // where offset = (i % values_per_long) * bits;
-        //
-        // Let's trace:
-        // i = 0. array_index = 0. offset = 0. data[0] |= index << 0. Correct.
-        // i = 1. array_index = 0. offset = bits. data[0] |= index << bits. Correct.
-
         data[array_index] |= (index as u64) << offset;
     }
 
