@@ -1,9 +1,9 @@
 //! This module contains the `Sections` and `ChunkSection` structs.
 use std::{fmt::Debug, io::Cursor};
 
-use steel_utils::{BlockStateId, serial::WriteTo, types::Todo};
+use steel_utils::{BlockStateId, serial::WriteTo};
 
-use crate::chunk::paletted_container::BlockPalette;
+use crate::chunk::paletted_container::{BiomePalette, BlockPalette};
 
 /// A collection of chunk sections.
 #[derive(Debug, Clone)]
@@ -66,14 +66,17 @@ pub struct ChunkSection {
     /// The block states in the section.
     pub states: BlockPalette,
     /// The biomes in the section.
-    pub biomes: Todo,
+    pub biomes: BiomePalette,
 }
 
 impl ChunkSection {
     /// Creates a new chunk section.
     #[must_use]
     pub fn new(states: BlockPalette) -> Self {
-        Self { states, biomes: () }
+        Self {
+            states,
+            biomes: BiomePalette::Homogeneous(0),
+        }
     }
 
     /// Creates a new empty chunk section.
@@ -81,7 +84,7 @@ impl ChunkSection {
     pub fn new_empty() -> Self {
         Self {
             states: BlockPalette::Homogeneous(BlockStateId(0)),
-            biomes: (),
+            biomes: BiomePalette::Homogeneous(0),
         }
     }
 
@@ -94,5 +97,10 @@ impl ChunkSection {
             .non_empty_block_count()
             .write(writer)
             .expect("Failed to write block count");
+
+        self.states
+            .write(writer)
+            .expect("Failed to write block states");
+        self.biomes.write(writer).expect("Failed to write biomes");
     }
 }

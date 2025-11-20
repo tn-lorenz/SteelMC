@@ -1,6 +1,7 @@
 mod c_chunk_batch_finished;
 mod c_chunk_batch_start;
 mod c_forget_level_chunk;
+mod c_game_event;
 mod c_level_chunk_with_light;
 mod c_login;
 mod s_chunk_batch_received;
@@ -9,8 +10,11 @@ mod s_client_tick_end;
 pub use c_chunk_batch_finished::CChunkBatchFinished;
 pub use c_chunk_batch_start::CChunkBatchStart;
 pub use c_forget_level_chunk::CForgetLevelChunk;
+pub use c_game_event::CGameEvent;
+pub use c_game_event::GameEventType;
 pub use c_level_chunk_with_light::{
-    BlockEntityInfo, CLevelChunkWithLight, ChunkPacketData, Heightmaps, LightUpdatePacketData,
+    BlockEntityInfo, CLevelChunkWithLight, ChunkPacketData, HeightmapType, Heightmaps,
+    LightUpdatePacketData,
 };
 pub use c_login::CLogin;
 pub use c_login::CommonPlayerSpawnInfo;

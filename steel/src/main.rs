@@ -1,8 +1,7 @@
 use log::LevelFilter;
 use simplelog::{ColorChoice, Config, TermLogger, TerminalMode};
 use steel::SteelServer;
-use steel_utils::{ChunkPos, Identifier, translations};
-use tokio::time::Instant;
+use steel_utils::{Identifier, translations};
 
 #[tokio::main]
 async fn main() {
@@ -36,6 +35,7 @@ async fn main() {
             .format()
     );
 
+    /*
     steel.server.worlds[0]
         .chunk_map
         .distance_manager
@@ -45,7 +45,7 @@ async fn main() {
 
     let _start = Instant::now();
 
-    println!("{:?}", steel.server.worlds[0].chunk_map.chunks.len());
+    println!("{:?}", steel.server.worlds[0].chunk_map.chunks.len()); */
 
     /*
     steel.server.worlds[0]

@@ -1,7 +1,9 @@
 //! This module contains the `LevelChunk` struct, which is a chunk that is ready to be sent to the client.
 use std::io::Cursor;
 
-use steel_protocol::packets::game::{ChunkPacketData, Heightmaps, LightUpdatePacketData};
+use steel_protocol::packets::game::{
+    ChunkPacketData, HeightmapType, Heightmaps, LightUpdatePacketData,
+};
 use steel_utils::{ChunkPos, codec::BitSet};
 
 use crate::chunk::{proto_chunk::ProtoChunk, section::Sections};
@@ -28,17 +30,21 @@ impl LevelChunk {
     /// Extracts the chunk data for sending to the client.
     pub fn extract_chunk_data(&self) -> ChunkPacketData {
         let data = Vec::new();
-        // `Cursor::new(Vec::new())` creates a cursor over an empty vector.
-        // When writing, it needs to grow.
-        // The previous error was `Cursor<&mut Vec<u8>>`.
-        // `ChunkSection::write` takes `&mut Cursor<Vec<u8>>`.
+
         let mut cursor = Cursor::new(data);
+        log::info!("Writing sections {:?}", self.sections.sections.len());
         for section in &self.sections.sections {
             section.write(&mut cursor);
         }
 
         ChunkPacketData {
-            heightmaps: Heightmaps(Vec::new()),
+            heightmaps: Heightmaps {
+                heightmaps: vec![
+                    (HeightmapType::WorldSurface, vec![0; 37]),
+                    (HeightmapType::MotionBlocking, vec![0; 37]),
+                    (HeightmapType::MotionBlockingNoLeaves, vec![0; 37]),
+                ],
+            },
             data: cursor.into_inner(),
             block_entities: Vec::new(),
         }

@@ -4,7 +4,10 @@ use std::{
     io::{Result, Write},
 };
 
-use simdnbt::{ToNbtTag, owned::NbtTag};
+use simdnbt::{
+    ToNbtTag,
+    owned::{NbtCompound, NbtTag},
+};
 use uuid::Uuid;
 
 use crate::{
@@ -64,6 +67,12 @@ impl WriteTo for i32 {
 }
 
 impl WriteTo for i64 {
+    fn write(&self, writer: &mut impl Write) -> Result<()> {
+        writer.write_all(&self.to_be_bytes())
+    }
+}
+
+impl WriteTo for f32 {
     fn write(&self, writer: &mut impl Write) -> Result<()> {
         writer.write_all(&self.to_be_bytes())
     }
@@ -145,6 +154,15 @@ impl WriteTo for Identifier {
 }
 
 impl WriteTo for NbtTag {
+    fn write(&self, writer: &mut impl Write) -> Result<()> {
+        let mut buf = Vec::new();
+        self.write(&mut buf);
+        writer.write_all(&buf)?;
+        Ok(())
+    }
+}
+
+impl WriteTo for NbtCompound {
     fn write(&self, writer: &mut impl Write) -> Result<()> {
         let mut buf = Vec::new();
         self.write(&mut buf);

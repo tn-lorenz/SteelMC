@@ -1,6 +1,8 @@
 //! This module contains the implementation of the world's entity-related methods.
 use std::sync::Arc;
 
+use steel_protocol::packets::game::{CGameEvent, GameEventType};
+
 use crate::{player::Player, world::World};
 
 impl World {
@@ -21,6 +23,17 @@ impl World {
             .is_err()
         {
             player.connection.close();
+            return;
         }
+
+        player.connection.send_packet(CGameEvent {
+            event: GameEventType::LevelChunksLoadStart,
+            data: 0.0,
+        });
+
+        player.connection.send_packet(CGameEvent {
+            event: GameEventType::ChangeGameMode,
+            data: 1.0,
+        });
     }
 }

@@ -6,7 +6,6 @@ use steel_utils::Identifier;
 #[derive(Clone, Debug, WriteTo)]
 pub struct RegistryEntry {
     pub id: Identifier,
-    #[write(as = "option")]
     pub data: Option<NbtTag>,
 }
 

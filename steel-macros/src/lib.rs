@@ -310,6 +310,13 @@ fn write_to_struct(s: syn::DataStruct, name: Ident, generics: &syn::Generics) ->
                     }
                 }
             }
+            Some("vec_no_prefix") => {
+                quote! {
+                    for item in &self.#field_name {
+                        item.write(writer)?;
+                    }
+                }
+            }
             Some("json") => {
                 let prefix =
                     prefix.unwrap_or_else(|| syn::parse_quote!(steel_utils::codec::VarInt));
@@ -319,16 +326,6 @@ fn write_to_struct(s: syn::DataStruct, name: Ident, generics: &syn::Generics) ->
                     serde_json::to_string(&self.#field_name).map_err(|e| {
                         std::io::Error::other(format!("Failed to serialize: {e}"))
                     })?.write_prefixed::<#prefix>(writer)?;
-                }
-            }
-            Some("option") => {
-                quote! {
-                    if let Some(value) = &self.#field_name {
-                        true.write(writer)?;
-                        steel_utils::serial::WriteTo::write(value, writer)?;
-                    } else {
-                        false.write(writer)?;
-                    }
                 }
             }
             Some("option_byte") => {
