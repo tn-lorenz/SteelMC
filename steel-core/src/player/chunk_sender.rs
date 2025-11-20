@@ -6,11 +6,7 @@ use steel_protocol::packets::game::{
 };
 use steel_utils::ChunkPos;
 
-use crate::{
-    chunk::{chunk_packet_data::ChunkPacketData, level_chunk::LevelChunk},
-    player::networking::JavaConnection,
-    world::World,
-};
+use crate::{chunk::level_chunk::LevelChunk, player::networking::JavaConnection, world::World};
 
 /// This struct is responsible for sending chunks to the client.
 #[derive(Debug)]
@@ -113,11 +109,10 @@ impl ChunkSender {
 
     /// Sends a chunk to the client.
     pub fn send_chunk(chunk: &LevelChunk, connection: &JavaConnection) {
-        let chunk_data = ChunkPacketData { chunk }.extract_chunk_data();
         connection.send_packet(CLevelChunkWithLight {
             pos: chunk.pos,
-            heightmaps: (),
-            chunk_data,
+            chunk_data: chunk.extract_chunk_data(),
+            light_data: chunk.extract_light_data(),
         });
     }
 

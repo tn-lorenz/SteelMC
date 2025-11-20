@@ -1,5 +1,8 @@
 //! This module contains the `LevelChunk` struct, which is a chunk that is ready to be sent to the client.
-use steel_utils::ChunkPos;
+use std::io::Cursor;
+
+use steel_protocol::packets::game::{ChunkPacketData, Heightmaps, LightUpdatePacketData};
+use steel_utils::{ChunkPos, codec::BitSet};
 
 use crate::chunk::{proto_chunk::ProtoChunk, section::Sections};
 
@@ -19,6 +22,53 @@ impl LevelChunk {
         Self {
             sections: proto_chunk.sections,
             pos: proto_chunk.pos,
+        }
+    }
+
+    /// Extracts the chunk data for sending to the client.
+    pub fn extract_chunk_data(&self) -> ChunkPacketData {
+        let data = Vec::new();
+        // `Cursor::new(Vec::new())` creates a cursor over an empty vector.
+        // When writing, it needs to grow.
+        // The previous error was `Cursor<&mut Vec<u8>>`.
+        // `ChunkSection::write` takes `&mut Cursor<Vec<u8>>`.
+        let mut cursor = Cursor::new(data);
+        for section in &self.sections.sections {
+            section.write(&mut cursor);
+        }
+
+        ChunkPacketData {
+            heightmaps: Heightmaps(Vec::new()),
+            data: cursor.into_inner(),
+            block_entities: Vec::new(),
+        }
+    }
+
+    /// Extracts the light data for sending to the client.
+    pub fn extract_light_data(&self) -> LightUpdatePacketData {
+        let section_count = self.sections.sections.len();
+        let mut sky_y_mask = BitSet(vec![0; (section_count + 63) / 64].into_boxed_slice());
+        let mut block_y_mask = BitSet(vec![0; (section_count + 63) / 64].into_boxed_slice());
+        let empty_sky_y_mask = BitSet(vec![0; (section_count + 63) / 64].into_boxed_slice());
+        let empty_block_y_mask = BitSet(vec![0; (section_count + 63) / 64].into_boxed_slice());
+
+        let mut sky_updates = Vec::new();
+        let mut block_updates = Vec::new();
+
+        for i in 0..section_count {
+            sky_y_mask.set(i, true);
+            block_y_mask.set(i, true);
+            sky_updates.push(vec![0xFF; 2048]);
+            block_updates.push(vec![0xFF; 2048]);
+        }
+
+        LightUpdatePacketData {
+            sky_y_mask,
+            block_y_mask,
+            empty_sky_y_mask,
+            empty_block_y_mask,
+            sky_updates,
+            block_updates,
         }
     }
 }

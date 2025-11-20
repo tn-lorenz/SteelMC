@@ -7,7 +7,7 @@ pub struct ChunkTrackingView {
 }
 
 impl ChunkTrackingView {
-    #[must_use] 
+    #[must_use]
     pub fn empty() -> Self {
         Self {
             center: ChunkPos::new(0, 0),
@@ -15,7 +15,7 @@ impl ChunkTrackingView {
         }
     }
 
-    #[must_use] 
+    #[must_use]
     pub fn new(center: ChunkPos, view_distance: i32) -> Self {
         Self {
             center,
@@ -23,7 +23,7 @@ impl ChunkTrackingView {
         }
     }
 
-    #[must_use] 
+    #[must_use]
     pub fn contains(&self, pos: ChunkPos) -> bool {
         let dx = (pos.0.x - self.center.0.x).abs();
         let dy = (pos.0.y - self.center.0.y).abs();
