@@ -152,8 +152,11 @@ impl Server {
         }
         let start = Instant::now();
         futures::future::join_all(tasks).await;
-        if start.elapsed().as_millis() > 50 {
-            log::info!("Worlds ticked in {:?}", start.elapsed());
+        if start.elapsed().as_millis() > 1 {
+            log::warn!(
+                "Worlds ticked in {:?}, tick count: {tick_count}",
+                start.elapsed()
+            );
         }
     }
 }

@@ -2,6 +2,7 @@ use log::LevelFilter;
 use simplelog::{ColorChoice, Config, TermLogger, TerminalMode};
 use steel::SteelServer;
 use steel_utils::{Identifier, translations};
+use tokio_util::task::TaskTracker;
 
 #[tokio::main]
 async fn main() {
@@ -35,39 +36,6 @@ async fn main() {
             .format()
     );
 
-    /*
-    steel.server.worlds[0]
-        .chunk_map
-        .distance_manager
-        .lock()
-        .await
-        .add_player(ChunkPos::new(0, 0), 10);
-
-    let _start = Instant::now();
-
-    println!("{:?}", steel.server.worlds[0].chunk_map.chunks.len()); */
-
-    /*
-    steel.server.worlds[0]
-        .chunk_map
-        .chunks
-        .get_async(&ChunkPos::new(0, 10))
-        .await
-        .unwrap()
-        .get()
-        .await_chunk_and_then(ChunkStatus::Full, |chunk| match chunk {
-            ChunkAccess::Full(chunk) => {
-                log::info!(
-                    "Lesgo {:?} in {:?}",
-                    chunk.sections.sections.len(),
-                    start.elapsed()
-                );
-            }
-            _ => unreachable!(),
-        })
-        .await;
-     */
-
     let server = steel.server.clone();
     let cancel_token = steel.cancel_token.clone();
 
@@ -78,9 +46,15 @@ async fn main() {
         }
     });
 
-    steel.start().await;
+    let task_tracker = TaskTracker::new();
+
+    steel.start(task_tracker.clone()).await;
 
     log::info!("Waiting for pending tasks...");
+
+    task_tracker.close();
+    task_tracker.wait().await;
+
     for world in &server.worlds {
         world.chunk_map.task_tracker.close();
         world.chunk_map.task_tracker.wait().await;

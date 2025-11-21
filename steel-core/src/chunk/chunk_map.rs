@@ -73,7 +73,7 @@ impl ChunkMap {
         if pending.is_empty() {
             return;
         }
-        log::info!("Running {} generation tasks", pending.len());
+        //log::info!("Running {} generation tasks", pending.len());
         for task in pending.drain(..) {
             self.task_tracker.spawn(async move {
                 task.run().await;
@@ -292,10 +292,12 @@ impl ChunkMap {
     }
 
     /// Removes a player from the chunk map.
-    pub fn remove_player(&self, player: &Player) {
+    pub async fn remove_player(&self, player: &Player) {
+        // Okay to lock sync lock here cause it has low contention
         let mut last_view_guard = player.last_tracking_view.lock();
         if let Some(last_view) = last_view_guard.take() {
-            let mut distance_manager = self.distance_manager.blocking_lock();
+            drop(last_view_guard);
+            let mut distance_manager = self.distance_manager.lock().await;
             #[allow(clippy::cast_possible_truncation, clippy::cast_sign_loss)]
             distance_manager.remove_player(last_view.center, last_view.view_distance as u8);
         }

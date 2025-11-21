@@ -1,10 +1,11 @@
 //! This module is responsible for sending chunks to the client.
-use std::collections::HashSet;
+use std::{collections::HashSet, sync::Arc};
 
 use steel_protocol::packets::game::{
     CChunkBatchFinished, CChunkBatchStart, CForgetLevelChunk, CLevelChunkWithLight,
 };
 use steel_utils::ChunkPos;
+use tokio::task::spawn_blocking;
 
 use crate::{player::networking::JavaConnection, world::World};
 
@@ -39,7 +40,7 @@ impl ChunkSender {
     /// Sends the next batch of chunks to the client.
     pub fn send_next_chunks(
         &mut self,
-        connection: &JavaConnection,
+        connection: Arc<JavaConnection>,
         world: &World,
         player_chunk_pos: ChunkPos,
     ) {
@@ -50,23 +51,25 @@ impl ChunkSender {
 
             if self.batch_quota >= 1.0 && !self.pending_chunks.is_empty() {
                 let chunks_to_send = self.collect_chunks_to_send(world, player_chunk_pos);
-
                 if !chunks_to_send.is_empty() {
-                    //log::info!("Sending {} chunks", chunks_to_send.len());
                     self.unacknowledged_batches += 1;
-                    connection.send_packet(CChunkBatchStart {});
-                    let batch_size = chunks_to_send.len();
-
-                    for chunk in chunks_to_send {
-                        connection.send_packet(chunk);
-                    }
-
-                    connection.send_packet(CChunkBatchFinished {
-                        batch_size: batch_size as i32,
-                    });
-
-                    self.batch_quota -= batch_size as f32;
+                    self.batch_quota -= chunks_to_send.len() as f32;
                 }
+                let _ = spawn_blocking(move || {
+                    if !chunks_to_send.is_empty() {
+                        //log::info!("Sending {} chunks", chunks_to_send.len());
+                        connection.send_packet(CChunkBatchStart {});
+                        let batch_size = chunks_to_send.len();
+
+                        for chunk in chunks_to_send {
+                            connection.send_packet(chunk);
+                        }
+
+                        connection.send_packet(CChunkBatchFinished {
+                            batch_size: batch_size as i32,
+                        });
+                    }
+                });
             }
         }
     }
@@ -95,7 +98,7 @@ impl ChunkSender {
 
             if let Some(holder) = world.chunk_map.chunks.get_sync(&pos) {
                 // Check if chunk is full and get it
-                if let Some(chunk) = holder.get().with_full_chunk(|chunk| CLevelChunkWithLight {
+                if let Some(chunk) = holder.with_full_chunk(|chunk| CLevelChunkWithLight {
                     pos: chunk.pos,
                     chunk_data: chunk.extract_chunk_data(),
                     light_data: chunk.extract_light_data(),
@@ -105,7 +108,6 @@ impl ChunkSender {
                 }
             }
         }
-
         chunks_to_send
     }
 

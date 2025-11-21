@@ -65,15 +65,14 @@ impl Player {
     }
 
     /// Ticks the player.
+    #[allow(clippy::cast_possible_truncation)]
     pub fn tick(&self) {
         if !self.client_loaded.load(Ordering::Relaxed) {
             //return;
         }
 
         let current_pos = *self.position.lock();
-        #[allow(clippy::cast_possible_truncation)]
         let chunk_x = (current_pos.x as i32) >> 4;
-        #[allow(clippy::cast_possible_truncation)]
         let chunk_z = (current_pos.z as i32) >> 4;
         let chunk_pos = ChunkPos::new(chunk_x, chunk_z);
 
@@ -83,7 +82,7 @@ impl Player {
 
         self.chunk_sender
             .lock()
-            .send_next_chunks(&self.connection, &self.world, chunk_pos);
+            .send_next_chunks(self.connection.clone(), &self.world, chunk_pos);
 
         self.connection.tick();
 

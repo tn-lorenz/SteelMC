@@ -24,7 +24,7 @@ use std::{
 };
 use steel_core::{config::STEEL_CONFIG, server::Server};
 use tokio::{net::TcpListener, select};
-use tokio_util::sync::CancellationToken;
+use tokio_util::{sync::CancellationToken, task::TaskTracker};
 
 /// The networking module.
 pub mod network;
@@ -68,7 +68,7 @@ impl SteelServer {
     }
 
     /// Starts the server and begins accepting connections.
-    pub async fn start(&mut self) {
+    pub async fn start(&mut self, task_tracker: TaskTracker) {
         log::info!("Started Steel Server");
 
         let server = self.server.clone();
@@ -89,7 +89,7 @@ impl SteelServer {
                     if let Err(e) = connection.set_nodelay(true) {
                         log::warn!("Failed to set TCP_NODELAY: {e}");
                     }
-                    let (java_client, sender_recv, net_reader) = JavaTcpClient::new(connection, address, self.client_id, self.cancel_token.child_token(), self.server.clone());
+                    let (java_client, sender_recv, net_reader) = JavaTcpClient::new(connection, address, self.client_id, self.cancel_token.child_token(), self.server.clone(), task_tracker.clone());
                     self.client_id = self.client_id.wrapping_add(1);
                     log::info!("Accepted connection from Java Edition: {address} (id {})", self.client_id);
 

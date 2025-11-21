@@ -35,7 +35,7 @@ use tokio::{
         mpsc::{self, UnboundedReceiver, UnboundedSender},
     },
 };
-use tokio_util::sync::CancellationToken;
+use tokio_util::{sync::CancellationToken, task::TaskTracker};
 
 use steel_core::server::Server;
 
@@ -89,6 +89,8 @@ pub struct JavaTcpClient {
 
     pub(crate) connection_updates: Sender<ConnectionUpdate>,
     pub(crate) connection_updated: Arc<Notify>,
+
+    task_tracker: TaskTracker,
 }
 
 impl JavaTcpClient {
@@ -100,6 +102,7 @@ impl JavaTcpClient {
         id: u64,
         cancel_token: CancellationToken,
         server: Arc<Server>,
+        task_tracker: TaskTracker,
     ) -> (
         Self,
         UnboundedReceiver<EnqueuedPacket>,
@@ -123,6 +126,7 @@ impl JavaTcpClient {
             challenge: AtomicCell::new([0; 4]),
             connection_updates,
             connection_updated: Arc::new(Notify::new()),
+            task_tracker,
         };
 
         (client, recv, TCPNetworkDecoder::new(BufReader::new(read)))
@@ -203,7 +207,7 @@ impl JavaTcpClient {
         let mut connection_updates_recv = self.connection_updates.subscribe();
         let connection_updated = self.connection_updated.clone();
 
-        tokio::spawn(async move {
+        self.task_tracker.spawn(async move {
             let mut connection = None;
             loop {
                 select! {
@@ -289,7 +293,7 @@ impl JavaTcpClient {
 
         let self_clone = self.clone();
 
-        tokio::spawn(async move {
+        self.task_tracker.spawn(async move {
             let mut connection = None;
             loop {
                 select! {
