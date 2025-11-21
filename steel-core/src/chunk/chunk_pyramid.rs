@@ -263,8 +263,8 @@ pub struct ChunkPyramid {
 impl ChunkPyramid {
     /// Gets the step for the given status.
     #[must_use]
-    pub fn get_step_to(&self, status: ChunkStatus) -> Arc<ChunkStep> {
-        self.steps[status.get_index()].clone()
+    pub fn get_step_to(&self, status: ChunkStatus) -> &Arc<ChunkStep> {
+        &self.steps[status.get_index()]
     }
 }
 

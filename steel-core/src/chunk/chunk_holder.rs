@@ -67,30 +67,32 @@ impl ChunkHolder {
 
     /// Returns a future that completes when the chunk reaches the given status or is cancelled.
     #[allow(clippy::missing_panics_doc)]
-    pub(crate) fn schedule_chunk_generation_task_b(
-        &self,
+    pub(crate) async fn schedule_chunk_generation_task(
+        self: Arc<Self>,
         status: ChunkStatus,
         chunk_map: Arc<ChunkMap>,
-    ) -> Pin<Box<dyn Future<Output = Option<()>> + Send + '_>> {
+    ) {
         if self.with_chunk(status, |_| ()).is_some() {
-            return Box::pin(future::ready(Some(())));
+            return;
         }
 
-        let task = self.generation_task.blocking_lock();
+        let task = self.generation_task.lock().await;
 
         #[allow(clippy::unwrap_used)]
         if task.is_none() || status > task.as_ref().unwrap().target_status {
             drop(task);
-            self.reschedule_chunk_task_b(status, chunk_map);
+            self.reschedule_chunk_task(status, chunk_map).await;
         }
-
-        Box::pin(self.await_chunk_and_then(status, |_| ()))
     }
 
     /// Reschedules the chunk task to the given status.
-    pub(crate) fn reschedule_chunk_task_b(&self, status: ChunkStatus, chunk_map: Arc<ChunkMap>) {
-        let new_task = chunk_map.schedule_generation_task_b(status, self.pos);
-        let mut old_task_guard = self.generation_task.blocking_lock();
+    pub(crate) async fn reschedule_chunk_task(
+        &self,
+        status: ChunkStatus,
+        chunk_map: Arc<ChunkMap>,
+    ) {
+        let new_task = chunk_map.schedule_generation_task(status, self.pos).await;
+        let mut old_task_guard = self.generation_task.lock().await;
 
         let old_task = old_task_guard.replace(new_task);
         drop(old_task_guard);

@@ -55,14 +55,15 @@ impl ChunkMap {
     }
 
     /// Schedules a new generation task.
-    pub(crate) fn schedule_generation_task_b(
+    pub(crate) async fn schedule_generation_task(
         self: &Arc<Self>,
         target_status: ChunkStatus,
         pos: ChunkPos,
     ) -> Arc<ChunkGenerationTask> {
-        let task = Arc::new(ChunkGenerationTask::new(pos, target_status, self.clone()));
+        let task = Arc::new(ChunkGenerationTask::new(pos, target_status, self.clone()).await);
         self.pending_generation_tasks
-            .blocking_lock()
+            .lock()
+            .await
             .push(task.clone());
         task
     }
@@ -143,6 +144,10 @@ impl ChunkMap {
             }
         }
 
+        let sched_time = start_sched.elapsed();
+
+        let start_schedule = std::time::Instant::now();
+
         for (chunk_holder, new_level) in updates_to_schedule {
             // Use the generation pyramid to determine the target status for the given level.
             let target_status = if new_level >= MAX_LEVEL {
@@ -158,15 +163,20 @@ impl ChunkMap {
                     .get(distance)
             };
 
-            if let Some(status) = target_status {
+            if let Some(status) = target_status
+                && status == ChunkStatus::Full
+            {
                 let chunk_holder_clone = chunk_holder.clone();
                 let map_clone = self.clone();
-                spawn_blocking(move || {
-                    drop(chunk_holder_clone.schedule_chunk_generation_task_b(status, map_clone))
+                let _ = self.task_tracker.spawn(async move {
+                    chunk_holder_clone
+                        .schedule_chunk_generation_task(status, map_clone)
+                        .await;
                 });
             }
         }
-        let sched_time = start_sched.elapsed();
+
+        let schedule_time = start_schedule.elapsed();
 
         let start_gen = std::time::Instant::now();
         self.run_generation_tasks_b();
@@ -176,14 +186,15 @@ impl ChunkMap {
         self.process_unloads();
         let unload_time = start_unload.elapsed();
 
-        if start.elapsed().as_millis() > 2 {
+        if start.elapsed().as_millis() > 1 {
             log::warn!(
-                "Tick_b slow: total {:?}, updates {:?}, sched {:?}, gen {:?}, unload {:?}",
+                "Tick_b slow: total {:?}, updates {:?}, schedule planning {:?}, schedule {:?}, gen {:?}, unload {:?}",
                 start.elapsed(),
                 updates_time,
                 sched_time,
+                schedule_time,
                 gen_time,
-                unload_time
+                unload_time,
             );
         }
 

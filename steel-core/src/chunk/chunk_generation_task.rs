@@ -29,9 +29,9 @@ pub struct StaticCache2D<T> {
 impl<T> StaticCache2D<T> {
     /// Creates a `StaticCache2D` by concurrently populating it via a factory.
     #[allow(clippy::missing_panics_doc)]
-    pub fn create<F>(center_x: i32, center_z: i32, radius: i32, mut factory: F) -> Self
+    pub async fn create<F>(center_x: i32, center_z: i32, radius: i32, mut factory: F) -> Self
     where
-        F: FnMut(i32, i32) -> T,
+        F: AsyncFnMut(i32, i32) -> T + Send + Sync + 'static,
     {
         let size = radius * 2 + 1;
         let min_x = center_x - radius;
@@ -41,8 +41,9 @@ impl<T> StaticCache2D<T> {
 
         for z_offset in 0..size {
             for x_offset in 0..size {
-                cache.push(factory(min_x + x_offset, min_z + z_offset));
+                cache.push(factory(min_x + x_offset, min_z + z_offset).await);
             }
+            tokio::task::yield_now().await;
         }
 
         Self {
@@ -105,7 +106,7 @@ impl ChunkGenerationTask {
     /// Creates a new generation task.
     #[must_use]
     #[allow(clippy::unwrap_used, clippy::missing_panics_doc)]
-    pub fn new(pos: ChunkPos, target_status: ChunkStatus, chunk_map: Arc<ChunkMap>) -> Self {
+    pub async fn new(pos: ChunkPos, target_status: ChunkStatus, chunk_map: Arc<ChunkMap>) -> Self {
         let worst_case_radius = i32::try_from(
             GENERATION_PYRAMID
                 .get_step_to(target_status)
@@ -114,13 +115,14 @@ impl ChunkGenerationTask {
         )
         .unwrap();
 
-        let cache = StaticCache2D::create(pos.0.x, pos.0.y, worst_case_radius, |x, y| {
-            chunk_map
+        let chunk_map_clone = chunk_map.clone();
+        let cache = StaticCache2D::create(pos.0.x, pos.0.y, worst_case_radius, async move |x, y| {
+            chunk_map_clone
                 .chunks
-                .get_sync(&ChunkPos::new(x, y))
+                .get_async(&ChunkPos::new(x, y)).await
                 .expect("The chunkholder should be created by distance manager before the generation task is scheduled. This occurring means there is a bug in the distance manager or you called this yourself.")
                 .clone()
-        });
+        }).await;
 
         Self {
             chunk_map,
@@ -181,7 +183,7 @@ impl ChunkGenerationTask {
         );
 
         let future = chunk_holder.clone().apply_step(
-            pyramid.get_step_to(status),
+            pyramid.get_step_to(status).clone(),
             self.chunk_map.clone(),
             self.cache.clone(),
         );
