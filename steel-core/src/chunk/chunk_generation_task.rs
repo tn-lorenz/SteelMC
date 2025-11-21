@@ -164,10 +164,10 @@ impl ChunkGenerationTask {
         // This avoids creating empty futures for chunks that are already ready.
         if !generate {
             // Verify we are actually ready
-            if let Some(curr) = persisted_status {
-                if curr >= status {
-                    return true;
-                }
+            if let Some(curr) = persisted_status
+                && curr >= status
+            {
+                return true;
             }
         }
 

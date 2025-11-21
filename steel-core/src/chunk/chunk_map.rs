@@ -2,7 +2,6 @@ use std::sync::Arc;
 use steel_protocol::packets::game::CSetChunkCenter;
 use steel_utils::ChunkPos;
 use tokio::sync::Mutex;
-use tokio::task::spawn_blocking;
 use tokio_util::task::TaskTracker;
 
 use crate::chunk::chunk_holder::ChunkHolder;
@@ -125,7 +124,7 @@ impl ChunkMap {
 
     /// Processes chunk updates.
     pub fn tick_b(self: &Arc<Self>, tick_count: u64) {
-        let start = std::time::Instant::now();
+        let start = tokio::time::Instant::now();
 
         {
             let mut dm = self.distance_manager.blocking_lock();
@@ -133,9 +132,7 @@ impl ChunkMap {
         }
 
         let changes = self.distance_manager.blocking_lock().run_updates();
-        let updates_time = start.elapsed();
 
-        let start_sched = std::time::Instant::now();
         let mut updates_to_schedule = Vec::new();
 
         for (pos, _, new_level) in changes {
@@ -144,65 +141,51 @@ impl ChunkMap {
             }
         }
 
-        let sched_time = start_sched.elapsed();
+        let self_clone = self.clone();
+        let _ = self.task_tracker.spawn(async move {
+            for (chunk_holder, new_level) in updates_to_schedule {
+                // Use the generation pyramid to determine the target status for the given level.
+                let target_status = if new_level >= MAX_LEVEL {
+                    None
+                } else if new_level <= 33 {
+                    Some(ChunkStatus::Full)
+                } else {
+                    let distance = (new_level - 33) as usize;
+                    // Fallback to None if distance is out of bounds (simulating Vanilla logic)
+                    GENERATION_PYRAMID
+                        .get_step_to(ChunkStatus::Full)
+                        .accumulated_dependencies
+                        .get(distance)
+                };
 
-        let start_schedule = std::time::Instant::now();
+                if let Some(status) = target_status
+                    && status == ChunkStatus::Full
+                {
+                    let chunk_holder_clone = chunk_holder.clone();
+                    let map_clone = self_clone.clone();
 
-        for (chunk_holder, new_level) in updates_to_schedule {
-            // Use the generation pyramid to determine the target status for the given level.
-            let target_status = if new_level >= MAX_LEVEL {
-                None
-            } else if new_level <= 33 {
-                Some(ChunkStatus::Full)
-            } else {
-                let distance = (new_level - 33) as usize;
-                // Fallback to None if distance is out of bounds (simulating Vanilla logic)
-                GENERATION_PYRAMID
-                    .get_step_to(ChunkStatus::Full)
-                    .accumulated_dependencies
-                    .get(distance)
-            };
-
-            if let Some(status) = target_status
-                && status == ChunkStatus::Full
-            {
-                let chunk_holder_clone = chunk_holder.clone();
-                let map_clone = self.clone();
-                let _ = self.task_tracker.spawn(async move {
                     chunk_holder_clone
                         .schedule_chunk_generation_task(status, map_clone)
                         .await;
-                });
+                }
             }
-        }
+        });
 
-        let schedule_time = start_schedule.elapsed();
-
-        let start_gen = std::time::Instant::now();
         self.run_generation_tasks_b();
-        let gen_time = start_gen.elapsed();
 
-        let start_unload = std::time::Instant::now();
         self.process_unloads();
-        let unload_time = start_unload.elapsed();
 
         if start.elapsed().as_millis() > 1 {
-            log::warn!(
-                "Tick_b slow: total {:?}, updates {:?}, schedule planning {:?}, schedule {:?}, gen {:?}, unload {:?}",
-                start.elapsed(),
-                updates_time,
-                sched_time,
-                schedule_time,
-                gen_time,
-                unload_time,
-            );
+            log::warn!("Tick_b slow: total {:?}", start.elapsed(),);
         }
 
-        // log::info!(
-        //     "Chunk map entries: {}, unloading chunks: {}",
-        //     self.chunks.len(),
-        //     self.unloading_chunks.len()
-        // );
+        if tick_count.is_multiple_of(100) {
+            log::debug!(
+                "Chunk map entries: {}, unloading chunks: {}",
+                self.chunks.len(),
+                self.unloading_chunks.len()
+            );
+        }
     }
 
     /// Saves a chunk to disk.

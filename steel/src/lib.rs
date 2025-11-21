@@ -72,8 +72,9 @@ impl SteelServer {
         log::info!("Started Steel Server");
 
         let server = self.server.clone();
-        tokio::spawn(async move {
-            server.run().await;
+        let token = self.cancel_token.clone();
+        let server_handle = tokio::spawn(async move {
+            server.run(token).await;
         });
 
         loop {
@@ -100,5 +101,6 @@ impl SteelServer {
                 }
             }
         }
+        let _ = server_handle.await;
     }
 }

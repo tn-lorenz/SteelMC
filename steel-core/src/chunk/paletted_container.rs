@@ -232,13 +232,13 @@ impl<V: Hash + Eq + Copy + Default + Debug, const DIM: usize> PalettedContainer<
 
 fn pack_bits(indices: &[u32], bits: usize) -> Vec<u64> {
     let values_per_long = 64 / bits;
-    let len = (indices.len() + values_per_long - 1) / values_per_long;
+    let len = indices.len().div_ceil(values_per_long);
     let mut data = vec![0u64; len];
 
     for (i, &index) in indices.iter().enumerate() {
         let array_index = i / values_per_long;
         let offset = (i % values_per_long) * bits;
-        data[array_index] |= (index as u64) << offset;
+        data[array_index] |= u64::from(index) << offset;
     }
 
     data

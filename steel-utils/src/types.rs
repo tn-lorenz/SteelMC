@@ -32,11 +32,13 @@ impl ChunkPos {
     }
 
     /// Converts the `ChunkPos` to an `i64`.
+    #[must_use]
     pub fn as_i64(&self) -> i64 {
-        (self.0.x as i64 & 0xFFFFFFFF) | ((self.0.y as i64 & 0xFFFFFFFF) << 32)
+        (i64::from(self.0.x) & 0xFFFFFFFF) | ((i64::from(self.0.y) & 0xFFFFFFFF) << 32)
     }
 
     /// Creates a new `ChunkPos` from an `i64`.
+    #[must_use]
     pub fn from_i64(value: i64) -> Self {
         Self(Vector2::new(
             (value & 0xFFFFFFFF) as i32,

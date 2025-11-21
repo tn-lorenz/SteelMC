@@ -2,11 +2,11 @@
 use std::collections::HashSet;
 
 use steel_protocol::packets::game::{
-    CChunkBatchFinished, CChunkBatchStart, CForgetLevelChunk, CLevelChunkWithLight, CSetChunkCenter,
+    CChunkBatchFinished, CChunkBatchStart, CForgetLevelChunk, CLevelChunkWithLight,
 };
 use steel_utils::ChunkPos;
 
-use crate::{chunk::level_chunk::LevelChunk, player::networking::JavaConnection, world::World};
+use crate::{player::networking::JavaConnection, world::World};
 
 /// This struct is responsible for sending chunks to the client.
 #[derive(Debug)]

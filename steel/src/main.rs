@@ -68,5 +68,23 @@ async fn main() {
         .await;
      */
 
+    let server = steel.server.clone();
+    let cancel_token = steel.cancel_token.clone();
+
+    tokio::spawn(async move {
+        if tokio::signal::ctrl_c().await.is_ok() {
+            log::info!("Shutdown signal received");
+            cancel_token.cancel();
+        }
+    });
+
     steel.start().await;
+
+    log::info!("Waiting for pending tasks...");
+    for world in &server.worlds {
+        world.chunk_map.task_tracker.close();
+        world.chunk_map.task_tracker.wait().await;
+    }
+
+    log::info!("Server stopped");
 }

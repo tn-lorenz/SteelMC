@@ -232,9 +232,9 @@ impl JavaTcpClient {
                             }
 
                         } else {
-                            log::warn!(
-                                "Internal packet_sender_recv channel closed for client {id}",
-                            );
+                            //log::warn!(
+                            //    "Internal packet_sender_recv channel closed for client {id}",
+                            //);
                             cancel_token.cancel();
                         }
                     }
@@ -332,7 +332,7 @@ impl JavaTcpClient {
                             }
                             Err(err) => {
                                 if err != RecvError::Closed {
-                                    log::warn!("Internal connection_updates_recv channel closed for client {id}: {err}");
+                                    log::info!("Internal connection_updates_recv channel closed for client {id}: {err}");
                                 }
                                 cancel_token.cancel();
                             }

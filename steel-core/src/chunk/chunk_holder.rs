@@ -1,9 +1,8 @@
 //! `ChunkHolder` manages chunk state and asynchronous generation tasks.
-use std::pin::Pin;
 use std::sync::Arc;
 use std::sync::atomic::{AtomicUsize, Ordering};
 
-use futures::{Future, future};
+use futures::Future;
 use replace_with::replace_with_or_abort;
 use steel_utils::ChunkPos;
 use tokio::sync::{Mutex, watch};

@@ -31,7 +31,6 @@ use tokio::{
     },
 };
 use tokio_util::sync::CancellationToken;
-use uuid::Timestamp;
 
 struct KeepAliveTracker {
     alive_time: u64,
@@ -222,7 +221,7 @@ impl JavaConnection {
                                 }
                         }
                         Err(err) => {
-                            log::info!("Failed to get raw packet from client {}: {err}", self.id);
+                            log::debug!("Failed to get raw packet from client {}: {err}", self.id);
                             self.close();
                         }
                     }
@@ -263,10 +262,10 @@ impl JavaConnection {
                         }
 
                     } else {
-                        log::warn!(
-                            "Internal packet_sender_recv channel closed for client {}",
-                            self.id
-                        );
+                        //log::warn!(
+                        //    "Internal packet_sender_recv channel closed for client {}",
+                        //    self.id
+                        //);
                         self.close();
                     }
                 }

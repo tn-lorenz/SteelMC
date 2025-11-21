@@ -14,6 +14,7 @@ use steel_registry::Registry;
 use steel_utils::{Identifier, types::GameType};
 use tick_rate_manager::TickRateManager;
 use tokio::task::spawn_blocking;
+use tokio_util::sync::CancellationToken;
 
 use crate::{
     config::STEEL_CONFIG,
@@ -86,10 +87,14 @@ impl Server {
     }
 
     /// Runs the server tick loop.
-    pub async fn run(self: Arc<Self>) {
+    pub async fn run(self: Arc<Self>, cancel_token: CancellationToken) {
         let mut next_tick_time = Instant::now();
 
         loop {
+            if cancel_token.is_cancelled() {
+                break;
+            }
+
             let (nanoseconds_per_tick, is_sprinting, should_sprint_this_tick) = {
                 let mut tick_manager = self.tick_rate_manager.write();
                 let nanoseconds_per_tick = tick_manager.nanoseconds_per_tick;
@@ -111,9 +116,16 @@ impl Server {
                 // Normal wait logic
                 let now = Instant::now();
                 if now < next_tick_time {
-                    tokio::time::sleep(next_tick_time - now).await;
+                    tokio::select! {
+                        () = cancel_token.cancelled() => break,
+                        () = tokio::time::sleep(next_tick_time - now) => {}
+                    }
                 }
                 next_tick_time += std::time::Duration::from_nanos(nanoseconds_per_tick);
+            }
+
+            if cancel_token.is_cancelled() {
+                break;
             }
 
             let tick_count = {

@@ -9,7 +9,7 @@ pub const MAX_LEVEL: u8 = 66;
 pub struct ChunkTracker {
     /// Map of chunk positions to their current levels.
     levels: FxHashMap<ChunkPos, u8>,
-    /// Priority queue: array of queues, one per priority level (0 to MAX_LEVEL).
+    /// Priority queue: array of queues, one per priority level (0 to `MAX_LEVEL`).
     /// Lower priority values are processed first.
     priority_queue: Vec<VecDeque<ChunkPos>>,
     /// Set of chunks currently in the queue (for deduplication).
@@ -56,7 +56,26 @@ impl ChunkTracker {
         _get_ticket_level: impl Fn(ChunkPos) -> u8,
     ) {
         let current_level = self.get_level(pos);
-        let computed_level = new_ticket_level;
+
+        // Compute best level from new ticket level AND neighbors
+        let mut best_level = new_ticket_level;
+
+        if best_level > 0 {
+            let neighbors = [
+                ChunkPos::new(pos.0.x + 1, pos.0.y),
+                ChunkPos::new(pos.0.x - 1, pos.0.y),
+                ChunkPos::new(pos.0.x, pos.0.y + 1),
+                ChunkPos::new(pos.0.x, pos.0.y - 1),
+            ];
+
+            for neighbor in neighbors {
+                let neighbor_level = self.get_level(neighbor);
+                let propagated = min(neighbor_level + 1, MAX_LEVEL);
+                best_level = min(best_level, propagated);
+            }
+        }
+
+        let computed_level = best_level;
 
         // Calculate priority: min(current_level, computed_level, MAX_LEVEL)
         let priority = min(min(current_level, computed_level), MAX_LEVEL);
@@ -180,17 +199,35 @@ impl ChunkTracker {
         let to_level = self.get_level(to);
         let propagated_level = min(from_level + 1, MAX_LEVEL);
 
+        // Check against currently computed level in queue if present, otherwise current level
+        let stored_computed = self.computed_levels.get(&to).copied();
+        let target_level = stored_computed.unwrap_or(to_level);
+
         let computed_level = if only_decrease {
             // When only decreasing, just propagate the level
-            min(to_level, propagated_level)
+            min(target_level, propagated_level)
+        } else if propagated_level == target_level {
+            // When increasing, if 'to' (or its pending update) derived its level from 'from',
+            // we must recompute 'to's level ignoring 'from' (since 'from' increased).
+            self.compute_level(to, from, MAX_LEVEL, get_ticket_level)
         } else {
-            // When increasing, compute from all neighbors and ticket
-            self.compute_level(to, from, propagated_level, get_ticket_level)
+            // 'to' has a better source or is otherwise unaffected
+            return;
         };
 
-        if computed_level != to_level {
+        if computed_level != target_level {
             let priority = min(min(to_level, computed_level), MAX_LEVEL);
             self.enqueue(to, priority, computed_level);
+        } else if stored_computed.is_some() && computed_level == to_level {
+            // If we computed the same as current level, and it was in queue, we should remove it?
+            // Java does: this.priorityQueue.dequeue(to, oldPriority, this.levelCount);
+            // this.computedLevels.remove(to);
+            // But our enqueue handles updates. If we want to remove, we don't have a remove method exposed easily here.
+            // However, leaving it in queue with level == current level is harmless, just redundant processing.
+            // But wait, if computed_level == to_level, process_all_updates will dequeue it.
+            // computed (X) == current (X).
+            // It does nothing.
+            // So it effectively removes it.
         }
     }
 
@@ -229,5 +266,94 @@ impl ChunkTracker {
         }
 
         best_level
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    #[test]
+    fn test_ticket_propagation() {
+        let mut tracker = ChunkTracker::new();
+        let pos = ChunkPos::new(0, 0);
+
+        // Add ticket
+        tracker.update(pos, 31, |_| MAX_LEVEL);
+        tracker.process_all_updates(|p| if p == pos { 31 } else { MAX_LEVEL });
+
+        assert_eq!(tracker.get_level(pos), 31);
+        assert_eq!(tracker.get_level(ChunkPos::new(1, 0)), 32);
+    }
+
+    #[test]
+    fn test_ticket_removal() {
+        let mut tracker = ChunkTracker::new();
+        let pos = ChunkPos::new(0, 0);
+
+        // Setup initial state
+        tracker.update(pos, 31, |_| MAX_LEVEL);
+        tracker.process_all_updates(|p| if p == pos { 31 } else { MAX_LEVEL });
+
+        // Remove ticket
+        tracker.update(pos, MAX_LEVEL, |_| MAX_LEVEL);
+        tracker.process_all_updates(|_| MAX_LEVEL);
+
+        assert_eq!(tracker.get_level(pos), MAX_LEVEL);
+        assert_eq!(tracker.get_level(ChunkPos::new(1, 0)), MAX_LEVEL);
+    }
+
+    #[test]
+    fn test_circular_dependency_unloading() {
+        let mut tracker = ChunkTracker::new();
+        let center = ChunkPos::new(0, 0);
+        let neighbor = ChunkPos::new(1, 0);
+
+        // Setup: Center has ticket 31. Neighbor has ticket 33 (weaker).
+        // Center -> 31. Neighbor -> 32 (from center).
+        tracker.update(center, 31, |_| MAX_LEVEL);
+        tracker.update(neighbor, 33, |_| MAX_LEVEL);
+
+        tracker.process_all_updates(|p| {
+            if p == center {
+                31
+            } else if p == neighbor {
+                33
+            } else {
+                MAX_LEVEL
+            }
+        });
+
+        assert_eq!(tracker.get_level(center), 31);
+        assert_eq!(tracker.get_level(neighbor), 32); // Propagated from center is better than 33
+
+        // Remove center ticket. Neighbor ticket remains 33.
+        // Center should become 34 (from neighbor 33). Neighbor becomes 33 (its ticket).
+        tracker.update(center, MAX_LEVEL, |_| MAX_LEVEL);
+        tracker.process_all_updates(|p| if p == neighbor { 33 } else { MAX_LEVEL });
+
+        assert_eq!(tracker.get_level(neighbor), 33);
+        assert_eq!(tracker.get_level(center), 34);
+    }
+
+    #[test]
+    fn test_circular_dependency_full_unload() {
+        let mut tracker = ChunkTracker::new();
+        let center = ChunkPos::new(0, 0);
+        let neighbor = ChunkPos::new(1, 0);
+
+        // Setup: Center has ticket 31.
+        tracker.update(center, 31, |_| MAX_LEVEL);
+        tracker.process_all_updates(|p| if p == center { 31 } else { MAX_LEVEL });
+
+        assert_eq!(tracker.get_level(center), 31);
+        assert_eq!(tracker.get_level(neighbor), 32);
+
+        // Remove ticket. Both should unload.
+        tracker.update(center, MAX_LEVEL, |_| MAX_LEVEL);
+        tracker.process_all_updates(|_| MAX_LEVEL);
+
+        assert_eq!(tracker.get_level(center), MAX_LEVEL);
+        assert_eq!(tracker.get_level(neighbor), MAX_LEVEL);
     }
 }

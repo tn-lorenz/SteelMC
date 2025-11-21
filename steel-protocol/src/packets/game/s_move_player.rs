@@ -22,6 +22,7 @@ pub struct SMovePlayer {
 }
 
 impl SMovePlayer {
+    #[must_use]
     pub fn get_x(&self, fallback: f64) -> f64 {
         if self.has_pos {
             self.position.x
@@ -30,6 +31,7 @@ impl SMovePlayer {
         }
     }
 
+    #[must_use]
     pub fn get_y(&self, fallback: f64) -> f64 {
         if self.has_pos {
             self.position.y
@@ -38,6 +40,7 @@ impl SMovePlayer {
         }
     }
 
+    #[must_use]
     pub fn get_z(&self, fallback: f64) -> f64 {
         if self.has_pos {
             self.position.z
@@ -46,10 +49,12 @@ impl SMovePlayer {
         }
     }
 
+    #[must_use]
     pub fn get_x_rot(&self, fallback: f32) -> f32 {
         if self.has_rot { self.x_rot } else { fallback }
     }
 
+    #[must_use]
     pub fn get_y_rot(&self, fallback: f32) -> f32 {
         if self.has_rot { self.y_rot } else { fallback }
     }
