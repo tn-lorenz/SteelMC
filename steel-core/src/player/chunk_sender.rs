@@ -7,7 +7,11 @@ use steel_protocol::packets::game::{
 use steel_utils::ChunkPos;
 use tokio::task::spawn_blocking;
 
-use crate::{player::networking::JavaConnection, world::World};
+use crate::{
+    chunk::{chunk_access::ChunkStatus, chunk_holder::ChunkHolder},
+    player::networking::JavaConnection,
+    world::World,
+};
 
 /// This struct is responsible for sending chunks to the client.
 #[derive(Debug)]
@@ -50,14 +54,25 @@ impl ChunkSender {
                 (self.batch_quota + self.desired_chunks_per_tick).min(max_batch_size);
 
             if self.batch_quota >= 1.0 && !self.pending_chunks.is_empty() {
-                let chunks_to_send = self.collect_chunks_to_send(world, player_chunk_pos);
-                if !chunks_to_send.is_empty() {
+                let chunks_to_process = self.collect_candidates(world, player_chunk_pos);
+                if !chunks_to_process.is_empty() {
                     self.unacknowledged_batches += 1;
-                    self.batch_quota -= chunks_to_send.len() as f32;
-                }
-                let _ = spawn_blocking(move || {
-                    if !chunks_to_send.is_empty() {
-                        //log::info!("Sending {} chunks", chunks_to_send.len());
+                    self.batch_quota -= chunks_to_process.len() as f32;
+
+                    let _ = spawn_blocking(move || {
+                        let mut chunks_to_send = Vec::new();
+                        for holder in chunks_to_process {
+                            if let Some(chunk) =
+                                holder.with_full_chunk(|chunk| CLevelChunkWithLight {
+                                    pos: chunk.pos,
+                                    chunk_data: chunk.extract_chunk_data(),
+                                    light_data: chunk.extract_light_data(),
+                                })
+                            {
+                                chunks_to_send.push(chunk);
+                            }
+                        }
+
                         connection.send_packet(CChunkBatchStart {});
                         let batch_size = chunks_to_send.len();
 
@@ -68,17 +83,17 @@ impl ChunkSender {
                         connection.send_packet(CChunkBatchFinished {
                             batch_size: batch_size as i32,
                         });
-                    }
-                });
+                    });
+                }
             }
         }
     }
 
-    fn collect_chunks_to_send(
+    fn collect_candidates(
         &mut self,
         world: &World,
         player_chunk_pos: ChunkPos,
-    ) -> Vec<CLevelChunkWithLight> {
+    ) -> Vec<Arc<ChunkHolder>> {
         let max_batch_size = self.batch_quota.floor() as usize;
         let mut candidates: Vec<ChunkPos> = self.pending_chunks.iter().copied().collect();
 
@@ -97,13 +112,9 @@ impl ChunkSender {
             }
 
             if let Some(holder) = world.chunk_map.chunks.get_sync(&pos) {
-                // Check if chunk is full and get it
-                if let Some(chunk) = holder.with_full_chunk(|chunk| CLevelChunkWithLight {
-                    pos: chunk.pos,
-                    chunk_data: chunk.extract_chunk_data(),
-                    light_data: chunk.extract_light_data(),
-                }) {
-                    chunks_to_send.push(chunk);
+                let holder = holder.get().clone();
+                if holder.persisted_status() == Some(ChunkStatus::Full) {
+                    chunks_to_send.push(holder);
                     self.pending_chunks.remove(&pos);
                 }
             }

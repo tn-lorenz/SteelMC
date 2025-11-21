@@ -126,19 +126,35 @@ impl ChunkMap {
     pub fn tick_b(self: &Arc<Self>, tick_count: u64) {
         let start = tokio::time::Instant::now();
 
+        let start_purge = tokio::time::Instant::now();
         {
             let mut dm = self.distance_manager.blocking_lock();
             dm.purge_tickets(tick_count);
         }
+        if start_purge.elapsed().as_millis() > 1 {
+            log::warn!("purge_tickets slow: {:?}", start_purge.elapsed());
+        }
 
+        let start_updates = tokio::time::Instant::now();
         let changes = self.distance_manager.blocking_lock().run_updates();
+        if start_updates.elapsed().as_millis() > 1 {
+            log::warn!("run_updates slow: {:?}", start_updates.elapsed());
+        }
 
         let mut updates_to_schedule = Vec::new();
 
+        let start_process_changes = tokio::time::Instant::now();
         for (pos, _, new_level) in changes {
             if let Some(holder) = self.update_chunk_level_b(pos, new_level) {
                 updates_to_schedule.push((holder, new_level));
             }
+        }
+        if start_process_changes.elapsed().as_millis() > 1 {
+            log::warn!(
+                "process changes slow: {:?} ({} changes)",
+                start_process_changes.elapsed(),
+                updates_to_schedule.len()
+            );
         }
 
         let self_clone = self.clone();
@@ -171,12 +187,20 @@ impl ChunkMap {
             }
         });
 
+        let start_gen = tokio::time::Instant::now();
         self.run_generation_tasks_b();
+        if start_gen.elapsed().as_millis() > 1 {
+            log::warn!("run_generation_tasks_b slow: {:?}", start_gen.elapsed());
+        }
 
+        let start_unload = tokio::time::Instant::now();
         self.process_unloads();
+        if start_unload.elapsed().as_millis() > 1 {
+            log::warn!("process_unloads slow: {:?}", start_unload.elapsed());
+        }
 
         if start.elapsed().as_millis() > 1 {
-            log::warn!("Tick_b slow: total {:?}", start.elapsed(),);
+            log::warn!("Tick_b slow: total {:?}", start.elapsed());
         }
 
         if tick_count.is_multiple_of(100) {
