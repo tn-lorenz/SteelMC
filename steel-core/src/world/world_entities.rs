@@ -2,16 +2,23 @@
 use std::sync::Arc;
 
 use steel_protocol::packets::game::{CGameEvent, GameEventType};
+use tokio::{task::spawn_blocking, time::Instant};
 
 use crate::{player::Player, world::World};
 
 impl World {
     /// Removes a player from the world.
-    pub fn remove_player(&self, player: Arc<Player>) {
+    pub async fn remove_player(self: &Arc<Self>, player: Arc<Player>) {
         let uuid = player.gameprofile.id;
 
-        if self.players.remove_sync(&uuid).is_some() {
-            log::info!("Player {uuid} removed");
+        if self.players.remove_async(&uuid).await.is_some() {
+            let self_clone = self.clone();
+            let _ = spawn_blocking(move || {
+                let start = Instant::now();
+                self_clone.chunk_map.remove_player(&player);
+                player.cleanup();
+                log::info!("Player {uuid} removed in {:?}", start.elapsed());
+            });
         }
     }
 

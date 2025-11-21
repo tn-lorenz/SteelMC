@@ -6,6 +6,8 @@ pub struct TickRateManager {
     pub tick_rate: f32,
     /// The number of nanoseconds per tick based on the tick rate.
     pub nanoseconds_per_tick: u64,
+    /// The current tick count.
+    pub tick_count: u64,
     /// Whether the server is currently frozen.
     pub is_frozen: bool,
     /// The number of ticks to run while frozen (stepping).
@@ -33,6 +35,7 @@ impl TickRateManager {
         Self {
             tick_rate: 20.0,
             nanoseconds_per_tick: 50_000_000,
+            tick_count: 0,
             is_frozen: false,
             frozen_ticks_to_run: 0,
             run_game_elements: true,
@@ -86,6 +89,9 @@ impl TickRateManager {
         self.run_game_elements = !self.is_frozen || self.frozen_ticks_to_run > 0;
         if self.frozen_ticks_to_run > 0 {
             self.frozen_ticks_to_run -= 1;
+        }
+        if self.run_game_elements {
+            self.tick_count += 1;
         }
     }
 

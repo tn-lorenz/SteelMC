@@ -52,7 +52,7 @@ impl ChunkSender {
                 let chunks_to_send = self.collect_chunks_to_send(world, player_chunk_pos);
 
                 if !chunks_to_send.is_empty() {
-                    log::info!("Sending {} chunks", chunks_to_send.len());
+                    //log::info!("Sending {} chunks", chunks_to_send.len());
                     self.unacknowledged_batches += 1;
                     connection.send_packet(CChunkBatchStart {});
                     let batch_size = chunks_to_send.len();

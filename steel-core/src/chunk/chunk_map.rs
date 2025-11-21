@@ -2,6 +2,7 @@ use std::sync::Arc;
 use steel_protocol::packets::game::CSetChunkCenter;
 use steel_utils::ChunkPos;
 use tokio::sync::Mutex;
+use tokio::task::spawn_blocking;
 use tokio_util::task::TaskTracker;
 
 use crate::chunk::chunk_holder::ChunkHolder;
@@ -95,7 +96,7 @@ impl ChunkMap {
         } else if let Some(holder) = self.chunks.get_sync(&pos) {
             holder.get().clone()
         } else {
-            if new_level > MAX_LEVEL {
+            if new_level >= MAX_LEVEL {
                 return None;
             }
             let holder = Arc::new(ChunkHolder::new(pos, new_level));
@@ -105,8 +106,13 @@ impl ChunkMap {
 
         *chunk_holder.ticket_level.blocking_lock() = new_level;
 
-        if new_level > MAX_LEVEL {
-            log::info!("Unloading chunk at {pos:?}");
+        //log::info!("New level: {new_level}");
+        if new_level >= MAX_LEVEL {
+            //log::info!("Unloading chunk at {pos:?}");
+            chunk_holder.cancel_generation_task();
+            // Drop the local reference so it doesn't count towards the strong count
+            drop(chunk_holder);
+
             if let Some((_, holder)) = self.chunks.remove_sync(&pos) {
                 let _ = self.unloading_chunks.insert_sync(pos, holder);
             }
@@ -117,9 +123,18 @@ impl ChunkMap {
     }
 
     /// Processes chunk updates.
-    pub fn tick_b(self: &Arc<Self>) {
-        let changes = self.distance_manager.blocking_lock().run_updates();
+    pub fn tick_b(self: &Arc<Self>, tick_count: u64) {
+        let start = std::time::Instant::now();
 
+        {
+            let mut dm = self.distance_manager.blocking_lock();
+            dm.purge_tickets(tick_count);
+        }
+
+        let changes = self.distance_manager.blocking_lock().run_updates();
+        let updates_time = start.elapsed();
+
+        let start_sched = std::time::Instant::now();
         let mut updates_to_schedule = Vec::new();
 
         for (pos, _, new_level) in changes {
@@ -130,7 +145,7 @@ impl ChunkMap {
 
         for (chunk_holder, new_level) in updates_to_schedule {
             // Use the generation pyramid to determine the target status for the given level.
-            let target_status = if new_level > MAX_LEVEL {
+            let target_status = if new_level >= MAX_LEVEL {
                 None
             } else if new_level <= 33 {
                 Some(ChunkStatus::Full)
@@ -146,11 +161,87 @@ impl ChunkMap {
             if let Some(status) = target_status {
                 let chunk_holder_clone = chunk_holder.clone();
                 let map_clone = self.clone();
-                drop(chunk_holder_clone.schedule_chunk_generation_task_b(status, map_clone));
+                spawn_blocking(move || {
+                    drop(chunk_holder_clone.schedule_chunk_generation_task_b(status, map_clone))
+                });
             }
         }
+        let sched_time = start_sched.elapsed();
 
+        let start_gen = std::time::Instant::now();
         self.run_generation_tasks_b();
+        let gen_time = start_gen.elapsed();
+
+        let start_unload = std::time::Instant::now();
+        self.process_unloads();
+        let unload_time = start_unload.elapsed();
+
+        if start.elapsed().as_millis() > 2 {
+            log::warn!(
+                "Tick_b slow: total {:?}, updates {:?}, sched {:?}, gen {:?}, unload {:?}",
+                start.elapsed(),
+                updates_time,
+                sched_time,
+                gen_time,
+                unload_time
+            );
+        }
+
+        // log::info!(
+        //     "Chunk map entries: {}, unloading chunks: {}",
+        //     self.chunks.len(),
+        //     self.unloading_chunks.len()
+        // );
+    }
+
+    /// Saves a chunk to disk.
+    ///
+    /// This function is currently a placeholder for the actual saving logic.
+    pub async fn save_chunk(&self, chunk_holder: &Arc<ChunkHolder>) {
+        let _pos = chunk_holder.get_pos();
+        // Access the chunk to ensure it's loaded and ready for saving
+        // We use ChunkStatus::StructureReferences as the minimum requirement, effectively checking if any data exists.
+        let saved = chunk_holder.with_chunk(ChunkStatus::StructureReferences, |_chunk| {
+            // TODO: Serialize the chunk data here.
+            // Since serialization might be CPU intensive, we might want to do it inside this closure
+            // or clone the necessary data structure if possible (though deep cloning chunks is expensive).
+            // For now, we assume serialization happens here synchronously.
+            true
+        });
+
+        if saved.is_some() {
+            // TODO: Perform the actual disk I/O here (asynchronously).
+            // storage.write(pos, serialized_data).await;
+            //log::info!("Saved chunk at {:?}", pos);
+        } else {
+            //log::warn!(
+            //    "Skipping save for chunk at {:?}: Chunk not fully loaded",
+            //    pos
+            //);
+        }
+    }
+
+    /// Processes chunks that are pending unload.
+    ///
+    /// This method iterates over the chunks in the `unloading_chunks` map.
+    /// If a chunk is only held by the map (strong count is 1), it is removed
+    /// and a background task is spawned to save it.
+    pub fn process_unloads(self: &Arc<Self>) {
+        self.unloading_chunks.retain_sync(|_, holder| {
+            // If the strong count is 1, it means only this map holds a reference to the chunk.
+            // We can safely unload it.
+            if Arc::strong_count(&*holder) == 1 {
+                let holder_clone = holder.clone();
+                let map_clone = self.clone();
+
+                self.task_tracker.spawn(async move {
+                    map_clone.save_chunk(&holder_clone).await;
+                });
+                // Remove from unloading_chunks.
+                return false;
+            }
+            true
+        });
     }
 
     /// Updates the player's status in the chunk map.
@@ -203,6 +294,16 @@ impl ChunkMap {
             }
 
             *last_view_guard = Some(new_view);
+        }
+    }
+
+    /// Removes a player from the chunk map.
+    pub fn remove_player(&self, player: &Player) {
+        let mut last_view_guard = player.last_tracking_view.lock();
+        if let Some(last_view) = last_view_guard.take() {
+            let mut distance_manager = self.distance_manager.blocking_lock();
+            #[allow(clippy::cast_possible_truncation, clippy::cast_sign_loss)]
+            distance_manager.remove_player(last_view.center, last_view.view_distance as u8);
         }
     }
 }

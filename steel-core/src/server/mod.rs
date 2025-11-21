@@ -116,13 +116,14 @@ impl Server {
                 next_tick_time += std::time::Duration::from_nanos(nanoseconds_per_tick);
             }
 
-            {
+            let tick_count = {
                 let mut tick_manager = self.tick_rate_manager.write();
                 tick_manager.tick();
-            }
+                tick_manager.tick_count
+            };
 
             // Tick worlds
-            self.tick_worlds().await;
+            self.tick_worlds(tick_count).await;
 
             if is_sprinting && should_sprint_this_tick {
                 let mut tick_manager = self.tick_rate_manager.write();
@@ -131,12 +132,16 @@ impl Server {
         }
     }
 
-    async fn tick_worlds(&self) {
+    async fn tick_worlds(&self, tick_count: u64) {
         let mut tasks = Vec::with_capacity(self.worlds.len());
         for world in &self.worlds {
             let world_clone = world.clone();
-            tasks.push(spawn_blocking(move || world_clone.tick_b()));
+            tasks.push(spawn_blocking(move || world_clone.tick_b(tick_count)));
         }
+        let start = Instant::now();
         futures::future::join_all(tasks).await;
+        if start.elapsed().as_millis() > 50 {
+            log::info!("Worlds ticked in {:?}", start.elapsed());
+        }
     }
 }

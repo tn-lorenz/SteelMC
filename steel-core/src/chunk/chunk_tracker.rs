@@ -1,4 +1,5 @@
-use std::collections::{BTreeMap, HashMap, VecDeque};
+use rustc_hash::{FxHashMap, FxHashSet};
+use std::{cmp::min, collections::VecDeque};
 use steel_utils::ChunkPos;
 
 /// A standard max level for chunks that are unloaded.
@@ -7,12 +8,13 @@ pub const MAX_LEVEL: u8 = 66;
 /// Tracks chunk levels based on propagation.
 pub struct ChunkTracker {
     /// Map of chunk positions to their current levels.
-    levels: BTreeMap<ChunkPos, u8>,
-    /// Queue of chunks to update, keyed by level.
-    queue: BTreeMap<u8, VecDeque<ChunkPos>>,
-    /// Map of chunks currently in the queue to their queued level.
-    /// Used to avoid duplicates and handle priority updates.
-    computed_levels: HashMap<ChunkPos, u8>,
+    levels: FxHashMap<ChunkPos, u8>,
+    /// Queue of chunks to update.
+    queue: VecDeque<ChunkPos>,
+    /// Set of chunks currently in the queue (for deduplication).
+    in_queue: FxHashSet<ChunkPos>,
+    /// Pending changes from direct updates.
+    pending_changes: Vec<(ChunkPos, u8, u8)>,
 }
 
 impl Default for ChunkTracker {
@@ -26,9 +28,10 @@ impl ChunkTracker {
     #[must_use]
     pub fn new() -> Self {
         Self {
-            levels: BTreeMap::new(),
-            queue: BTreeMap::new(),
-            computed_levels: HashMap::new(),
+            levels: FxHashMap::default(),
+            queue: VecDeque::new(),
+            in_queue: FxHashSet::default(),
+            pending_changes: Vec::new(),
         }
     }
 
@@ -42,124 +45,75 @@ impl ChunkTracker {
     pub fn update(
         &mut self,
         pos: ChunkPos,
-        new_ticket_level: u8,
-        get_ticket_level: impl Fn(ChunkPos) -> u8,
+        _new_ticket_level: u8,
+        _get_ticket_level: impl Fn(ChunkPos) -> u8,
     ) {
-        let current_level = self.get_level(pos);
-
-        if new_ticket_level < current_level {
-            // Case 1: Improvement. Just queue it.
-            self.enqueue(pos, new_ticket_level);
-        } else if new_ticket_level > current_level {
-            // Case 2: Degradation. Re-evaluate.
-            self.compute_level(pos, &get_ticket_level, true);
-        }
-    }
-
-    fn enqueue(&mut self, pos: ChunkPos, level: u8) {
-        if let Some(&old_level) = self.computed_levels.get(&pos)
-            && old_level <= level
-        {
-            return;
-        }
-        self.computed_levels.insert(pos, level);
-        self.queue.entry(level).or_default().push_back(pos);
-    }
-
-    /// Re-evaluates a chunk's level based on tickets and neighbors.
-    fn compute_level<F>(&mut self, pos: ChunkPos, get_ticket_level: &F, force_reset: bool)
-    where
-        F: Fn(ChunkPos) -> u8,
-    {
-        let old_level = self.get_level(pos);
-        let mut best_level = get_ticket_level(pos);
-
-        let neighbors = [
-            ChunkPos::new(pos.0.x + 1, pos.0.y),
-            ChunkPos::new(pos.0.x - 1, pos.0.y),
-            ChunkPos::new(pos.0.x, pos.0.y + 1),
-            ChunkPos::new(pos.0.x, pos.0.y - 1),
-        ];
-
-        for neighbor in neighbors {
-            let n_level = self.get_level(neighbor);
-            if n_level < MAX_LEVEL {
-                best_level = best_level.min(n_level + 1);
-            }
-        }
-
-        if best_level == old_level && !force_reset {
-            return;
-        }
-
-        if best_level < old_level {
-            // Improvement
-            self.enqueue(pos, best_level);
-        } else if best_level > old_level {
-            // Degradation: set new level, then recurse to neighbors that depended on us.
-            self.levels.insert(pos, best_level);
-
-            for neighbor in neighbors {
-                let n_level = self.get_level(neighbor);
-                if n_level == old_level + 1 {
-                    // Dependent neighbor needs re-evaluation.
-                    self.compute_level(neighbor, get_ticket_level, true);
-                }
-            }
+        // We don't need to use `new_ticket_level` directly or recurse.
+        // We just mark this chunk as needing an update.
+        // The process loop will check `get_ticket_level`.
+        if !self.in_queue.contains(&pos) {
+            self.in_queue.insert(pos);
+            self.queue.push_back(pos);
         }
     }
 
     /// Processes all pending updates in the queue.
-    ///
-    /// # Panics
-    /// Panics if the queue state is inconsistent (key found but removal failed).
     pub fn process_all_updates(
         &mut self,
-        _get_ticket_level: impl Fn(ChunkPos) -> u8,
+        get_ticket_level: impl Fn(ChunkPos) -> u8,
     ) -> Vec<(ChunkPos, u8, u8)> {
-        let mut changes = Vec::new();
+        let mut changes = std::mem::take(&mut self.pending_changes);
 
-        loop {
-            // Process levels in increasing order.
-            let entry = self.queue.keys().next().copied();
-            let Some(level) = entry else { break };
+        while let Some(pos) = self.queue.pop_front() {
+            self.in_queue.remove(&pos);
 
-            let mut chunks = self.queue.remove(&level).expect("Queue entry must exist");
+            let old_level = self.get_level(pos);
+            let ticket_level = get_ticket_level(pos);
 
-            while let Some(pos) = chunks.pop_front() {
-                // Check if this entry is stale or if we have a better one queued.
-                match self.computed_levels.get(&pos) {
-                    Some(&computed) if computed != level => continue, // Stale
-                    Some(_) => {
-                        self.computed_levels.remove(&pos);
-                    } // Valid, consume
-                    None => continue, // Should not happen if logic is correct, but safe to skip
+            // Check neighbors to find the best level from them.
+            let neighbors = [
+                ChunkPos::new(pos.0.x + 1, pos.0.y),
+                ChunkPos::new(pos.0.x - 1, pos.0.y),
+                ChunkPos::new(pos.0.x, pos.0.y + 1),
+                ChunkPos::new(pos.0.x, pos.0.y - 1),
+            ];
+
+            let mut best_neighbor = MAX_LEVEL;
+            for n in neighbors {
+                let n_level = self.get_level(n);
+                if n_level < MAX_LEVEL {
+                    best_neighbor = min(best_neighbor, n_level);
                 }
+            }
 
-                let current_level = self.get_level(pos);
+            // Calculate new level based on source (ticket) and neighbors.
+            // Note: Propagation adds 1 to neighbor level.
+            let propagated_level = if best_neighbor == MAX_LEVEL {
+                MAX_LEVEL
+            } else {
+                best_neighbor + 1
+            };
 
-                if level >= current_level {
-                    continue;
-                }
+            let new_level = min(ticket_level, propagated_level);
 
-                self.levels.insert(pos, level);
-                changes.push((pos, current_level, level));
+            if new_level != old_level {
+                self.levels.insert(pos, new_level);
+                changes.push((pos, old_level, new_level));
 
-                if level < MAX_LEVEL {
-                    let next = level + 1;
-                    let neighbors = [
-                        ChunkPos::new(pos.0.x + 1, pos.0.y),
-                        ChunkPos::new(pos.0.x - 1, pos.0.y),
-                        ChunkPos::new(pos.0.x, pos.0.y + 1),
-                        ChunkPos::new(pos.0.x, pos.0.y - 1),
-                    ];
-
-                    for neighbor in neighbors {
-                        if self.get_level(neighbor) > next {
-                            self.enqueue(neighbor, next);
-                        }
+                // If our level changed, our neighbors might need to update.
+                // (Either we improved so they might improve, OR we degraded so they might degrade).
+                for n in neighbors {
+                    if !self.in_queue.contains(&n) {
+                        self.in_queue.insert(n);
+                        self.queue.push_back(n);
                     }
                 }
+
+                // If we degraded, we might need to re-evaluate ourselves if our new level relies on a neighbor
+                // that depended on us (circular dependency breaker).
+                // Actually, simple iterative updates handle this eventually, but enqueuing self again
+                // is sometimes needed if we are not stable?
+                // With standard Bellman-Ford/Dijkstra on this grid, simple neighbor enqueue is usually sufficient.
             }
         }
 

@@ -1888,6 +1888,7 @@ dependencies = [
  "replace_with",
  "rsa",
  "rsa-der",
+ "rustc-hash",
  "scc",
  "serde",
  "serde_json5",

@@ -78,4 +78,12 @@ impl DistanceManager {
         self.tracker
             .process_all_updates(|p| self.ticket_storage.get_level(p).unwrap_or(MAX_LEVEL + 1))
     }
+
+    /// Purges expired tickets and updates the tracker.
+    pub fn purge_tickets(&mut self, current_tick: u64) {
+        let changed_chunks = self.ticket_storage.purge_expired(current_tick);
+        for pos in changed_chunks {
+            self.update_chunk_tracker(pos);
+        }
+    }
 }

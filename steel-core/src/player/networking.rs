@@ -275,6 +275,6 @@ impl JavaConnection {
 
         let player = self.player.upgrade().expect("Player is not available");
         let world = player.world.clone();
-        world.remove_player(player);
+        world.remove_player(player).await;
     }
 }

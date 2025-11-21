@@ -158,6 +158,17 @@ impl ChunkGenerationTask {
             generate = true;
         }
 
+        // Fast path: If no generation is needed and we already have the status, we don't need to schedule anything.
+        // This avoids creating empty futures for chunks that are already ready.
+        if !generate {
+            // Verify we are actually ready
+            if let Some(curr) = persisted_status {
+                if curr >= status {
+                    return true;
+                }
+            }
+        }
+
         let pyramid = if generate {
             &*GENERATION_PYRAMID
         } else {
@@ -292,6 +303,8 @@ impl ChunkGenerationTask {
             if self.marked_for_cancel.load(Ordering::Relaxed)
                 || *self.scheduled_status.lock() == Some(self.target_status)
             {
+                let center_chunk = self.cache.get(self.pos.0.x, self.pos.0.y);
+                center_chunk.cancel_generation_task_async().await;
                 return;
             }
 
@@ -301,18 +314,21 @@ impl ChunkGenerationTask {
 
     /// Waits for all scheduled neighbor tasks to complete.
     pub async fn wait_for_scheduled_layers(&self) {
-        loop {
-            let future = self.neighbor_ready.lock().pop();
-            if let Some(future) = future {
-                if future.await.is_none() {
-                    self.mark_for_cancel();
-                    break;
-                }
-                //log::info!(
-                //    "Neighbor task completed for {:?}",
-                //    self.neighbor_ready.lock().len()
-                //);
-            } else {
+        // Collect all futures first to avoid locking the mutex during await
+        let futures: Vec<_> = {
+            let mut lock = self.neighbor_ready.lock();
+            std::mem::take(&mut *lock)
+        };
+
+        if futures.is_empty() {
+            return;
+        }
+
+        let results = futures::future::join_all(futures).await;
+
+        for result in results {
+            if result.is_none() {
+                self.mark_for_cancel();
                 break;
             }
         }

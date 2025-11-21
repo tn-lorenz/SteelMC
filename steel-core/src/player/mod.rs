@@ -143,4 +143,7 @@ impl Player {
             *self.position.lock() = packet.position;
         }
     }
+
+    /// Cleans up player resources.
+    pub fn cleanup(&self) {}
 }

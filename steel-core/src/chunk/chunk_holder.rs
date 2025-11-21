@@ -342,4 +342,20 @@ impl ChunkHolder {
             *c = ChunkResult::Ok((status, chunk));
         });
     }
+
+    /// Cancels the current generation task.
+    pub fn cancel_generation_task(&self) {
+        let mut task_guard = self.generation_task.blocking_lock();
+        if let Some(task) = task_guard.take() {
+            task.mark_for_cancel();
+        }
+    }
+
+    /// Cancels the current generation task asynchronously.
+    pub async fn cancel_generation_task_async(&self) {
+        let mut task_guard = self.generation_task.lock().await;
+        if let Some(task) = task_guard.take() {
+            task.mark_for_cancel();
+        }
+    }
 }

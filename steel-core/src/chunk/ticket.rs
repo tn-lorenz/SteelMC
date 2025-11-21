@@ -1,6 +1,6 @@
 //! `Ticket` module manages chunk tickets and their storage.
+use rustc_hash::FxHashMap;
 use std::cmp::Ordering;
-use std::collections::BTreeMap;
 
 use steel_utils::ChunkPos;
 
@@ -52,7 +52,7 @@ impl Ord for Ticket {
 
 /// Manages tickets for chunks.
 pub struct TicketStorage {
-    tickets: BTreeMap<ChunkPos, Vec<Ticket>>,
+    tickets: FxHashMap<ChunkPos, Vec<Ticket>>,
 }
 
 impl Default for TicketStorage {
@@ -66,20 +66,34 @@ impl TicketStorage {
     #[must_use]
     pub fn new() -> Self {
         Self {
-            tickets: BTreeMap::new(),
+            tickets: FxHashMap::default(),
         }
     }
 
     /// Adds a ticket.
     pub fn add_ticket(&mut self, pos: ChunkPos, ticket: Ticket) {
-        self.tickets.entry(pos).or_default().push(ticket);
+        let tickets = self.tickets.entry(pos).or_default();
+
+        // Match Java behavior: update existing ticket if type and level match
+        if let Some(existing) = tickets
+            .iter_mut()
+            .find(|t| t.ticket_type == ticket.ticket_type && t.level == ticket.level)
+        {
+            existing.expiration = ticket.expiration;
+        } else {
+            tickets.push(ticket);
+        }
     }
 
     /// Removes a ticket.
     pub fn remove_ticket(&mut self, pos: ChunkPos, ticket: &Ticket) {
         if let Some(tickets) = self.tickets.get_mut(&pos) {
-            if let Some(index) = tickets.iter().position(|t| t == ticket) {
-                tickets.remove(index);
+            // Match Java behavior: remove based on type and level
+            if let Some(index) = tickets
+                .iter()
+                .position(|t| t.ticket_type == ticket.ticket_type && t.level == ticket.level)
+            {
+                tickets.swap_remove(index);
             }
             if tickets.is_empty() {
                 self.tickets.remove(&pos);
