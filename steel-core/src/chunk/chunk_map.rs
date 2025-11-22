@@ -53,15 +53,14 @@ impl ChunkMap {
     }
 
     /// Schedules a new generation task.
-    pub(crate) async fn schedule_generation_task(
+    pub(crate) fn schedule_generation_task_b(
         self: &Arc<Self>,
         target_status: ChunkStatus,
         pos: ChunkPos,
     ) -> Arc<ChunkGenerationTask> {
-        let task = Arc::new(ChunkGenerationTask::new(pos, target_status, self.clone()).await);
+        let task = Arc::new(ChunkGenerationTask::new(pos, target_status, self.clone()));
         self.pending_generation_tasks
-            .lock()
-            .await
+            .blocking_lock()
             .push(task.clone());
         task
     }
@@ -108,7 +107,7 @@ impl ChunkMap {
         //log::info!("New level: {new_level}");
         if new_level >= MAX_LEVEL {
             //log::info!("Unloading chunk at {pos:?}");
-            chunk_holder.cancel_generation_task();
+            //chunk_holder.cancel_generation_task();
             // Drop the local reference so it doesn't count towards the strong count
             drop(chunk_holder);
 
@@ -157,34 +156,30 @@ impl ChunkMap {
         }
 
         let self_clone = self.clone();
-        let _ = self.task_tracker.spawn(async move {
-            for (chunk_holder, new_level) in updates_to_schedule {
-                // Use the generation pyramid to determine the target status for the given level.
-                let target_status = if new_level >= MAX_LEVEL {
-                    None
-                } else if new_level <= 33 {
-                    Some(ChunkStatus::Full)
-                } else {
-                    let distance = (new_level - 33) as usize;
-                    // Fallback to None if distance is out of bounds (simulating Vanilla logic)
-                    GENERATION_PYRAMID
-                        .get_step_to(ChunkStatus::Full)
-                        .accumulated_dependencies
-                        .get(distance)
-                };
+        for (chunk_holder, new_level) in updates_to_schedule {
+            // Use the generation pyramid to determine the target status for the given level.
+            let target_status = if new_level >= MAX_LEVEL {
+                None
+            } else if new_level <= 33 {
+                Some(ChunkStatus::Full)
+            } else {
+                let distance = (new_level - 33) as usize;
+                // Fallback to None if distance is out of bounds (simulating Vanilla logic)
+                GENERATION_PYRAMID
+                    .get_step_to(ChunkStatus::Full)
+                    .accumulated_dependencies
+                    .get(distance)
+            };
 
-                if let Some(status) = target_status
-                    && status == ChunkStatus::Full
-                {
-                    let chunk_holder_clone = chunk_holder.clone();
-                    let map_clone = self_clone.clone();
+            if let Some(status) = target_status
+                && status == ChunkStatus::Full
+            {
+                let chunk_holder_clone = chunk_holder.clone();
+                let map_clone = self_clone.clone();
 
-                    chunk_holder_clone
-                        .schedule_chunk_generation_task(status, map_clone)
-                        .await;
-                }
+                chunk_holder_clone.schedule_chunk_generation_task_b(status, map_clone)
             }
-        });
+        }
 
         let start_gen = tokio::time::Instant::now();
         self.run_generation_tasks_b();
