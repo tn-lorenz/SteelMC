@@ -8,14 +8,14 @@ use steel_protocol::packets::game::CSetChunkCenter;
 use steel_registry::blocks::BlockRegistry;
 use steel_registry::vanilla_blocks;
 use steel_utils::ChunkPos;
-use tokio::sync::Mutex;
 use tokio_util::task::TaskTracker;
 
 use crate::chunk::chunk_holder::ChunkHolder;
+use crate::chunk::chunk_level::ChunkLevel;
 use crate::chunk::chunk_tracking_view::ChunkTrackingView;
 use crate::chunk::{
     chunk_access::ChunkStatus, chunk_generation_task::ChunkGenerationTask,
-    chunk_pyramid::GENERATION_PYRAMID, chunk_tracker::MAX_LEVEL, distance_manager::DistanceManager,
+    chunk_tracker::MAX_LEVEL, distance_manager::DistanceManager,
     flat_chunk_generator::FlatChunkGenerator, world_gen_context::WorldGenContext,
 };
 use crate::config::STEEL_CONFIG;
@@ -31,7 +31,7 @@ pub struct ChunkMap {
     /// Map of chunks currently being unloaded.
     pub unloading_chunks: scc::HashMap<ChunkPos, Arc<ChunkHolder>>,
     /// Queue of pending generation tasks.
-    pub pending_generation_tasks: Mutex<Vec<Arc<ChunkGenerationTask>>>,
+    pub pending_generation_tasks: ParkingMutex<Vec<Arc<ChunkGenerationTask>>>,
     /// Tracker for background generation tasks.
     pub task_tracker: TaskTracker,
     /// Manager for chunk distances and tickets.
@@ -47,7 +47,7 @@ impl ChunkMap {
         Self {
             chunks: scc::HashMap::with_capacity(1000),
             unloading_chunks: scc::HashMap::new(),
-            pending_generation_tasks: Mutex::new(Vec::new()),
+            pending_generation_tasks: ParkingMutex::new(Vec::new()),
             task_tracker: TaskTracker::new(),
             distance_manager: ParkingMutex::new(DistanceManager::new()),
             world_gen_context: Arc::new(WorldGenContext {
@@ -67,15 +67,13 @@ impl ChunkMap {
         pos: ChunkPos,
     ) -> Arc<ChunkGenerationTask> {
         let task = Arc::new(ChunkGenerationTask::new(pos, target_status, self.clone()));
-        self.pending_generation_tasks
-            .blocking_lock()
-            .push(task.clone());
+        self.pending_generation_tasks.lock().push(task.clone());
         task
     }
 
     /// Runs queued generation tasks.
     pub fn run_generation_tasks_b(&self) {
-        let mut pending = self.pending_generation_tasks.blocking_lock();
+        let mut pending = self.pending_generation_tasks.lock();
         if pending.is_empty() {
             return;
         }
@@ -96,47 +94,45 @@ impl ChunkMap {
         new_level: u8,
     ) -> Option<Arc<ChunkHolder>> {
         // Recover from unloading if possible, else create new holder.
-        let (chunk_holder, revived_from_unloading) =
+        let chunk_holder = if let Some(holder) = self.chunks.get_sync(&pos) {
+            holder.get().clone()
+        } else {
+            if new_level >= MAX_LEVEL {
+                return None;
+            }
+
             if let Some(entry) = self.unloading_chunks.remove_sync(&pos) {
-                (entry.1, true)
-            } else if let Some(holder) = self.chunks.get_sync(&pos) {
-                (holder.get().clone(), false)
+                let _ = self.chunks.insert_sync(pos, entry.1.clone());
+                entry.1
             } else {
-                if new_level >= MAX_LEVEL {
-                    return None;
-                }
                 let holder = Arc::new(ChunkHolder::new(pos, new_level));
                 let _ = self.chunks.insert_sync(pos, holder.clone());
-                (holder, false)
-            };
+                holder
+            }
+        };
 
         if new_level >= MAX_LEVEL {
             //log::info!("Unloading chunk at {pos:?}");
             //chunk_holder.cancel_generation_task();
-            // Drop the local reference so it doesn't count towards the strong count
-            if revived_from_unloading {
-                let _ = self.unloading_chunks.insert_sync(pos, chunk_holder.clone());
-            } else if let Some((_, holder)) = self
+
+            // Check for two cause we are also holding a reference to the chunk
+            if let Some((_, holder)) = self
                 .chunks
-                .remove_if_sync(&pos, |chunk| Arc::strong_count(chunk) == 1)
+                .remove_if_sync(&pos, |chunk| Arc::strong_count(chunk) == 2)
             {
                 let _ = self.unloading_chunks.insert_sync(pos, holder);
+            } else {
+                chunk_holder
+                    .ticket_level
+                    .store(new_level, Ordering::Relaxed);
+                chunk_holder.update_highest_allowed_status(new_level);
             }
-            drop(chunk_holder);
             None
         } else {
-            if revived_from_unloading {
-                let _ = self.chunks.insert_sync(pos, chunk_holder.clone());
-            }
-
-            let ticket_level = chunk_holder.ticket_level.load(Ordering::Acquire);
-            if ticket_level == new_level {
-                return Some(chunk_holder);
-            }
-
             chunk_holder
                 .ticket_level
-                .store(new_level, Ordering::Release);
+                .store(new_level, Ordering::Relaxed);
+            chunk_holder.update_highest_allowed_status(new_level);
             Some(chunk_holder)
         }
     }
@@ -202,21 +198,10 @@ impl ChunkMap {
 
         let schedule_start = tokio::time::Instant::now();
         let self_clone = self.clone();
+        let update_len = updates_to_schedule.len();
         // TODO: Use parallel iterator, when 4lve says it's time hehe
         for (chunk_holder, new_level) in updates_to_schedule {
-            let target_status = if new_level >= MAX_LEVEL {
-                None
-            } else if new_level <= 33 {
-                Some(ChunkStatus::Full)
-            } else {
-                let distance = (new_level - 33) as usize;
-
-                // Fallback to None if distance is out of bounds (simulating Vanilla logic)
-                GENERATION_PYRAMID
-                    .get_step_to(ChunkStatus::Full)
-                    .accumulated_dependencies
-                    .get(distance)
-            };
+            let target_status = ChunkLevel::generation_status(new_level);
 
             if let Some(status) = target_status
                 && status == ChunkStatus::Full
@@ -229,7 +214,10 @@ impl ChunkMap {
 
         let schedule_elapsed = schedule_start.elapsed();
         if schedule_elapsed >= SLOW_TASK_WARN_THRESHOLD {
-            log::warn!("tick_b schedule loop took: {schedule_elapsed:?}");
+            log::warn!(
+                "tick_b schedule loop took: {schedule_elapsed:?} ({} updates)",
+                update_len
+            );
         }
 
         let start_gen = tokio::time::Instant::now();
