@@ -37,7 +37,7 @@ impl ChunkMap {
     #[must_use]
     pub fn new(block_registry: &BlockRegistry) -> Self {
         Self {
-            chunks: scc::HashMap::with_capacity(100000),
+            chunks: scc::HashMap::new(),
             unloading_chunks: scc::HashMap::new(),
             pending_generation_tasks: Mutex::new(Vec::new()),
             task_tracker: TaskTracker::new(),
