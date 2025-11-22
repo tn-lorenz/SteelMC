@@ -100,6 +100,7 @@ impl ChunkHolder {
         self: Arc<Self>,
         status: ChunkStatus,
         chunk_map: Arc<ChunkMap>,
+        lookup_provider: impl FnMut(ChunkPos) -> Option<Arc<ChunkHolder>>,
     ) {
         if self.is_status_disallowed(status) {
             return;
@@ -114,13 +115,18 @@ impl ChunkHolder {
         #[allow(clippy::unwrap_used)]
         if task.is_none() || status > task.as_ref().unwrap().target_status {
             drop(task);
-            self.reschedule_chunk_task_b(status, chunk_map);
+            self.reschedule_chunk_task_b(status, chunk_map, lookup_provider);
         }
     }
 
     /// Reschedules the chunk task to the given status.
-    pub(crate) fn reschedule_chunk_task_b(&self, status: ChunkStatus, chunk_map: Arc<ChunkMap>) {
-        let new_task = chunk_map.schedule_generation_task_b(status, self.pos);
+    pub(crate) fn reschedule_chunk_task_b(
+        &self,
+        status: ChunkStatus,
+        chunk_map: Arc<ChunkMap>,
+        lookup_provider: impl FnMut(ChunkPos) -> Option<Arc<ChunkHolder>>,
+    ) {
+        let new_task = chunk_map.schedule_generation_task_b(status, self.pos, lookup_provider);
         let mut old_task_guard = self.generation_task.lock();
 
         let old_task = old_task_guard.replace(new_task);

@@ -65,8 +65,14 @@ impl ChunkMap {
         self: &Arc<Self>,
         target_status: ChunkStatus,
         pos: ChunkPos,
+        lookup_provider: impl FnMut(ChunkPos) -> Option<Arc<ChunkHolder>>,
     ) -> Arc<ChunkGenerationTask> {
-        let task = Arc::new(ChunkGenerationTask::new(pos, target_status, self.clone()));
+        let task = Arc::new(ChunkGenerationTask::new(
+            pos,
+            target_status,
+            self.clone(),
+            lookup_provider,
+        ));
         self.pending_generation_tasks.lock().push(task.clone());
         task
     }
@@ -199,6 +205,21 @@ impl ChunkMap {
         let schedule_start = tokio::time::Instant::now();
         let self_clone = self.clone();
         let update_len = updates_to_schedule.len();
+
+        let mut cache =
+            FxHashMap::with_capacity_and_hasher(updates_to_schedule.len(), FxBuildHasher);
+        let mut lookup = |pos| {
+            if let Some(holder) = cache.get(&pos) {
+                return Some(Arc::clone(holder));
+            }
+            if let Some(holder) = self_clone.chunks.get_sync(&pos) {
+                let holder = holder.get().clone();
+                cache.insert(pos, holder.clone());
+                return Some(holder);
+            }
+            None
+        };
+
         // TODO: Use parallel iterator, when 4lve says it's time hehe
         for (chunk_holder, new_level) in updates_to_schedule {
             let target_status = ChunkLevel::generation_status(new_level);
@@ -208,7 +229,7 @@ impl ChunkMap {
             {
                 let chunk_holder_clone = chunk_holder.clone();
                 let map_clone = self_clone.clone();
-                chunk_holder_clone.schedule_chunk_generation_task_b(status, map_clone);
+                chunk_holder_clone.schedule_chunk_generation_task_b(status, map_clone, &mut lookup);
             }
         }
 
