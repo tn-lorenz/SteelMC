@@ -1,5 +1,7 @@
 use std::sync::Arc;
 use steel_protocol::packets::game::CSetChunkCenter;
+use steel_registry::blocks::BlockRegistry;
+use steel_registry::vanilla_blocks;
 use steel_utils::ChunkPos;
 use tokio::sync::Mutex;
 use tokio_util::task::TaskTracker;
@@ -8,9 +10,8 @@ use crate::chunk::chunk_holder::ChunkHolder;
 use crate::chunk::chunk_tracking_view::ChunkTrackingView;
 use crate::chunk::{
     chunk_access::ChunkStatus, chunk_generation_task::ChunkGenerationTask,
-    chunk_generator::SimpleChunkGenerator, chunk_pyramid::GENERATION_PYRAMID,
-    chunk_tracker::MAX_LEVEL, distance_manager::DistanceManager,
-    world_gen_context::WorldGenContext,
+    chunk_pyramid::GENERATION_PYRAMID, chunk_tracker::MAX_LEVEL, distance_manager::DistanceManager,
+    flat_chunk_generator::FlatChunkGenerator, world_gen_context::WorldGenContext,
 };
 use crate::config::STEEL_CONFIG;
 use crate::player::Player;
@@ -31,16 +32,10 @@ pub struct ChunkMap {
     pub world_gen_context: Arc<WorldGenContext>,
 }
 
-impl Default for ChunkMap {
-    fn default() -> Self {
-        Self::new()
-    }
-}
-
 impl ChunkMap {
     /// Creates a new chunk map.
     #[must_use]
-    pub fn new() -> Self {
+    pub fn new(block_registry: &BlockRegistry) -> Self {
         Self {
             chunks: scc::HashMap::new(),
             unloading_chunks: scc::HashMap::new(),
@@ -48,7 +43,11 @@ impl ChunkMap {
             task_tracker: TaskTracker::new(),
             distance_manager: Mutex::new(DistanceManager::new()),
             world_gen_context: Arc::new(WorldGenContext {
-                generator: Arc::new(SimpleChunkGenerator),
+                generator: Arc::new(FlatChunkGenerator::new(
+                    block_registry.get_default_state_id(vanilla_blocks::BEDROCK), // Bedrock
+                    block_registry.get_default_state_id(vanilla_blocks::DIRT),    // Dirt
+                    block_registry.get_default_state_id(vanilla_blocks::GRASS_BLOCK), // Grass Block
+                )),
             }),
         }
     }
