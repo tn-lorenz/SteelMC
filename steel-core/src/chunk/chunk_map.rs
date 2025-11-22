@@ -3,7 +3,7 @@ use std::sync::atomic::Ordering;
 use std::time::Duration;
 
 use parking_lot::Mutex as ParkingMutex;
-use rustc_hash::FxHashMap;
+use rustc_hash::{FxBuildHasher, FxHashMap};
 use steel_protocol::packets::game::CSetChunkCenter;
 use steel_registry::blocks::BlockRegistry;
 use steel_registry::vanilla_blocks;
@@ -27,9 +27,9 @@ const SLOW_TASK_WARN_THRESHOLD: Duration = Duration::from_micros(250);
 /// A map of chunks managing their state, loading, and generation.
 pub struct ChunkMap {
     /// Map of active chunks.
-    pub chunks: scc::HashMap<ChunkPos, Arc<ChunkHolder>>,
+    pub chunks: scc::HashMap<ChunkPos, Arc<ChunkHolder>, FxBuildHasher>,
     /// Map of chunks currently being unloaded.
-    pub unloading_chunks: scc::HashMap<ChunkPos, Arc<ChunkHolder>>,
+    pub unloading_chunks: scc::HashMap<ChunkPos, Arc<ChunkHolder>, FxBuildHasher>,
     /// Queue of pending generation tasks.
     pub pending_generation_tasks: ParkingMutex<Vec<Arc<ChunkGenerationTask>>>,
     /// Tracker for background generation tasks.
@@ -45,8 +45,8 @@ impl ChunkMap {
     #[must_use]
     pub fn new(block_registry: &BlockRegistry) -> Self {
         Self {
-            chunks: scc::HashMap::with_capacity(1000),
-            unloading_chunks: scc::HashMap::new(),
+            chunks: scc::HashMap::with_capacity_and_hasher(1000, FxBuildHasher),
+            unloading_chunks: scc::HashMap::with_hasher(FxBuildHasher),
             pending_generation_tasks: ParkingMutex::new(Vec::new()),
             task_tracker: TaskTracker::new(),
             distance_manager: ParkingMutex::new(DistanceManager::new()),
