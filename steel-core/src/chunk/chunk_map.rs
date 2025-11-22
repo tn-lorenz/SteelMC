@@ -37,7 +37,7 @@ impl ChunkMap {
     #[must_use]
     pub fn new(block_registry: &BlockRegistry) -> Self {
         Self {
-            chunks: scc::HashMap::new(),
+            chunks: scc::HashMap::with_capacity(100000),
             unloading_chunks: scc::HashMap::new(),
             pending_generation_tasks: Mutex::new(Vec::new()),
             task_tracker: TaskTracker::new(),
@@ -111,7 +111,11 @@ impl ChunkMap {
             // Drop the local reference so it doesn't count towards the strong count
             drop(chunk_holder);
 
-            if let Some((_, holder)) = self.chunks.remove_sync(&pos) {
+            // Makes it so we don't unload chunks being used by generation tasks
+            if let Some((_, holder)) = self
+                .chunks
+                .remove_if_sync(&pos, |chunk| Arc::strong_count(chunk) == 1)
+            {
                 let _ = self.unloading_chunks.insert_sync(pos, holder);
             }
             None
