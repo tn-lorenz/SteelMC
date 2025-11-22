@@ -1,4 +1,9 @@
 use std::sync::Arc;
+use std::sync::atomic::Ordering;
+use std::time::Duration;
+
+use parking_lot::Mutex as ParkingMutex;
+use rustc_hash::FxHashMap;
 use steel_protocol::packets::game::CSetChunkCenter;
 use steel_registry::blocks::BlockRegistry;
 use steel_registry::vanilla_blocks;
@@ -16,6 +21,9 @@ use crate::chunk::{
 use crate::config::STEEL_CONFIG;
 use crate::player::Player;
 
+const PROCESS_CHANGES_WARN_THRESHOLD: usize = 1_000;
+const PROCESS_CHANGES_WARN_MIN_DURATION: Duration = Duration::from_micros(500);
+const SLOW_TASK_WARN_THRESHOLD: Duration = Duration::from_micros(250);
 /// A map of chunks managing their state, loading, and generation.
 pub struct ChunkMap {
     /// Map of active chunks.
@@ -27,7 +35,7 @@ pub struct ChunkMap {
     /// Tracker for background generation tasks.
     pub task_tracker: TaskTracker,
     /// Manager for chunk distances and tickets.
-    pub distance_manager: Mutex<DistanceManager>,
+    pub distance_manager: ParkingMutex<DistanceManager>,
     /// The world generation context.
     pub world_gen_context: Arc<WorldGenContext>,
 }
@@ -37,11 +45,11 @@ impl ChunkMap {
     #[must_use]
     pub fn new(block_registry: &BlockRegistry) -> Self {
         Self {
-            chunks: scc::HashMap::new(),
+            chunks: scc::HashMap::with_capacity(1000),
             unloading_chunks: scc::HashMap::new(),
             pending_generation_tasks: Mutex::new(Vec::new()),
             task_tracker: TaskTracker::new(),
-            distance_manager: Mutex::new(DistanceManager::new()),
+            distance_manager: ParkingMutex::new(DistanceManager::new()),
             world_gen_context: Arc::new(WorldGenContext {
                 generator: Arc::new(FlatChunkGenerator::new(
                     block_registry.get_default_state_id(vanilla_blocks::BEDROCK), // Bedrock
@@ -81,45 +89,54 @@ impl ChunkMap {
 
     /// Updates scheduling for a chunk based on its new level.
     /// Returns the chunk holder if it is active.
-    pub fn update_chunk_level_b(
+    #[inline]
+    pub fn update_chunk_level(
         self: &Arc<Self>,
         pos: ChunkPos,
         new_level: u8,
     ) -> Option<Arc<ChunkHolder>> {
         // Recover from unloading if possible, else create new holder.
-        let chunk_holder = if let Some(entry) = self.unloading_chunks.remove_sync(&pos) {
-            let holder = entry.1;
-            let _ = self.chunks.insert_sync(pos, holder.clone());
-            holder
-        } else if let Some(holder) = self.chunks.get_sync(&pos) {
-            holder.get().clone()
-        } else {
-            if new_level >= MAX_LEVEL {
-                return None;
-            }
-            let holder = Arc::new(ChunkHolder::new(pos, new_level));
-            let _ = self.chunks.insert_sync(pos, holder.clone());
-            holder
-        };
+        let (chunk_holder, revived_from_unloading) =
+            if let Some(entry) = self.unloading_chunks.remove_sync(&pos) {
+                (entry.1, true)
+            } else if let Some(holder) = self.chunks.get_sync(&pos) {
+                (holder.get().clone(), false)
+            } else {
+                if new_level >= MAX_LEVEL {
+                    return None;
+                }
+                let holder = Arc::new(ChunkHolder::new(pos, new_level));
+                let _ = self.chunks.insert_sync(pos, holder.clone());
+                (holder, false)
+            };
 
-        *chunk_holder.ticket_level.blocking_lock() = new_level;
-
-        //log::info!("New level: {new_level}");
         if new_level >= MAX_LEVEL {
             //log::info!("Unloading chunk at {pos:?}");
             //chunk_holder.cancel_generation_task();
             // Drop the local reference so it doesn't count towards the strong count
-            drop(chunk_holder);
-
-            // Makes it so we don't unload chunks being used by generation tasks
-            if let Some((_, holder)) = self
+            if revived_from_unloading {
+                let _ = self.unloading_chunks.insert_sync(pos, chunk_holder.clone());
+            } else if let Some((_, holder)) = self
                 .chunks
                 .remove_if_sync(&pos, |chunk| Arc::strong_count(chunk) == 1)
             {
                 let _ = self.unloading_chunks.insert_sync(pos, holder);
             }
+            drop(chunk_holder);
             None
         } else {
+            if revived_from_unloading {
+                let _ = self.chunks.insert_sync(pos, chunk_holder.clone());
+            }
+
+            let ticket_level = chunk_holder.ticket_level.load(Ordering::Acquire);
+            if ticket_level == new_level {
+                return Some(chunk_holder);
+            }
+
+            chunk_holder
+                .ticket_level
+                .store(new_level, Ordering::Release);
             Some(chunk_holder)
         }
     }
@@ -128,46 +145,72 @@ impl ChunkMap {
     pub fn tick_b(self: &Arc<Self>, tick_count: u64) {
         let start = tokio::time::Instant::now();
 
-        let start_purge = tokio::time::Instant::now();
-        {
-            let mut dm = self.distance_manager.blocking_lock();
+        let (changes, purge_elapsed, updates_elapsed) = {
+            let mut dm = self.distance_manager.lock();
+
+            let purge_start = tokio::time::Instant::now();
             dm.purge_tickets(tick_count);
+            let purge_elapsed = purge_start.elapsed();
+
+            let updates_start = tokio::time::Instant::now();
+            let changes = dm.run_updates();
+            let updates_elapsed = updates_start.elapsed();
+
+            (changes, purge_elapsed, updates_elapsed)
+        };
+
+        if purge_elapsed >= SLOW_TASK_WARN_THRESHOLD {
+            log::warn!("distance_manager purge_tickets slow: {purge_elapsed:?}");
         }
-        if start_purge.elapsed().as_millis() > 1 {
-            log::warn!("purge_tickets slow: {:?}", start_purge.elapsed());
+        if updates_elapsed >= SLOW_TASK_WARN_THRESHOLD {
+            log::warn!("distance_manager run_updates slow: {updates_elapsed:?}");
         }
 
-        let start_updates = tokio::time::Instant::now();
-        let changes = self.distance_manager.blocking_lock().run_updates();
-        if start_updates.elapsed().as_millis() > 1 {
-            log::warn!("run_updates slow: {:?}", start_updates.elapsed());
-        }
-
-        let mut updates_to_schedule = Vec::new();
+        let deduped: FxHashMap<_, _> = changes
+            .into_iter()
+            .map(|(pos, _, new_level)| (pos, new_level))
+            .collect();
 
         let start_process_changes = tokio::time::Instant::now();
-        for (pos, _, new_level) in changes {
-            if let Some(holder) = self.update_chunk_level_b(pos, new_level) {
-                updates_to_schedule.push((holder, new_level));
-            }
-        }
-        if start_process_changes.elapsed().as_millis() > 1 {
+        let deduped_len = deduped.len();
+
+        // TODO: Use parallel iterator, when 4lve says it's time hehe
+        let updates_to_schedule: Vec<_> = deduped
+            .into_iter()
+            .filter_map(|(pos, new_level)| {
+                self.update_chunk_level(pos, new_level)
+                    .map(|holder| (holder, new_level))
+            })
+            .collect();
+
+        let process_elapsed = start_process_changes.elapsed();
+        if !updates_to_schedule.is_empty()
+            && (updates_to_schedule.len() >= PROCESS_CHANGES_WARN_THRESHOLD
+                || process_elapsed >= PROCESS_CHANGES_WARN_MIN_DURATION)
+        {
+            let per_change =
+                process_elapsed.as_secs_f64() * 1_000_000.0 / updates_to_schedule.len() as f64;
+            // Show unique (deduped) vs scheduled counts. Avoid unsigned underflow from incorrect subtraction.
             log::warn!(
-                "process changes slow: {:?} ({} changes)",
-                start_process_changes.elapsed(),
-                updates_to_schedule.len()
+                "process changes: {:?} ({} unique, {} scheduled, {:.2}µs/change)",
+                process_elapsed,
+                deduped_len,
+                updates_to_schedule.len(),
+                per_change
             );
         }
 
+        let schedule_start = tokio::time::Instant::now();
         let self_clone = self.clone();
+        // TODO: Use parallel iterator, when 4lve says it's time hehe
         for (chunk_holder, new_level) in updates_to_schedule {
-            // Use the generation pyramid to determine the target status for the given level.
             let target_status = if new_level >= MAX_LEVEL {
                 None
             } else if new_level <= 33 {
                 Some(ChunkStatus::Full)
             } else {
                 let distance = (new_level - 33) as usize;
+
                 // Fallback to None if distance is out of bounds (simulating Vanilla logic)
                 GENERATION_PYRAMID
                     .get_step_to(ChunkStatus::Full)
@@ -180,25 +223,32 @@ impl ChunkMap {
             {
                 let chunk_holder_clone = chunk_holder.clone();
                 let map_clone = self_clone.clone();
-
-                chunk_holder_clone.schedule_chunk_generation_task_b(status, map_clone)
+                chunk_holder_clone.schedule_chunk_generation_task_b(status, map_clone);
             }
+        }
+
+        let schedule_elapsed = schedule_start.elapsed();
+        if schedule_elapsed >= SLOW_TASK_WARN_THRESHOLD {
+            log::warn!("tick_b schedule loop took: {schedule_elapsed:?}");
         }
 
         let start_gen = tokio::time::Instant::now();
         self.run_generation_tasks_b();
-        if start_gen.elapsed().as_millis() > 1 {
-            log::warn!("run_generation_tasks_b slow: {:?}", start_gen.elapsed());
+        let gen_elapsed = start_gen.elapsed();
+        if gen_elapsed >= SLOW_TASK_WARN_THRESHOLD {
+            log::warn!("run_generation_tasks_b slow: {gen_elapsed:?}");
         }
 
         let start_unload = tokio::time::Instant::now();
         self.process_unloads();
-        if start_unload.elapsed().as_millis() > 1 {
-            log::warn!("process_unloads slow: {:?}", start_unload.elapsed());
+        let unload_elapsed = start_unload.elapsed();
+        if unload_elapsed >= SLOW_TASK_WARN_THRESHOLD {
+            log::warn!("process_unloads slow: {unload_elapsed:?}");
         }
 
-        if start.elapsed().as_millis() > 1 {
-            log::warn!("Tick_b slow: total {:?}", start.elapsed());
+        let tick_elapsed = start.elapsed();
+        if tick_elapsed >= SLOW_TASK_WARN_THRESHOLD {
+            log::warn!("Tick_b slow: total {tick_elapsed:?}");
         }
 
         if tick_count.is_multiple_of(100) {
@@ -269,7 +319,7 @@ impl ChunkMap {
         let mut last_view_guard = player.last_tracking_view.lock();
 
         if last_view_guard.as_ref() != Some(&new_view) {
-            let mut distance_manager = self.distance_manager.blocking_lock();
+            let mut distance_manager = self.distance_manager.lock();
 
             let connection = &player.connection;
 
@@ -314,12 +364,12 @@ impl ChunkMap {
     }
 
     /// Removes a player from the chunk map.
-    pub async fn remove_player(&self, player: &Player) {
+    pub fn remove_player(&self, player: &Player) {
         // Okay to lock sync lock here cause it has low contention
         let mut last_view_guard = player.last_tracking_view.lock();
         if let Some(last_view) = last_view_guard.take() {
             drop(last_view_guard);
-            let mut distance_manager = self.distance_manager.lock().await;
+            let mut distance_manager = self.distance_manager.lock();
             #[allow(clippy::cast_possible_truncation, clippy::cast_sign_loss)]
             distance_manager.remove_player(last_view.center, last_view.view_distance as u8);
         }

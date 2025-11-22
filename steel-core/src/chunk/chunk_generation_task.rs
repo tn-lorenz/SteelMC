@@ -27,7 +27,7 @@ pub struct StaticCache2D<T> {
 }
 
 impl<T> StaticCache2D<T> {
-    /// Creates a `StaticCache2D` by concurrently populating it via a factory.
+    /// Creates a `StaticCache2D` by populating it via a factory.
     #[allow(clippy::missing_panics_doc)]
     pub fn create<F>(center_x: i32, center_z: i32, radius: i32, mut factory: F) -> Self
     where

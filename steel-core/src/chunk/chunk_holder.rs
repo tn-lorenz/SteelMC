@@ -1,6 +1,6 @@
 //! `ChunkHolder` manages chunk state and asynchronous generation tasks.
 use std::sync::Arc;
-use std::sync::atomic::{AtomicUsize, Ordering};
+use std::sync::atomic::{AtomicU8, AtomicUsize, Ordering};
 
 use futures::Future;
 use replace_with::replace_with_or_abort;
@@ -39,7 +39,7 @@ pub struct ChunkHolder {
     generation_task: Mutex<Option<Arc<ChunkGenerationTask>>>,
     pos: ChunkPos,
     /// The current ticket level of the chunk.
-    pub ticket_level: Mutex<u8>,
+    pub ticket_level: AtomicU8,
     /// The highest status that has started work.
     started_work: AtomicUsize,
 }
@@ -59,13 +59,14 @@ impl ChunkHolder {
             sender,
             generation_task: Mutex::new(None),
             pos,
-            ticket_level: Mutex::new(ticket_level),
+            ticket_level: AtomicU8::new(ticket_level),
             started_work: AtomicUsize::new(usize::MAX),
         }
     }
 
     /// Returns a future that completes when the chunk reaches the given status or is cancelled.
     #[allow(clippy::missing_panics_doc)]
+    #[inline]
     pub(crate) fn schedule_chunk_generation_task_b(
         self: Arc<Self>,
         status: ChunkStatus,
@@ -113,6 +114,7 @@ impl ChunkHolder {
     }
 
     /// Gets access to the chunk if it has reached the given status.
+    #[inline]
     pub fn with_chunk<F, R>(&self, status: ChunkStatus, f: F) -> Option<R>
     where
         F: FnOnce(&ChunkAccess) -> R,
