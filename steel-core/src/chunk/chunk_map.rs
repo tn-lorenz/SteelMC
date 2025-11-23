@@ -29,7 +29,7 @@ pub struct ChunkMap {
     /// Map of active chunks.
     pub chunks: scc::HashMap<ChunkPos, Arc<ChunkHolder>, FxBuildHasher>,
     /// Map of chunks currently being unloaded.
-    pub unloading_chunks: scc::HashMap<ChunkPos, Arc<ChunkHolder>, FxBuildHasher>,
+    pub unloading_chunks: ParkingMutex<FxHashMap<ChunkPos, Arc<ChunkHolder>>>,
     /// Queue of pending generation tasks.
     pub pending_generation_tasks: ParkingMutex<Vec<Arc<ChunkGenerationTask>>>,
     /// Tracker for background generation tasks.
@@ -46,7 +46,10 @@ impl ChunkMap {
     pub fn new(block_registry: &BlockRegistry) -> Self {
         Self {
             chunks: scc::HashMap::with_capacity_and_hasher(1000, FxBuildHasher),
-            unloading_chunks: scc::HashMap::with_hasher(FxBuildHasher),
+            unloading_chunks: ParkingMutex::new(FxHashMap::with_capacity_and_hasher(
+                1000,
+                FxBuildHasher,
+            )),
             pending_generation_tasks: ParkingMutex::new(Vec::new()),
             task_tracker: TaskTracker::new(),
             distance_manager: ParkingMutex::new(DistanceManager::new()),
@@ -107,9 +110,9 @@ impl ChunkMap {
                 return None;
             }
 
-            if let Some(entry) = self.unloading_chunks.remove_sync(&pos) {
-                let _ = self.chunks.insert_sync(pos, entry.1.clone());
-                entry.1
+            if let Some(entry) = self.unloading_chunks.lock().remove(&pos) {
+                let _ = self.chunks.insert_sync(pos, entry.clone());
+                entry
             } else {
                 let holder = Arc::new(ChunkHolder::new(pos, new_level));
                 let _ = self.chunks.insert_sync(pos, holder.clone());
@@ -126,7 +129,7 @@ impl ChunkMap {
                 .chunks
                 .remove_if_sync(&pos, |chunk| Arc::strong_count(chunk) == 2)
             {
-                let _ = self.unloading_chunks.insert_sync(pos, holder);
+                let _ = self.unloading_chunks.lock().insert(pos, holder);
             } else {
                 chunk_holder
                     .ticket_level
@@ -264,7 +267,7 @@ impl ChunkMap {
             log::debug!(
                 "Chunk map entries: {}, unloading chunks: {}",
                 self.chunks.len(),
-                self.unloading_chunks.len()
+                self.unloading_chunks.lock().len()
             );
         }
     }
@@ -302,7 +305,7 @@ impl ChunkMap {
     /// If a chunk is only held by the map (strong count is 1), it is removed
     /// and a background task is spawned to save it.
     pub fn process_unloads(self: &Arc<Self>) {
-        self.unloading_chunks.retain_sync(|_, holder| {
+        self.unloading_chunks.lock().retain(|_, holder| {
             // If the strong count is 1, it means only this map holds a reference to the chunk.
             // We can safely unload it.
             if Arc::strong_count(&*holder) == 1 {
