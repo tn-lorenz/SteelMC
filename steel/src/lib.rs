@@ -8,7 +8,7 @@ use std::{
     sync::Arc,
 };
 use steel_core::{config::STEEL_CONFIG, server::Server};
-use tokio::{net::TcpListener, select};
+use tokio::{net::TcpListener, runtime::Runtime, select};
 use tokio_util::{sync::CancellationToken, task::TaskTracker};
 
 /// The networking module.
@@ -34,10 +34,10 @@ impl SteelServer {
     ///
     /// # Panics
     /// This function will panic if the TCP listener fails to bind to the server address.
-    pub async fn new() -> Self {
+    pub async fn new(chunk_runtime: Arc<Runtime>) -> Self {
         log::info!("Starting Steel Server");
 
-        let server = Server::new().await;
+        let server = Server::new(chunk_runtime).await;
 
         Self {
             tcp_listener: TcpListener::bind(SocketAddrV4::new(

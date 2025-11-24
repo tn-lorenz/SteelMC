@@ -10,6 +10,7 @@ use steel_protocol::packets::game::CSetChunkCenter;
 use steel_registry::blocks::BlockRegistry;
 use steel_registry::vanilla_blocks;
 use steel_utils::ChunkPos;
+use tokio::runtime::Runtime;
 use tokio_util::task::TaskTracker;
 
 use crate::chunk::chunk_holder::ChunkHolder;
@@ -42,12 +43,14 @@ pub struct ChunkMap {
     pub world_gen_context: Arc<WorldGenContext>,
     /// The thread pool to use for generation.
     pub thread_pool: Arc<ThreadPool>,
+    /// The runtime to use for chunk tasks.
+    pub chunk_runtime: Arc<Runtime>,
 }
 
 impl ChunkMap {
     /// Creates a new chunk map.
     #[must_use]
-    pub fn new(block_registry: &BlockRegistry) -> Self {
+    pub fn new(block_registry: &BlockRegistry, chunk_runtime: Arc<Runtime>) -> Self {
         Self {
             chunks: scc::HashMap::with_capacity_and_hasher(1000, FxBuildHasher),
             unloading_chunks: ParkingMutex::new(FxHashMap::with_capacity_and_hasher(
@@ -65,6 +68,7 @@ impl ChunkMap {
                 )),
             }),
             thread_pool: Arc::new(ThreadPoolBuilder::new().build().unwrap()),
+            chunk_runtime,
         }
     }
 
@@ -92,9 +96,12 @@ impl ChunkMap {
         }
         //log::info!("Running {} generation tasks", pending.len());
         for task in pending.drain(..) {
-            self.task_tracker.spawn(async move {
-                task.run().await;
-            });
+            self.task_tracker.spawn_on(
+                async move {
+                    task.run().await;
+                },
+                self.chunk_runtime.handle(),
+            );
         }
     }
 
