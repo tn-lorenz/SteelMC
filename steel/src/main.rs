@@ -1,3 +1,5 @@
+//! Main entry point for the Steel Minecraft server.
+
 use log::LevelFilter;
 use simplelog::{ColorChoice, Config, TermLogger, TerminalMode};
 use steel::SteelServer;
@@ -12,7 +14,7 @@ async fn main() {
         TerminalMode::Mixed,
         ColorChoice::Auto,
     )
-    .unwrap();
+    .expect("Failed to initialize logger");
 
     let mut steel = SteelServer::new().await;
 
@@ -23,7 +25,7 @@ async fn main() {
             .registry
             .items
             .get_tag(&Identifier::vanilla_static("swords"))
-            .unwrap()
+            .expect("swords tag should exist")
             .iter()
             .map(|b| b.key.path.to_string())
             .collect::<Vec<String>>()
