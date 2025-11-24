@@ -1,9 +1,9 @@
 //! `ChunkHolder` manages chunk state and asynchronous generation tasks.
+use parking_lot::{Mutex as ParkingMutex, RwLock as ParkingRwLock};
 use std::sync::Arc;
 use std::sync::atomic::{AtomicU8, AtomicUsize, Ordering};
 
 use futures::Future;
-use parking_lot::Mutex;
 use replace_with::replace_with_or_abort;
 use steel_utils::ChunkPos;
 use tokio::sync::watch;
@@ -23,9 +23,6 @@ use crate::{
 
 const STATUS_NONE: u8 = u8::MAX;
 
-/// A tuple containing the chunk status and the chunk access.
-pub type ChunkStageHolder = (ChunkStatus, ChunkAccess);
-
 /// The result of a chunk operation.
 pub enum ChunkResult {
     /// The chunk is not loaded.
@@ -33,14 +30,25 @@ pub enum ChunkResult {
     /// The chunk operation failed.
     Failed,
     /// The chunk operation succeeded.
-    Ok(ChunkStageHolder),
+    Ok(ChunkStatus),
 }
 
 /// Holds a chunk in a watch channel, allowing for concurrent access and state tracking.
+///
+/// NOTICE: It is very important to keep data and `chunk_result` in sync.
+///
+/// `ChunkResult::Unloaded` -> data is None
+///
+/// `ChunkResult::Failed` -> data is Anything and should not be used anymore
+///
+/// `ChunkResult::Ok(status` except Full) -> data is `Some(ChunkAccess::Proto(ProtoChunk))`
+///
+/// `ChunkResult::Ok(ChunkStatus::Full)` -> data is `Some(ChunkAccess::Full(LevelChunk))`
 pub struct ChunkHolder {
-    chunk_access: watch::Receiver<ChunkResult>,
+    data: ParkingRwLock<Option<ChunkAccess>>,
+    chunk_result: watch::Receiver<ChunkResult>,
     sender: watch::Sender<ChunkResult>,
-    generation_task: Mutex<Option<Arc<ChunkGenerationTask>>>,
+    generation_task: ParkingMutex<Option<Arc<ChunkGenerationTask>>>,
     pos: ChunkPos,
     /// The current ticket level of the chunk.
     pub ticket_level: AtomicU8,
@@ -64,9 +72,10 @@ impl ChunkHolder {
             .map_or(STATUS_NONE, |s| s.get_index() as u8);
 
         Self {
-            chunk_access: receiver,
+            data: ParkingRwLock::new(None),
+            chunk_result: receiver,
             sender,
-            generation_task: Mutex::new(None),
+            generation_task: ParkingMutex::new(None),
             pos,
             ticket_level: AtomicU8::new(ticket_level),
             started_work: AtomicUsize::new(usize::MAX),
@@ -103,7 +112,7 @@ impl ChunkHolder {
             return;
         }
 
-        if self.with_chunk(status, |_| ()).is_some() {
+        if self.try_chunk(status).is_some() {
             return;
         }
 
@@ -129,61 +138,28 @@ impl ChunkHolder {
         }
     }
 
-    /// Gets mutable access to the chunk if it has reached the given status.
-    pub fn with_chunk_mut<F, R>(&self, status: ChunkStatus, f: F) -> Option<R>
-    where
-        F: FnOnce(&mut ChunkAccess) -> R,
-    {
-        let mut return_value: Option<R> = None;
-        self.sender.send_modify(|chunk| match chunk {
-            ChunkResult::Ok((s, chunk)) if status <= *s => {
-                return_value = Some(f(chunk));
-            }
-            _ => {}
-        });
-        return_value
-    }
-
     /// Gets access to the chunk if it has reached the given status.
     #[inline]
-    pub fn with_chunk<F, R>(&self, status: ChunkStatus, f: F) -> Option<R>
-    where
-        F: FnOnce(&ChunkAccess) -> R,
-    {
-        match &*self.chunk_access.borrow() {
-            ChunkResult::Ok((s, chunk)) if status <= *s => Some(f(chunk)),
-            _ => None,
-        }
-    }
-
-    /// Gets access to the chunk if it is full.
-    pub fn with_full_chunk<F, R>(&self, f: F) -> Option<R>
-    where
-        F: FnOnce(&LevelChunk) -> R,
-    {
-        match &*self.chunk_access.borrow() {
-            ChunkResult::Ok((ChunkStatus::Full, ChunkAccess::Full(chunk))) => Some(f(chunk)),
+    pub fn try_chunk(&self, status: ChunkStatus) -> Option<&ParkingRwLock<Option<ChunkAccess>>> {
+        match &*self.chunk_result.borrow() {
+            ChunkResult::Ok(s) if status <= *s => Some(&self.data),
             _ => None,
         }
     }
 
     /// Waits until the chunk has reached the given status, then calls the function.
-    pub fn await_chunk_and_then<F, R>(
+    pub fn await_chunk(
         &self,
         status: ChunkStatus,
-        f: F,
-    ) -> impl Future<Output = Option<R>>
-    where
-        F: FnOnce(&ChunkAccess) -> R,
-    {
+    ) -> impl Future<Output = Option<&ParkingRwLock<Option<ChunkAccess>>>> {
         let mut subscriber = self.sender.subscribe();
         async move {
             loop {
                 {
-                    let chunk_access = subscriber.borrow_and_update();
-                    match &*chunk_access {
-                        ChunkResult::Ok((s, chunk)) if status <= *s => {
-                            return Some(f(chunk));
+                    let chunk_result = subscriber.borrow_and_update();
+                    match &*chunk_result {
+                        ChunkResult::Ok(s) if status <= *s => {
+                            return Some(&self.data);
                         }
                         ChunkResult::Failed => return None,
                         _ => {}
@@ -198,23 +174,10 @@ impl ChunkHolder {
         }
     }
 
-    /// Waits until this chunk has reached the Full status.
-    pub async fn await_full_and_then<F, R>(&self, f: F) -> Option<R>
-    where
-        F: FnOnce(&ChunkAccess) -> R,
-    {
-        self.await_chunk_and_then(ChunkStatus::Full, f).await
-    }
-
-    /// Waits until this chunk has reached the Full status.
-    pub async fn await_full(&self) -> Option<()> {
-        self.await_full_and_then(|_| ()).await
-    }
-
     /// Gets the persisted status of the chunk.
     pub fn persisted_status(&self) -> Option<ChunkStatus> {
-        match &*self.chunk_access.borrow() {
-            ChunkResult::Ok((s, _)) => Some(*s),
+        match &*self.chunk_result.borrow() {
+            ChunkResult::Ok(s) => Some(*s),
             _ => None,
         }
     }
@@ -232,14 +195,20 @@ impl ChunkHolder {
         let target_status = step.target_status;
 
         if self.is_status_disallowed(target_status) {
-            return Box::pin(async { None });
+            //TODO: Once we have cancel safety and a working ticket system we can implement this properly
+            //log::error!(
+            //    "Chunk {:?} is status disallowed for {:?}",
+            //    self.get_pos(),
+            //    target_status
+            //);
+            //return Box::pin(async { None });
         }
 
         if !self.acquire_status_bump(target_status) {
             let self_clone = self.clone();
-            return Box::pin(async move {
-                self_clone.await_chunk_and_then(target_status, |_| ()).await
-            });
+            return Box::pin(
+                async move { self_clone.await_chunk(target_status).await.map(|_| ()) },
+            );
         }
 
         let sender = self.sender.clone();
@@ -255,7 +224,7 @@ impl ChunkHolder {
                     match spawn_blocking(move || task(context, &step, &cache, self_clone)).await {
                         Ok(_) => {
                             sender.send_modify(|chunk| {
-                                if let ChunkResult::Ok((s, _)) = chunk {
+                                if let ChunkResult::Ok(s) = chunk {
                                     //log::info!("Task completed for {:?}", target_status);
 
                                     if *s < target_status {
@@ -282,13 +251,13 @@ impl ChunkHolder {
                     //    target_status
                     //);
 
-                    let has_parent = self_clone.with_chunk(parent_status, |_| ()).is_some();
+                    let has_parent = self_clone.try_chunk(parent_status).is_some();
 
                     assert!(has_parent, "Parent chunk missing");
 
                     match spawn_blocking(move || task(context, &step, &cache, self_clone)).await {
                         Ok(_) => {
-                            sender.send_modify(|chunk| if let ChunkResult::Ok((s, _)) = chunk {
+                            sender.send_modify(|chunk| if let ChunkResult::Ok(s) = chunk {
                             if *s < target_status {
                                 *s = target_status;
                             } else if *s != ChunkStatus::Full {
@@ -359,34 +328,31 @@ impl ChunkHolder {
     /// # Panics
     /// Panics if the chunk is not at `ProtoChunk` stage or completed.
     pub fn upgrade_to_full(&self) {
-        self.sender.send_modify(|chunk| {
-            replace_with_or_abort(chunk, |chunk| match chunk {
-                ChunkResult::Ok((_, ChunkAccess::Proto(proto_chunk))) => ChunkResult::Ok((
-                    ChunkStatus::Full,
-                    ChunkAccess::Full(LevelChunk::from_proto(proto_chunk)),
-                )),
-                _ => panic!("Cannot upgrade chunk: not at ProtoChunk status"),
+        {
+            let mut data = self.data.write();
+            replace_with_or_abort(&mut *data, |chunk| match chunk {
+                Some(ChunkAccess::Proto(proto_chunk)) => {
+                    Some(ChunkAccess::Full(LevelChunk::from_proto(proto_chunk)))
+                }
+                _ => unreachable!(),
             });
+        }
+
+        self.sender.send_modify(|chunk| {
+            *chunk = ChunkResult::Ok(ChunkStatus::Full);
         });
     }
 
     /// Inserts a chunk into the holder with a specific status.
     pub fn insert_chunk(&self, chunk: ChunkAccess, status: ChunkStatus) {
+        self.data.write().replace(chunk);
         self.sender.send_modify(|c| {
-            *c = ChunkResult::Ok((status, chunk));
+            *c = ChunkResult::Ok(status);
         });
     }
 
     /// Cancels the current generation task.
     pub fn cancel_generation_task(&self) {
-        let mut task_guard = self.generation_task.lock();
-        if let Some(task) = task_guard.take() {
-            task.mark_for_cancel();
-        }
-    }
-
-    /// Cancels the current generation task asynchronously.
-    pub async fn cancel_generation_task_async(&self) {
         let mut task_guard = self.generation_task.lock();
         if let Some(task) = task_guard.take() {
             task.mark_for_cancel();

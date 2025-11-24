@@ -255,24 +255,8 @@ impl ChunkMap {
         let _pos = chunk_holder.get_pos();
         // Access the chunk to ensure it's loaded and ready for saving
         // We use ChunkStatus::StructureReferences as the minimum requirement, effectively checking if any data exists.
-        let saved = chunk_holder.with_chunk(ChunkStatus::StructureReferences, |_chunk| {
-            // TODO: Serialize the chunk data here.
-            // Since serialization might be CPU intensive, we might want to do it inside this closure
-            // or clone the necessary data structure if possible (though deep cloning chunks is expensive).
-            // For now, we assume serialization happens here synchronously.
-            true
-        });
-
-        if saved.is_some() {
-            // TODO: Perform the actual disk I/O here (asynchronously).
-            // storage.write(pos, serialized_data).await;
-            //log::info!("Saved chunk at {:?}", pos);
-        } else {
-            //log::warn!(
-            //    "Skipping save for chunk at {:?}: Chunk not fully loaded",
-            //    pos
-            //);
-        }
+        let _saved = chunk_holder.try_chunk(ChunkStatus::StructureReferences);
+        //TODO: Save the chunk to disk
     }
 
     /// Processes chunks that are pending unload.
@@ -327,15 +311,17 @@ impl ChunkMap {
                 }
 
                 // We lock here to ensure we have unique access for the duration of the diff
+                let mut chunk_sender = player.chunk_sender.lock();
                 ChunkTrackingView::difference(
                     last_view,
                     &new_view,
-                    |pos| {
-                        player.chunk_sender.lock().mark_chunk_pending_to_send(pos);
+                    |pos, chunk_sender| {
+                        chunk_sender.mark_chunk_pending_to_send(pos);
                     },
-                    |pos| {
-                        player.chunk_sender.lock().drop_chunk(connection, pos);
+                    |pos, chunk_sender| {
+                        chunk_sender.drop_chunk(connection, pos);
                     },
+                    &mut chunk_sender,
                 );
             } else {
                 #[allow(clippy::cast_possible_truncation, clippy::cast_sign_loss)]

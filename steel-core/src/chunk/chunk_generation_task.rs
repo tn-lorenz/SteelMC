@@ -8,6 +8,7 @@ use std::{
     },
 };
 
+use parking_lot::Mutex as ParkingMutex;
 use steel_utils::ChunkPos;
 
 use crate::chunk::{
@@ -89,11 +90,11 @@ pub struct ChunkGenerationTask {
     /// The target generation status.
     pub target_status: ChunkStatus,
     /// The status scheduled for generation. Protected by a mutex for safe concurrent access.
-    pub scheduled_status: parking_lot::Mutex<Option<ChunkStatus>>,
+    pub scheduled_status: ParkingMutex<Option<ChunkStatus>>,
     /// Flag indicating if the task is cancelled.
     pub marked_for_cancel: AtomicBool,
     /// Futures for neighbors. Protected by a mutex.
-    pub neighbor_ready: parking_lot::Mutex<Vec<NeighborReady>>,
+    pub neighbor_ready: ParkingMutex<Vec<NeighborReady>>,
     /// Cache of required chunks.
     pub cache: Arc<StaticCache2D<Arc<ChunkHolder>>>,
     /// Whether generation is required for this task.
@@ -296,7 +297,7 @@ impl ChunkGenerationTask {
                 || *self.scheduled_status.lock() == Some(self.target_status)
             {
                 let center_chunk = self.cache.get(self.pos.0.x, self.pos.0.y);
-                center_chunk.cancel_generation_task_async().await;
+                center_chunk.cancel_generation_task();
                 return;
             }
 
@@ -320,6 +321,7 @@ impl ChunkGenerationTask {
 
         for result in results {
             if result.is_none() {
+                log::error!("Neighbor ready is none for chunk {:?}", self.pos);
                 self.mark_for_cancel();
                 break;
             }

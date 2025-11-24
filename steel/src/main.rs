@@ -16,6 +16,34 @@ async fn main() {
     )
     .expect("Failed to initialize logger");
 
+    #[cfg(feature = "deadlock_detection")]
+    {
+        // only for #[cfg]
+        use parking_lot::deadlock;
+        use std::thread;
+        use std::time::Duration;
+
+        // Create a background thread which checks for deadlocks every 10s
+        thread::spawn(move || {
+            loop {
+                thread::sleep(Duration::from_secs(10));
+                let deadlocks = deadlock::check_deadlock();
+                if deadlocks.is_empty() {
+                    continue;
+                }
+
+                log::error!("{} deadlocks detected", deadlocks.len());
+                for (i, threads) in deadlocks.iter().enumerate() {
+                    log::error!("Deadlock #{i}");
+                    for t in threads {
+                        log::error!("Thread Id {:#?}", t.thread_id());
+                        log::error!("{:#?}", t.backtrace());
+                    }
+                }
+            }
+        });
+    }
+
     let mut steel = SteelServer::new().await;
 
     log::info!(
