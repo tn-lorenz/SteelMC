@@ -1980,6 +1980,7 @@ dependencies = [
  "log",
  "parking_lot",
  "rand",
+ "rayon",
  "replace_with",
  "rsa",
  "rsa-der",

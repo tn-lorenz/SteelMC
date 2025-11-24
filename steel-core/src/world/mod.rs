@@ -30,12 +30,16 @@ impl World {
 
     /// Ticks the world.
     pub fn tick_b(&self, tick_count: u64) {
+        let start = std::time::Instant::now();
+
         self.chunk_map.tick_b(tick_count);
 
         // Tick players
         self.players.iter_sync(|_uuid, player| {
             player.tick();
+
             true
         });
+        log::info!("world tick took {:?}", start.elapsed());
     }
 }

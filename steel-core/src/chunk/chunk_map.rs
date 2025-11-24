@@ -3,6 +3,8 @@ use std::sync::atomic::Ordering;
 use std::time::Duration;
 
 use parking_lot::Mutex as ParkingMutex;
+use rayon::iter::{IntoParallelRefIterator, ParallelIterator};
+use rayon::{ThreadPool, ThreadPoolBuilder};
 use rustc_hash::{FxBuildHasher, FxHashMap};
 use steel_protocol::packets::game::CSetChunkCenter;
 use steel_registry::blocks::BlockRegistry;
@@ -38,6 +40,8 @@ pub struct ChunkMap {
     pub distance_manager: ParkingMutex<DistanceManager>,
     /// The world generation context.
     pub world_gen_context: Arc<WorldGenContext>,
+    /// The thread pool to use for generation.
+    pub thread_pool: Arc<ThreadPool>,
 }
 
 impl ChunkMap {
@@ -60,6 +64,7 @@ impl ChunkMap {
                     block_registry.get_default_state_id(vanilla_blocks::GRASS_BLOCK), // Grass Block
                 )),
             }),
+            thread_pool: Arc::new(ThreadPoolBuilder::new().build().unwrap()),
         }
     }
 
@@ -69,7 +74,12 @@ impl ChunkMap {
         target_status: ChunkStatus,
         pos: ChunkPos,
     ) -> Arc<ChunkGenerationTask> {
-        let task = Arc::new(ChunkGenerationTask::new(pos, target_status, self.clone()));
+        let task = Arc::new(ChunkGenerationTask::new(
+            pos,
+            target_status,
+            self.clone(),
+            self.thread_pool.clone(),
+        ));
         self.pending_generation_tasks.lock().push(task.clone());
         task
     }
@@ -93,23 +103,23 @@ impl ChunkMap {
     #[inline]
     pub fn update_chunk_level(
         self: &Arc<Self>,
-        pos: ChunkPos,
+        pos: &ChunkPos,
         new_level: u8,
     ) -> Option<Arc<ChunkHolder>> {
         // Recover from unloading if possible, else create new holder.
-        let chunk_holder = if let Some(holder) = self.chunks.get_sync(&pos) {
+        let chunk_holder = if let Some(holder) = self.chunks.get_sync(pos) {
             holder.get().clone()
         } else {
             if new_level >= MAX_LEVEL {
                 return None;
             }
 
-            if let Some(entry) = self.unloading_chunks.lock().remove(&pos) {
-                let _ = self.chunks.insert_sync(pos, entry.clone());
+            if let Some(entry) = self.unloading_chunks.lock().remove(pos) {
+                let _ = self.chunks.insert_sync(*pos, entry.clone());
                 entry
             } else {
-                let holder = Arc::new(ChunkHolder::new(pos, new_level));
-                let _ = self.chunks.insert_sync(pos, holder.clone());
+                let holder = Arc::new(ChunkHolder::new(*pos, new_level));
+                let _ = self.chunks.insert_sync(*pos, holder.clone());
                 holder
             }
         };
@@ -121,9 +131,9 @@ impl ChunkMap {
             // Check for two cause we are also holding a reference to the chunk
             if let Some((_, holder)) = self
                 .chunks
-                .remove_if_sync(&pos, |chunk| Arc::strong_count(chunk) == 2)
+                .remove_if_sync(pos, |chunk| Arc::strong_count(chunk) == 2)
             {
-                let _ = self.unloading_chunks.lock().insert(pos, holder);
+                let _ = self.unloading_chunks.lock().insert(*pos, holder);
             } else {
                 chunk_holder
                     .ticket_level
@@ -173,11 +183,10 @@ impl ChunkMap {
         let start_process_changes = tokio::time::Instant::now();
         let deduped_len = deduped.len();
 
-        // TODO: Use parallel iterator, when 4lve says it's time hehe
-        let updates_to_schedule: Vec<_> = deduped
+        let updates_to_schedule: Vec<(Arc<ChunkHolder>, u8)> = deduped
             .into_iter()
             .filter_map(|(pos, new_level)| {
-                self.update_chunk_level(pos, new_level)
+                self.update_chunk_level(&pos, new_level)
                     .map(|holder| (holder, new_level))
             })
             .collect();
@@ -202,18 +211,19 @@ impl ChunkMap {
         let schedule_start = tokio::time::Instant::now();
         let self_clone = self.clone();
         let update_len = updates_to_schedule.len();
-        // TODO: Use parallel iterator, when 4lve says it's time hehe
-        for (chunk_holder, new_level) in updates_to_schedule {
-            let target_status = ChunkLevel::generation_status(new_level);
+        updates_to_schedule
+            .par_iter()
+            .for_each(|(chunk_holder, new_level)| {
+                let target_status = ChunkLevel::generation_status(*new_level);
 
-            if let Some(status) = target_status
-                && status == ChunkStatus::Full
-            {
-                let chunk_holder_clone = chunk_holder.clone();
-                let map_clone = self_clone.clone();
-                chunk_holder_clone.schedule_chunk_generation_task_b(status, map_clone);
-            }
-        }
+                if let Some(status) = target_status
+                    && status == ChunkStatus::Full
+                {
+                    let chunk_holder_clone = chunk_holder.clone();
+                    let map_clone = self_clone.clone();
+                    chunk_holder_clone.schedule_chunk_generation_task_b(status, map_clone);
+                }
+            });
 
         let schedule_elapsed = schedule_start.elapsed();
         if schedule_elapsed >= SLOW_TASK_WARN_THRESHOLD {

@@ -9,6 +9,7 @@ use std::{
 };
 
 use parking_lot::Mutex as ParkingMutex;
+use rayon::ThreadPool;
 use steel_utils::ChunkPos;
 
 use crate::chunk::{
@@ -99,13 +100,20 @@ pub struct ChunkGenerationTask {
     pub cache: Arc<StaticCache2D<Arc<ChunkHolder>>>,
     /// Whether generation is required for this task.
     pub needs_generation: AtomicBool,
+    /// The thread pool to use for generation.
+    pub thread_pool: Arc<ThreadPool>,
 }
 
 impl ChunkGenerationTask {
     /// Creates a new generation task.
     #[must_use]
     #[allow(clippy::unwrap_used, clippy::missing_panics_doc)]
-    pub fn new(pos: ChunkPos, target_status: ChunkStatus, chunk_map: Arc<ChunkMap>) -> Self {
+    pub fn new(
+        pos: ChunkPos,
+        target_status: ChunkStatus,
+        chunk_map: Arc<ChunkMap>,
+        thread_pool: Arc<ThreadPool>,
+    ) -> Self {
         let worst_case_radius = GENERATION_PYRAMID
             .get_step_to(target_status)
             .accumulated_dependencies
@@ -129,6 +137,7 @@ impl ChunkGenerationTask {
             neighbor_ready: parking_lot::Mutex::new(Vec::new()),
             cache: Arc::new(cache),
             needs_generation: AtomicBool::new(true),
+            thread_pool,
         }
     }
 
@@ -182,6 +191,7 @@ impl ChunkGenerationTask {
             pyramid.get_step_to(status).clone(),
             self.chunk_map.clone(),
             self.cache.clone(),
+            self.thread_pool.clone(),
         );
 
         self.neighbor_ready.lock().push(future);

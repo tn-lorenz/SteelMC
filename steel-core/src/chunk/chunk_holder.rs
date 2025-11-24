@@ -1,13 +1,12 @@
 //! `ChunkHolder` manages chunk state and asynchronous generation tasks.
+use futures::Future;
 use parking_lot::{Mutex as ParkingMutex, RwLock as ParkingRwLock};
+use replace_with::replace_with_or_abort;
+use std::fmt::Debug;
 use std::sync::Arc;
 use std::sync::atomic::{AtomicU8, AtomicUsize, Ordering};
-
-use futures::Future;
-use replace_with::replace_with_or_abort;
 use steel_utils::ChunkPos;
-use tokio::sync::watch;
-use tokio::task::spawn_blocking;
+use tokio::sync::{oneshot, watch};
 
 use crate::chunk::chunk_generation_task::{NeighborReady, StaticCache2D};
 use crate::chunk::chunk_level::ChunkLevel;
@@ -41,7 +40,7 @@ pub enum ChunkResult {
 ///
 /// `ChunkResult::Failed` -> data is Anything and should not be used anymore
 ///
-/// `ChunkResult::Ok(status` except Full) -> data is `Some(ChunkAccess::Proto(ProtoChunk))`
+/// `ChunkResult::Ok(status except Full)` -> data is `Some(ChunkAccess::Proto(ProtoChunk))`
 ///
 /// `ChunkResult::Ok(ChunkStatus::Full)` -> data is `Some(ChunkAccess::Full(LevelChunk))`
 pub struct ChunkHolder {
@@ -191,6 +190,7 @@ impl ChunkHolder {
         step: Arc<ChunkStep>,
         chunk_map: Arc<ChunkMap>,
         cache: Arc<StaticCache2D<Arc<ChunkHolder>>>,
+        thread_pool: Arc<rayon::ThreadPool>,
     ) -> NeighborReady {
         let target_status = step.target_status;
 
@@ -221,8 +221,12 @@ impl ChunkHolder {
         let future =
             chunk_map.task_tracker.spawn(async move {
                 if target_status == ChunkStatus::Empty {
-                    match spawn_blocking(move || task(context, &step, &cache, self_clone)).await {
-                        Ok(_) => {
+                    match rayon_spawn(&thread_pool, move || {
+                        task(context, &step, &cache, self_clone)
+                    })
+                    .await
+                    {
+                        Ok(()) => {
                             sender.send_modify(|chunk| {
                                 if let ChunkResult::Ok(s) = chunk {
                                     //log::info!("Task completed for {:?}", target_status);
@@ -255,8 +259,12 @@ impl ChunkHolder {
 
                     assert!(has_parent, "Parent chunk missing");
 
-                    match spawn_blocking(move || task(context, &step, &cache, self_clone)).await {
-                        Ok(_) => {
+                    match rayon_spawn(&thread_pool, move || {
+                        task(context, &step, &cache, self_clone)
+                    })
+                    .await
+                    {
+                        Ok(()) => {
                             sender.send_modify(|chunk| if let ChunkResult::Ok(s) = chunk {
                             if *s < target_status {
                                 *s = target_status;
@@ -358,4 +366,16 @@ impl ChunkHolder {
             task.mark_for_cancel();
         }
     }
+}
+
+fn rayon_spawn<F, R>(thread_pool: &rayon::ThreadPool, func: F) -> impl Future<Output = R>
+where
+    F: FnOnce() -> R + Send + 'static,
+    R: Send + 'static + Debug,
+{
+    let (sender, receiver) = oneshot::channel();
+    thread_pool.spawn(move || {
+        sender.send(func()).expect("Failed to send result");
+    });
+    async move { receiver.await.unwrap() }
 }

@@ -39,6 +39,7 @@ simdnbt = "0.8.0"
 enum_dispatch = "0.3.13"
 anyhow = "1.0.100"
 parking_lot = { version = "0.12.5", features = ["nightly"] }
+rayon = "1.11.0"
 
 [profile.release]
 lto = true
