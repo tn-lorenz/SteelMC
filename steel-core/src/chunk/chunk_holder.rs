@@ -61,8 +61,7 @@ impl ChunkHolder {
     pub fn new(pos: ChunkPos, ticket_level: u8) -> Self {
         let (sender, receiver) = watch::channel(ChunkResult::Unloaded);
         let highest_allowed_status = ChunkLevel::generation_status(ticket_level)
-            .map(|s| s.get_index() as u8)
-            .unwrap_or(STATUS_NONE);
+            .map_or(STATUS_NONE, |s| s.get_index() as u8);
 
         Self {
             chunk_access: receiver,
@@ -78,8 +77,7 @@ impl ChunkHolder {
     /// Updates the highest allowed generation status based on the ticket level.
     pub fn update_highest_allowed_status(&self, ticket_level: u8) {
         let new_status = ChunkLevel::generation_status(ticket_level)
-            .map(|s| s.get_index() as u8)
-            .unwrap_or(STATUS_NONE);
+            .map_or(STATUS_NONE, |s| s.get_index() as u8);
         self.highest_allowed_status
             .store(new_status, Ordering::Relaxed);
     }

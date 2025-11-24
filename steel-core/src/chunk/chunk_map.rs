@@ -217,10 +217,7 @@ impl ChunkMap {
 
         let schedule_elapsed = schedule_start.elapsed();
         if schedule_elapsed >= SLOW_TASK_WARN_THRESHOLD {
-            log::warn!(
-                "tick_b schedule loop took: {schedule_elapsed:?} ({} updates)",
-                update_len
-            );
+            log::warn!("tick_b schedule loop took: {schedule_elapsed:?} ({update_len} updates)");
         }
 
         let start_gen = tokio::time::Instant::now();
