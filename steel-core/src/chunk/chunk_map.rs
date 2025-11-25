@@ -133,7 +133,7 @@ impl ChunkMap {
 
         if new_level >= MAX_LEVEL {
             //log::info!("Unloading chunk at {pos:?}");
-            //chunk_holder.cancel_generation_task();
+            chunk_holder.force_fail();
 
             // Check for two cause we are also holding a reference to the chunk
             if let Some((_, holder)) = self
