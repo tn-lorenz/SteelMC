@@ -6,6 +6,7 @@ use std::fmt::Debug;
 use std::sync::Arc;
 use std::sync::atomic::{AtomicU8, AtomicUsize, Ordering};
 use steel_utils::ChunkPos;
+use tokio::select;
 use tokio::sync::{oneshot, watch};
 
 use crate::chunk::chunk_generation_task::{NeighborReady, StaticCache2D};
@@ -54,7 +55,8 @@ pub struct ChunkHolder {
     /// The highest status that has started work.
     started_work: AtomicUsize,
     /// The highest status that generation is allowed to reach.
-    highest_allowed_status: AtomicU8,
+    highest_allowed_status: watch::Receiver<u8>,
+    highest_allowed_status_sender: watch::Sender<u8>,
 }
 
 impl ChunkHolder {
@@ -67,8 +69,10 @@ impl ChunkHolder {
     #[must_use]
     pub fn new(pos: ChunkPos, ticket_level: u8) -> Self {
         let (sender, receiver) = watch::channel(ChunkResult::Unloaded);
-        let highest_allowed_status = ChunkLevel::generation_status(ticket_level)
-            .map_or(STATUS_NONE, |s| s.get_index() as u8);
+        let (highest_allowed_status_sender, highest_allowed_status_receiver) = watch::channel(
+            ChunkLevel::generation_status(ticket_level)
+                .map_or(STATUS_NONE, |s| s.get_index() as u8),
+        );
 
         Self {
             data: ParkingRwLock::new(None),
@@ -78,7 +82,8 @@ impl ChunkHolder {
             pos,
             ticket_level: AtomicU8::new(ticket_level),
             started_work: AtomicUsize::new(usize::MAX),
-            highest_allowed_status: AtomicU8::new(highest_allowed_status),
+            highest_allowed_status: highest_allowed_status_receiver,
+            highest_allowed_status_sender,
         }
     }
 
@@ -86,13 +91,12 @@ impl ChunkHolder {
     pub fn update_highest_allowed_status(&self, ticket_level: u8) {
         let new_status = ChunkLevel::generation_status(ticket_level)
             .map_or(STATUS_NONE, |s| s.get_index() as u8);
-        self.highest_allowed_status
-            .store(new_status, Ordering::Relaxed);
+        self.highest_allowed_status_sender.send_replace(new_status);
     }
 
     /// Checks if the given status is disallowed.
     pub fn is_status_disallowed(&self, status: ChunkStatus) -> bool {
-        let allowed = self.highest_allowed_status.load(Ordering::Relaxed);
+        let allowed = *self.highest_allowed_status.borrow();
         if allowed == STATUS_NONE {
             return true;
         }
@@ -152,6 +156,7 @@ impl ChunkHolder {
         status: ChunkStatus,
     ) -> impl Future<Output = Option<&ParkingRwLock<Option<ChunkAccess>>>> {
         let mut subscriber = self.sender.subscribe();
+        let mut status_subscriber = self.highest_allowed_status_sender.subscribe();
         async move {
             loop {
                 {
@@ -160,14 +165,30 @@ impl ChunkHolder {
                         ChunkResult::Ok(s) if status <= *s => {
                             return Some(&self.data);
                         }
-                        ChunkResult::Failed => return None,
+                        ChunkResult::Failed => {
+                            return None;
+                        }
                         _ => {}
                     }
                 }
 
-                if subscriber.changed().await.is_err() {
-                    log::error!("Failed to wait for chunk access");
+                if self.is_status_disallowed(status) {
                     return None;
+                }
+
+                select! {
+                    val = subscriber.changed() => {
+                        if val.is_err() {
+                            log::error!("Failed to wait for chunk access");
+                            return None;
+                        }
+                    }
+                    val = status_subscriber.changed() => {
+                        if val.is_err() {
+                            log::error!("Failed to wait for highest allowed status");
+                            return None;
+                        }
+                    }
                 }
             }
         }
@@ -195,13 +216,7 @@ impl ChunkHolder {
         let target_status = step.target_status;
 
         if self.is_status_disallowed(target_status) {
-            //TODO: Once we have cancel safety and a working ticket system we can implement this properly
-            //log::error!(
-            //    "Chunk {:?} is status disallowed for {:?}",
-            //    self.get_pos(),
-            //    target_status
-            //);
-            //return Box::pin(async { None });
+            return Box::pin(async { None });
         }
 
         if !self.acquire_status_bump(target_status) {

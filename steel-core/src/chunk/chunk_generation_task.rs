@@ -331,7 +331,7 @@ impl ChunkGenerationTask {
 
         for result in results {
             if result.is_none() {
-                log::error!("Neighbor ready is none for chunk {:?}", self.pos);
+                //log::error!("Neighbor ready is none for chunk {:?}", self.pos);
                 self.mark_for_cancel();
                 break;
             }
