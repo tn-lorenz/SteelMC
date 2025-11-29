@@ -129,6 +129,7 @@ impl ChunkHolder {
     }
 
     /// Reschedules the chunk task to the given status.
+    #[inline]
     pub(crate) fn reschedule_chunk_task_b(&self, status: ChunkStatus, chunk_map: Arc<ChunkMap>) {
         let new_task = chunk_map.schedule_generation_task_b(status, self.pos);
         let mut old_task_guard = self.generation_task.lock();
