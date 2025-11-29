@@ -269,6 +269,10 @@ impl ChunkTracker {
             ChunkPos::new(pos.0.x - 1, pos.0.y),
             ChunkPos::new(pos.0.x, pos.0.y + 1),
             ChunkPos::new(pos.0.x, pos.0.y - 1),
+            ChunkPos::new(pos.0.x + 1, pos.0.y + 1),
+            ChunkPos::new(pos.0.x - 1, pos.0.y + 1),
+            ChunkPos::new(pos.0.x + 1, pos.0.y - 1),
+            ChunkPos::new(pos.0.x - 1, pos.0.y - 1),
         ];
 
         for neighbor in neighbors {
