@@ -1,6 +1,7 @@
 //! `ChunkGenerationTask` handles the generation process for chunks.
 use std::{
     future::Future,
+    mem::MaybeUninit,
     pin::Pin,
     sync::{
         Arc,
@@ -9,7 +10,10 @@ use std::{
 };
 
 use parking_lot::Mutex as ParkingMutex;
-use rayon::ThreadPool;
+use rayon::{
+    ThreadPool,
+    iter::{IndexedParallelIterator, IntoParallelRefMutIterator, ParallelIterator},
+};
 use steel_utils::ChunkPos;
 
 use crate::chunk::{
@@ -31,27 +35,33 @@ pub struct StaticCache2D<T> {
 impl<T> StaticCache2D<T> {
     /// Creates a `StaticCache2D` by populating it via a factory.
     #[allow(clippy::missing_panics_doc)]
-    pub fn create<F>(center_x: i32, center_z: i32, radius: i32, mut factory: F) -> Self
+    pub fn create<F>(center_x: i32, center_z: i32, radius: i32, factory: F) -> Self
     where
-        F: FnMut(i32, i32) -> T + Send + Sync + 'static,
+        F: Fn(i32, i32) -> T + Send + Sync + 'static,
+        T: Send + 'static,
     {
         let size = radius * 2 + 1;
         let min_x = center_x - radius;
         let min_z = center_z - radius;
         let cap = (size * size) as usize;
         let mut cache = Vec::with_capacity(cap);
+        cache.resize_with(cap, MaybeUninit::uninit);
 
-        for z_offset in 0..size {
-            for x_offset in 0..size {
-                cache.push(factory(min_x + x_offset, min_z + z_offset));
-            }
-        }
+        let size_usize = size as usize;
+        let factory_ref = &factory;
+
+        cache.par_iter_mut().enumerate().for_each(|(index, slot)| {
+            let x_offset = (index % size_usize) as i32;
+            let z_offset = (index / size_usize) as i32;
+            slot.write(factory_ref(min_x + x_offset, min_z + z_offset));
+        });
 
         Self {
             min_x,
             min_z,
             size,
-            cache,
+            // SAFETY: We know that T is Send + Sync, and that the whole cache is initialized, so we can transmute it to a Vec<T>.
+            cache: unsafe { std::mem::transmute(cache) },
         }
     }
 

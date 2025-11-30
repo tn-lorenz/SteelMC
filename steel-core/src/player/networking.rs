@@ -135,9 +135,13 @@ impl JavaConnection {
     pub fn send_packet<P: ClientPacket>(&self, packet: P) {
         let packet = EncodedPacket::write_vec(packet, ConnectionProtocol::Play)
             .expect("Failed to write packet");
-        self.outgoing_packets
+        if self
+            .outgoing_packets
             .send(EnqueuedPacket::RawData(packet))
-            .expect("Failed to send packet");
+            .is_err()
+        {
+            self.close();
+        }
     }
 
     /// Closes the connection.

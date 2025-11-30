@@ -2,8 +2,10 @@ use rustc_hash::FxHashMap;
 use std::{cmp::min, collections::VecDeque};
 use steel_utils::ChunkPos;
 
+use crate::chunk::chunk_level::ChunkLevel;
+
 /// A standard max level for chunks that are unloaded.
-pub const MAX_LEVEL: u8 = 66;
+pub const MAX_LEVEL: u8 = ChunkLevel::MAX_LEVEL + 1;
 
 /// Tracks chunk levels based on propagation.
 pub struct ChunkTracker {
@@ -35,6 +37,20 @@ impl Default for ChunkTracker {
     fn default() -> Self {
         Self::new()
     }
+}
+
+#[inline]
+fn get_neighbors(pos: ChunkPos) -> [ChunkPos; 8] {
+    [
+        ChunkPos::new(pos.0.x + 1, pos.0.y),
+        ChunkPos::new(pos.0.x - 1, pos.0.y),
+        ChunkPos::new(pos.0.x, pos.0.y + 1),
+        ChunkPos::new(pos.0.x, pos.0.y - 1),
+        ChunkPos::new(pos.0.x + 1, pos.0.y + 1),
+        ChunkPos::new(pos.0.x - 1, pos.0.y + 1),
+        ChunkPos::new(pos.0.x + 1, pos.0.y - 1),
+        ChunkPos::new(pos.0.x - 1, pos.0.y - 1),
+    ]
 }
 
 impl ChunkTracker {
@@ -149,7 +165,7 @@ impl ChunkTracker {
     ///
     /// Calls `set_level(pos, new_level)` for each chunk whose level changes.
     /// Like Java's `DynamicGraphMinFixedPoint.runUpdates`, this may call `set_level`
-    /// multiple times for the same chunk during a single run (e.g., first to MAX_LEVEL,
+    /// multiple times for the same chunk during a single run (e.g., first to `MAX_LEVEL`,
     /// then to the final level). Use a `HashSet` in the callback to deduplicate if needed.
     #[inline]
     pub fn process_all_updates(
@@ -195,12 +211,7 @@ impl ChunkTracker {
             return;
         }
 
-        let neighbors = [
-            ChunkPos::new(pos.0.x + 1, pos.0.y),
-            ChunkPos::new(pos.0.x - 1, pos.0.y),
-            ChunkPos::new(pos.0.x, pos.0.y + 1),
-            ChunkPos::new(pos.0.x, pos.0.y - 1),
-        ];
+        let neighbors = get_neighbors(pos);
 
         for neighbor in neighbors {
             self.check_neighbor(pos, neighbor, level, only_decrease, get_ticket_level);
@@ -266,16 +277,7 @@ impl ChunkTracker {
             return 0;
         }
 
-        let neighbors = [
-            ChunkPos::new(pos.0.x + 1, pos.0.y),
-            ChunkPos::new(pos.0.x - 1, pos.0.y),
-            ChunkPos::new(pos.0.x, pos.0.y + 1),
-            ChunkPos::new(pos.0.x, pos.0.y - 1),
-            ChunkPos::new(pos.0.x + 1, pos.0.y + 1),
-            ChunkPos::new(pos.0.x - 1, pos.0.y + 1),
-            ChunkPos::new(pos.0.x + 1, pos.0.y - 1),
-            ChunkPos::new(pos.0.x - 1, pos.0.y - 1),
-        ];
+        let neighbors = get_neighbors(pos);
 
         for neighbor in neighbors {
             if neighbor != known_parent {
