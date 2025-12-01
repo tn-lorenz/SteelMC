@@ -91,12 +91,7 @@ impl ChunkTracker {
         let mut best_level = new_ticket_level;
 
         if best_level > 0 {
-            let neighbors = [
-                ChunkPos::new(pos.0.x + 1, pos.0.y),
-                ChunkPos::new(pos.0.x - 1, pos.0.y),
-                ChunkPos::new(pos.0.x, pos.0.y + 1),
-                ChunkPos::new(pos.0.x, pos.0.y - 1),
-            ];
+            let neighbors = get_neighbors(pos);
 
             for neighbor in neighbors {
                 let neighbor_level = self.get_level(neighbor);
