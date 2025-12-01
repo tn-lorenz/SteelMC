@@ -12,6 +12,10 @@ pub struct DistanceManager {
     pub ticket_storage: TicketStorage,
     /// Tracker for propagating chunk levels.
     pub tracker: ChunkTracker,
+    /// Reference counts for simulation tickets (center chunks).
+    sim_ref_counts: FxHashMap<ChunkPos, usize>,
+    /// Reference counts for loading tickets (view distance).
+    loading_ref_counts: FxHashMap<ChunkPos, usize>,
 }
 
 impl Default for DistanceManager {
@@ -27,6 +31,8 @@ impl DistanceManager {
         Self {
             ticket_storage: TicketStorage::new(),
             tracker: ChunkTracker::new(),
+            sim_ref_counts: FxHashMap::default(),
+            loading_ref_counts: FxHashMap::default(),
         }
     }
 
@@ -42,29 +48,112 @@ impl DistanceManager {
         self.update_chunk_tracker(pos);
     }
 
-    /// Adds a player ticket (simulates player loading).
-    pub fn add_player(&mut self, pos: ChunkPos, view_distance: u8) {
-        // Level 31 is entity ticking.
-        let level = 31_u8.saturating_sub(view_distance);
-        self.add_ticket(
-            pos,
-            Ticket {
-                ticket_type: TicketType::Player,
-                level,
-                expiration: None,
-            },
-        );
+    /// Adds a player's tickets (simulation and view distance).
+    pub fn add_player(&mut self, pos: ChunkPos, view_distance: u8, simulation_distance: u8) {
+        // 1. Simulation Ticket (Center Chunk only)
+        // Level = 31 - sim_distance (limits entity ticking range)
+        let should_add_sim = {
+            let sim_count = self.sim_ref_counts.entry(pos).or_default();
+            let should = *sim_count == 0;
+            *sim_count += 1;
+            should
+        };
+
+        if should_add_sim {
+            let level = 31_u8.saturating_sub(simulation_distance);
+            self.add_ticket(
+                pos,
+                Ticket {
+                    ticket_type: TicketType::PlayerSimulation,
+                    level,
+                    expiration: None,
+                },
+            );
+        }
+
+        // 2. Loading Tickets (Square Radius = view_distance)
+        // Level = 31 (Entity Ticking) - ensures chunks are loaded
+        let r = view_distance as i32;
+        for x in -r..=r {
+            for z in -r..=r {
+                let chunk_pos = ChunkPos::new(pos.0.x + x, pos.0.y + z);
+                let should_add_load = {
+                    let load_count = self.loading_ref_counts.entry(chunk_pos).or_default();
+                    let should = *load_count == 0;
+                    *load_count += 1;
+                    should
+                };
+
+                if should_add_load {
+                    self.add_ticket(
+                        chunk_pos,
+                        Ticket {
+                            ticket_type: TicketType::Player,
+                            level: 31,
+                            expiration: None,
+                        },
+                    );
+                }
+            }
+        }
     }
 
-    /// Removes a player ticket.
-    pub fn remove_player(&mut self, pos: ChunkPos, view_distance: u8) {
-        let level = 31_u8.saturating_sub(view_distance);
-        let ticket = Ticket {
-            ticket_type: TicketType::Player,
-            level,
-            expiration: None,
+    /// Removes a player's tickets.
+    pub fn remove_player(&mut self, pos: ChunkPos, view_distance: u8, simulation_distance: u8) {
+        // 1. Remove Simulation Ticket
+        let should_remove_sim = {
+            if let Some(sim_count) = self.sim_ref_counts.get_mut(&pos) {
+                *sim_count -= 1;
+                if *sim_count == 0 {
+                    self.sim_ref_counts.remove(&pos);
+                    true
+                } else {
+                    false
+                }
+            } else {
+                false
+            }
         };
-        self.remove_ticket(pos, &ticket);
+
+        if should_remove_sim {
+            let level = 31_u8.saturating_sub(simulation_distance);
+            let ticket = Ticket {
+                ticket_type: TicketType::PlayerSimulation,
+                level,
+                expiration: None,
+            };
+            self.remove_ticket(pos, &ticket);
+        }
+
+        // 2. Remove Loading Tickets
+        let r = view_distance as i32;
+        for x in -r..=r {
+            for z in -r..=r {
+                let chunk_pos = ChunkPos::new(pos.0.x + x, pos.0.y + z);
+                let should_remove_load = {
+                    if let Some(load_count) = self.loading_ref_counts.get_mut(&chunk_pos) {
+                        *load_count -= 1;
+                        if *load_count == 0 {
+                            self.loading_ref_counts.remove(&chunk_pos);
+                            true
+                        } else {
+                            false
+                        }
+                    } else {
+                        false
+                    }
+                };
+
+                if should_remove_load {
+                    let ticket = Ticket {
+                        ticket_type: TicketType::Player,
+                        level: 31,
+                        expiration: None,
+                    };
+                    self.remove_ticket(chunk_pos, &ticket);
+                }
+            }
+        }
     }
 
     #[inline]

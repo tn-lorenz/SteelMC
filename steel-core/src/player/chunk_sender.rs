@@ -118,8 +118,11 @@ impl ChunkSender {
                 break;
             }
 
-            if let Some(holder) = world.chunk_map.chunks.get_sync(&pos) {
-                let holder = holder.get().clone();
+            if let Some(holder) = world
+                .chunk_map
+                .chunks
+                .read_sync(&pos, |_, chunk| chunk.clone())
+            {
                 if holder.persisted_status() == Some(ChunkStatus::Full) {
                     chunks_to_send.push(holder);
                     self.pending_chunks.remove(&pos);

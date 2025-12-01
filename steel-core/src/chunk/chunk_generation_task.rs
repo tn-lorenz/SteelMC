@@ -50,7 +50,7 @@ impl<T> StaticCache2D<T> {
         let size_usize = size as usize;
         let factory_ref = &factory;
 
-        cache.par_iter_mut().enumerate().for_each(|(index, slot)| {
+        cache.iter_mut().enumerate().for_each(|(index, slot)| {
             let x_offset = (index % size_usize) as i32;
             let z_offset = (index / size_usize) as i32;
             slot.write(factory_ref(min_x + x_offset, min_z + z_offset));

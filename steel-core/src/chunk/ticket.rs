@@ -9,8 +9,10 @@ use steel_utils::ChunkPos;
 /// Variants are ordered by priority (lowest value = highest priority).
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Hash, PartialOrd, Ord)]
 pub enum TicketType {
-    /// A ticket created by a player.
+    /// A ticket created by a player for loading.
     Player,
+    /// A ticket created by a player for simulation.
+    PlayerSimulation,
     /// A forced ticket.
     Forced,
     /// A light update ticket.

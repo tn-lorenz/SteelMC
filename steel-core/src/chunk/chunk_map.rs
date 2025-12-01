@@ -3,7 +3,7 @@ use std::sync::atomic::Ordering;
 use std::time::Duration;
 
 use parking_lot::Mutex as ParkingMutex;
-use rayon::iter::{IntoParallelRefIterator, ParallelIterator};
+use rayon::iter::{IntoParallelRefIterator, ParallelBridge, ParallelIterator};
 use rayon::{ThreadPool, ThreadPoolBuilder};
 use rustc_hash::{FxBuildHasher, FxHashMap};
 use steel_protocol::packets::game::CSetChunkCenter;
@@ -79,12 +79,16 @@ impl ChunkMap {
         target_status: ChunkStatus,
         pos: ChunkPos,
     ) -> Arc<ChunkGenerationTask> {
+        let start = tokio::time::Instant::now();
         let task = Arc::new(ChunkGenerationTask::new(
             pos,
             target_status,
             self.clone(),
             self.thread_pool.clone(),
         ));
+        if start.elapsed() >= Duration::from_millis(1) {
+            log::warn!("schedule_generation_task_b took: {:?}", start.elapsed());
+        }
         self.pending_generation_tasks.lock().push(task.clone());
         task
     }
@@ -96,14 +100,10 @@ impl ChunkMap {
             return;
         }
         //log::info!("Running {} generation tasks", pending.len());
-        for task in pending.drain(..) {
-            self.task_tracker.spawn_on(
-                async move {
-                    task.run().await;
-                },
-                self.chunk_runtime.handle(),
-            );
-        }
+        pending.drain(..).par_bridge().for_each(|task| {
+            self.task_tracker
+                .spawn_on(async move { task.run().await }, self.chunk_runtime.handle());
+        });
     }
 
     /// Updates scheduling for a chunk based on its new level.
@@ -115,22 +115,23 @@ impl ChunkMap {
         new_level: u8,
     ) -> Option<Arc<ChunkHolder>> {
         // Recover from unloading if possible, else create new holder.
-        let chunk_holder = if let Some(holder) = self.chunks.get_sync(pos) {
-            holder.get().clone()
-        } else {
-            if new_level >= MAX_LEVEL {
-                return None;
-            }
-
-            if let Some(entry) = self.unloading_chunks.lock().remove(pos) {
-                let _ = self.chunks.insert_sync(*pos, entry.clone());
-                entry
-            } else {
-                let holder = Arc::new(ChunkHolder::new(*pos, new_level));
-                let _ = self.chunks.insert_sync(*pos, holder.clone());
+        let chunk_holder =
+            if let Some(holder) = self.chunks.read_sync(pos, |_, holder| holder.clone()) {
                 holder
-            }
-        };
+            } else {
+                if new_level >= MAX_LEVEL {
+                    return None;
+                }
+
+                if let Some(entry) = self.unloading_chunks.lock().remove(pos) {
+                    let _ = self.chunks.insert_sync(*pos, entry.clone());
+                    entry
+                } else {
+                    let holder = Arc::new(ChunkHolder::new(*pos, new_level));
+                    let _ = self.chunks.insert_sync(*pos, holder.clone());
+                    holder
+                }
+            };
 
         if new_level >= MAX_LEVEL {
             //log::info!("Unloading chunk at {pos:?}");
@@ -312,9 +313,17 @@ impl ChunkMap {
                     || last_view.view_distance != new_view.view_distance
                 {
                     #[allow(clippy::cast_possible_truncation, clippy::cast_sign_loss)]
-                    distance_manager.remove_player(last_view.center, last_view.view_distance as u8);
+                    distance_manager.remove_player(
+                        last_view.center,
+                        last_view.view_distance as u8,
+                        STEEL_CONFIG.simulation_distance,
+                    );
                     #[allow(clippy::cast_possible_truncation, clippy::cast_sign_loss)]
-                    distance_manager.add_player(new_view.center, new_view.view_distance as u8);
+                    distance_manager.add_player(
+                        new_view.center,
+                        new_view.view_distance as u8,
+                        STEEL_CONFIG.simulation_distance,
+                    );
 
                     connection.send_packet(CSetChunkCenter {
                         x: new_view.center.0.x,
@@ -337,7 +346,11 @@ impl ChunkMap {
                 );
             } else {
                 #[allow(clippy::cast_possible_truncation, clippy::cast_sign_loss)]
-                distance_manager.add_player(new_view.center, new_view.view_distance as u8);
+                distance_manager.add_player(
+                    new_view.center,
+                    new_view.view_distance as u8,
+                    STEEL_CONFIG.simulation_distance,
+                );
 
                 let mut chunk_sender = player.chunk_sender.lock();
                 new_view.for_each(|pos| {
@@ -357,7 +370,11 @@ impl ChunkMap {
             drop(last_view_guard);
             let mut distance_manager = self.distance_manager.lock();
             #[allow(clippy::cast_possible_truncation, clippy::cast_sign_loss)]
-            distance_manager.remove_player(last_view.center, last_view.view_distance as u8);
+            distance_manager.remove_player(
+                last_view.center,
+                last_view.view_distance as u8,
+                STEEL_CONFIG.simulation_distance,
+            );
         }
     }
 }
