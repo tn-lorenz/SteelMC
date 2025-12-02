@@ -12,7 +12,7 @@ use std::{
 use parking_lot::Mutex as ParkingMutex;
 use rayon::{
     ThreadPool,
-    iter::{IndexedParallelIterator, IntoParallelRefMutIterator, ParallelIterator},
+    iter::{IndexedParallelIterator, ParallelIterator},
 };
 use steel_utils::ChunkPos;
 

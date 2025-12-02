@@ -122,11 +122,10 @@ impl ChunkSender {
                 .chunk_map
                 .chunks
                 .read_sync(&pos, |_, chunk| chunk.clone())
+                && holder.persisted_status() == Some(ChunkStatus::Full)
             {
-                if holder.persisted_status() == Some(ChunkStatus::Full) {
-                    chunks_to_send.push(holder);
-                    self.pending_chunks.remove(&pos);
-                }
+                chunks_to_send.push(holder);
+                self.pending_chunks.remove(&pos);
             }
         }
         chunks_to_send

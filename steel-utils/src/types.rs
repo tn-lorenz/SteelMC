@@ -31,6 +31,23 @@ impl std::hash::Hash for ChunkPos {
 }
 
 impl ChunkPos {
+    const OFFSETS: [(i32, i32); 8] = [
+        (-1, -1),
+        (0, -1),
+        (1, -1),
+        (-1, 0),
+        (1, 0),
+        (-1, 1),
+        (0, 1),
+        (1, 1),
+    ];
+
+    /// Returns all 8 neighbors of this chunk position.
+    #[must_use]
+    pub fn neighbors(&self) -> [ChunkPos; 8] {
+        Self::OFFSETS.map(|(dx, dy)| ChunkPos::new(self.0.x + dx, self.0.y + dy))
+    }
+
     #[must_use]
     #[inline]
     /// Creates a new `ChunkPos` with the given x and y coordinates.

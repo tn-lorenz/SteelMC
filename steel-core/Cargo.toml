@@ -29,6 +29,7 @@ enum_dispatch.workspace = true
 anyhow.workspace = true
 rustc-hash = "2.1.1"
 rayon.workspace = true
+smallvec = "1.15.1"
 
 [lints]
 workspace = true

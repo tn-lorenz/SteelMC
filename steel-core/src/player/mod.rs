@@ -16,7 +16,7 @@ use steel_protocol::packets::{common::SCustomPayload, game::SMovePlayer};
 use steel_utils::{ChunkPos, math::Vector3, translations};
 
 use crate::{
-    chunk::chunk_tracking_view::ChunkTrackingView,
+    chunk::player_chunk_view::PlayerChunkView,
     player::{chunk_sender::ChunkSender, networking::JavaConnection},
     world::World,
 };
@@ -39,7 +39,7 @@ pub struct Player {
     /// The last chunk position of the player.
     pub last_chunk_pos: Mutex<ChunkPos>,
     /// The last chunk tracking view of the player.
-    pub last_tracking_view: Mutex<Option<ChunkTrackingView>>,
+    pub last_tracking_view: Mutex<Option<PlayerChunkView>>,
     /// The chunk sender for the player.
     pub chunk_sender: Mutex<ChunkSender>,
 }

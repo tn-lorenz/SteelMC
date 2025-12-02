@@ -4,14 +4,14 @@ use steel_utils::ChunkPos;
 
 /// A view of chunks around a center chunk.
 #[derive(Debug, Clone, PartialEq, Eq)]
-pub struct ChunkTrackingView {
+pub struct PlayerChunkView {
     /// The center of the view.
     pub center: ChunkPos,
     /// The view distance in chunks.
-    pub view_distance: i32,
+    pub view_distance: u8,
 }
 
-impl ChunkTrackingView {
+impl PlayerChunkView {
     /// Creates a new empty `ChunkTrackingView`.
     #[must_use]
     pub fn empty() -> Self {
@@ -23,7 +23,7 @@ impl ChunkTrackingView {
 
     /// Creates a new `ChunkTrackingView` with the given center and view distance.
     #[must_use]
-    pub fn new(center: ChunkPos, view_distance: i32) -> Self {
+    pub fn new(center: ChunkPos, view_distance: u8) -> Self {
         Self {
             center,
             view_distance,
@@ -31,19 +31,19 @@ impl ChunkTrackingView {
     }
 
     fn min_x(&self) -> i32 {
-        self.center.0.x - self.view_distance - 1
+        self.center.0.x - i32::from(self.view_distance) - 1
     }
 
     fn max_x(&self) -> i32 {
-        self.center.0.x + self.view_distance + 1
+        self.center.0.x + i32::from(self.view_distance) + 1
     }
 
     fn min_z(&self) -> i32 {
-        self.center.0.y - self.view_distance - 1
+        self.center.0.y - i32::from(self.view_distance) - 1
     }
 
     fn max_z(&self) -> i32 {
-        self.center.0.y + self.view_distance + 1
+        self.center.0.y + i32::from(self.view_distance) + 1
     }
 
     /// Checks if the given chunk position is within the view.
@@ -52,7 +52,7 @@ impl ChunkTrackingView {
         Self::is_within_distance(
             self.center.0.x,
             self.center.0.y,
-            self.view_distance,
+            i32::from(self.view_distance),
             pos.0.x,
             pos.0.y,
             true,
@@ -145,7 +145,7 @@ mod tests {
 
     #[test]
     fn test_contains() {
-        let view = ChunkTrackingView::new(ChunkPos::new(0, 0), 2);
+        let view = PlayerChunkView::new(ChunkPos::new(0, 0), 2);
 
         // (0,0) is center, should be contained
         assert!(view.contains(ChunkPos::new(0, 0)));
@@ -166,10 +166,10 @@ mod tests {
         let mut added = Vec::new();
         let mut removed = Vec::new();
 
-        let old_view = ChunkTrackingView::new(ChunkPos::new(0, 0), 2);
-        let new_view = ChunkTrackingView::new(ChunkPos::new(1, 0), 2);
+        let old_view = PlayerChunkView::new(ChunkPos::new(0, 0), 2);
+        let new_view = PlayerChunkView::new(ChunkPos::new(1, 0), 2);
 
-        ChunkTrackingView::difference(
+        PlayerChunkView::difference(
             &old_view,
             &new_view,
             |p, ()| added.push(p),
@@ -190,10 +190,10 @@ mod tests {
         let mut added = Vec::new();
         let mut removed = Vec::new();
 
-        let old_view = ChunkTrackingView::new(ChunkPos::new(0, 0), 2);
-        let new_view = ChunkTrackingView::new(ChunkPos::new(100, 100), 2); // far away
+        let old_view = PlayerChunkView::new(ChunkPos::new(0, 0), 2);
+        let new_view = PlayerChunkView::new(ChunkPos::new(100, 100), 2); // far away
 
-        ChunkTrackingView::difference(
+        PlayerChunkView::difference(
             &old_view,
             &new_view,
             |p, ()| added.push(p),

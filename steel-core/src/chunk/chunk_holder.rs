@@ -10,7 +10,7 @@ use tokio::select;
 use tokio::sync::{oneshot, watch};
 
 use crate::chunk::chunk_generation_task::{NeighborReady, StaticCache2D};
-use crate::chunk::chunk_level::ChunkLevel;
+use crate::chunk::chunk_ticket_manager::generation_status;
 use crate::{
     ChunkMap,
     chunk::{
@@ -70,8 +70,7 @@ impl ChunkHolder {
     pub fn new(pos: ChunkPos, ticket_level: u8) -> Self {
         let (sender, receiver) = watch::channel(ChunkResult::Unloaded);
         let (highest_allowed_status_sender, highest_allowed_status_receiver) = watch::channel(
-            ChunkLevel::generation_status(ticket_level)
-                .map_or(STATUS_NONE, |s| s.get_index() as u8),
+            generation_status(Some(ticket_level)).map_or(STATUS_NONE, |s| s.get_index() as u8),
         );
 
         Self {
@@ -89,8 +88,8 @@ impl ChunkHolder {
 
     /// Updates the highest allowed generation status based on the ticket level.
     pub fn update_highest_allowed_status(&self, ticket_level: u8) {
-        let new_status = ChunkLevel::generation_status(ticket_level)
-            .map_or(STATUS_NONE, |s| s.get_index() as u8);
+        let new_status =
+            generation_status(Some(ticket_level)).map_or(STATUS_NONE, |s| s.get_index() as u8);
         self.highest_allowed_status_sender.send_replace(new_status);
     }
 
@@ -107,9 +106,9 @@ impl ChunkHolder {
     #[allow(clippy::missing_panics_doc)]
     #[inline]
     pub(crate) fn schedule_chunk_generation_task_b(
-        self: Arc<Self>,
+        &self,
         status: ChunkStatus,
-        chunk_map: Arc<ChunkMap>,
+        chunk_map: &Arc<ChunkMap>,
     ) {
         if self.is_status_disallowed(status) {
             return;
@@ -130,7 +129,7 @@ impl ChunkHolder {
 
     /// Reschedules the chunk task to the given status.
     #[inline]
-    pub(crate) fn reschedule_chunk_task_b(&self, status: ChunkStatus, chunk_map: Arc<ChunkMap>) {
+    pub(crate) fn reschedule_chunk_task_b(&self, status: ChunkStatus, chunk_map: &Arc<ChunkMap>) {
         let new_task = chunk_map.schedule_generation_task_b(status, self.pos);
         let mut old_task_guard = self.generation_task.lock();
 

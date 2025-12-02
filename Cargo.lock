@@ -1988,6 +1988,7 @@ dependencies = [
  "scc",
  "serde",
  "serde_json5",
+ "smallvec",
  "steel-protocol",
  "steel-registry",
  "steel-utils",

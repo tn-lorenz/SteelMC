@@ -1,6 +1,7 @@
 use std::sync::Arc;
 use std::sync::atomic::Ordering;
 use std::time::Duration;
+use std::u8;
 
 use parking_lot::Mutex as ParkingMutex;
 use rayon::iter::{IntoParallelRefIterator, ParallelBridge, ParallelIterator};
@@ -14,11 +15,12 @@ use tokio::runtime::Runtime;
 use tokio_util::task::TaskTracker;
 
 use crate::chunk::chunk_holder::ChunkHolder;
-use crate::chunk::chunk_level::ChunkLevel;
-use crate::chunk::chunk_tracking_view::ChunkTrackingView;
+use crate::chunk::chunk_ticket_manager::{
+    ChunkTicketManager, LevelChange, MAX_VIEW_DISTANCE, is_full,
+};
+use crate::chunk::player_chunk_view::PlayerChunkView;
 use crate::chunk::{
     chunk_access::ChunkStatus, chunk_generation_task::ChunkGenerationTask,
-    chunk_tracker::MAX_LEVEL, distance_manager::DistanceManager,
     flat_chunk_generator::FlatChunkGenerator, world_gen_context::WorldGenContext,
 };
 use crate::config::STEEL_CONFIG;
@@ -38,7 +40,7 @@ pub struct ChunkMap {
     /// Tracker for background generation tasks.
     pub task_tracker: TaskTracker,
     /// Manager for chunk distances and tickets.
-    pub distance_manager: ParkingMutex<DistanceManager>,
+    pub chunk_tickets: ParkingMutex<ChunkTicketManager>,
     /// The world generation context.
     pub world_gen_context: Arc<WorldGenContext>,
     /// The thread pool to use for generation.
@@ -59,7 +61,7 @@ impl ChunkMap {
             )),
             pending_generation_tasks: ParkingMutex::new(Vec::new()),
             task_tracker: TaskTracker::new(),
-            distance_manager: ParkingMutex::new(DistanceManager::new()),
+            chunk_tickets: ParkingMutex::new(ChunkTicketManager::new()),
             world_gen_context: Arc::new(WorldGenContext {
                 generator: Arc::new(FlatChunkGenerator::new(
                     block_registry.get_default_state_id(vanilla_blocks::BEDROCK), // Bedrock
@@ -112,28 +114,32 @@ impl ChunkMap {
     pub fn update_chunk_level(
         self: &Arc<Self>,
         pos: &ChunkPos,
-        new_level: u8,
+        new_level: Option<u8>,
     ) -> Option<Arc<ChunkHolder>> {
         // Recover from unloading if possible, else create new holder.
         let chunk_holder =
             if let Some(holder) = self.chunks.read_sync(pos, |_, holder| holder.clone()) {
                 holder
             } else {
-                if new_level >= MAX_LEVEL {
-                    return None;
-                }
+                new_level?;
 
                 if let Some(entry) = self.unloading_chunks.lock().remove(pos) {
                     let _ = self.chunks.insert_sync(*pos, entry.clone());
                     entry
                 } else {
-                    let holder = Arc::new(ChunkHolder::new(*pos, new_level));
+                    let holder = Arc::new(ChunkHolder::new(*pos, new_level.unwrap()));
                     let _ = self.chunks.insert_sync(*pos, holder.clone());
                     holder
                 }
             };
 
-        if new_level >= MAX_LEVEL {
+        if let Some(level) = new_level {
+            let old = chunk_holder.ticket_level.swap(level, Ordering::Relaxed);
+            if old != level {
+                chunk_holder.update_highest_allowed_status(level);
+            }
+            Some(chunk_holder)
+        } else {
             //log::info!("Unloading chunk at {pos:?}");
             chunk_holder.force_fail();
 
@@ -144,18 +150,10 @@ impl ChunkMap {
             {
                 let _ = self.unloading_chunks.lock().insert(*pos, holder);
             } else {
-                chunk_holder
-                    .ticket_level
-                    .store(new_level, Ordering::Relaxed);
-                chunk_holder.update_highest_allowed_status(new_level);
+                chunk_holder.ticket_level.store(u8::MAX, Ordering::Relaxed);
+                chunk_holder.update_highest_allowed_status(u8::MAX);
             }
             None
-        } else {
-            chunk_holder
-                .ticket_level
-                .store(new_level, Ordering::Relaxed);
-            chunk_holder.update_highest_allowed_status(new_level);
-            Some(chunk_holder)
         }
     }
 
@@ -163,75 +161,44 @@ impl ChunkMap {
     pub fn tick_b(self: &Arc<Self>, tick_count: u64) {
         let start = tokio::time::Instant::now();
 
-        let (changes, purge_elapsed, updates_elapsed) = {
-            let mut dm = self.distance_manager.lock();
-
-            let purge_start = tokio::time::Instant::now();
-            dm.purge_tickets(tick_count);
-            let purge_elapsed = purge_start.elapsed();
+        {
+            let mut ct = self.chunk_tickets.lock();
 
             let updates_start = tokio::time::Instant::now();
-            let changes = dm.run_updates();
+            // Only process chunks that actually changed
+            let changes: Vec<LevelChange> = ct.run_all_updates().to_vec();
             let updates_elapsed = updates_start.elapsed();
 
-            (changes, purge_elapsed, updates_elapsed)
-        };
+            let holder_creation_start = tokio::time::Instant::now();
+            let holders_to_schedule: Vec<_> = changes
+                .iter()
+                .filter_map(|change| {
+                    self.update_chunk_level(&change.pos, change.new_level)
+                        .map(|holder| (holder, change.new_level))
+                })
+                .collect();
+            let holder_creation_elapsed = holder_creation_start.elapsed();
 
-        if purge_elapsed >= SLOW_TASK_WARN_THRESHOLD {
-            log::warn!("distance_manager purge_tickets slow: {purge_elapsed:?}");
-        }
-        if updates_elapsed >= SLOW_TASK_WARN_THRESHOLD {
-            log::warn!("distance_manager run_updates slow: {updates_elapsed:?}");
-        }
-
-        let start_process_changes = tokio::time::Instant::now();
-        let changes_len = changes.len();
-
-        let updates_to_schedule: Vec<(Arc<ChunkHolder>, u8)> = changes
-            .into_iter()
-            .filter_map(|(pos, new_level)| {
-                self.update_chunk_level(&pos, new_level)
-                    .map(|holder| (holder, new_level))
-            })
-            .collect();
-
-        let process_elapsed = start_process_changes.elapsed();
-        if !updates_to_schedule.is_empty()
-            && (updates_to_schedule.len() >= PROCESS_CHANGES_WARN_THRESHOLD
-                || process_elapsed >= PROCESS_CHANGES_WARN_MIN_DURATION)
-        {
-            let per_change =
-                process_elapsed.as_secs_f64() * 1_000_000.0 / updates_to_schedule.len() as f64;
-            log::warn!(
-                "process changes: {:?} ({} changes, {} scheduled, {:.2}µs/change)",
-                process_elapsed,
-                changes_len,
-                updates_to_schedule.len(),
-                per_change
-            );
-        }
-
-        let schedule_start = tokio::time::Instant::now();
-        let self_clone = self.clone();
-        let update_len = updates_to_schedule.len();
-        updates_to_schedule
-            .par_iter()
-            .for_each(|(chunk_holder, new_level)| {
-                let target_status = ChunkLevel::generation_status(*new_level);
-
-                if let Some(status) = target_status
-                    && status == ChunkStatus::Full
-                {
-                    let chunk_holder_clone = chunk_holder.clone();
-                    let map_clone = self_clone.clone();
-                    chunk_holder_clone.schedule_chunk_generation_task_b(status, map_clone);
+            let schedule_start = tokio::time::Instant::now();
+            holders_to_schedule.par_iter().for_each(|(holder, level)| {
+                if let Some(level) = level {
+                    if is_full(*level) {
+                        holder.schedule_chunk_generation_task_b(ChunkStatus::Full, self);
+                    }
                 }
             });
+            let schedule_elapsed = schedule_start.elapsed();
 
-        let schedule_elapsed = schedule_start.elapsed();
-        if schedule_elapsed >= SLOW_TASK_WARN_THRESHOLD {
-            log::warn!("tick_b schedule loop took: {schedule_elapsed:?} ({update_len} updates)");
-        }
+            if updates_elapsed >= SLOW_TASK_WARN_THRESHOLD {
+                log::warn!("chunk_tickets run_updates slow: {updates_elapsed:?}");
+            }
+            if holder_creation_elapsed >= SLOW_TASK_WARN_THRESHOLD {
+                log::warn!("holder_creation slow: {holder_creation_elapsed:?}");
+            }
+            if schedule_elapsed >= SLOW_TASK_WARN_THRESHOLD {
+                log::warn!("schedule slow: {schedule_elapsed:?}");
+            }
+        };
 
         let start_gen = tokio::time::Instant::now();
         self.run_generation_tasks_b();
@@ -300,11 +267,11 @@ impl ChunkMap {
         let current_chunk_pos = *player.last_chunk_pos.lock();
         let view_distance = STEEL_CONFIG.view_distance;
 
-        let new_view = ChunkTrackingView::new(current_chunk_pos, i32::from(view_distance));
+        let new_view = PlayerChunkView::new(current_chunk_pos, view_distance);
         let mut last_view_guard = player.last_tracking_view.lock();
 
         if last_view_guard.as_ref() != Some(&new_view) {
-            let mut distance_manager = self.distance_manager.lock();
+            let mut chunk_tickets = self.chunk_tickets.lock();
 
             let connection = &player.connection;
 
@@ -312,17 +279,13 @@ impl ChunkMap {
                 if last_view.center != new_view.center
                     || last_view.view_distance != new_view.view_distance
                 {
-                    #[allow(clippy::cast_possible_truncation, clippy::cast_sign_loss)]
-                    distance_manager.remove_player(
+                    chunk_tickets.remove_ticket(
                         last_view.center,
-                        last_view.view_distance as u8,
-                        STEEL_CONFIG.simulation_distance,
+                        MAX_VIEW_DISTANCE.saturating_sub(last_view.view_distance),
                     );
-                    #[allow(clippy::cast_possible_truncation, clippy::cast_sign_loss)]
-                    distance_manager.add_player(
+                    chunk_tickets.add_ticket(
                         new_view.center,
-                        new_view.view_distance as u8,
-                        STEEL_CONFIG.simulation_distance,
+                        MAX_VIEW_DISTANCE.saturating_sub(new_view.view_distance),
                     );
 
                     connection.send_packet(CSetChunkCenter {
@@ -333,7 +296,7 @@ impl ChunkMap {
 
                 // We lock here to ensure we have unique access for the duration of the diff
                 let mut chunk_sender = player.chunk_sender.lock();
-                ChunkTrackingView::difference(
+                PlayerChunkView::difference(
                     last_view,
                     &new_view,
                     |pos, chunk_sender| {
@@ -345,11 +308,9 @@ impl ChunkMap {
                     &mut chunk_sender,
                 );
             } else {
-                #[allow(clippy::cast_possible_truncation, clippy::cast_sign_loss)]
-                distance_manager.add_player(
+                chunk_tickets.add_ticket(
                     new_view.center,
-                    new_view.view_distance as u8,
-                    STEEL_CONFIG.simulation_distance,
+                    MAX_VIEW_DISTANCE.saturating_sub(new_view.view_distance),
                 );
 
                 let mut chunk_sender = player.chunk_sender.lock();
@@ -368,12 +329,10 @@ impl ChunkMap {
         let mut last_view_guard = player.last_tracking_view.lock();
         if let Some(last_view) = last_view_guard.take() {
             drop(last_view_guard);
-            let mut distance_manager = self.distance_manager.lock();
-            #[allow(clippy::cast_possible_truncation, clippy::cast_sign_loss)]
-            distance_manager.remove_player(
+            let mut chunk_tickets = self.chunk_tickets.lock();
+            chunk_tickets.remove_ticket(
                 last_view.center,
-                last_view.view_distance as u8,
-                STEEL_CONFIG.simulation_distance,
+                MAX_VIEW_DISTANCE.saturating_sub(last_view.view_distance),
             );
         }
     }
