@@ -10,10 +10,7 @@ use std::{
 };
 
 use parking_lot::Mutex as ParkingMutex;
-use rayon::{
-    ThreadPool,
-    iter::{IndexedParallelIterator, ParallelIterator},
-};
+use rayon::ThreadPool;
 use steel_utils::ChunkPos;
 
 use crate::chunk::{
@@ -61,7 +58,7 @@ impl<T> StaticCache2D<T> {
             min_z,
             size,
             // SAFETY: We know that T is Send + Sync, and that the whole cache is initialized, so we can transmute it to a Vec<T>.
-            cache: unsafe { std::mem::transmute(cache) },
+            cache: unsafe { std::mem::transmute::<Vec<MaybeUninit<T>>, Vec<T>>(cache) },
         }
     }
 

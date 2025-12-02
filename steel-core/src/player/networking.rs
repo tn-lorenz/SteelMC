@@ -32,6 +32,7 @@ use tokio::{
 };
 use tokio_util::sync::CancellationToken;
 
+#[allow(clippy::struct_field_names)]
 struct KeepAliveTracker {
     alive_time: u64,
     alive_pending: bool,
@@ -82,11 +83,12 @@ impl JavaConnection {
         self.keep_connection_alive();
     }
 
+    #[allow(clippy::unwrap_used)]
     fn keep_connection_alive(&self) {
         let mut tracker = self.keep_alive_tracker.lock();
         let now = SystemTime::now()
             .duration_since(UNIX_EPOCH)
-            .unwrap()
+            .expect("System time before UNIX EPOCH")
             .as_millis() as u64;
 
         if now - tracker.alive_time >= 15000 {
@@ -108,7 +110,7 @@ impl JavaConnection {
         if tracker.alive_pending && packet.id as u64 == tracker.alive_id {
             let now = SystemTime::now()
                 .duration_since(UNIX_EPOCH)
-                .unwrap()
+                .expect("System time before UNIX EPOCH")
                 .as_millis() as u64;
 
             let time = now.saturating_sub(tracker.alive_time) as u32;

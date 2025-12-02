@@ -8,7 +8,7 @@ use crate::chunk::{
     chunk_status_tasks::ChunkStatusTasks, world_gen_context::WorldGenContext,
 };
 
-/// Number of ChunkStatus variants.
+/// Number of `ChunkStatus` variants.
 const STATUS_COUNT: usize = 12;
 /// Maximum dependency radius supported.
 const MAX_RADIUS: usize = 16;
@@ -64,11 +64,10 @@ impl ChunkDependencies {
             let limit = const_min(len, new_len);
             let mut j = 0;
             while j < limit {
-                if let Some(existing) = dependency_by_radius[j] {
-                    if status.get_index() > existing.get_index() {
+                if let Some(existing) = dependency_by_radius[j]
+                    && status.get_index() > existing.get_index() {
                         dependency_by_radius[j] = Some(status);
                     }
-                }
                 j += 1;
             }
 
@@ -112,11 +111,10 @@ impl ChunkDependencies {
         let mut radius_of_parent = 0;
         let mut i = 0;
         while i < self.len {
-            if let Some(s) = self.dependency_by_radius[i] {
-                if s.get_index() >= parent_status.get_index() {
+            if let Some(s) = self.dependency_by_radius[i]
+                && s.get_index() >= parent_status.get_index() {
                     radius_of_parent = i;
                 }
-            }
             i += 1;
         }
 

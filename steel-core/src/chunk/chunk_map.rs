@@ -1,7 +1,6 @@
 use std::sync::Arc;
 use std::sync::atomic::Ordering;
 use std::time::Duration;
-use std::u8;
 
 use parking_lot::Mutex as ParkingMutex;
 use rayon::iter::{IntoParallelRefIterator, ParallelBridge, ParallelIterator};
@@ -19,6 +18,7 @@ use crate::chunk::chunk_ticket_manager::{
     ChunkTicketManager, LevelChange, MAX_VIEW_DISTANCE, is_full,
 };
 use crate::chunk::player_chunk_view::PlayerChunkView;
+use crate::chunk::world_gen_context::ChunkGeneratorType;
 use crate::chunk::{
     chunk_access::ChunkStatus, chunk_generation_task::ChunkGenerationTask,
     flat_chunk_generator::FlatChunkGenerator, world_gen_context::WorldGenContext,
@@ -26,7 +26,9 @@ use crate::chunk::{
 use crate::config::STEEL_CONFIG;
 use crate::player::Player;
 
+#[allow(dead_code)]
 const PROCESS_CHANGES_WARN_THRESHOLD: usize = 1_000;
+#[allow(dead_code)]
 const PROCESS_CHANGES_WARN_MIN_DURATION: Duration = Duration::from_micros(500);
 const SLOW_TASK_WARN_THRESHOLD: Duration = Duration::from_micros(250);
 /// A map of chunks managing their state, loading, and generation.
@@ -52,6 +54,7 @@ pub struct ChunkMap {
 impl ChunkMap {
     /// Creates a new chunk map.
     #[must_use]
+    #[allow(clippy::missing_panics_doc, clippy::unwrap_used)]
     pub fn new(block_registry: &BlockRegistry, chunk_runtime: Arc<Runtime>) -> Self {
         Self {
             chunks: scc::HashMap::with_capacity_and_hasher(1000, FxBuildHasher),
@@ -63,11 +66,11 @@ impl ChunkMap {
             task_tracker: TaskTracker::new(),
             chunk_tickets: ParkingMutex::new(ChunkTicketManager::new()),
             world_gen_context: Arc::new(WorldGenContext {
-                generator: Arc::new(FlatChunkGenerator::new(
+                generator: Arc::new(ChunkGeneratorType::Flat(FlatChunkGenerator::new(
                     block_registry.get_default_state_id(vanilla_blocks::BEDROCK), // Bedrock
                     block_registry.get_default_state_id(vanilla_blocks::DIRT),    // Dirt
                     block_registry.get_default_state_id(vanilla_blocks::GRASS_BLOCK), // Grass Block
-                )),
+                ))),
             }),
             thread_pool: Arc::new(ThreadPoolBuilder::new().build().unwrap()),
             chunk_runtime,
@@ -111,6 +114,7 @@ impl ChunkMap {
     /// Updates scheduling for a chunk based on its new level.
     /// Returns the chunk holder if it is active.
     #[inline]
+    #[allow(clippy::missing_panics_doc, clippy::unwrap_used)]
     pub fn update_chunk_level(
         self: &Arc<Self>,
         pos: &ChunkPos,
@@ -181,10 +185,10 @@ impl ChunkMap {
 
             let schedule_start = tokio::time::Instant::now();
             holders_to_schedule.par_iter().for_each(|(holder, level)| {
-                if let Some(level) = level {
-                    if is_full(*level) {
-                        holder.schedule_chunk_generation_task_b(ChunkStatus::Full, self);
-                    }
+                if let Some(level) = level
+                    && is_full(*level)
+                {
+                    holder.schedule_chunk_generation_task_b(ChunkStatus::Full, self);
                 }
             });
             let schedule_elapsed = schedule_start.elapsed();
@@ -231,6 +235,7 @@ impl ChunkMap {
     /// Saves a chunk to disk.
     ///
     /// This function is currently a placeholder for the actual saving logic.
+    #[allow(clippy::unused_async)]
     pub async fn save_chunk(&self, chunk_holder: &Arc<ChunkHolder>) {
         let _pos = chunk_holder.get_pos();
         // Access the chunk to ensure it's loaded and ready for saving

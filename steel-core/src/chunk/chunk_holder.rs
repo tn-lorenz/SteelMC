@@ -237,7 +237,7 @@ impl ChunkHolder {
             chunk_map.task_tracker.spawn(async move {
                 if target_status == ChunkStatus::Empty {
                     match rayon_spawn(&thread_pool, move || {
-                        task(context, &step, &cache, self_clone)
+                        task(context, step, &cache, self_clone)
                     })
                     .await
                     {
@@ -275,7 +275,7 @@ impl ChunkHolder {
                     assert!(has_parent, "Parent chunk missing");
 
                     match rayon_spawn(&thread_pool, move || {
-                        task(context, &step, &cache, self_clone)
+                        task(context, step, &cache, self_clone)
                     })
                     .await
                     {
@@ -404,5 +404,5 @@ where
     thread_pool.spawn(move || {
         sender.send(func()).expect("Failed to send result");
     });
-    async move { receiver.await.unwrap() }
+    async move { receiver.await.expect("Failed to receive rayon task result") }
 }

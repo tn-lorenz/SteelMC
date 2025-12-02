@@ -62,6 +62,7 @@ impl ChunkSender {
                     self.unacknowledged_batches += 1;
                     self.batch_quota -= chunks_to_process.len() as f32;
 
+                    #[allow(clippy::let_underscore_future)]
                     let _ = spawn_blocking(move || {
                         let mut chunks_to_send = Vec::new();
                         for holder in chunks_to_process {

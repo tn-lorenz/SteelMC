@@ -1,15 +1,18 @@
 //! This module contains the `ChunkGenerator` trait, which is used to generate chunks.
 use std::ops::{Deref, DerefMut};
 
-use crate::chunk::{chunk_access::ChunkAccess, proto_chunk::ProtoChunk};
+use crate::chunk::chunk_access::ChunkAccess;
+use enum_dispatch::enum_dispatch;
 use parking_lot::{RwLock as ParkingRwLock, RwLockWriteGuard};
 
-pub struct YieldableGuard<'a> {
+/// A guard that provides access to a chunk while holding the lock.
+pub struct ChunkGuard<'a> {
     mutex: &'a ParkingRwLock<Option<ChunkAccess>>,
     guard: Option<RwLockWriteGuard<'a, Option<ChunkAccess>>>,
 }
 
-impl<'a> YieldableGuard<'a> {
+impl<'a> ChunkGuard<'a> {
+    /// Creates a new `ChunkGuard` that holds the write lock.
     pub fn new(mutex: &'a ParkingRwLock<Option<ChunkAccess>>) -> Self {
         Self {
             mutex,
@@ -18,78 +21,70 @@ impl<'a> YieldableGuard<'a> {
     }
 
     /// Temporarily drops the lock, runs the provided closure, and re-acquires the lock immediately after.
-    ///
-    /// This is safe because `&mut self` guarantees no other references to the
-    /// underlying data exist while this method runs.
     pub fn yield_lock<F, R>(&mut self, func: F) -> R
     where
         F: FnOnce() -> R,
     {
-        // 1. Drop the lock strictly before running the closure
-        self.guard = None; // This drops the MutexGuard immediately
+        self.guard = None;
 
-        // 2. Run the external work
-        // The lock is completely free here.
         let result = func();
 
-        // 3. Re-acquire the lock immediately
         self.guard = Some(self.mutex.write());
 
         result
     }
 }
 
-// Implement Deref so you can treat it exactly like a normal reference to T
-impl Deref for YieldableGuard<'_> {
+impl Deref for ChunkGuard<'_> {
     type Target = ChunkAccess;
 
-    #[inline(always)]
+    #[inline]
+    #[allow(clippy::unwrap_used)]
     fn deref(&self) -> &Self::Target {
-        // SAFETY: This unwrap is safe because `guard` is only None
-        // *inside* `yield_lock`, where `&mut self` prevents calling `deref`.
+        // SAFETY: It needs to contain a mutex guard to be dereferenceable and the chunk access is guaranteed to be there by it's creator.
         self.guard.as_deref().unwrap().as_ref().unwrap()
     }
 }
 
-// Implement DerefMut for mutable access
-impl DerefMut for YieldableGuard<'_> {
-    #[inline(always)]
+impl DerefMut for ChunkGuard<'_> {
+    #[inline]
+    #[allow(clippy::unwrap_used)]
     fn deref_mut(&mut self) -> &mut Self::Target {
+        // SAFETY: It needs to contain a mutex guard to be dereferenceable and the chunk access is guaranteed to be there by it's creator.
         self.guard.as_deref_mut().unwrap().as_mut().unwrap()
     }
 }
 
 /// A trait for generating chunks.
+#[enum_dispatch]
 pub trait ChunkGenerator: Send + Sync {
-    // TODO: Look into making the proto chunks be chunk holders instead, otherwise it holdsd the lock for the whole chunk for the whole generation process.
-
     /// Creates the structures in a chunk.
-    fn create_structures(&self, proto_chunk: &mut ProtoChunk);
+    fn create_structures(&self, chunk_guard: &mut ChunkGuard);
 
     /// Creates the biomes in a chunk.
-    fn create_biomes(&self, proto_chunk: &mut ProtoChunk);
+    fn create_biomes(&self, chunk_guard: &mut ChunkGuard);
 
     /// Fills the chunk with noise.
-    fn fill_from_noise(&self, yieldable_guard: &mut YieldableGuard);
+    fn fill_from_noise(&self, chunk_guard: &mut ChunkGuard);
 
     /// Builds the surface of the chunk.
-    fn build_surface(&self, proto_chunk: &mut ProtoChunk);
+    fn build_surface(&self, chunk_guard: &mut ChunkGuard);
 
     /// Applies carvers to the chunk.
-    fn apply_carvers(&self, proto_chunk: &mut ProtoChunk);
+    fn apply_carvers(&self, chunk_guard: &mut ChunkGuard);
 
     /// Applies biome decorations to the chunk.
-    fn apply_biome_decorations(&self, proto_chunk: &mut ProtoChunk);
+    fn apply_biome_decorations(&self, chunk_guard: &mut ChunkGuard);
 }
 
 /// A simple chunk generator that does nothing.
 pub struct SimpleChunkGenerator;
 
 impl ChunkGenerator for SimpleChunkGenerator {
-    fn create_structures(&self, _proto_chunk: &mut ProtoChunk) {}
-    fn create_biomes(&self, _proto_chunk: &mut ProtoChunk) {}
-    fn fill_from_noise(&self, _yieldable_guard: &mut YieldableGuard) {}
-    fn build_surface(&self, _proto_chunk: &mut ProtoChunk) {}
-    fn apply_carvers(&self, _proto_chunk: &mut ProtoChunk) {}
-    fn apply_biome_decorations(&self, _proto_chunk: &mut ProtoChunk) {}
+    fn create_structures(&self, _chunk_guard: &mut ChunkGuard) {}
+    fn create_biomes(&self, _chunk_guard: &mut ChunkGuard) {}
+    fn fill_from_noise(&self, _chunk_guard: &mut ChunkGuard) {}
+    fn build_surface(&self, _chunk_guard: &mut ChunkGuard) {}
+    fn apply_carvers(&self, _chunk_guard: &mut ChunkGuard) {}
+    fn apply_biome_decorations(&self, _chunk_guard: &mut ChunkGuard) {}
 }

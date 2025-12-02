@@ -19,6 +19,7 @@ use tokio_util::task::TaskTracker;
 /// If we only used one runtime this would lead to the tick task being blocked by the chunk tasks.
 ///
 /// We have to create the runtimes at this level cause tokio panics if you drop a runtime in a context where blocking is not allowed.
+#[allow(clippy::unwrap_used)]
 fn main() {
     let chunk_runtime = Arc::new(
         tokio::runtime::Builder::new_multi_thread()

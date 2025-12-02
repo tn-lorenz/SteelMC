@@ -1,9 +1,6 @@
 use steel_utils::BlockStateId;
 
-use crate::chunk::{
-    chunk_generator::{ChunkGenerator, YieldableGuard},
-    proto_chunk::ProtoChunk,
-};
+use crate::chunk::chunk_generator::{ChunkGenerator, ChunkGuard};
 
 /// A chunk generator that generates a flat world.
 pub struct FlatChunkGenerator {
@@ -28,11 +25,11 @@ impl FlatChunkGenerator {
 }
 
 impl ChunkGenerator for FlatChunkGenerator {
-    fn create_structures(&self, _proto_chunk: &mut ProtoChunk) {}
+    fn create_structures(&self, _chunk_guard: &mut ChunkGuard) {}
 
-    fn create_biomes(&self, _proto_chunk: &mut ProtoChunk) {}
+    fn create_biomes(&self, _chunk_guard: &mut ChunkGuard) {}
 
-    fn fill_from_noise(&self, yieldable_guard: &mut YieldableGuard) {
+    fn fill_from_noise(&self, chunk_guard: &mut ChunkGuard) {
         // Layers:
         // 0: Bedrock
         // 1-2: Dirt
@@ -45,21 +42,21 @@ impl ChunkGenerator for FlatChunkGenerator {
         for x in 0..16 {
             for z in 0..16 {
                 // Bedrock at bottom
-                yieldable_guard.set_relative_block(x, 0, z, self.bedrock);
+                chunk_guard.set_relative_block(x, 0, z, self.bedrock);
 
                 // Dirt layers
-                yieldable_guard.set_relative_block(x, 1, z, self.dirt);
-                yieldable_guard.set_relative_block(x, 2, z, self.dirt);
+                chunk_guard.set_relative_block(x, 1, z, self.dirt);
+                chunk_guard.set_relative_block(x, 2, z, self.dirt);
 
                 // Grass block
-                yieldable_guard.set_relative_block(x, 3, z, self.grass);
+                chunk_guard.set_relative_block(x, 3, z, self.grass);
             }
         }
     }
 
-    fn build_surface(&self, _proto_chunk: &mut ProtoChunk) {}
+    fn build_surface(&self, _chunk_guard: &mut ChunkGuard) {}
 
-    fn apply_carvers(&self, _proto_chunk: &mut ProtoChunk) {}
+    fn apply_carvers(&self, _chunk_guard: &mut ChunkGuard) {}
 
-    fn apply_biome_decorations(&self, _proto_chunk: &mut ProtoChunk) {}
+    fn apply_biome_decorations(&self, _chunk_guard: &mut ChunkGuard) {}
 }

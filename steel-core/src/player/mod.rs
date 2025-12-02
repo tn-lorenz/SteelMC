@@ -107,6 +107,7 @@ impl Player {
         //log::info!("Hello from the other side!");
     }
 
+    #[allow(clippy::unused_self)]
     fn is_invalid_position(&self, x: f64, y: f64, z: f64, rot_x: f32, rot_y: f32) -> bool {
         if x.is_nan() || y.is_nan() || z.is_nan() {
             return true;
@@ -119,6 +120,7 @@ impl Player {
         false
     }
 
+    #[allow(clippy::unused_self)]
     fn update_awaiting_teleport(&self) -> bool {
         //TODO: Implement this
         false

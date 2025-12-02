@@ -13,6 +13,7 @@ pub mod chunk_ticket_manager;
 /// Tracks the chunks that are visible to a player.
 pub mod player_chunk_view;
 
+/// Generates flat worlds with configurable layers.
 pub mod flat_chunk_generator;
 pub mod level_chunk;
 pub mod paletted_container;

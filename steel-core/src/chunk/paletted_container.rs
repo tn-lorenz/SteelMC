@@ -152,6 +152,7 @@ impl<V: Hash + Eq + Copy + Default + Debug, const DIM: usize> PalettedContainer<
     ///
     /// # Errors
     /// - If the writer fails to write.
+    #[allow(clippy::missing_panics_doc, clippy::unwrap_used)]
     pub fn write(&self, writer: &mut impl Write) -> Result<()>
     where
         V: ToGlobalId,

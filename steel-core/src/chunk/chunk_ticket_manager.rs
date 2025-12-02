@@ -1,9 +1,13 @@
+//! Chunk ticket management for tracking chunk levels and propagation.
+#![allow(missing_docs)]
+
 use rustc_hash::FxHashMap;
 use smallvec::SmallVec;
 use steel_utils::ChunkPos;
 
 use crate::chunk::{chunk_access::ChunkStatus, chunk_pyramid::GENERATION_PYRAMID};
 
+/// The maximum view distance for players.
 pub const MAX_VIEW_DISTANCE: u8 = 32;
 const RADIUS_AROUND_FULL_CHUNK: u8 = GENERATION_PYRAMID
     .get_step_to(ChunkStatus::Full)
@@ -16,6 +20,7 @@ pub fn is_full(level: u8) -> bool {
     level <= MAX_VIEW_DISTANCE
 }
 
+#[must_use]
 pub fn generation_status(level: Option<u8>) -> Option<ChunkStatus> {
     match level {
         None => None,
@@ -207,7 +212,7 @@ impl ChunkTicketManager {
         }
 
         // Find removed levels
-        for (&pos, _) in &old_levels {
+        for &pos in old_levels.keys() {
             if !self.levels.contains_key(&pos) {
                 self.changes.push(LevelChange {
                     pos,
@@ -225,11 +230,13 @@ impl ChunkTicketManager {
         self.levels.get(&pos).copied()
     }
 
+    #[allow(dead_code)]
     #[must_use]
     fn is_dirty(&self) -> bool {
         self.dirty
     }
 
+    #[allow(dead_code)]
     fn clear(&mut self) {
         self.tickets.clear();
         self.levels.clear();
