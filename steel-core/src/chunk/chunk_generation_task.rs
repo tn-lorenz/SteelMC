@@ -187,9 +187,9 @@ impl ChunkGenerationTask {
         }
 
         let pyramid = if generate {
-            &*GENERATION_PYRAMID
+            &GENERATION_PYRAMID
         } else {
-            &*LOADING_PYRAMID
+            &LOADING_PYRAMID
         };
 
         assert!(
@@ -198,7 +198,7 @@ impl ChunkGenerationTask {
         );
 
         let future = chunk_holder.clone().apply_step(
-            pyramid.get_step_to(status).clone(),
+            pyramid.get_step_to(status),
             self.chunk_map.clone(),
             self.cache.clone(),
             self.thread_pool.clone(),
@@ -225,9 +225,9 @@ impl ChunkGenerationTask {
 
     fn get_radius_for_layer(&self, status: ChunkStatus, needs_generation: bool) -> i32 {
         let pyramid = if needs_generation {
-            &*GENERATION_PYRAMID
+            &GENERATION_PYRAMID
         } else {
-            &*LOADING_PYRAMID
+            &LOADING_PYRAMID
         };
 
         pyramid
@@ -278,10 +278,9 @@ impl ChunkGenerationTask {
                 return false;
             }
 
-            let dependencies = LOADING_PYRAMID
+            let dependencies = &LOADING_PYRAMID
                 .get_step_to(self.target_status)
-                .accumulated_dependencies
-                .clone();
+                .accumulated_dependencies;
             let range = dependencies.get_radius() as i32;
 
             for x in (self.pos.0.x - range)..=(self.pos.0.x + range) {

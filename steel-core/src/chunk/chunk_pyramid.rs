@@ -1,41 +1,156 @@
 //! This module contains the `ChunkPyramid`, which is used to check chunk dependencies.
+//! All structures are const-compatible and computed at compile time.
 
-use std::sync::LazyLock;
-use std::{cmp::max, sync::Arc};
+use std::sync::Arc;
 
 use crate::chunk::{
     chunk_access::ChunkStatus, chunk_generation_task::StaticCache2D, chunk_holder::ChunkHolder,
     chunk_status_tasks::ChunkStatusTasks, world_gen_context::WorldGenContext,
 };
 
-/// A collection of chunk dependencies.
-#[derive(Debug, Clone)]
+/// Number of ChunkStatus variants.
+const STATUS_COUNT: usize = 12;
+/// Maximum dependency radius supported.
+const MAX_RADIUS: usize = 16;
+
+/// A collection of chunk dependencies (const-compatible).
+#[derive(Debug, Clone, Copy)]
 pub struct ChunkDependencies {
-    dependency_by_radius: Box<[ChunkStatus]>,
-    radius_by_dependency: Box<[usize]>,
+    dependency_by_radius: [Option<ChunkStatus>; MAX_RADIUS],
+    len: usize,
+    radius_by_dependency: [usize; STATUS_COUNT],
 }
 
 impl ChunkDependencies {
-    /// Creates a new chunk dependencies.
-    #[must_use]
-    pub fn new(dependency_by_radius: Vec<ChunkStatus>) -> Self {
-        let dependency_by_radius = dependency_by_radius.into_boxed_slice();
-        let size = dependency_by_radius
-            .first()
-            .map_or(0, |s| s.get_index() + 1);
-        let mut radius_by_dependency = vec![0; size].into_boxed_slice();
+    /// Empty dependencies constant.
+    pub const EMPTY: Self = Self {
+        dependency_by_radius: [None; MAX_RADIUS],
+        len: 0,
+        radius_by_dependency: [0; STATUS_COUNT],
+    };
 
-        for (radius, dependency) in dependency_by_radius.iter().enumerate() {
-            let index = dependency.get_index();
-            for i in 0..=index {
-                if i < radius_by_dependency.len() {
-                    radius_by_dependency[i] = radius;
-                }
-            }
+    /// Creates dependencies from requirements and optional parent status.
+    #[must_use]
+    const fn from_requirements(
+        reqs: &[(ChunkStatus, usize)],
+        parent_status: Option<ChunkStatus>,
+    ) -> Self {
+        let mut dependency_by_radius = [None; MAX_RADIUS];
+        let mut len = 0;
+
+        // If we have a parent, start with parent at radius 0
+        if let Some(parent) = parent_status {
+            dependency_by_radius[0] = Some(parent);
+            len = 1;
         }
+
+        // Process requirements
+        let mut i = 0;
+        while i < reqs.len() {
+            let (status, radius) = reqs[i];
+            let new_len = radius + 1;
+
+            // Extend if needed, filling with this status
+            if new_len > len {
+                let mut j = len;
+                while j < new_len {
+                    dependency_by_radius[j] = Some(status);
+                    j += 1;
+                }
+                len = new_len;
+            }
+
+            // Update existing entries if this status is higher
+            let limit = const_min(len, new_len);
+            let mut j = 0;
+            while j < limit {
+                if let Some(existing) = dependency_by_radius[j] {
+                    if status.get_index() > existing.get_index() {
+                        dependency_by_radius[j] = Some(status);
+                    }
+                }
+                j += 1;
+            }
+
+            i += 1;
+        }
+
+        // Build radius_by_dependency
+        let radius_by_dependency = Self::build_radius_lookup(&dependency_by_radius, len);
 
         Self {
             dependency_by_radius,
+            len,
+            radius_by_dependency,
+        }
+    }
+
+    /// Builds the radius lookup table from dependency array.
+    const fn build_radius_lookup(
+        deps: &[Option<ChunkStatus>; MAX_RADIUS],
+        len: usize,
+    ) -> [usize; STATUS_COUNT] {
+        let mut radius_by_dependency = [0usize; STATUS_COUNT];
+        let mut radius = 0;
+        while radius < len {
+            if let Some(dep) = deps[radius] {
+                let index = dep.get_index();
+                let mut j = 0;
+                while j <= index && j < STATUS_COUNT {
+                    radius_by_dependency[j] = radius;
+                    j += 1;
+                }
+            }
+            radius += 1;
+        }
+        radius_by_dependency
+    }
+
+    /// Computes accumulated dependencies by merging with parent's accumulated dependencies.
+    const fn accumulate(&self, parent_accumulated: &Self, parent_status: ChunkStatus) -> Self {
+        // Find the last radius where we reference the parent status or higher
+        let mut radius_of_parent = 0;
+        let mut i = 0;
+        while i < self.len {
+            if let Some(s) = self.dependency_by_radius[i] {
+                if s.get_index() >= parent_status.get_index() {
+                    radius_of_parent = i;
+                }
+            }
+            i += 1;
+        }
+
+        let parent_len = parent_accumulated.len;
+        let new_len = const_max(radius_of_parent + parent_len, self.len);
+        let capped_len = const_min(new_len, MAX_RADIUS);
+
+        let mut accumulated = [None; MAX_RADIUS];
+
+        let mut dist = 0;
+        while dist < capped_len {
+            let dist_in_parent = dist.saturating_sub(radius_of_parent);
+
+            let parent_dep = if dist_in_parent < parent_accumulated.len {
+                parent_accumulated.dependency_by_radius[dist_in_parent]
+            } else {
+                None
+            };
+
+            let direct_dep = if dist < self.len {
+                self.dependency_by_radius[dist]
+            } else {
+                None
+            };
+
+            accumulated[dist] = const_max_status(direct_dep, parent_dep);
+            dist += 1;
+        }
+
+        let radius_by_dependency = Self::build_radius_lookup(&accumulated, capped_len);
+
+        Self {
+            dependency_by_radius: accumulated,
+            len: capped_len,
             radius_by_dependency,
         }
     }
@@ -43,47 +158,76 @@ impl ChunkDependencies {
     /// Gets the radius of the dependencies for the given status.
     ///
     /// # Panics
-    /// Panics if the status is outside of the dependency range.
+    /// Panics if the status index is out of bounds.
     #[must_use]
-    pub fn get_radius_of(&self, status: ChunkStatus) -> usize {
-        let index = status.get_index();
-        assert!(
-            index < self.radius_by_dependency.len(),
-            "Requesting a ChunkStatus({status:?}) outside of dependency range"
-        );
-        self.radius_by_dependency[index]
+    pub const fn get_radius_of(&self, status: ChunkStatus) -> usize {
+        self.radius_by_dependency[status.get_index()]
     }
 
     /// Gets the radius of the dependencies.
     #[must_use]
-    pub fn get_radius(&self) -> usize {
-        self.dependency_by_radius.len().saturating_sub(1)
+    pub const fn get_radius(&self) -> usize {
+        self.len.saturating_sub(1)
     }
 
-    /// Gets the dependencies for the given distance.
+    /// Gets the dependency status at the given distance.
     #[must_use]
-    pub fn get(&self, distance: usize) -> Option<ChunkStatus> {
-        self.dependency_by_radius.get(distance).copied()
+    pub const fn get(&self, distance: usize) -> Option<ChunkStatus> {
+        if distance < self.len {
+            self.dependency_by_radius[distance]
+        } else {
+            None
+        }
     }
 }
+
+// ============================================================================
+// Const helper functions
+// ============================================================================
+
+const fn const_max(a: usize, b: usize) -> usize {
+    if a > b { a } else { b }
+}
+
+const fn const_min(a: usize, b: usize) -> usize {
+    if a < b { a } else { b }
+}
+
+const fn const_max_status(a: Option<ChunkStatus>, b: Option<ChunkStatus>) -> Option<ChunkStatus> {
+    match (a, b) {
+        (Some(sa), Some(sb)) => {
+            if sa.get_index() > sb.get_index() {
+                Some(sa)
+            } else {
+                Some(sb)
+            }
+        }
+        (Some(s), None) | (None, Some(s)) => Some(s),
+        (None, None) => None,
+    }
+}
+
+// ============================================================================
+// ChunkStep
+// ============================================================================
 
 /// A task that generates a chunk.
 pub type ChunkStatusTask = fn(
     Arc<WorldGenContext>,
-    &Arc<ChunkStep>,
+    &ChunkStep,
     &Arc<StaticCache2D<Arc<ChunkHolder>>>,
     Arc<ChunkHolder>,
 ) -> Result<(), anyhow::Error>;
 
-/// A chunk step.
-#[derive(Clone, Debug)]
+/// A chunk step (const-compatible).
+#[derive(Clone, Copy)]
 pub struct ChunkStep {
     /// The target status of the step.
     pub target_status: ChunkStatus,
     /// The direct dependencies of the step.
-    pub direct_dependencies: Arc<ChunkDependencies>,
+    pub direct_dependencies: ChunkDependencies,
     /// The accumulated dependencies of the step.
-    pub accumulated_dependencies: Arc<ChunkDependencies>,
+    pub accumulated_dependencies: ChunkDependencies,
     /// The block state write radius of the step.
     pub block_state_write_radius: i32,
     /// The task of the step.
@@ -91,16 +235,19 @@ pub struct ChunkStep {
 }
 
 impl ChunkStep {
-    /// Creates a new chunk step builder.
-    #[must_use]
-    pub fn builder(status: ChunkStatus, parent: Option<Arc<ChunkStep>>) -> Builder {
-        Builder::new(status, parent)
-    }
+    /// A placeholder step used for array initialization.
+    const PLACEHOLDER: Self = Self {
+        target_status: ChunkStatus::Empty,
+        direct_dependencies: ChunkDependencies::EMPTY,
+        accumulated_dependencies: ChunkDependencies::EMPTY,
+        block_state_write_radius: -1,
+        task: noop_task,
+    };
 
     /// Gets the accumulated radius of the dependencies for the given status.
     #[must_use]
-    pub fn get_accumulated_radius_of(&self, status: ChunkStatus) -> usize {
-        if status == self.target_status {
+    pub const fn get_accumulated_radius_of(&self, status: ChunkStatus) -> usize {
+        if status.get_index() == self.target_status.get_index() {
             0
         } else {
             self.accumulated_dependencies.get_radius_of(status)
@@ -108,280 +255,233 @@ impl ChunkStep {
     }
 }
 
-/// A builder for a chunk step.
-pub struct Builder {
-    status: ChunkStatus,
-    parent: Option<Arc<ChunkStep>>,
-    direct_dependencies_by_radius: Vec<ChunkStatus>,
-    block_state_write_radius: i32,
-    task: ChunkStatusTask,
-}
-
-impl Builder {
-    #[must_use]
-    /// Creates a new chunk step builder.
-    ///
-    /// # Panics
-    ///
-    /// Panics if the status is not the next status of the parent.
-    pub fn new(status: ChunkStatus, parent: Option<Arc<ChunkStep>>) -> Self {
-        let direct_dependencies_by_radius = if let Some(p) = &parent {
-            assert!(
-                p.target_status.next() == Some(status),
-                "Out of order status: {:?}, expected next of {:?}",
-                status,
-                p.target_status
-            );
-            vec![p.target_status]
-        } else {
-            assert!(
-                status.parent().is_none(),
-                "Not starting with the first status: {status:?}"
-            );
-            Vec::new()
-        };
-
-        Self {
-            status,
-            parent,
-            direct_dependencies_by_radius,
-            block_state_write_radius: -1,
-            task: noop_task,
-        }
-    }
-
-    #[must_use]
-    /// Adds a requirement to the step.
-    ///
-    /// # Panics
-    ///
-    /// Panics if the status is greater than the current status.
-    pub fn add_requirement(mut self, status: ChunkStatus, radius: usize) -> Self {
-        assert!(
-            status < self.status,
-            "Status {:?} can not be required by {:?}",
-            status,
-            self.status
-        );
-
-        let new_len = radius + 1;
-        let old_len = self.direct_dependencies_by_radius.len();
-
-        if new_len > old_len {
-            self.direct_dependencies_by_radius.resize(new_len, status);
-        }
-
-        for i in 0..old_len.min(new_len) {
-            self.direct_dependencies_by_radius[i] =
-                self.direct_dependencies_by_radius[i].max(status);
-        }
-        self
-    }
-
-    #[must_use]
-    /// Sets the block state write radius for the step.
-    pub fn block_state_write_radius(mut self, radius: i32) -> Self {
-        self.block_state_write_radius = radius;
-        self
-    }
-
-    /// Sets the task for the step.
-    #[must_use]
-    pub fn set_task(mut self, task: ChunkStatusTask) -> Self {
-        self.task = task;
-        self
-    }
-
-    #[must_use]
-    /// Builds the chunk step.
-    pub fn build(self) -> ChunkStep {
-        let accumulated_dependencies = self.build_accumulated_dependencies();
-        let direct_dependencies = ChunkDependencies::new(self.direct_dependencies_by_radius);
-
-        ChunkStep {
-            target_status: self.status,
-            direct_dependencies: Arc::new(direct_dependencies),
-            accumulated_dependencies: Arc::new(accumulated_dependencies),
-            block_state_write_radius: self.block_state_write_radius,
-            task: self.task,
-        }
-    }
-
-    fn build_accumulated_dependencies(&self) -> ChunkDependencies {
-        if self.parent.is_none() {
-            return ChunkDependencies::new(self.direct_dependencies_by_radius.clone());
-        }
-        let parent = self.parent.as_ref().expect("Parent is required");
-
-        let radius_of_parent = self
-            .direct_dependencies_by_radius
-            .iter()
-            .rposition(|&s| s >= parent.target_status)
-            .unwrap_or(0);
-
-        let parent_deps = &parent.accumulated_dependencies;
-        let new_len = max(
-            radius_of_parent + parent_deps.dependency_by_radius.len(),
-            self.direct_dependencies_by_radius.len(),
-        );
-        let mut accumulated = Vec::with_capacity(new_len);
-
-        for dist in 0..new_len {
-            let dist_in_parent = dist.saturating_sub(radius_of_parent);
-
-            let parent_dep = parent_deps.get(dist_in_parent);
-            let direct_dep = self.direct_dependencies_by_radius.get(dist).copied();
-
-            let dep = match (direct_dep, parent_dep) {
-                (Some(d), Some(p)) => d.max(p),
-                (Some(d), None) => d,
-                (None, Some(p)) => p,
-                (None, None) => continue,
-            };
-            accumulated.push(dep);
-        }
-
-        ChunkDependencies::new(accumulated)
-    }
-}
-
 #[allow(clippy::unnecessary_wraps)]
 fn noop_task(
     _context: Arc<WorldGenContext>,
-    _step: &Arc<ChunkStep>,
+    _step: &ChunkStep,
     _cache: &Arc<StaticCache2D<Arc<ChunkHolder>>>,
     _holder: Arc<ChunkHolder>,
 ) -> Result<(), anyhow::Error> {
     Ok(())
 }
 
+// ============================================================================
+// ChunkPyramid and const builder
+// ============================================================================
+
 /// Represents the hierarchy and dependencies for chunk generation or loading.
 pub struct ChunkPyramid {
-    steps: Box<[Arc<ChunkStep>]>,
+    steps: [ChunkStep; STATUS_COUNT],
 }
 
 impl ChunkPyramid {
     /// Gets the step for the given status.
     #[must_use]
-    pub fn get_step_to(&self, status: ChunkStatus) -> &Arc<ChunkStep> {
+    pub const fn get_step_to(&self, status: ChunkStatus) -> &ChunkStep {
         &self.steps[status.get_index()]
     }
 }
 
-/// A builder for a chunk pyramid.
-pub struct ChunkPyramidBuilder {
-    steps: Vec<Arc<ChunkStep>>,
+/// Const-time pyramid builder.
+struct ConstPyramidBuilder {
+    steps: [ChunkStep; STATUS_COUNT],
+    count: usize,
 }
 
-impl Default for ChunkPyramidBuilder {
-    fn default() -> Self {
-        Self::new()
-    }
-}
-
-impl ChunkPyramidBuilder {
-    #[must_use]
-    /// Creates a new chunk pyramid builder.
-    pub fn new() -> Self {
-        Self { steps: Vec::new() }
+impl ConstPyramidBuilder {
+    const fn new() -> Self {
+        Self {
+            steps: [ChunkStep::PLACEHOLDER; STATUS_COUNT],
+            count: 0,
+        }
     }
 
-    /// Adds a new step to the chunk pyramid.
-    #[must_use]
-    pub fn step<F>(mut self, status: ChunkStatus, op: F) -> Self
-    where
-        F: FnOnce(Builder) -> Builder,
-    {
-        let parent = self.steps.last().cloned();
-        let step_builder = ChunkStep::builder(status, parent);
-        let built_step = op(step_builder).build();
-        self.steps.push(Arc::new(built_step));
+    const fn step(
+        mut self,
+        status: ChunkStatus,
+        requirements: &[(ChunkStatus, usize)],
+        block_state_write_radius: i32,
+        task: ChunkStatusTask,
+    ) -> Self {
+        // Get parent info if we have previous steps
+        let (parent_status, parent_accumulated) = if self.count > 0 {
+            let parent = &self.steps[self.count - 1];
+            (
+                Some(parent.target_status),
+                Some(parent.accumulated_dependencies),
+            )
+        } else {
+            (None, None)
+        };
+
+        // Compute direct dependencies
+        let direct = ChunkDependencies::from_requirements(requirements, parent_status);
+
+        // Compute accumulated dependencies
+        let accumulated = match (parent_status, parent_accumulated) {
+            (Some(ps), Some(pa)) => direct.accumulate(&pa, ps),
+            _ => direct,
+        };
+
+        self.steps[self.count] = ChunkStep {
+            target_status: status,
+            direct_dependencies: direct,
+            accumulated_dependencies: accumulated,
+            block_state_write_radius,
+            task,
+        };
+        self.count += 1;
         self
     }
 
-    #[must_use]
-    /// Builds the chunk pyramid.
-    pub fn build(self) -> ChunkPyramid {
-        ChunkPyramid {
-            steps: self.steps.into_boxed_slice(),
-        }
+    const fn build(self) -> ChunkPyramid {
+        ChunkPyramid { steps: self.steps }
     }
 }
 
-/// The generation pyramid.
-pub static GENERATION_PYRAMID: LazyLock<ChunkPyramid> = LazyLock::new(|| {
-    ChunkPyramidBuilder::new()
-        .step(ChunkStatus::Empty, |s| s.set_task(ChunkStatusTasks::empty))
-        .step(ChunkStatus::StructureStarts, |s| {
-            s.set_task(ChunkStatusTasks::generate_structure_starts)
-        })
-        .step(ChunkStatus::StructureReferences, |s| {
-            s.add_requirement(ChunkStatus::StructureStarts, 8)
-                .set_task(ChunkStatusTasks::generate_structure_references)
-        })
-        .step(ChunkStatus::Biomes, |s| {
-            s.add_requirement(ChunkStatus::StructureStarts, 8)
-                .set_task(ChunkStatusTasks::generate_biomes)
-        })
-        .step(ChunkStatus::Noise, |s| {
-            s.add_requirement(ChunkStatus::StructureStarts, 8)
-                .add_requirement(ChunkStatus::Biomes, 1)
-                .block_state_write_radius(0)
-                .set_task(ChunkStatusTasks::generate_noise)
-        })
-        .step(ChunkStatus::Surface, |s| {
-            s.add_requirement(ChunkStatus::StructureStarts, 8)
-                .add_requirement(ChunkStatus::Biomes, 1)
-                .block_state_write_radius(0)
-                .set_task(ChunkStatusTasks::generate_surface)
-        })
-        .step(ChunkStatus::Carvers, |s| {
-            s.add_requirement(ChunkStatus::StructureStarts, 8)
-                .block_state_write_radius(0)
-                .set_task(ChunkStatusTasks::generate_carvers)
-        })
-        .step(ChunkStatus::Features, |s| {
-            s.add_requirement(ChunkStatus::StructureStarts, 8)
-                .add_requirement(ChunkStatus::Carvers, 1)
-                .block_state_write_radius(1)
-                .set_task(ChunkStatusTasks::generate_features)
-        })
-        .step(ChunkStatus::InitializeLight, |s| {
-            s.set_task(ChunkStatusTasks::initialize_light)
-        })
-        .step(ChunkStatus::Light, |s| {
-            s.add_requirement(ChunkStatus::InitializeLight, 1)
-                .set_task(ChunkStatusTasks::light)
-        })
-        .step(ChunkStatus::Spawn, |s| {
-            s.add_requirement(ChunkStatus::Biomes, 1)
-                .set_task(ChunkStatusTasks::generate_spawn)
-        })
-        .step(ChunkStatus::Full, |s| s.set_task(ChunkStatusTasks::full))
-        .build()
-});
+// ============================================================================
+// Macro for ergonomic pyramid definition
+// ============================================================================
 
-/// The loading pyramid.
-pub static LOADING_PYRAMID: LazyLock<ChunkPyramid> = LazyLock::new(|| {
-    ChunkPyramidBuilder::new()
-        .step(ChunkStatus::Empty, |s| s)
-        .step(ChunkStatus::StructureStarts, |s| {
-            s.set_task(ChunkStatusTasks::load_structure_starts)
-        })
-        .step(ChunkStatus::StructureReferences, |s| s)
-        .step(ChunkStatus::Biomes, |s| s)
-        .step(ChunkStatus::Noise, |s| s)
-        .step(ChunkStatus::Surface, |s| s)
-        .step(ChunkStatus::Carvers, |s| s)
-        .step(ChunkStatus::Features, |s| s)
-        .step(ChunkStatus::InitializeLight, |s| {
-            s.set_task(ChunkStatusTasks::initialize_light)
-        })
-        .step(ChunkStatus::Light, |s| {
-            s.add_requirement(ChunkStatus::InitializeLight, 1)
-                .set_task(ChunkStatusTasks::light)
-        })
-        .step(ChunkStatus::Spawn, |s| s)
-        .step(ChunkStatus::Full, |s| s.set_task(ChunkStatusTasks::full))
-        .build()
-});
+/// Macro for defining chunk pyramids with nice syntax.
+///
+/// # Example
+/// ```ignore
+/// define_pyramid! {
+///     pub static MY_PYRAMID = {
+///         Empty => { task: my_task },
+///         StructureStarts => {
+///             requirements: [(StructureStarts, 8)],
+///             task: other_task,
+///         },
+///     };
+/// }
+/// ```
+macro_rules! define_pyramid {
+    (
+        $vis:vis const $name:ident = {
+            $($status:ident => {
+                $(requirements: [$( ($req_status:ident, $req_radius:expr) ),* $(,)?] ,)?
+                $(block_state_write_radius: $bswr:expr ,)?
+                task: $task:expr $(,)?
+            }),* $(,)?
+        };
+    ) => {
+        #[allow(missing_docs)]
+        $vis const $name: &'static ChunkPyramid = &{
+            ConstPyramidBuilder::new()
+            $(
+                .step(
+                    ChunkStatus::$status,
+                    &[ $( $( (ChunkStatus::$req_status, $req_radius) ),* )? ],
+                    define_pyramid!(@bswr $($bswr)?),
+                    $task,
+                )
+            )*
+            .build()
+        };
+    };
+
+    // Default block_state_write_radius
+    (@bswr) => { -1 };
+    (@bswr $bswr:expr) => { $bswr };
+}
+
+// ============================================================================
+// Pyramid definitions
+// ============================================================================
+
+define_pyramid! {
+    pub const GENERATION_PYRAMID = {
+        Empty => {
+            task: ChunkStatusTasks::empty,
+        },
+        StructureStarts => {
+            task: ChunkStatusTasks::generate_structure_starts,
+        },
+        StructureReferences => {
+            requirements: [(StructureStarts, 8)],
+            task: ChunkStatusTasks::generate_structure_references,
+        },
+        Biomes => {
+            requirements: [(StructureStarts, 8)],
+            task: ChunkStatusTasks::generate_biomes,
+        },
+        Noise => {
+            requirements: [(StructureStarts, 8), (Biomes, 1)],
+            block_state_write_radius: 0,
+            task: ChunkStatusTasks::generate_noise,
+        },
+        Surface => {
+            requirements: [(StructureStarts, 8), (Biomes, 1)],
+            block_state_write_radius: 0,
+            task: ChunkStatusTasks::generate_surface,
+        },
+        Carvers => {
+            requirements: [(StructureStarts, 8)],
+            block_state_write_radius: 0,
+            task: ChunkStatusTasks::generate_carvers,
+        },
+        Features => {
+            requirements: [(StructureStarts, 8), (Carvers, 1)],
+            block_state_write_radius: 1,
+            task: ChunkStatusTasks::generate_features,
+        },
+        InitializeLight => {
+            task: ChunkStatusTasks::initialize_light,
+        },
+        Light => {
+            requirements: [(InitializeLight, 1)],
+            task: ChunkStatusTasks::light,
+        },
+        Spawn => {
+            requirements: [(Biomes, 1)],
+            task: ChunkStatusTasks::generate_spawn,
+        },
+        Full => {
+            task: ChunkStatusTasks::full,
+        },
+    };
+}
+
+define_pyramid! {
+    pub const LOADING_PYRAMID = {
+        Empty => {
+            task: noop_task,
+        },
+        StructureStarts => {
+            task: ChunkStatusTasks::load_structure_starts,
+        },
+        StructureReferences => {
+            task: noop_task,
+        },
+        Biomes => {
+            task: noop_task,
+        },
+        Noise => {
+            task: noop_task,
+        },
+        Surface => {
+            task: noop_task,
+        },
+        Carvers => {
+            task: noop_task,
+        },
+        Features => {
+            task: noop_task,
+        },
+        InitializeLight => {
+            task: ChunkStatusTasks::initialize_light,
+        },
+        Light => {
+            requirements: [(InitializeLight, 1)],
+            task: ChunkStatusTasks::light,
+        },
+        Spawn => {
+            task: noop_task,
+        },
+        Full => {
+            task: ChunkStatusTasks::full,
+        },
+    };
+}

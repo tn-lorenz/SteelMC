@@ -19,7 +19,7 @@ pub struct ChunkStatusTasks;
 impl ChunkStatusTasks {
     pub fn empty(
         _context: Arc<WorldGenContext>,
-        _step: &Arc<ChunkStep>,
+        _step: &ChunkStep,
         _cache: &Arc<StaticCache2D<Arc<ChunkHolder>>>,
         holder: Arc<ChunkHolder>,
     ) -> Result<(), anyhow::Error> {
@@ -48,7 +48,7 @@ impl ChunkStatusTasks {
     /// Panics if the chunk is not at `ChunkStatus::Empty` or higher.
     pub fn generate_structure_starts(
         _context: Arc<WorldGenContext>,
-        _step: &Arc<ChunkStep>,
+        _step: &ChunkStep,
         _cache: &Arc<StaticCache2D<Arc<ChunkHolder>>>,
         _holder: Arc<ChunkHolder>,
     ) -> Result<(), anyhow::Error> {
@@ -57,7 +57,7 @@ impl ChunkStatusTasks {
 
     pub fn generate_structure_references(
         _context: Arc<WorldGenContext>,
-        _step: &Arc<ChunkStep>,
+        _step: &ChunkStep,
         _cache: &Arc<StaticCache2D<Arc<ChunkHolder>>>,
         _holder: Arc<ChunkHolder>,
     ) -> Result<(), anyhow::Error> {
@@ -66,7 +66,7 @@ impl ChunkStatusTasks {
 
     pub fn load_structure_starts(
         _context: Arc<WorldGenContext>,
-        _step: &Arc<ChunkStep>,
+        _step: &ChunkStep,
         _cache: &Arc<StaticCache2D<Arc<ChunkHolder>>>,
         _holder: Arc<ChunkHolder>,
     ) -> Result<(), anyhow::Error> {
@@ -75,7 +75,7 @@ impl ChunkStatusTasks {
 
     pub fn generate_biomes(
         _context: Arc<WorldGenContext>,
-        _step: &Arc<ChunkStep>,
+        _step: &ChunkStep,
         _cache: &Arc<StaticCache2D<Arc<ChunkHolder>>>,
         _holder: Arc<ChunkHolder>,
     ) -> Result<(), anyhow::Error> {
@@ -84,7 +84,7 @@ impl ChunkStatusTasks {
 
     pub fn generate_noise(
         context: Arc<WorldGenContext>,
-        _step: &Arc<ChunkStep>,
+        _step: &ChunkStep,
         _cache: &Arc<StaticCache2D<Arc<ChunkHolder>>>,
         holder: Arc<ChunkHolder>,
     ) -> Result<(), anyhow::Error> {
@@ -99,7 +99,7 @@ impl ChunkStatusTasks {
 
     pub fn generate_surface(
         _context: Arc<WorldGenContext>,
-        _step: &Arc<ChunkStep>,
+        _step: &ChunkStep,
         _cache: &Arc<StaticCache2D<Arc<ChunkHolder>>>,
         _holder: Arc<ChunkHolder>,
     ) -> Result<(), anyhow::Error> {
@@ -108,7 +108,7 @@ impl ChunkStatusTasks {
 
     pub fn generate_carvers(
         _context: Arc<WorldGenContext>,
-        _step: &Arc<ChunkStep>,
+        _step: &ChunkStep,
         _cache: &Arc<StaticCache2D<Arc<ChunkHolder>>>,
         _holder: Arc<ChunkHolder>,
     ) -> Result<(), anyhow::Error> {
@@ -117,7 +117,7 @@ impl ChunkStatusTasks {
 
     pub fn generate_features(
         _context: Arc<WorldGenContext>,
-        _step: &Arc<ChunkStep>,
+        _step: &ChunkStep,
         _cache: &Arc<StaticCache2D<Arc<ChunkHolder>>>,
         _holder: Arc<ChunkHolder>,
     ) -> Result<(), anyhow::Error> {
@@ -126,7 +126,7 @@ impl ChunkStatusTasks {
 
     pub fn initialize_light(
         _context: Arc<WorldGenContext>,
-        _step: &Arc<ChunkStep>,
+        _step: &ChunkStep,
         _cache: &Arc<StaticCache2D<Arc<ChunkHolder>>>,
         _holder: Arc<ChunkHolder>,
     ) -> Result<(), anyhow::Error> {
@@ -135,7 +135,7 @@ impl ChunkStatusTasks {
 
     pub fn light(
         _context: Arc<WorldGenContext>,
-        _step: &Arc<ChunkStep>,
+        _step: &ChunkStep,
         _cache: &Arc<StaticCache2D<Arc<ChunkHolder>>>,
         _holder: Arc<ChunkHolder>,
     ) -> Result<(), anyhow::Error> {
@@ -144,7 +144,7 @@ impl ChunkStatusTasks {
 
     pub fn generate_spawn(
         _context: Arc<WorldGenContext>,
-        _step: &Arc<ChunkStep>,
+        _step: &ChunkStep,
         _cache: &Arc<StaticCache2D<Arc<ChunkHolder>>>,
         _holder: Arc<ChunkHolder>,
     ) -> Result<(), anyhow::Error> {
@@ -153,7 +153,7 @@ impl ChunkStatusTasks {
 
     pub fn full(
         _context: Arc<WorldGenContext>,
-        _step: &Arc<ChunkStep>,
+        _step: &ChunkStep,
         _cache: &Arc<StaticCache2D<Arc<ChunkHolder>>>,
         holder: Arc<ChunkHolder>,
     ) -> Result<(), anyhow::Error> {

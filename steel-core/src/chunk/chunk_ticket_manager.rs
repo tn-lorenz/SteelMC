@@ -5,7 +5,10 @@ use steel_utils::ChunkPos;
 use crate::chunk::{chunk_access::ChunkStatus, chunk_pyramid::GENERATION_PYRAMID};
 
 pub const MAX_VIEW_DISTANCE: u8 = 32;
-const RADIUS_AROUND_FULL_CHUNK: u8 = 11;
+const RADIUS_AROUND_FULL_CHUNK: u8 = GENERATION_PYRAMID
+    .get_step_to(ChunkStatus::Full)
+    .accumulated_dependencies
+    .get_radius_of(ChunkStatus::Empty) as u8;
 const MAX_LEVEL: u8 = MAX_VIEW_DISTANCE + RADIUS_AROUND_FULL_CHUNK;
 
 #[must_use]

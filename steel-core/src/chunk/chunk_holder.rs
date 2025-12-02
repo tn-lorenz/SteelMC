@@ -208,7 +208,7 @@ impl ChunkHolder {
     /// Panics if the target status is not Empty and has no parent, or if the chunk status is invalid during generation.
     pub fn apply_step(
         self: Arc<Self>,
-        step: Arc<ChunkStep>,
+        step: &'static ChunkStep,
         chunk_map: Arc<ChunkMap>,
         cache: Arc<StaticCache2D<Arc<ChunkHolder>>>,
         thread_pool: Arc<rayon::ThreadPool>,

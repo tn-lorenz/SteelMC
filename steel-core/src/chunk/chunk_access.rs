@@ -35,7 +35,7 @@ pub enum ChunkStatus {
 impl ChunkStatus {
     /// Gets the index of the status.
     #[must_use]
-    pub fn get_index(self) -> usize {
+    pub const fn get_index(self) -> usize {
         self as usize
     }
 
