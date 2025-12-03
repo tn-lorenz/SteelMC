@@ -65,9 +65,10 @@ impl ChunkDependencies {
             let mut j = 0;
             while j < limit {
                 if let Some(existing) = dependency_by_radius[j]
-                    && status.get_index() > existing.get_index() {
-                        dependency_by_radius[j] = Some(status);
-                    }
+                    && status.get_index() > existing.get_index()
+                {
+                    dependency_by_radius[j] = Some(status);
+                }
                 j += 1;
             }
 
@@ -112,9 +113,10 @@ impl ChunkDependencies {
         let mut i = 0;
         while i < self.len {
             if let Some(s) = self.dependency_by_radius[i]
-                && s.get_index() >= parent_status.get_index() {
-                    radius_of_parent = i;
-                }
+                && s.get_index() >= parent_status.get_index()
+            {
+                radius_of_parent = i;
+            }
             i += 1;
         }
 

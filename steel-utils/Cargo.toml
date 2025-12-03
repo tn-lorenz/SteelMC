@@ -16,6 +16,7 @@ phf = { version = "0.13.1", features = ["macros"] }
 md5 = "0.8.0"
 enum_dispatch.workspace = true
 log.workspace = true
+bitcode.workspace = true
 
 [dev-dependencies]
 criterion = "0.7"

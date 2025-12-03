@@ -1,10 +1,11 @@
 //! This module contains the `ChunkAccess` enum, which is used to access chunks in different states.
+use bitcode::{Decode, Encode};
 use steel_utils::BlockStateId;
 
 use crate::chunk::{level_chunk::LevelChunk, proto_chunk::ProtoChunk};
 
 /// The status of a chunk.
-#[derive(Debug, PartialEq, Eq, PartialOrd, Ord, Clone, Copy)]
+#[derive(Debug, PartialEq, Eq, PartialOrd, Ord, Clone, Copy, Encode, Decode)]
 pub enum ChunkStatus {
     /// The chunk is empty.
     Empty,

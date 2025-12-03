@@ -131,7 +131,7 @@ impl From<GameType> for i8 {
 }
 
 /// An identifier used by Minecraft.
-#[derive(Debug, Clone, PartialEq, Eq, Hash)]
+#[derive(Debug, Clone, PartialEq, Eq, Hash, Default)]
 pub struct Identifier {
     /// The namespace of the identifier.
     pub namespace: Cow<'static, str>,
