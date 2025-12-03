@@ -2,10 +2,12 @@ use std::{
     borrow::Cow,
     fmt::{self, Display},
     io::{self, Read, Write},
+    mem::MaybeUninit,
     str::FromStr,
 };
 
 use serde::{Deserialize, Serialize};
+use wincode::{SchemaRead, SchemaWrite};
 
 use crate::{
     math::{Vector2, Vector3},
@@ -203,20 +205,20 @@ impl Display for Identifier {
 
 #[allow(missing_docs)]
 impl FromStr for Identifier {
-    type Err = String;
+    type Err = &'static str;
 
     fn from_str(s: &str) -> Result<Self, Self::Err> {
         let parts: Vec<&str> = s.split(':').collect();
         if parts.len() != 2 {
-            return Err(format!("Invalid resource location: {s}"));
+            return Err("Invalid resource location");
         }
 
         if !Identifier::validate_namespace(parts[0]) {
-            return Err(format!("Invalid namespace: {}", parts[0]));
+            return Err("Invalid namespace");
         }
 
         if !Identifier::validate_path(parts[1]) {
-            return Err(format!("Invalid path: {}", parts[1]));
+            return Err("Invalid path");
         }
 
         Ok(Identifier {
@@ -243,5 +245,34 @@ impl<'de> Deserialize<'de> for Identifier {
     {
         let s = String::deserialize(deserializer)?;
         Identifier::from_str(&s).map_err(serde::de::Error::custom)
+    }
+}
+
+impl SchemaWrite for Identifier {
+    type Src = Identifier;
+
+    fn size_of(src: &Self::Src) -> wincode::WriteResult<usize> {
+        <str>::size_of(&src.to_string())
+    }
+
+    fn write(writer: &mut impl wincode::io::Writer, src: &Self::Src) -> wincode::WriteResult<()> {
+        <str>::write(writer, &src.to_string())
+    }
+}
+
+impl<'de> SchemaRead<'de> for Identifier {
+    type Dst = Identifier;
+
+    fn read(
+        reader: &mut impl wincode::io::Reader<'de>,
+        dst: &mut std::mem::MaybeUninit<Self::Dst>,
+    ) -> wincode::ReadResult<()> {
+        let mut s = MaybeUninit::<String>::uninit();
+        String::read(reader, &mut s)?;
+
+        let s = unsafe { s.assume_init() };
+
+        dst.write(Identifier::from_str(&s).map_err(|e| wincode::ReadError::Custom(e))?);
+        Ok(())
     }
 }

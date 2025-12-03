@@ -30,7 +30,7 @@ anyhow.workspace = true
 rustc-hash = "2.1.1"
 rayon.workspace = true
 smallvec = "1.15.1"
-bitcode.workspace = true
+wincode.workspace = true
 
 [lints]
 workspace = true
