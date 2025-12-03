@@ -90,6 +90,13 @@ impl<T> StaticCache2D<T> {
 pub type NeighborReady = Pin<Box<dyn Future<Output = Option<()>> + Send + Sync>>;
 
 /// A task responsible for driving a chunk to a target status.
+///
+/// It works in form of layers. Imagine a pyramid, to get to the top you first need to generate the base layer. And so on.
+/// This works in the same way but with chunk dependencies.
+///
+/// This is achieved using the Generation Pyramid and Loading Pyramid.
+///
+/// To make sure a chunk is only put through a stage once it uses an atomic with a CAS operation. Loading Pyramid must also be advanced with noop functions so this atomic can be driven forward.
 pub struct ChunkGenerationTask {
     /// The chunk map associated with this task.
     pub chunk_map: Arc<ChunkMap>,
@@ -172,17 +179,6 @@ impl ChunkGenerationTask {
             generate = true;
         }
 
-        // Fast path: If no generation is needed and we already have the status, we don't need to schedule anything.
-        // This avoids creating empty futures for chunks that are already ready.
-        if !generate {
-            // Verify we are actually ready
-            if let Some(curr) = persisted_status
-                && curr >= status
-            {
-                return true;
-            }
-        }
-
         let pyramid = if generate {
             &GENERATION_PYRAMID
         } else {
@@ -194,20 +190,24 @@ impl ChunkGenerationTask {
             "Generation required but not expected for chunk load"
         );
 
-        let future = chunk_holder.clone().apply_step(
+        if let Some(future) = chunk_holder.apply_step(
             pyramid.get_step_to(status),
-            self.chunk_map.clone(),
-            self.cache.clone(),
+            &self.chunk_map,
+            &self.cache,
             self.thread_pool.clone(),
-        );
+        ) {
+            self.neighbor_ready.lock().push(future);
+        } else {
+            self.mark_for_cancel();
+        }
 
-        self.neighbor_ready.lock().push(future);
         true
     }
 
     /// Schedules tasks for the current layer's neighbors.
     pub fn schedule_layer(&self, status: ChunkStatus, needs_generation: bool) {
         let radius = self.get_radius_for_layer(status, needs_generation);
+        // This for loop is inclusive, so if the radius is 0, we will only schedule the center chunk.
         for x in (self.pos.0.x - radius)..=(self.pos.0.x + radius) {
             for y in (self.pos.0.y - radius)..=(self.pos.0.y + radius) {
                 let chunk_holder = self.cache.get(x, y);

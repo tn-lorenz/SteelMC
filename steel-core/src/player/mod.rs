@@ -107,8 +107,7 @@ impl Player {
         //log::info!("Hello from the other side!");
     }
 
-    #[allow(clippy::unused_self)]
-    fn is_invalid_position(&self, x: f64, y: f64, z: f64, rot_x: f32, rot_y: f32) -> bool {
+    fn is_invalid_position(x: f64, y: f64, z: f64, rot_x: f32, rot_y: f32) -> bool {
         if x.is_nan() || y.is_nan() || z.is_nan() {
             return true;
         }
@@ -128,7 +127,7 @@ impl Player {
 
     /// Handles a move player packet.
     pub fn handle_move_player(&self, packet: SMovePlayer) {
-        if self.is_invalid_position(
+        if Self::is_invalid_position(
             packet.get_x(0.0),
             packet.get_y(0.0),
             packet.get_z(0.0),

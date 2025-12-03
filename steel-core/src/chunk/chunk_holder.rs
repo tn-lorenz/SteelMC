@@ -207,23 +207,23 @@ impl ChunkHolder {
     /// # Panics
     /// Panics if the target status is not Empty and has no parent, or if the chunk status is invalid during generation.
     pub fn apply_step(
-        self: Arc<Self>,
+        self: &Arc<Self>,
         step: &'static ChunkStep,
-        chunk_map: Arc<ChunkMap>,
-        cache: Arc<StaticCache2D<Arc<ChunkHolder>>>,
+        chunk_map: &Arc<ChunkMap>,
+        cache: &Arc<StaticCache2D<Arc<ChunkHolder>>>,
         thread_pool: Arc<rayon::ThreadPool>,
-    ) -> NeighborReady {
+    ) -> Option<NeighborReady> {
         let target_status = step.target_status;
 
         if self.is_status_disallowed(target_status) {
-            return Box::pin(async { None });
+            return None;
         }
 
         if !self.acquire_status_bump(target_status) {
             let self_clone = self.clone();
-            return Box::pin(
-                async move { self_clone.await_chunk(target_status).await.map(|_| ()) },
-            );
+            return Some(Box::pin(async move {
+                self_clone.await_chunk(target_status).await.map(|_| ())
+            }));
         }
 
         let sender = self.sender.clone();
@@ -302,7 +302,7 @@ impl ChunkHolder {
                 }
             });
 
-        Box::pin(async move {
+        Some(Box::pin(async move {
             match future.await {
                 Ok(result) => result,
                 Err(e) => {
@@ -310,7 +310,7 @@ impl ChunkHolder {
                     None
                 }
             }
-        })
+        }))
     }
 
     fn acquire_status_bump(&self, status: ChunkStatus) -> bool {
