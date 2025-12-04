@@ -143,7 +143,13 @@ impl RegionManager {
         Ok(())
     }
 
-    /// Ensures a region is loaded and increments its reference count.
+    /// Explicitly acquires a region, loading it from disk if needed.
+    ///
+    /// This is useful for batch operations where you want to pre-load a region
+    /// before loading multiple chunks from it. Each call increments the reference
+    /// count, so you must call `release_region` a matching number of times.
+    ///
+    /// For simple single-chunk loads, prefer `load_chunk` which handles this automatically.
     pub fn acquire_region(&self, chunk_pos: ChunkPos) -> io::Result<()> {
         let region_pos = RegionPos::from_chunk(chunk_pos.0.x, chunk_pos.0.y);
 
@@ -169,6 +175,9 @@ impl RegionManager {
     }
 
     /// Decrements a region's reference count and optionally saves/unloads it.
+    ///
+    /// When the reference count reaches zero, the region is saved (if dirty) and
+    /// unloaded from memory.
     pub fn release_region(&self, chunk_pos: ChunkPos) -> io::Result<()> {
         let region_pos = RegionPos::from_chunk(chunk_pos.0.x, chunk_pos.0.y);
 
@@ -195,6 +204,14 @@ impl RegionManager {
     }
 
     /// Saves a chunk to the appropriate region.
+    ///
+    /// If the chunk is already tracked (via `load_chunk`), this just updates the data.
+    /// Otherwise, this does NOT increment the reference count - the region will be
+    /// saved and unloaded after `flush_all` or when another chunk from this region
+    /// is released.
+    ///
+    /// For chunks that will remain loaded in memory, use `load_chunk` first or
+    /// call `acquire_region` to ensure the region stays loaded.
     pub fn save_chunk(&self, chunk: &LevelChunk, status: ChunkStatus) -> io::Result<()> {
         let region_pos = RegionPos::from_chunk(chunk.pos.0.x, chunk.pos.0.y);
         let (local_x, local_z) = RegionPos::local_chunk_pos(chunk.pos.0.x, chunk.pos.0.y);
@@ -219,25 +236,68 @@ impl RegionManager {
     }
 
     /// Loads a chunk from the appropriate region.
+    ///
+    /// Automatically acquires the region if not already loaded. The region's reference
+    /// count is incremented, so you must call `release_chunk` when done with the chunk.
+    ///
+    /// Returns `Ok(None)` if the chunk doesn't exist on disk.
     pub fn load_chunk(&self, pos: ChunkPos) -> io::Result<Option<(LevelChunk, ChunkStatus)>> {
         let region_pos = RegionPos::from_chunk(pos.0.x, pos.0.y);
         let (local_x, local_z) = RegionPos::local_chunk_pos(pos.0.x, pos.0.y);
         let index = RegionFile::chunk_index(local_x, local_z);
 
-        let regions = self.regions.read();
+        let mut regions = self.regions.write();
 
-        let loaded = match regions.get(&region_pos) {
-            Some(loaded) => loaded,
-            None => return Ok(None),
+        // Track if we just loaded this region (for cleanup on missing chunk)
+        let was_already_loaded = regions.contains_key(&region_pos);
+
+        // Get or load the region
+        let loaded = if let Some(loaded) = regions.get_mut(&region_pos) {
+            loaded
+        } else {
+            // Try to load from disk
+            let data = match self.load_region(region_pos) {
+                Ok(data) => data,
+                Err(e) if e.kind() == io::ErrorKind::NotFound => return Ok(None),
+                Err(e) => return Err(e),
+            };
+            regions.insert(
+                region_pos,
+                LoadedRegion {
+                    data,
+                    loaded_chunk_count: 0,
+                    dirty: false,
+                },
+            );
+            regions.get_mut(&region_pos).expect("just inserted")
         };
 
-        let persistent = match &loaded.data.chunks[index] {
-            Some(chunk) => chunk,
-            None => return Ok(None),
-        };
+        // Check if chunk exists
+        let chunk_exists = loaded.data.chunks[index].is_some();
+        if !chunk_exists {
+            // If we just loaded this region and the chunk doesn't exist,
+            // remove the region to avoid memory leak (unless it has other refs)
+            if !was_already_loaded && loaded.loaded_chunk_count == 0 && !loaded.dirty {
+                regions.remove(&region_pos);
+            }
+            return Ok(None);
+        }
 
+        // Increment ref count since we're returning a chunk from this region
+        loaded.loaded_chunk_count += 1;
+
+        // SAFETY: We just checked chunk_exists above
+        let persistent = loaded.data.chunks[index].as_ref().expect("checked above");
         let chunk = self.persistent_to_chunk(persistent, pos, &loaded.data);
         Ok(Some((chunk, persistent.status)))
+    }
+
+    /// Releases a chunk, decrementing the region's reference count.
+    ///
+    /// When all chunks from a region are released, the region is saved (if dirty)
+    /// and unloaded from memory.
+    pub fn release_chunk(&self, pos: ChunkPos) -> io::Result<()> {
+        self.release_region(pos)
     }
 
     /// Flushes all dirty regions to disk.
