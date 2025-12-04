@@ -1,26 +1,22 @@
-//! This module contains the chunk saver.
+//! Chunk persistence module.
+//!
+//! This module handles saving and loading chunks to/from disk using a region-based
+//! file format. Each region file contains a 32×32 grid of chunks.
+//!
+//! ## Format Overview
+//!
+//! Region files are loaded entirely into memory, modified, and saved atomically.
+//! This simplifies the implementation and allows for better compression.
+//!
+//! ### Key Features
+//! - Per-region block state and biome tables for string deduplication
+//! - Power-of-2 bit packing for efficient storage (1, 2, 4, 8, 16 bits)
+//! - Homogeneous section optimization (single block type = no bit array)
+//! - zstd compression at the region level
 
-use steel_utils::{ChunkPos, Identifier};
-use wincode::{SchemaRead, SchemaWrite};
+mod bit_pack;
+mod format;
+mod region_manager;
 
-use crate::chunk::chunk_access::ChunkStatus;
-
-#[derive(SchemaWrite, SchemaRead)]
-pub struct PersistentBlock {
-    block_name: Identifier,
-    block_props: Vec<(String, String)>,
-}
-
-#[derive(SchemaWrite, SchemaRead)]
-pub struct PersistentChunkSection {
-    palette: Vec<PersistentBlock>,
-    blocks: Box<[u16]>,
-}
-
-#[derive(SchemaWrite, SchemaRead)]
-pub struct EncodedChunk {
-    sections: Vec<PersistentChunkSection>,
-    status: ChunkStatus,
-}
-
-pub struct ChunkSaver;
+pub use format::*;
+pub use region_manager::*;

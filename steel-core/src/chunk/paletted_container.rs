@@ -31,7 +31,7 @@ type Cube<T, const DIM: usize> = [[[T; DIM]; DIM]; DIM];
 /// A heterogeneous palette container.
 #[derive(Debug, Clone)]
 pub struct HeterogeneousPalette<V: Hash + Eq + Copy, const DIM: usize> {
-    cube: Box<Cube<V, DIM>>,
+    pub(crate) cube: Box<Cube<V, DIM>>,
     // Keeps track of how many different times each value appears in the cube. (value, count)
     pub(crate) palette: Vec<(V, u16)>,
 }
@@ -43,6 +43,11 @@ impl<V: Hash + Eq + Copy, const DIM: usize> HeterogeneousPalette<V, DIM> {
         debug_assert!(z < DIM);
 
         self.cube[y][z][x]
+    }
+
+    /// Returns an iterator over all values in the cube in y, z, x order.
+    pub fn iter_values(&self) -> impl Iterator<Item = &V> {
+        self.cube.iter().flatten().flatten()
     }
 
     fn set(&mut self, x: usize, y: usize, z: usize, value: V) -> V {
@@ -97,7 +102,11 @@ impl<V: Hash + Eq + Copy + Default + Debug, const DIM: usize> PalettedContainer<
     /// The volume of the container.
     pub const VOLUME: usize = DIM * DIM * DIM;
 
-    fn from_cube(cube: Box<Cube<V, DIM>>) -> Self {
+    /// Creates a `PalettedContainer` from a pre-built cube.
+    ///
+    /// Will automatically determine if the result should be homogeneous or heterogeneous.
+    #[must_use]
+    pub fn from_cube(cube: Box<Cube<V, DIM>>) -> Self {
         let mut palette: Vec<(V, u16)> = Vec::new();
         cube.iter().flatten().flatten().for_each(|v| {
             if let Some((_, count)) = palette.iter_mut().find(|(value, _)| value == v) {
@@ -119,6 +128,15 @@ impl<V: Hash + Eq + Copy + Default + Debug, const DIM: usize> PalettedContainer<
         match self {
             Self::Homogeneous(value) => *value,
             Self::Heterogeneous(data) => data.get(x, y, z),
+        }
+    }
+
+    /// Collects all values in the container in y, z, x order.
+    #[must_use]
+    pub fn collect_values(&self) -> Vec<V> {
+        match self {
+            Self::Homogeneous(value) => vec![*value; Self::VOLUME],
+            Self::Heterogeneous(data) => data.iter_values().copied().collect(),
         }
     }
 
