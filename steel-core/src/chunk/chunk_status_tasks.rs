@@ -31,10 +31,7 @@ impl ChunkStatusTasks {
             .into_boxed_slice();
 
         // TODO: Use upgrade_to_full if the loaded chunk is full.
-        let proto_chunk = ProtoChunk {
-            sections: Sections { sections },
-            pos: holder.get_pos(),
-        };
+        let proto_chunk = ProtoChunk::new(Sections { sections }, holder.get_pos());
 
         //log::info!("Inserted proto chunk for {:?}", holder.get_pos());
 

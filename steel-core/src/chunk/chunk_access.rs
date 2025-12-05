@@ -1,8 +1,8 @@
 //! This module contains the `ChunkAccess` enum, which is used to access chunks in different states.
-use steel_utils::BlockStateId;
+use steel_utils::{BlockStateId, ChunkPos};
 use wincode::{SchemaRead, SchemaWrite};
 
-use crate::chunk::{level_chunk::LevelChunk, proto_chunk::ProtoChunk};
+use crate::chunk::{level_chunk::LevelChunk, proto_chunk::ProtoChunk, section::Sections};
 
 /// The status of a chunk.
 #[derive(Debug, PartialEq, Eq, PartialOrd, Ord, Clone, Copy, SchemaWrite, SchemaRead)]
@@ -141,6 +141,7 @@ impl ChunkAccess {
     }
 
     /// Sets a block at a relative position in the chunk.
+    /// Automatically marks the chunk as dirty.
     pub fn set_relative_block(
         &mut self,
         relative_x: usize,
@@ -148,11 +149,71 @@ impl ChunkAccess {
         relative_z: usize,
         value: BlockStateId,
     ) {
-        let sections = match self {
-            Self::Full(chunk) => &mut chunk.sections,
-            Self::Proto(proto_chunk) => &mut proto_chunk.sections,
-        };
+        match self {
+            Self::Full(chunk) => {
+                chunk
+                    .sections
+                    .set_relative_block(relative_x, relative_y, relative_z, value);
+                chunk.dirty = true;
+            }
+            Self::Proto(proto_chunk) => {
+                proto_chunk
+                    .sections
+                    .set_relative_block(relative_x, relative_y, relative_z, value);
+                proto_chunk.dirty = true;
+            }
+        }
+    }
 
-        sections.set_relative_block(relative_x, relative_y, relative_z, value);
+    /// Returns whether the chunk has been modified since last save.
+    #[must_use]
+    pub const fn is_dirty(&self) -> bool {
+        match self {
+            Self::Full(chunk) => chunk.dirty,
+            Self::Proto(proto_chunk) => proto_chunk.dirty,
+        }
+    }
+
+    /// Marks the chunk as dirty (modified).
+    pub fn mark_dirty(&mut self) {
+        match self {
+            Self::Full(chunk) => chunk.dirty = true,
+            Self::Proto(proto_chunk) => proto_chunk.dirty = true,
+        }
+    }
+
+    /// Clears the dirty flag (called after saving).
+    pub fn clear_dirty(&mut self) {
+        match self {
+            Self::Full(chunk) => chunk.dirty = false,
+            Self::Proto(proto_chunk) => proto_chunk.dirty = false,
+        }
+    }
+
+    /// Returns the chunk position.
+    #[must_use]
+    pub const fn pos(&self) -> ChunkPos {
+        match self {
+            Self::Full(chunk) => chunk.pos,
+            Self::Proto(proto_chunk) => proto_chunk.pos,
+        }
+    }
+
+    /// Returns a reference to the sections.
+    #[must_use]
+    pub const fn sections(&self) -> &Sections {
+        match self {
+            Self::Full(chunk) => &chunk.sections,
+            Self::Proto(proto_chunk) => &proto_chunk.sections,
+        }
+    }
+
+    /// Returns the chunk status.
+    #[must_use]
+    pub const fn status(&self) -> ChunkStatus {
+        match self {
+            Self::Full(_) => ChunkStatus::Full,
+            Self::Proto(_) => ChunkStatus::Empty, // Proto chunks track their own status elsewhere
+        }
     }
 }

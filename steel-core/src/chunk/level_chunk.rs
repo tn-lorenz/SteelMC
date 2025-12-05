@@ -15,6 +15,8 @@ pub struct LevelChunk {
     pub sections: Sections,
     /// The position of the chunk.
     pub pos: ChunkPos,
+    /// Whether the chunk has been modified since last save.
+    pub dirty: bool,
 }
 
 impl LevelChunk {
@@ -24,6 +26,17 @@ impl LevelChunk {
         Self {
             sections: proto_chunk.sections,
             pos: proto_chunk.pos,
+            dirty: proto_chunk.dirty,
+        }
+    }
+
+    /// Creates a new `LevelChunk` that was loaded from disk (not dirty).
+    #[must_use]
+    pub fn from_disk(sections: Sections, pos: ChunkPos) -> Self {
+        Self {
+            sections,
+            pos,
+            dirty: false,
         }
     }
 

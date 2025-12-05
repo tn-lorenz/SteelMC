@@ -1,11 +1,12 @@
-//! Region file manager with open handle tracking.
+//! Region file manager with seek-based chunk access.
 //!
-//! Keeps region files open in memory while any chunk from that region is loaded,
-//! avoiding repeated disk I/O for nearby chunk operations.
+//! Uses a sector-based format where only the header (8KB) is kept in memory.
+//! Chunk data is read on-demand from disk and converted directly to runtime
+//! format, avoiding memory duplication.
 
 use std::{
-    fs::{self, File},
-    io::{self, BufReader, BufWriter, Read, Write},
+    fs::{self, File, OpenOptions},
+    io::{self, Read, Seek, SeekFrom, Write},
     path::PathBuf,
     sync::Arc,
 };
@@ -16,7 +17,7 @@ use steel_registry::Registry;
 use steel_utils::{BlockStateId, ChunkPos, Identifier};
 
 use crate::chunk::{
-    chunk_access::ChunkStatus,
+    chunk_access::{ChunkAccess, ChunkStatus},
     level_chunk::LevelChunk,
     paletted_container::PalettedContainer,
     section::{ChunkSection, Sections},
@@ -25,30 +26,38 @@ use crate::chunk::{
 use super::{
     bit_pack::{bits_for_palette_len, pack_indices, unpack_indices},
     format::{
-        BIOMES_PER_SECTION, BLOCKS_PER_SECTION, FORMAT_VERSION, PersistentBiomeData,
-        PersistentBlockState, PersistentChunk, PersistentSection, REGION_MAGIC, RegionFile,
-        RegionPos,
+        BIOMES_PER_SECTION, BLOCKS_PER_SECTION, CHUNK_TABLE_SIZE, FILE_HEADER_SIZE,
+        FIRST_DATA_SECTOR, FORMAT_VERSION, MAX_CHUNK_SIZE, PersistentBiomeData,
+        PersistentBlockState, PersistentChunk, PersistentSection, REGION_MAGIC, RegionHeader,
+        RegionPos, SECTOR_SIZE,
     },
 };
 
-/// Manages region files with open handle tracking.
+/// Manages region files with seek-based chunk access.
+///
+/// Only keeps region headers (8KB each) in memory, not chunk data.
+/// Chunks are loaded on-demand and converted directly to runtime format.
 pub struct RegionManager {
     /// Base directory for region files (e.g., "world/region").
     base_path: PathBuf,
-    /// Currently loaded regions, keyed by region position.
-    regions: RwLock<FxHashMap<RegionPos, LoadedRegion>>,
+    /// Open region file handles with their headers.
+    regions: RwLock<FxHashMap<RegionPos, RegionHandle>>,
     /// Registry for block state and biome conversions.
     registry: Arc<Registry>,
 }
 
-/// A loaded region with reference counting.
-struct LoadedRegion {
-    /// The region data.
-    data: RegionFile,
+/// An open region file with its header.
+struct RegionHandle {
+    /// File handle for reading/writing.
+    file: File,
+    /// Chunk location header (8KB).
+    header: RegionHeader,
     /// Number of chunks currently loaded from this region.
     loaded_chunk_count: usize,
-    /// Whether the region has been modified since last save.
-    dirty: bool,
+    /// Whether the header has been modified since last save.
+    header_dirty: bool,
+    /// Current file size in sectors.
+    file_sectors: u32,
 }
 
 /// Builder for creating a persistent chunk with its own palettes.
@@ -116,8 +125,6 @@ impl<'a> ChunkBuilder<'a> {
     }
 }
 
-/// TODO: Needs
-/// - Saving protochunks
 impl RegionManager {
     /// Creates a new region manager.
     ///
@@ -137,20 +144,22 @@ impl RegionManager {
         self.base_path.join(pos.filename())
     }
 
-    /// Loads a region from disk, or creates a new one if it doesn't exist.
-    fn load_region(&self, pos: RegionPos) -> io::Result<RegionFile> {
+    /// Opens or creates a region file, loading only the header.
+    fn open_region(&self, pos: RegionPos) -> io::Result<RegionHandle> {
         let path = self.region_path(pos);
 
         if !path.exists() {
-            return Ok(RegionFile::new());
+            // Create new region file with empty header
+            return self.create_region(pos);
         }
 
-        let file = File::open(&path)?;
-        let mut reader = BufReader::new(file);
+        let mut file = OpenOptions::new().read(true).write(true).open(&path)?;
 
-        // Read and verify magic
-        let mut magic = [0u8; 4];
-        reader.read_exact(&mut magic)?;
+        // Read and verify magic + version
+        let mut header_bytes = [0u8; FILE_HEADER_SIZE];
+        file.read_exact(&mut header_bytes)?;
+
+        let magic = &header_bytes[0..4];
         if magic != REGION_MAGIC {
             return Err(io::Error::new(
                 io::ErrorKind::InvalidData,
@@ -158,152 +167,213 @@ impl RegionManager {
             ));
         }
 
-        // Read compressed data
-        let mut compressed = Vec::new();
-        reader.read_to_end(&mut compressed)?;
-
-        // Decompress with zstd
-        let data = zstd::decode_all(&compressed[..])?;
-
-        let region: RegionFile = wincode::deserialize(&data)
-            .map_err(|e| io::Error::new(io::ErrorKind::InvalidData, e.to_string()))?;
-
-        // Version check
-        if region.version > FORMAT_VERSION {
+        let version = u16::from_le_bytes([header_bytes[4], header_bytes[5]]);
+        if version > FORMAT_VERSION {
             return Err(io::Error::new(
                 io::ErrorKind::InvalidData,
                 format!(
-                    "Region file version {} is newer than supported version {}",
-                    region.version, FORMAT_VERSION
+                    "Region file version {version} is newer than supported version {FORMAT_VERSION}"
                 ),
             ));
         }
 
-        Ok(region)
+        // Read chunk table
+        let mut table_bytes = vec![0u8; CHUNK_TABLE_SIZE];
+        file.read_exact(&mut table_bytes)?;
+        let header = RegionHeader::from_bytes(&table_bytes);
+
+        // Calculate file size in sectors
+        let file_size = file.seek(SeekFrom::End(0))?;
+        let file_sectors = file_size.div_ceil(SECTOR_SIZE as u64) as u32;
+
+        Ok(RegionHandle {
+            file,
+            header,
+            loaded_chunk_count: 0,
+            header_dirty: false,
+            file_sectors,
+        })
     }
 
-    /// Saves a region to disk atomically.
-    fn save_region(&self, pos: RegionPos, region: &RegionFile) -> io::Result<()> {
+    /// Creates a new empty region file.
+    fn create_region(&self, pos: RegionPos) -> io::Result<RegionHandle> {
         fs::create_dir_all(&self.base_path)?;
 
         let path = self.region_path(pos);
-        let temp_path = path.with_extension("srg.tmp");
+        let mut file = OpenOptions::new()
+            .read(true)
+            .write(true)
+            .create(true)
+            .truncate(true)
+            .open(&path)?;
 
-        let file = File::create(&temp_path)?;
-        let mut writer = BufWriter::new(file);
+        // Write header
+        let mut header_bytes = [0u8; FILE_HEADER_SIZE];
+        header_bytes[0..4].copy_from_slice(&REGION_MAGIC);
+        header_bytes[4..6].copy_from_slice(&FORMAT_VERSION.to_le_bytes());
+        file.write_all(&header_bytes)?;
 
-        // Write magic
-        writer.write_all(&REGION_MAGIC)?;
+        // Write empty chunk table
+        let header = RegionHeader::new();
+        file.write_all(&header.to_bytes())?;
+        file.flush()?;
 
-        // Serialize with wincode
-        let data = wincode::serialize(region)
-            .map_err(|e| io::Error::new(io::ErrorKind::InvalidData, e.to_string()))?;
+        Ok(RegionHandle {
+            file,
+            header,
+            loaded_chunk_count: 0,
+            header_dirty: false,
+            file_sectors: FIRST_DATA_SECTOR,
+        })
+    }
 
-        // Compress with zstd (level 3 is a good balance of speed/ratio)
-        let compressed = zstd::encode_all(&data[..], 3)?;
-
-        writer.write_all(&compressed)?;
-        writer.flush()?;
-        drop(writer);
-
-        // Atomic rename
-        fs::rename(&temp_path, &path)?;
-
+    /// Writes the header to disk.
+    fn write_header(file: &mut File, header: &RegionHeader) -> io::Result<()> {
+        file.seek(SeekFrom::Start(FILE_HEADER_SIZE as u64))?;
+        file.write_all(&header.to_bytes())?;
+        file.flush()?;
         Ok(())
     }
 
-    /// Explicitly acquires a region, loading it from disk if needed.
-    ///
-    /// This is useful for batch operations where you want to pre-load a region
-    /// before loading multiple chunks from it. Each call increments the reference
-    /// count, so you must call `release_region` a matching number of times.
-    ///
-    /// For simple single-chunk loads, prefer `load_chunk` which handles this automatically.
-    pub fn acquire_region(&self, chunk_pos: ChunkPos) -> io::Result<()> {
-        let region_pos = RegionPos::from_chunk(chunk_pos.0.x, chunk_pos.0.y);
+    /// Reads a chunk's compressed data from disk.
+    fn read_chunk_data(file: &mut File, sector_offset: u32, size: u32) -> io::Result<Vec<u8>> {
+        let byte_offset = u64::from(sector_offset) * SECTOR_SIZE as u64;
+        file.seek(SeekFrom::Start(byte_offset))?;
 
-        let mut regions = self.regions.write();
-
-        if let Some(loaded) = regions.get_mut(&region_pos) {
-            loaded.loaded_chunk_count += 1;
-            return Ok(());
-        }
-
-        // Load from disk
-        let data = self.load_region(region_pos)?;
-        regions.insert(
-            region_pos,
-            LoadedRegion {
-                data,
-                loaded_chunk_count: 1,
-                dirty: false,
-            },
-        );
-
-        Ok(())
+        let mut compressed = vec![0u8; size as usize];
+        file.read_exact(&mut compressed)?;
+        Ok(compressed)
     }
 
-    /// Decrements a region's reference count and optionally saves/unloads it.
-    ///
-    /// When the reference count reaches zero, the region is saved (if dirty) and
-    /// unloaded from memory.
-    pub fn release_region(&self, chunk_pos: ChunkPos) -> io::Result<()> {
-        let region_pos = RegionPos::from_chunk(chunk_pos.0.x, chunk_pos.0.y);
+    /// Writes chunk data to disk at the specified sector offset.
+    fn write_chunk_data(
+        file: &mut File,
+        sector_offset: u32,
+        data: &[u8],
+        file_sectors: &mut u32,
+    ) -> io::Result<()> {
+        let byte_offset = u64::from(sector_offset) * SECTOR_SIZE as u64;
+        file.seek(SeekFrom::Start(byte_offset))?;
+        file.write_all(data)?;
 
-        let mut regions = self.regions.write();
-
-        let should_unload = if let Some(loaded) = regions.get_mut(&region_pos) {
-            loaded.loaded_chunk_count = loaded.loaded_chunk_count.saturating_sub(1);
-            loaded.loaded_chunk_count == 0
-        } else {
-            return Ok(());
-        };
-
-        if should_unload
-            && let Some(loaded) = regions.remove(&region_pos)
-            && loaded.dirty
-        {
-            self.save_region(region_pos, &loaded.data)?;
+        // Pad to sector boundary
+        let padding_needed = (SECTOR_SIZE - (data.len() % SECTOR_SIZE)) % SECTOR_SIZE;
+        if padding_needed > 0 {
+            file.write_all(&vec![0u8; padding_needed])?;
         }
 
+        // Update file sectors if we wrote past the end
+        let sectors_used = data.len().div_ceil(SECTOR_SIZE) as u32;
+        let end_sector = sector_offset + sectors_used;
+        if end_sector > *file_sectors {
+            *file_sectors = end_sector;
+        }
+
+        file.flush()?;
         Ok(())
     }
 
     /// Saves a chunk to the appropriate region.
     ///
-    /// If the chunk is already tracked (via `load_chunk`), this just updates the data.
-    /// Otherwise, this does NOT increment the reference count - the region will be
-    /// saved and unloaded after `flush_all` or when another chunk from this region
-    /// is released.
+    /// The chunk is serialized, compressed, and written to disk immediately.
+    /// If the region was already open (has loaded chunks), the header update is
+    /// deferred. If this call opened the region, it will be closed after saving.
     ///
-    /// For chunks that will remain loaded in memory, use `load_chunk` first or
-    /// call `acquire_region` to ensure the region stays loaded.
-    pub fn save_chunk(&self, chunk: &LevelChunk, status: ChunkStatus) -> io::Result<()> {
-        let region_pos = RegionPos::from_chunk(chunk.pos.0.x, chunk.pos.0.y);
-        let (local_x, local_z) = RegionPos::local_chunk_pos(chunk.pos.0.x, chunk.pos.0.y);
-        let index = RegionFile::chunk_index(local_x, local_z);
+    /// If the chunk is not dirty, this is a no-op and returns `Ok(false)`.
+    /// Returns `Ok(true)` if the chunk was saved.
+    #[allow(clippy::missing_panics_doc)]
+    pub fn save_chunk(&self, chunk: &mut ChunkAccess) -> io::Result<bool> {
+        // Skip saving if chunk hasn't been modified
+        if !chunk.is_dirty() {
+            return Ok(false);
+        }
+
+        let pos = chunk.pos();
+        let status = chunk.status();
+        let region_pos = RegionPos::from_chunk(pos.0.x, pos.0.y);
+        let (local_x, local_z) = RegionPos::local_chunk_pos(pos.0.x, pos.0.y);
+        let index = RegionHeader::chunk_index(local_x, local_z);
 
         let mut regions = self.regions.write();
 
-        let loaded = regions.entry(region_pos).or_insert_with(|| LoadedRegion {
-            data: self
-                .load_region(region_pos)
-                .unwrap_or_else(|_| RegionFile::new()),
-            loaded_chunk_count: 0,
-            dirty: false,
-        });
+        // Track if we opened the region (so we can close it after)
+        let we_opened_region = !regions.contains_key(&region_pos);
 
-        // Convert chunk to persistent format
-        let persistent = self.chunk_to_persistent(chunk, status);
-        loaded.data.chunks[index] = Some(persistent);
-        loaded.dirty = true;
+        // Get or open the region
+        let handle = if let Some(handle) = regions.get_mut(&region_pos) {
+            handle
+        } else {
+            let handle = self.open_region(region_pos)?;
+            regions.insert(region_pos, handle);
+            regions.get_mut(&region_pos).expect("just inserted")
+        };
 
-        Ok(())
+        // Convert chunk to persistent format and serialize
+        let persistent = self.sections_to_persistent(chunk.sections());
+        let data = wincode::serialize(&persistent)
+            .map_err(|e| io::Error::new(io::ErrorKind::InvalidData, e.to_string()))?;
+
+        // Compress with zstd
+        let compressed = zstd::encode_all(&data[..], 3)?;
+
+        if compressed.len() > MAX_CHUNK_SIZE {
+            // Clean up if we opened the region
+            if we_opened_region {
+                regions.remove(&region_pos);
+            }
+            return Err(io::Error::new(
+                io::ErrorKind::InvalidData,
+                format!(
+                    "Chunk too large: {} bytes (max {})",
+                    compressed.len(),
+                    MAX_CHUNK_SIZE
+                ),
+            ));
+        }
+
+        // Find space for the chunk
+        let sectors_needed = compressed.len().div_ceil(SECTOR_SIZE) as u32;
+        let old_entry = handle.header.entries[index];
+
+        // Try to reuse existing space if it fits
+        let sector_offset = if old_entry.exists() && old_entry.sector_count() >= sectors_needed {
+            old_entry.sector_offset
+        } else {
+            handle
+                .header
+                .find_free_sectors(sectors_needed, handle.file_sectors)
+        };
+
+        // Write chunk data
+        Self::write_chunk_data(
+            &mut handle.file,
+            sector_offset,
+            &compressed,
+            &mut handle.file_sectors,
+        )?;
+
+        // Update header entry
+        handle.header.entries[index] =
+            super::format::ChunkEntry::new(sector_offset, compressed.len() as u32, status);
+
+        // If we opened this region and no chunks are loaded from it,
+        // write the header and close it immediately
+        if we_opened_region && handle.loaded_chunk_count == 0 {
+            Self::write_header(&mut handle.file, &handle.header)?;
+            regions.remove(&region_pos);
+        } else {
+            handle.header_dirty = true;
+        }
+
+        drop(regions);
+        chunk.clear_dirty();
+
+        Ok(true)
     }
 
     /// Loads a chunk from the appropriate region.
     ///
-    /// Automatically acquires the region if not already loaded. The region's reference
+    /// Automatically opens the region if not already open. The region's reference
     /// count is incremented, so you must call `release_chunk` when done with the chunk.
     ///
     /// Returns `Ok(None)` if the chunk doesn't exist on disk.
@@ -311,96 +381,154 @@ impl RegionManager {
     pub fn load_chunk(&self, pos: ChunkPos) -> io::Result<Option<(LevelChunk, ChunkStatus)>> {
         let region_pos = RegionPos::from_chunk(pos.0.x, pos.0.y);
         let (local_x, local_z) = RegionPos::local_chunk_pos(pos.0.x, pos.0.y);
-        let index = RegionFile::chunk_index(local_x, local_z);
+        let index = RegionHeader::chunk_index(local_x, local_z);
 
         let mut regions = self.regions.write();
 
-        // Track if we just loaded this region (for cleanup on missing chunk)
-        let was_already_loaded = regions.contains_key(&region_pos);
+        // Track if we just opened this region
+        let was_already_open = regions.contains_key(&region_pos);
 
-        // Get or load the region
-        let loaded = if let Some(loaded) = regions.get_mut(&region_pos) {
-            loaded
+        // Get or open the region
+        let handle = if let Some(handle) = regions.get_mut(&region_pos) {
+            handle
         } else {
-            // Try to load from disk
-            let data = match self.load_region(region_pos) {
-                Ok(data) => data,
+            // Try to open region file
+            match self.open_region(region_pos) {
+                Ok(handle) => {
+                    regions.insert(region_pos, handle);
+                    regions.get_mut(&region_pos).expect("just inserted")
+                }
                 Err(e) if e.kind() == io::ErrorKind::NotFound => return Ok(None),
                 Err(e) => return Err(e),
-            };
-            regions.insert(
-                region_pos,
-                LoadedRegion {
-                    data,
-                    loaded_chunk_count: 0,
-                    dirty: false,
-                },
-            );
-            regions.get_mut(&region_pos).expect("just inserted")
+            }
         };
 
         // Check if chunk exists
-        let chunk_exists = loaded.data.chunks[index].is_some();
-        if !chunk_exists {
-            // If we just loaded this region and the chunk doesn't exist,
-            // remove the region to avoid memory leak (unless it has other refs)
-            if !was_already_loaded && loaded.loaded_chunk_count == 0 && !loaded.dirty {
+        let entry = handle.header.entries[index];
+        if !entry.exists() {
+            // Clean up if we just opened this region for nothing
+            if !was_already_open && handle.loaded_chunk_count == 0 && !handle.header_dirty {
                 regions.remove(&region_pos);
             }
             return Ok(None);
         }
 
-        // Increment ref count since we're returning a chunk from this region
-        loaded.loaded_chunk_count += 1;
+        // Read chunk data from disk
+        let compressed =
+            Self::read_chunk_data(&mut handle.file, entry.sector_offset, entry.size_bytes)?;
 
-        // SAFETY: We just checked chunk_exists above
-        let persistent = loaded.data.chunks[index].as_ref().expect("checked above");
-        let chunk = self.persistent_to_chunk(persistent, pos);
-        Ok(Some((chunk, persistent.status)))
+        // Decompress
+        let data = zstd::decode_all(&compressed[..])?;
+
+        // Deserialize
+        let persistent: PersistentChunk = wincode::deserialize(&data)
+            .map_err(|e| io::Error::new(io::ErrorKind::InvalidData, e.to_string()))?;
+
+        // Convert to runtime format (persistent is dropped after this - no duplication!)
+        let chunk = self.persistent_to_chunk(&persistent, pos);
+        let status = entry.status;
+
+        // Increment ref count
+        handle.loaded_chunk_count += 1;
+
+        Ok(Some((chunk, status)))
     }
 
-    /// Releases a chunk, decrementing the region's reference count.
+    /// Releases a loaded chunk, decrementing the region's reference count.
     ///
-    /// When all chunks from a region are released, the region is saved (if dirty)
-    /// and unloaded from memory.
+    /// When all chunks from a region are released, the header is saved (if dirty)
+    /// and the file handle is closed.
+    ///
+    /// This must be called for each chunk returned by `load_chunk`.
     pub fn release_chunk(&self, pos: ChunkPos) -> io::Result<()> {
-        self.release_region(pos)
+        let region_pos = RegionPos::from_chunk(pos.0.x, pos.0.y);
+
+        let mut regions = self.regions.write();
+
+        let should_close = if let Some(handle) = regions.get_mut(&region_pos) {
+            handle.loaded_chunk_count = handle.loaded_chunk_count.saturating_sub(1);
+            handle.loaded_chunk_count == 0
+        } else {
+            return Ok(());
+        };
+
+        if should_close
+            && let Some(mut handle) = regions.remove(&region_pos)
+            && handle.header_dirty
+        {
+            Self::write_header(&mut handle.file, &handle.header)?;
+        }
+
+        Ok(())
     }
 
-    /// Flushes all dirty regions to disk.
+    /// Checks if a chunk exists on disk without loading it.
+    pub fn chunk_exists(&self, pos: ChunkPos) -> io::Result<bool> {
+        let region_pos = RegionPos::from_chunk(pos.0.x, pos.0.y);
+        let (local_x, local_z) = RegionPos::local_chunk_pos(pos.0.x, pos.0.y);
+        let index = RegionHeader::chunk_index(local_x, local_z);
+
+        let regions = self.regions.read();
+
+        // Check cached header first
+        if let Some(handle) = regions.get(&region_pos) {
+            return Ok(handle.header.entries[index].exists());
+        }
+
+        drop(regions);
+
+        // Need to read header from disk
+        let path = self.region_path(region_pos);
+        if !path.exists() {
+            return Ok(false);
+        }
+
+        let mut file = File::open(&path)?;
+
+        // Skip magic + version
+        file.seek(SeekFrom::Start(FILE_HEADER_SIZE as u64))?;
+
+        // Read just the one entry we need (8 bytes at index * 8)
+        file.seek(SeekFrom::Current((index * 8) as i64))?;
+        let mut entry_bytes = [0u8; 8];
+        file.read_exact(&mut entry_bytes)?;
+
+        let entry = super::format::ChunkEntry::from_bytes(entry_bytes);
+        Ok(entry.exists())
+    }
+
+    /// Flushes all dirty headers to disk.
     pub fn flush_all(&self) -> io::Result<()> {
         let mut regions = self.regions.write();
 
-        for (pos, loaded) in regions.iter_mut() {
-            if loaded.dirty {
-                self.save_region(*pos, &loaded.data)?;
-                loaded.dirty = false;
+        for handle in regions.values_mut() {
+            if handle.header_dirty {
+                Self::write_header(&mut handle.file, &handle.header)?;
+                handle.header_dirty = false;
             }
         }
 
         Ok(())
     }
 
-    /// Converts a runtime chunk to persistent format.
-    fn chunk_to_persistent(&self, chunk: &LevelChunk, status: ChunkStatus) -> PersistentChunk {
+    /// Converts sections to persistent format.
+    fn sections_to_persistent(&self, sections: &Sections) -> PersistentChunk {
         let mut builder = ChunkBuilder::new(&self.registry);
 
-        let sections = chunk
-            .sections
+        let persistent_sections = sections
             .sections
             .iter()
             .map(|section| Self::section_to_persistent(section, &mut builder))
             .collect();
 
         PersistentChunk {
-            status,
             last_modified: std::time::SystemTime::now()
                 .duration_since(std::time::UNIX_EPOCH)
                 .map(|d| d.as_secs() as u32)
                 .unwrap_or(0),
             block_states: builder.block_states,
             biomes: builder.biomes,
-            sections,
+            sections: persistent_sections,
             block_entities: Vec::new(), // TODO: Implement block entity serialization
         }
     }
@@ -429,7 +557,8 @@ impl RegionManager {
                     .collect();
 
                 // Pack block indices (indices into section-local palette)
-                let bits = bits_for_palette_len(palette.len()).unwrap_or(4);
+                let bits = bits_for_palette_len(palette.len())
+                    .expect("Heterogeneous section should have palette length >= 2");
                 let indices: Vec<u32> = data
                     .cube
                     .iter()
@@ -473,7 +602,8 @@ impl RegionManager {
                     .map(|(biome_id, _)| builder.ensure_biome(*biome_id))
                     .collect();
 
-                let bits = bits_for_palette_len(palette.len()).unwrap_or(1);
+                let bits = bits_for_palette_len(palette.len())
+                    .expect("Heterogeneous biome data should have palette length >= 2");
                 let indices: Vec<u32> = data
                     .cube
                     .iter()
@@ -499,6 +629,7 @@ impl RegionManager {
     }
 
     /// Converts a persistent chunk to runtime format.
+    /// The returned chunk is not dirty (freshly loaded from disk).
     fn persistent_to_chunk(&self, persistent: &PersistentChunk, pos: ChunkPos) -> LevelChunk {
         let sections: Vec<ChunkSection> = persistent
             .sections
@@ -506,12 +637,12 @@ impl RegionManager {
             .map(|section| self.persistent_to_section(section, persistent))
             .collect();
 
-        LevelChunk {
-            sections: Sections {
+        LevelChunk::from_disk(
+            Sections {
                 sections: sections.into_boxed_slice(),
             },
             pos,
-        }
+        )
     }
 
     /// Converts a persistent section to runtime format.

@@ -1,5 +1,25 @@
 //! Data structures for the chunk persistence format.
 //!
+//! ## Format Overview
+//!
+//! Region files use a sector-based format with a fixed header for fast random access:
+//!
+//! ```text
+//! ┌─────────────────────────────────────────────────────┐
+//! │ Magic (4 bytes): "STLR"                             │
+//! │ Version (2 bytes): u16                              │
+//! │ Padding (2 bytes): reserved                         │
+//! ├─────────────────────────────────────────────────────┤
+//! │ Header: 1024 entries × 8 bytes = 8KB                │
+//! │   Each entry: offset (u32) + size (u24) + flags (u8)│
+//! ├─────────────────────────────────────────────────────┤
+//! │ Chunk data in 4KB sectors                           │
+//! │   [chunk data padded to 4KB boundary]               │
+//! │   [chunk data padded to 4KB boundary]               │
+//! │   ...                                               │
+//! └─────────────────────────────────────────────────────┘
+//! ```
+//!
 //! ## Design
 //!
 //! Each chunk stores its own block state and biome palettes, making chunks
@@ -17,7 +37,7 @@ use crate::chunk::chunk_access::ChunkStatus;
 pub const REGION_MAGIC: [u8; 4] = *b"STLR";
 
 /// Current format version. Increment when making breaking changes.
-pub const FORMAT_VERSION: u16 = 1;
+pub const FORMAT_VERSION: u16 = 2;
 
 /// Number of chunks per region side (32×32 = 1024 chunks per region).
 pub const REGION_SIZE: usize = 32;
@@ -37,27 +57,129 @@ pub const BIOME_SIZE: usize = 4;
 /// Total biome cells in a section.
 pub const BIOMES_PER_SECTION: usize = BIOME_SIZE * BIOME_SIZE * BIOME_SIZE;
 
-/// A region file containing a 32×32 grid of chunks.
-///
-/// Region files are loaded entirely into memory, modified, and saved atomically.
-/// Each chunk is self-contained with its own block state and biome palettes.
-#[derive(SchemaWrite, SchemaRead)]
-pub struct RegionFile {
-    /// Format version for migrations.
-    pub version: u16,
+/// Sector size in bytes (4KB, matches modern disk physical sectors).
+pub const SECTOR_SIZE: usize = 4096;
 
-    /// 32×32 chunks. `None` = chunk never generated.
-    /// Index = `local_z` * 32 + `local_x`
-    pub chunks: Box<[Option<PersistentChunk>; CHUNKS_PER_REGION]>,
+/// Size of the file header (magic + version + padding).
+pub const FILE_HEADER_SIZE: usize = 8;
+
+/// Size of the chunk location table (1024 entries × 8 bytes).
+pub const CHUNK_TABLE_SIZE: usize = CHUNKS_PER_REGION * 8;
+
+/// Total header size (file header + chunk table).
+pub const TOTAL_HEADER_SIZE: usize = FILE_HEADER_SIZE + CHUNK_TABLE_SIZE;
+
+/// First sector where chunk data can be stored.
+/// Header takes `ceil(TOTAL_HEADER_SIZE` / `SECTOR_SIZE`) = 3 sectors (8 + 8192 = 8200 bytes).
+pub const FIRST_DATA_SECTOR: u32 = 3;
+
+/// Maximum chunk size in bytes (16MB - should be plenty).
+pub const MAX_CHUNK_SIZE: usize = 16 * 1024 * 1024;
+
+/// Entry in the chunk location table.
+///
+/// Layout (8 bytes total):
+/// - offset: u32 - sector offset (0 = chunk doesn't exist)
+/// - size: u24 - compressed size in bytes
+/// - flags: u8 - status and flags
+#[derive(Clone, Copy)]
+pub struct ChunkEntry {
+    /// Sector offset from start of file. 0 means chunk doesn't exist.
+    /// Multiply by `SECTOR_SIZE` to get byte offset.
+    pub sector_offset: u32,
+    /// Size of compressed chunk data in bytes (stored as u24, max ~16MB).
+    pub size_bytes: u32,
+    /// Chunk status (generation state).
+    pub status: ChunkStatus,
 }
 
-impl RegionFile {
-    /// Creates a new empty region file.
+impl ChunkEntry {
+    /// Creates a new chunk entry.
+    #[must_use]
+    pub const fn new(sector_offset: u32, size_bytes: u32, status: ChunkStatus) -> Self {
+        Self {
+            sector_offset,
+            size_bytes,
+            status,
+        }
+    }
+
+    /// Returns true if this entry represents an existing chunk.
+    #[must_use]
+    pub const fn exists(&self) -> bool {
+        self.sector_offset != 0
+    }
+
+    /// Creates an empty/non-existent chunk entry.
+    #[must_use]
+    pub const fn empty() -> Self {
+        Self {
+            sector_offset: 0,
+            size_bytes: 0,
+            status: ChunkStatus::Empty,
+        }
+    }
+
+    /// Calculates the number of sectors this chunk occupies.
+    #[must_use]
+    pub const fn sector_count(&self) -> u32 {
+        if self.size_bytes == 0 {
+            0
+        } else {
+            (self.size_bytes as usize).div_ceil(SECTOR_SIZE) as u32
+        }
+    }
+
+    /// Serializes to 8 bytes: [offset: 4][size: 3][flags: 1]
+    #[must_use]
+    pub const fn to_bytes(&self) -> [u8; 8] {
+        let offset_bytes = self.sector_offset.to_le_bytes();
+        let size_bytes = self.size_bytes.to_le_bytes();
+        let flags = self.status.get_index() as u8;
+        [
+            offset_bytes[0],
+            offset_bytes[1],
+            offset_bytes[2],
+            offset_bytes[3],
+            size_bytes[0],
+            size_bytes[1],
+            size_bytes[2],
+            flags,
+        ]
+    }
+
+    /// Deserializes from 8 bytes.
+    #[must_use]
+    pub fn from_bytes(bytes: [u8; 8]) -> Self {
+        let sector_offset = u32::from_le_bytes([bytes[0], bytes[1], bytes[2], bytes[3]]);
+        let size_bytes = u32::from_le_bytes([bytes[4], bytes[5], bytes[6], 0]);
+        let status = ChunkStatus::from_index(bytes[7] as usize).unwrap_or(ChunkStatus::Empty);
+        Self {
+            sector_offset,
+            size_bytes,
+            status,
+        }
+    }
+}
+
+impl Default for ChunkEntry {
+    fn default() -> Self {
+        Self::empty()
+    }
+}
+
+/// Region header containing chunk location table.
+pub struct RegionHeader {
+    /// Chunk entries (1024 = 32×32).
+    pub entries: Box<[ChunkEntry; CHUNKS_PER_REGION]>,
+}
+
+impl RegionHeader {
+    /// Creates an empty header with no chunks.
     #[must_use]
     pub fn new() -> Self {
         Self {
-            version: FORMAT_VERSION,
-            chunks: Box::new(std::array::from_fn(|_| None)),
+            entries: Box::new([ChunkEntry::default(); CHUNKS_PER_REGION]),
         }
     }
 
@@ -75,9 +197,65 @@ impl RegionFile {
         debug_assert!(index < CHUNKS_PER_REGION);
         (index % REGION_SIZE, index / REGION_SIZE)
     }
+
+    /// Serializes the header to bytes.
+    #[must_use]
+    pub fn to_bytes(&self) -> Vec<u8> {
+        let mut bytes = Vec::with_capacity(CHUNK_TABLE_SIZE);
+        for entry in self.entries.iter() {
+            bytes.extend_from_slice(&entry.to_bytes());
+        }
+        bytes
+    }
+
+    /// Deserializes the header from bytes.
+    ///
+    /// # Panics
+    /// Panics if bytes length is not exactly `CHUNK_TABLE_SIZE`.
+    #[must_use]
+    pub fn from_bytes(bytes: &[u8]) -> Self {
+        assert_eq!(bytes.len(), CHUNK_TABLE_SIZE);
+        let mut entries = Box::new([ChunkEntry::default(); CHUNKS_PER_REGION]);
+        for (i, chunk) in bytes.chunks_exact(8).enumerate() {
+            entries[i] = ChunkEntry::from_bytes(chunk.try_into().expect("chunk entry is 8 bytes"));
+        }
+        Self { entries }
+    }
+
+    /// Finds a contiguous range of free sectors for allocation.
+    ///
+    /// Returns the starting sector offset, or `None` if no suitable range exists.
+    #[must_use]
+    pub fn find_free_sectors(&self, sectors_needed: u32, file_sectors: u32) -> u32 {
+        if sectors_needed == 0 {
+            return FIRST_DATA_SECTOR;
+        }
+
+        // Build a list of (start, end) ranges for used sectors
+        let mut used_ranges: Vec<(u32, u32)> = self
+            .entries
+            .iter()
+            .filter(|e| e.exists())
+            .map(|e| (e.sector_offset, e.sector_offset + e.sector_count()))
+            .collect();
+        used_ranges.sort_by_key(|r| r.0);
+
+        // Try to find a gap between used ranges
+        let mut current_sector = FIRST_DATA_SECTOR;
+        for (start, end) in used_ranges {
+            if start >= current_sector + sectors_needed {
+                // Found a gap
+                return current_sector;
+            }
+            current_sector = current_sector.max(end);
+        }
+
+        // No gap found, append at the end
+        current_sector.max(file_sectors)
+    }
 }
 
-impl Default for RegionFile {
+impl Default for RegionHeader {
     fn default() -> Self {
         Self::new()
     }
@@ -98,8 +276,6 @@ pub struct PersistentBlockState {
 /// self-contained. Sections reference indices into these chunk-level palettes.
 #[derive(SchemaWrite, SchemaRead)]
 pub struct PersistentChunk {
-    /// Generation status of this chunk.
-    pub status: ChunkStatus,
     /// Unix timestamp of last modification.
     pub last_modified: u32,
     /// Block states used in this chunk. Sections reference indices into this.
@@ -240,9 +416,68 @@ mod tests {
 
     #[test]
     fn test_chunk_index() {
-        assert_eq!(RegionFile::chunk_index(0, 0), 0);
-        assert_eq!(RegionFile::chunk_index(31, 0), 31);
-        assert_eq!(RegionFile::chunk_index(0, 1), 32);
-        assert_eq!(RegionFile::chunk_index(31, 31), 1023);
+        assert_eq!(RegionHeader::chunk_index(0, 0), 0);
+        assert_eq!(RegionHeader::chunk_index(31, 0), 31);
+        assert_eq!(RegionHeader::chunk_index(0, 1), 32);
+        assert_eq!(RegionHeader::chunk_index(31, 31), 1023);
+    }
+
+    #[test]
+    fn test_chunk_entry_roundtrip() {
+        let entry = ChunkEntry::new(42, 12345, ChunkStatus::Full);
+        let bytes = entry.to_bytes();
+        let decoded = ChunkEntry::from_bytes(bytes);
+        assert_eq!(entry.sector_offset, decoded.sector_offset);
+        assert_eq!(entry.size_bytes, decoded.size_bytes);
+        assert_eq!(entry.status, decoded.status);
+    }
+
+    #[test]
+    fn test_chunk_entry_empty() {
+        let entry = ChunkEntry::default();
+        assert!(!entry.exists());
+        assert_eq!(entry.sector_count(), 0);
+    }
+
+    #[test]
+    fn test_sector_count() {
+        // Empty
+        assert_eq!(ChunkEntry::new(1, 0, ChunkStatus::Full).sector_count(), 0);
+        // Exactly one sector
+        assert_eq!(
+            ChunkEntry::new(1, 4096, ChunkStatus::Full).sector_count(),
+            1
+        );
+        // Just over one sector
+        assert_eq!(
+            ChunkEntry::new(1, 4097, ChunkStatus::Full).sector_count(),
+            2
+        );
+        // Multiple sectors
+        assert_eq!(
+            ChunkEntry::new(1, 12000, ChunkStatus::Full).sector_count(),
+            3
+        );
+    }
+
+    #[test]
+    fn test_find_free_sectors_empty() {
+        let header = RegionHeader::new();
+        // Should return first data sector
+        assert_eq!(header.find_free_sectors(1, 3), FIRST_DATA_SECTOR);
+    }
+
+    #[test]
+    fn test_find_free_sectors_gap() {
+        let mut header = RegionHeader::new();
+        // Chunk at sector 3-4 (2 sectors)
+        header.entries[0] = ChunkEntry::new(3, 8000, ChunkStatus::Full);
+        // Chunk at sector 10-11 (2 sectors)
+        header.entries[1] = ChunkEntry::new(10, 8000, ChunkStatus::Full);
+
+        // Should find gap at sector 5-9
+        assert_eq!(header.find_free_sectors(3, 12), 5);
+        // Needs more than gap, append at end
+        assert_eq!(header.find_free_sectors(6, 12), 12);
     }
 }
