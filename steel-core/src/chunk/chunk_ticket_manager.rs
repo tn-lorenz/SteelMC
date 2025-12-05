@@ -1,7 +1,7 @@
 //! Chunk ticket management for tracking chunk levels and propagation.
 #![allow(missing_docs)]
 
-use rustc_hash::FxHashMap;
+use rustc_hash::{FxBuildHasher, FxHashMap};
 use smallvec::SmallVec;
 use steel_utils::ChunkPos;
 
@@ -39,8 +39,6 @@ pub fn generation_status(level: Option<u8>) -> Option<ChunkStatus> {
     }
 }
 
-const NUM_BUCKETS: usize = MAX_LEVEL as usize + 1;
-
 /// Up to 4 tickets stored inline per position.
 type TicketLevels = SmallVec<[u8; 4]>;
 
@@ -52,14 +50,13 @@ pub struct LevelChange {
     pub new_level: Option<u8>,
 }
 
-/// Chunk ticket propagation using Dial's algorithm.
+/// Chunk ticket propagation.
 /// Lower levels = higher priority. Multiple tickets per position supported.
 #[derive(Debug)]
 pub struct ChunkTicketManager {
     tickets: FxHashMap<ChunkPos, TicketLevels>,
     levels: FxHashMap<ChunkPos, u8>,
     dirty: bool,
-    buckets: [Vec<ChunkPos>; NUM_BUCKETS],
     /// Tracks changes from the last `run_all_updates()` call.
     changes: Vec<LevelChange>,
 }
@@ -77,7 +74,6 @@ impl ChunkTicketManager {
             tickets: FxHashMap::default(),
             levels: FxHashMap::default(),
             dirty: false,
-            buckets: std::array::from_fn(|_| Vec::new()),
             changes: Vec::new(),
         }
     }
@@ -143,7 +139,7 @@ impl ChunkTicketManager {
         self.tickets.len()
     }
 
-    /// Propagates all tickets using Dial's algorithm. Only runs if dirty.
+    /// Propagates all tickets. Only runs if dirty.
     /// Returns a slice of changes (added/updated/removed levels).
     pub fn run_all_updates(&mut self) -> &[LevelChange] {
         self.changes.clear();
@@ -152,52 +148,37 @@ impl ChunkTicketManager {
             return &self.changes;
         }
 
-        // Swap out old levels to compare against later
-        let old_levels = std::mem::take(&mut self.levels);
-
-        // Seed buckets with ticket sources
-        for (&pos, levels) in &self.tickets {
-            if let Some(&min_level) = levels.iter().min() {
-                self.buckets[min_level as usize].push(pos);
-            }
-        }
+        // Swap out old levels to compare against later, reusing capacity
+        let old_capacity = self.levels.capacity();
+        let old_levels = std::mem::replace(
+            &mut self.levels,
+            FxHashMap::with_capacity_and_hasher(old_capacity, FxBuildHasher::default()),
+        );
 
         self.dirty = false;
 
-        // Process buckets low to high
-        for current_level in 0..NUM_BUCKETS {
-            let current_level = current_level as u8;
-            let mut i = 0;
+        // Propagate each ticket source
+        for (&source_pos, levels) in &self.tickets {
+            let Some(&source_level) = levels.iter().min() else {
+                continue;
+            };
 
-            while i < self.buckets[current_level as usize].len() {
-                let current_pos = self.buckets[current_level as usize][i];
-                i += 1;
+            let radius = (MAX_LEVEL - source_level) as i32;
+            let sx = source_pos.0.x;
+            let sy = source_pos.0.y;
 
-                // Skip if already has equal or better level
-                if self
-                    .levels
-                    .get(&current_pos)
-                    .is_some_and(|&e| e <= current_level)
-                {
-                    continue;
-                }
+            for dy in -radius..=radius {
+                for dx in -radius..=radius {
+                    let distance = dx.abs().max(dy.abs()) as u8;
+                    let level = source_level + distance;
 
-                self.levels.insert(current_pos, current_level);
-
-                let next_level = current_level + 1;
-                if next_level <= MAX_LEVEL {
-                    for neighbor in current_pos.neighbors() {
-                        let dominated =
-                            self.levels.get(&neighbor).is_some_and(|&e| e <= next_level);
-
-                        if !dominated {
-                            self.buckets[next_level as usize].push(neighbor);
-                        }
-                    }
+                    let pos = ChunkPos::new(sx + dx, sy + dy);
+                    self.levels
+                        .entry(pos)
+                        .and_modify(|e| *e = (*e).min(level))
+                        .or_insert(level);
                 }
             }
-
-            self.buckets[current_level as usize].clear();
         }
 
         // Find changed/added levels

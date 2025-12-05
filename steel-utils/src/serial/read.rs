@@ -137,7 +137,6 @@ impl ReadFrom for Uuid {
 
 impl ReadFrom for Identifier {
     fn read(data: &mut impl Read) -> Result<Self> {
-        Identifier::from_str(&String::read_prefixed::<VarInt>(data)?)
-            .map_err(|e| Error::other(e.clone()))
+        Identifier::from_str(&String::read_prefixed::<VarInt>(data)?).map_err(|e| Error::other(e))
     }
 }
