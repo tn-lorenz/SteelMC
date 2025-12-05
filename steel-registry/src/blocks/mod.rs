@@ -198,6 +198,59 @@ impl BlockRegistry {
         property_values
     }
 
+    /// Gets the state ID for a block with the given properties.
+    ///
+    /// Returns `None` if the block key is unknown or if any property name/value is invalid.
+    ///
+    /// Properties can be provided in any order. Missing properties will use the block's
+    /// default values (typically index 0 for each property).
+    #[must_use]
+    pub fn state_id_from_properties(
+        &self,
+        key: &Identifier,
+        properties: &[(&str, &str)],
+    ) -> Option<BlockStateId> {
+        let block = self.by_key(key)?;
+        let block_id = *self.blocks_by_key.get(key)?;
+        let base_state_id = self.block_to_base_state[block_id];
+
+        // If no properties, just return base state
+        if block.properties.is_empty() {
+            return Some(BlockStateId(base_state_id));
+        }
+
+        // Build property indices (start with defaults = 0)
+        let mut property_indices = vec![0usize; block.properties.len()];
+
+        // Apply provided properties
+        for (prop_name, prop_value) in properties {
+            // Find this property in the block's property list
+            let prop_idx = block
+                .properties
+                .iter()
+                .position(|p| p.get_name() == *prop_name)?;
+
+            // Find the value index
+            let prop = block.properties[prop_idx];
+            let value_idx = prop
+                .get_possible_values()
+                .iter()
+                .position(|v| *v == *prop_value)?;
+
+            property_indices[prop_idx] = value_idx;
+        }
+
+        // Encode property indices to state offset
+        let mut offset = 0u16;
+        let mut multiplier = 1u16;
+        for (idx, prop) in property_indices.iter().zip(block.properties.iter()) {
+            offset += *idx as u16 * multiplier;
+            multiplier *= prop.get_possible_values().len() as u16;
+        }
+
+        Some(BlockStateId(base_state_id + offset))
+    }
+
     // Panics if that property isn't supposed to be on this block.
     pub fn get_property<T, P: Property<T>>(&self, id: BlockStateId, property: &P) -> T {
         let block = self.by_state_id(id).expect("Invalid state ID");
@@ -398,3 +451,237 @@ macro_rules! offset {
 /// Re-export for easier access
 pub use offset;
 use steel_utils::{BlockStateId, Identifier};
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+    use crate::vanilla_blocks;
+
+    fn create_test_registry() -> BlockRegistry {
+        let mut registry = BlockRegistry::new();
+        vanilla_blocks::register_blocks(&mut registry);
+        registry.freeze();
+        registry
+    }
+
+    #[test]
+    fn test_redstone_wire_properties() {
+        let registry = create_test_registry();
+        let redstone_wire = registry
+            .by_key(&Identifier::vanilla_static("redstone_wire"))
+            .expect("redstone_wire should exist");
+
+        // Redstone wire has 5 properties
+        assert_eq!(redstone_wire.properties.len(), 5);
+
+        // Check property names
+        let prop_names: Vec<&str> = redstone_wire
+            .properties
+            .iter()
+            .map(|p| p.get_name())
+            .collect();
+        assert!(prop_names.contains(&"east"));
+        assert!(prop_names.contains(&"north"));
+        assert!(prop_names.contains(&"south"));
+        assert!(prop_names.contains(&"west"));
+        assert!(prop_names.contains(&"power"));
+    }
+
+    #[test]
+    fn test_redstone_wire_state_count() {
+        let registry = create_test_registry();
+
+        // Redstone wire: 3 sides × 3 sides × 3 sides × 3 sides × 16 power levels = 1296 states
+        // Actually checking the state count
+        let redstone_wire = registry
+            .by_key(&Identifier::vanilla_static("redstone_wire"))
+            .expect("redstone_wire should exist");
+
+        let mut state_count = 1;
+        for prop in redstone_wire.properties {
+            state_count *= prop.get_possible_values().len();
+        }
+        assert_eq!(state_count, 3 * 3 * 3 * 3 * 16); // 1296
+    }
+
+    #[test]
+    fn test_get_properties_default_state() {
+        let registry = create_test_registry();
+        let redstone_wire = registry
+            .by_key(&Identifier::vanilla_static("redstone_wire"))
+            .expect("redstone_wire should exist");
+
+        let default_state = registry.get_default_state_id(redstone_wire);
+        let properties = registry.get_properties(default_state);
+
+        // Default state should have all sides "none" and power 0
+        assert_eq!(properties.len(), 5);
+
+        for (name, value) in &properties {
+            match *name {
+                "east" | "north" | "south" | "west" => {
+                    assert_eq!(*value, "none", "Default side should be 'none'");
+                }
+                "power" => {
+                    assert_eq!(*value, "0", "Default power should be '0'");
+                }
+                _ => panic!("Unexpected property: {}", name),
+            }
+        }
+    }
+
+    #[test]
+    fn test_state_id_from_properties_roundtrip() {
+        let registry = create_test_registry();
+        let key = Identifier::vanilla_static("redstone_wire");
+
+        // Test with specific properties
+        let properties = [
+            ("east", "up"),
+            ("north", "side"),
+            ("south", "none"),
+            ("west", "up"),
+            ("power", "15"),
+        ];
+
+        let state_id = registry
+            .state_id_from_properties(&key, &properties)
+            .expect("Should find state");
+
+        // Get properties back and verify
+        let retrieved = registry.get_properties(state_id);
+        assert_eq!(retrieved.len(), 5);
+
+        for (name, value) in &properties {
+            let found = retrieved
+                .iter()
+                .find(|(n, _)| n == name)
+                .expect("Property should exist");
+            assert_eq!(found.1, *value, "Property {} mismatch", name);
+        }
+    }
+
+    #[test]
+    fn test_state_id_from_properties_partial() {
+        let registry = create_test_registry();
+        let key = Identifier::vanilla_static("redstone_wire");
+
+        // Only specify some properties - others should default to index 0
+        let partial_props = [("power", "10"), ("east", "side")];
+
+        let state_id = registry
+            .state_id_from_properties(&key, &partial_props)
+            .expect("Should find state");
+
+        let retrieved = registry.get_properties(state_id);
+
+        // Verify specified properties
+        let power = retrieved.iter().find(|(n, _)| *n == "power").unwrap();
+        assert_eq!(power.1, "10");
+
+        let east = retrieved.iter().find(|(n, _)| *n == "east").unwrap();
+        assert_eq!(east.1, "side");
+
+        // Unspecified properties should be at index 0 (first value in enum)
+        let north = retrieved.iter().find(|(n, _)| *n == "north").unwrap();
+        assert_eq!(north.1, "up"); // Index 0 is "up" for RedstoneSide
+    }
+
+    #[test]
+    fn test_state_id_from_properties_empty() {
+        let registry = create_test_registry();
+        let key = Identifier::vanilla_static("redstone_wire");
+
+        // Empty properties - should get base state with all defaults at index 0
+        let state_id = registry
+            .state_id_from_properties(&key, &[])
+            .expect("Should find state");
+
+        let retrieved = registry.get_properties(state_id);
+
+        // All should be at index 0
+        for (name, value) in &retrieved {
+            match *name {
+                "east" | "north" | "south" | "west" => {
+                    assert_eq!(*value, "up", "Empty props should use index 0 = 'up'");
+                }
+                "power" => {
+                    assert_eq!(*value, "0", "Empty props should use index 0 = '0'");
+                }
+                _ => {}
+            }
+        }
+    }
+
+    #[test]
+    fn test_state_id_from_properties_invalid_block() {
+        let registry = create_test_registry();
+        let key = Identifier::vanilla_static("nonexistent_block");
+
+        let result = registry.state_id_from_properties(&key, &[]);
+        assert!(result.is_none(), "Should return None for invalid block");
+    }
+
+    #[test]
+    fn test_state_id_from_properties_invalid_property() {
+        let registry = create_test_registry();
+        let key = Identifier::vanilla_static("redstone_wire");
+
+        let invalid_props = [("invalid_property", "value")];
+        let result = registry.state_id_from_properties(&key, &invalid_props);
+        assert!(result.is_none(), "Should return None for invalid property");
+    }
+
+    #[test]
+    fn test_state_id_from_properties_invalid_value() {
+        let registry = create_test_registry();
+        let key = Identifier::vanilla_static("redstone_wire");
+
+        let invalid_props = [("power", "999")]; // Power only goes 0-15
+        let result = registry.state_id_from_properties(&key, &invalid_props);
+        assert!(result.is_none(), "Should return None for invalid value");
+    }
+
+    #[test]
+    fn test_stone_no_properties() {
+        let registry = create_test_registry();
+        let key = Identifier::vanilla_static("stone");
+
+        // Stone has no properties
+        let stone = registry.by_key(&key).expect("stone should exist");
+        assert!(stone.properties.is_empty());
+
+        // Should still work with empty properties
+        let state_id = registry
+            .state_id_from_properties(&key, &[])
+            .expect("Should find state");
+
+        let retrieved = registry.get_properties(state_id);
+        assert!(retrieved.is_empty());
+    }
+
+    #[test]
+    fn test_all_redstone_power_levels() {
+        let registry = create_test_registry();
+        let key = Identifier::vanilla_static("redstone_wire");
+
+        // Test all 16 power levels
+        for power in 0..=15 {
+            let power_str = power.to_string();
+            let props = [("power", power_str.as_str())];
+
+            let state_id = registry
+                .state_id_from_properties(&key, &props)
+                .unwrap_or_else(|| panic!("Should find state for power {}", power));
+
+            let retrieved = registry.get_properties(state_id);
+            let found_power = retrieved.iter().find(|(n, _)| *n == "power").unwrap();
+            assert_eq!(
+                found_power.1,
+                power_str.as_str(),
+                "Power level {} mismatch",
+                power
+            );
+        }
+    }
+}

@@ -114,7 +114,7 @@ mod tests {
             let packed = pack_indices(&indices, bits);
             let unpacked = unpack_indices(&packed, bits, indices.len());
 
-            assert_eq!(indices, unpacked, "Failed for bits={}", bits);
+            assert_eq!(indices, unpacked, "Failed for bits={bits}");
         }
     }
 

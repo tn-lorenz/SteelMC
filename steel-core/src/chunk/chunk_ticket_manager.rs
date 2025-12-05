@@ -152,7 +152,7 @@ impl ChunkTicketManager {
         let old_capacity = self.levels.capacity();
         let old_levels = std::mem::replace(
             &mut self.levels,
-            FxHashMap::with_capacity_and_hasher(old_capacity, FxBuildHasher::default()),
+            FxHashMap::with_capacity_and_hasher(old_capacity, FxBuildHasher),
         );
 
         self.dirty = false;
@@ -163,7 +163,7 @@ impl ChunkTicketManager {
                 continue;
             };
 
-            let radius = (MAX_LEVEL - source_level) as i32;
+            let radius = i32::from(MAX_LEVEL - source_level);
             let sx = source_pos.0.x;
             let sy = source_pos.0.y;
 

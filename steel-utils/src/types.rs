@@ -272,7 +272,7 @@ impl<'de> SchemaRead<'de> for Identifier {
 
         let s = unsafe { s.assume_init() };
 
-        dst.write(Identifier::from_str(&s).map_err(|e| wincode::ReadError::Custom(e))?);
+        dst.write(Identifier::from_str(&s).map_err(wincode::ReadError::Custom)?);
         Ok(())
     }
 }

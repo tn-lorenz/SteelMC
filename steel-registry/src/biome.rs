@@ -151,6 +151,12 @@ impl BiomeRegistry {
         self.get(key)
     }
 
+    /// Gets the numeric ID for a biome by its key.
+    #[must_use]
+    pub fn id_from_key(&self, key: &Identifier) -> Option<usize> {
+        self.biomes_by_key.get(key).copied()
+    }
+
     pub fn iter(&self) -> impl Iterator<Item = (usize, BiomeRef)> + '_ {
         self.biomes_by_id
             .iter()

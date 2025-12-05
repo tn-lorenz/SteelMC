@@ -2,8 +2,8 @@
 //!
 //! ## Design
 //!
-//! The format uses per-region tables for block states and biomes to deduplicate
-//! strings. Sections store indices into these tables rather than full identifiers.
+//! Each chunk stores its own block state and biome palettes, making chunks
+//! self-contained and avoiding expensive region-wide table rebuilds.
 //!
 //! Block data uses power-of-2 bit packing (1, 2, 4, 8, 16 bits) to avoid entries
 //! spanning u64 boundaries.
@@ -40,21 +40,14 @@ pub const BIOMES_PER_SECTION: usize = BIOME_SIZE * BIOME_SIZE * BIOME_SIZE;
 /// A region file containing a 32×32 grid of chunks.
 ///
 /// Region files are loaded entirely into memory, modified, and saved atomically.
+/// Each chunk is self-contained with its own block state and biome palettes.
 #[derive(SchemaWrite, SchemaRead)]
 pub struct RegionFile {
     /// Format version for migrations.
     pub version: u16,
 
-    /// Block states used in this region.
-    /// Index 0 is always air (`minecraft:air` with no properties).
-    pub block_states: Vec<PersistentBlockState>,
-
-    /// Biome identifiers used in this region.
-    /// Stored as full identifiers (e.g., "minecraft:plains").
-    pub biomes: Vec<Identifier>,
-
     /// 32×32 chunks. `None` = chunk never generated.
-    /// Index = local_z * 32 + local_x
+    /// Index = `local_z` * 32 + `local_x`
     pub chunks: Box<[Option<PersistentChunk>; CHUNKS_PER_REGION]>,
 }
 
@@ -62,16 +55,8 @@ impl RegionFile {
     /// Creates a new empty region file.
     #[must_use]
     pub fn new() -> Self {
-        // Air is always index 0
-        let air = PersistentBlockState {
-            name: Identifier::vanilla_static("air"),
-            properties: Vec::new(),
-        };
-
         Self {
             version: FORMAT_VERSION,
-            block_states: vec![air],
-            biomes: Vec::new(),
             chunks: Box::new(std::array::from_fn(|_| None)),
         }
     }
@@ -101,19 +86,26 @@ impl Default for RegionFile {
 /// A block state with its identifier and properties.
 #[derive(SchemaWrite, SchemaRead, Clone, PartialEq, Eq, Hash, Debug)]
 pub struct PersistentBlockState {
-    /// Block identifier (e.g., "minecraft:oak_stairs").
+    /// Block identifier (e.g., "`minecraft:oak_stairs`").
     pub name: Identifier,
     /// Block properties as key-value pairs (e.g., [("facing", "north")]).
     pub properties: Vec<(String, String)>,
 }
 
 /// A persistent chunk containing sections and metadata.
+///
+/// Each chunk stores its own block state and biome palettes, making it
+/// self-contained. Sections reference indices into these chunk-level palettes.
 #[derive(SchemaWrite, SchemaRead)]
 pub struct PersistentChunk {
     /// Generation status of this chunk.
     pub status: ChunkStatus,
     /// Unix timestamp of last modification.
     pub last_modified: u32,
+    /// Block states used in this chunk. Sections reference indices into this.
+    pub block_states: Vec<PersistentBlockState>,
+    /// Biomes used in this chunk. Sections reference indices into this.
+    pub biomes: Vec<Identifier>,
     /// Vertical sections (typically 24 for -64 to 319).
     pub sections: Vec<PersistentSection>,
     /// Block entities (chests, signs, etc.). Currently placeholder.
@@ -125,18 +117,18 @@ pub struct PersistentChunk {
 pub enum PersistentSection {
     /// All blocks are the same type.
     Homogeneous {
-        /// Index into region's `block_states` table.
-        block_state: u32,
+        /// Index into chunk's `block_states` palette.
+        block_state: u16,
         /// Biome data for this section.
         biomes: PersistentBiomeData,
     },
     /// Multiple block types present.
     Heterogeneous {
-        /// Local palette: indices into region's `block_states` table.
-        palette: Vec<u32>,
+        /// Section-local palette: indices into chunk's `block_states` palette.
+        palette: Vec<u16>,
         /// Bits per entry (1, 2, 4, 8, or 16).
         bits_per_entry: u8,
-        /// Packed block indices into local palette. 4096 entries.
+        /// Packed block indices into section-local palette. 4096 entries.
         block_data: Box<[u64]>,
         /// Biome data for this section.
         biomes: PersistentBiomeData,
@@ -148,16 +140,16 @@ pub enum PersistentSection {
 pub enum PersistentBiomeData {
     /// All 64 biome cells are the same.
     Homogeneous {
-        /// Index into region's `biomes` table.
+        /// Index into chunk's `biomes` palette.
         biome: u16,
     },
     /// Multiple biomes present.
     Heterogeneous {
-        /// Local palette: indices into region's `biomes` table.
+        /// Section-local palette: indices into chunk's `biomes` palette.
         palette: Vec<u16>,
         /// Bits per entry (1, 2, 4, or 8).
         bits_per_entry: u8,
-        /// Packed biome indices into local palette. 64 entries.
+        /// Packed biome indices into section-local palette. 64 entries.
         biome_data: Box<[u64]>,
     },
 }
@@ -182,9 +174,9 @@ pub struct PersistentBlockEntity {
 /// Position of a region in region coordinates.
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Hash)]
 pub struct RegionPos {
-    /// Region X coordinate (chunk_x / 32).
+    /// Region X coordinate (`chunk_x` / 32).
     pub x: i32,
-    /// Region Z coordinate (chunk_z / 32).
+    /// Region Z coordinate (`chunk_z` / 32).
     pub z: i32,
 }
 

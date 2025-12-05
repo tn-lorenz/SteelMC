@@ -7,10 +7,12 @@ use std::{
     fs::{self, File},
     io::{self, BufReader, BufWriter, Read, Write},
     path::PathBuf,
+    sync::Arc,
 };
 
 use parking_lot::RwLock;
 use rustc_hash::FxHashMap;
+use steel_registry::Registry;
 use steel_utils::{BlockStateId, ChunkPos, Identifier};
 
 use crate::chunk::{
@@ -35,6 +37,8 @@ pub struct RegionManager {
     base_path: PathBuf,
     /// Currently loaded regions, keyed by region position.
     regions: RwLock<FxHashMap<RegionPos, LoadedRegion>>,
+    /// Registry for block state and biome conversions.
+    registry: Arc<Registry>,
 }
 
 /// A loaded region with reference counting.
@@ -47,19 +51,84 @@ struct LoadedRegion {
     dirty: bool,
 }
 
+/// Builder for creating a persistent chunk with its own palettes.
+struct ChunkBuilder<'a> {
+    block_states: Vec<PersistentBlockState>,
+    biomes: Vec<Identifier>,
+    registry: &'a Registry,
+}
+
+impl<'a> ChunkBuilder<'a> {
+    fn new(registry: &'a Registry) -> Self {
+        Self {
+            block_states: Vec::new(),
+            biomes: Vec::new(),
+            registry,
+        }
+    }
+
+    /// Ensures a block state exists in the chunk's palette, returning its index.
+    fn ensure_block_state(&mut self, block_id: BlockStateId) -> u16 {
+        // Get block and properties from registry
+        let block = self
+            .registry
+            .blocks
+            .by_state_id(block_id)
+            .expect("Invalid block state ID");
+        let properties = self.registry.blocks.get_properties(block_id);
+
+        let persistent = PersistentBlockState {
+            name: block.key.clone(),
+            properties: properties
+                .into_iter()
+                .map(|(k, v)| (k.to_string(), v.to_string()))
+                .collect(),
+        };
+
+        // Check if already exists
+        if let Some(idx) = self.block_states.iter().position(|s| s == &persistent) {
+            return idx as u16;
+        }
+
+        // Add new entry
+        let idx = self.block_states.len();
+        self.block_states.push(persistent);
+        idx as u16
+    }
+
+    /// Ensures a biome exists in the chunk's palette, returning its index.
+    fn ensure_biome(&mut self, biome_id: u8) -> u16 {
+        // Get biome identifier from registry
+        let biome = self
+            .registry
+            .biomes
+            .by_id(biome_id as usize)
+            .expect("Invalid biome ID");
+        let identifier = biome.key.clone();
+
+        if let Some(idx) = self.biomes.iter().position(|b| b == &identifier) {
+            return idx as u16;
+        }
+
+        let idx = self.biomes.len();
+        self.biomes.push(identifier);
+        idx as u16
+    }
+}
+
 /// TODO: Needs
 /// - Saving protochunks
-/// - Fix block, properties and biomes to string.
-/// - Investigate reducing ref count for non-dirty chunks.
 impl RegionManager {
     /// Creates a new region manager.
     ///
     /// # Arguments
     /// * `base_path` - Directory where region files are stored.
-    pub fn new(base_path: impl Into<PathBuf>) -> Self {
+    /// * `registry` - The registry for block state and biome conversions.
+    pub fn new(base_path: impl Into<PathBuf>, registry: Arc<Registry>) -> Self {
         Self {
             base_path: base_path.into(),
             regions: RwLock::new(FxHashMap::default()),
+            registry,
         }
     }
 
@@ -190,14 +259,11 @@ impl RegionManager {
             return Ok(());
         };
 
-        if should_unload {
-            if let Some(loaded) = regions.remove(&region_pos) {
-                if loaded.dirty {
-                    // Rebuild tables and save
-                    let optimized = self.rebuild_tables(loaded.data);
-                    self.save_region(region_pos, &optimized)?;
-                }
-            }
+        if should_unload
+            && let Some(loaded) = regions.remove(&region_pos)
+            && loaded.dirty
+        {
+            self.save_region(region_pos, &loaded.data)?;
         }
 
         Ok(())
@@ -228,7 +294,7 @@ impl RegionManager {
         });
 
         // Convert chunk to persistent format
-        let persistent = self.chunk_to_persistent(chunk, status, &mut loaded.data);
+        let persistent = self.chunk_to_persistent(chunk, status);
         loaded.data.chunks[index] = Some(persistent);
         loaded.dirty = true;
 
@@ -241,6 +307,7 @@ impl RegionManager {
     /// count is incremented, so you must call `release_chunk` when done with the chunk.
     ///
     /// Returns `Ok(None)` if the chunk doesn't exist on disk.
+    #[allow(clippy::missing_panics_doc)]
     pub fn load_chunk(&self, pos: ChunkPos) -> io::Result<Option<(LevelChunk, ChunkStatus)>> {
         let region_pos = RegionPos::from_chunk(pos.0.x, pos.0.y);
         let (local_x, local_z) = RegionPos::local_chunk_pos(pos.0.x, pos.0.y);
@@ -288,7 +355,7 @@ impl RegionManager {
 
         // SAFETY: We just checked chunk_exists above
         let persistent = loaded.data.chunks[index].as_ref().expect("checked above");
-        let chunk = self.persistent_to_chunk(persistent, pos, &loaded.data);
+        let chunk = self.persistent_to_chunk(persistent, pos);
         Ok(Some((chunk, persistent.status)))
     }
 
@@ -306,9 +373,7 @@ impl RegionManager {
 
         for (pos, loaded) in regions.iter_mut() {
             if loaded.dirty {
-                let optimized = self.rebuild_tables(std::mem::take(&mut loaded.data));
-                self.save_region(*pos, &optimized)?;
-                loaded.data = optimized;
+                self.save_region(*pos, &loaded.data)?;
                 loaded.dirty = false;
             }
         }
@@ -317,17 +382,14 @@ impl RegionManager {
     }
 
     /// Converts a runtime chunk to persistent format.
-    fn chunk_to_persistent(
-        &self,
-        chunk: &LevelChunk,
-        status: ChunkStatus,
-        region: &mut RegionFile,
-    ) -> PersistentChunk {
+    fn chunk_to_persistent(&self, chunk: &LevelChunk, status: ChunkStatus) -> PersistentChunk {
+        let mut builder = ChunkBuilder::new(&self.registry);
+
         let sections = chunk
             .sections
             .sections
             .iter()
-            .map(|section| self.section_to_persistent(section, region))
+            .map(|section| Self::section_to_persistent(section, &mut builder))
             .collect();
 
         PersistentChunk {
@@ -336,6 +398,8 @@ impl RegionManager {
                 .duration_since(std::time::UNIX_EPOCH)
                 .map(|d| d.as_secs() as u32)
                 .unwrap_or(0),
+            block_states: builder.block_states,
+            biomes: builder.biomes,
             sections,
             block_entities: Vec::new(), // TODO: Implement block entity serialization
         }
@@ -343,29 +407,28 @@ impl RegionManager {
 
     /// Converts a runtime section to persistent format.
     fn section_to_persistent(
-        &self,
         section: &ChunkSection,
-        region: &mut RegionFile,
+        builder: &mut ChunkBuilder,
     ) -> PersistentSection {
-        let biomes = self.biomes_to_persistent(&section.biomes, region);
+        let biomes = Self::biomes_to_persistent(&section.biomes, builder);
 
         match &section.states {
             PalettedContainer::Homogeneous(block_id) => {
-                let block_idx = self.ensure_block_state(region, *block_id);
+                let block_idx = builder.ensure_block_state(*block_id);
                 PersistentSection::Homogeneous {
                     block_state: block_idx,
                     biomes,
                 }
             }
             PalettedContainer::Heterogeneous(data) => {
-                // Build local palette (indices into region's block_states)
-                let palette: Vec<u32> = data
+                // Build section-local palette (indices into chunk's block_states)
+                let palette: Vec<u16> = data
                     .palette
                     .iter()
-                    .map(|(block_id, _)| self.ensure_block_state(region, *block_id))
+                    .map(|(block_id, _)| builder.ensure_block_state(*block_id))
                     .collect();
 
-                // Pack block indices
+                // Pack block indices (indices into section-local palette)
                 let bits = bits_for_palette_len(palette.len()).unwrap_or(4);
                 let indices: Vec<u32> = data
                     .cube
@@ -394,20 +457,20 @@ impl RegionManager {
 
     /// Converts runtime biome data to persistent format.
     fn biomes_to_persistent(
-        &self,
         biomes: &PalettedContainer<u8, 4>,
-        region: &mut RegionFile,
+        builder: &mut ChunkBuilder,
     ) -> PersistentBiomeData {
         match biomes {
             PalettedContainer::Homogeneous(biome_id) => {
-                let biome_idx = self.ensure_biome(region, *biome_id);
+                let biome_idx = builder.ensure_biome(*biome_id);
                 PersistentBiomeData::Homogeneous { biome: biome_idx }
             }
             PalettedContainer::Heterogeneous(data) => {
+                // Build section-local palette (indices into chunk's biomes)
                 let palette: Vec<u16> = data
                     .palette
                     .iter()
-                    .map(|(biome_id, _)| self.ensure_biome(region, *biome_id))
+                    .map(|(biome_id, _)| builder.ensure_biome(*biome_id))
                     .collect();
 
                 let bits = bits_for_palette_len(palette.len()).unwrap_or(1);
@@ -435,51 +498,12 @@ impl RegionManager {
         }
     }
 
-    /// Ensures a block state exists in the region's table, returning its index.
-    fn ensure_block_state(&self, region: &mut RegionFile, block_id: BlockStateId) -> u32 {
-        // TODO: Convert BlockStateId to PersistentBlockState using registry
-        // For now, store as numeric identifier
-        let persistent = PersistentBlockState {
-            name: Identifier::vanilla(format!("__block_state_{}", block_id.0)),
-            properties: Vec::new(),
-        };
-
-        // Check if already exists
-        if let Some(idx) = region.block_states.iter().position(|s| s == &persistent) {
-            return idx as u32;
-        }
-
-        // Add new entry
-        let idx = region.block_states.len();
-        region.block_states.push(persistent);
-        idx as u32
-    }
-
-    /// Ensures a biome exists in the region's table, returning its index.
-    fn ensure_biome(&self, region: &mut RegionFile, biome_id: u8) -> u16 {
-        // TODO: Convert biome ID to identifier using registry
-        let identifier = Identifier::vanilla(format!("__biome_{}", biome_id));
-
-        if let Some(idx) = region.biomes.iter().position(|b| b == &identifier) {
-            return idx as u16;
-        }
-
-        let idx = region.biomes.len();
-        region.biomes.push(identifier);
-        idx as u16
-    }
-
     /// Converts a persistent chunk to runtime format.
-    fn persistent_to_chunk(
-        &self,
-        persistent: &PersistentChunk,
-        pos: ChunkPos,
-        region: &RegionFile,
-    ) -> LevelChunk {
+    fn persistent_to_chunk(&self, persistent: &PersistentChunk, pos: ChunkPos) -> LevelChunk {
         let sections: Vec<ChunkSection> = persistent
             .sections
             .iter()
-            .map(|section| self.persistent_to_section(section, region))
+            .map(|section| self.persistent_to_section(section, persistent))
             .collect();
 
         LevelChunk {
@@ -494,15 +518,15 @@ impl RegionManager {
     fn persistent_to_section(
         &self,
         persistent: &PersistentSection,
-        region: &RegionFile,
+        chunk: &PersistentChunk,
     ) -> ChunkSection {
         match persistent {
             PersistentSection::Homogeneous {
                 block_state,
                 biomes,
             } => {
-                let block_id = self.resolve_block_state(region, *block_state);
-                let biome_data = self.persistent_to_biomes(biomes, region);
+                let block_id = self.resolve_block_state(chunk, *block_state);
+                let biome_data = self.persistent_to_biomes(biomes, chunk);
 
                 ChunkSection {
                     states: PalettedContainer::Homogeneous(block_id),
@@ -515,13 +539,13 @@ impl RegionManager {
                 block_data,
                 biomes,
             } => {
-                // Unpack indices
+                // Unpack indices (into section-local palette)
                 let indices = unpack_indices(block_data, *bits_per_entry, BLOCKS_PER_SECTION);
 
-                // Build runtime palette
+                // Build runtime palette by resolving section-local -> chunk -> runtime
                 let runtime_palette: Vec<BlockStateId> = palette
                     .iter()
-                    .map(|&idx| self.resolve_block_state(region, idx))
+                    .map(|&idx| self.resolve_block_state(chunk, idx))
                     .collect();
 
                 // Build cube
@@ -537,7 +561,7 @@ impl RegionManager {
                 }
 
                 let states = PalettedContainer::from_cube(cube);
-                let biome_data = self.persistent_to_biomes(biomes, region);
+                let biome_data = self.persistent_to_biomes(biomes, chunk);
 
                 ChunkSection {
                     states,
@@ -551,11 +575,11 @@ impl RegionManager {
     fn persistent_to_biomes(
         &self,
         persistent: &PersistentBiomeData,
-        region: &RegionFile,
+        chunk: &PersistentChunk,
     ) -> PalettedContainer<u8, 4> {
         match persistent {
             PersistentBiomeData::Homogeneous { biome } => {
-                let biome_id = self.resolve_biome(region, *biome);
+                let biome_id = self.resolve_biome(chunk, *biome);
                 PalettedContainer::Homogeneous(biome_id)
             }
             PersistentBiomeData::Heterogeneous {
@@ -565,9 +589,10 @@ impl RegionManager {
             } => {
                 let indices = unpack_indices(biome_data, *bits_per_entry, BIOMES_PER_SECTION);
 
+                // Resolve section-local palette -> chunk palette -> runtime
                 let runtime_palette: Vec<u8> = palette
                     .iter()
-                    .map(|&idx| self.resolve_biome(region, idx))
+                    .map(|&idx| self.resolve_biome(chunk, idx))
                     .collect();
 
                 let mut cube = Box::new([[[0u8; 4]; 4]; 4]);
@@ -583,144 +608,34 @@ impl RegionManager {
         }
     }
 
-    /// Resolves a persistent block state index to a runtime BlockStateId.
-    fn resolve_block_state(&self, region: &RegionFile, index: u32) -> BlockStateId {
-        // TODO: Use registry to convert PersistentBlockState to BlockStateId
-        // For now, parse the numeric identifier we stored
-        if let Some(state) = region.block_states.get(index as usize) {
-            if let Some(num) = state.name.path.strip_prefix("__block_state_") {
-                if let Ok(id) = num.parse::<u16>() {
-                    return BlockStateId(id);
-                }
+    /// Resolves a chunk palette index to a runtime `BlockStateId`.
+    fn resolve_block_state(&self, chunk: &PersistentChunk, index: u16) -> BlockStateId {
+        if let Some(state) = chunk.block_states.get(index as usize) {
+            // Convert properties to the format expected by the registry
+            let properties: Vec<(&str, &str)> = state
+                .properties
+                .iter()
+                .map(|(k, v)| (k.as_str(), v.as_str()))
+                .collect();
+
+            if let Some(state_id) = self
+                .registry
+                .blocks
+                .state_id_from_properties(&state.name, &properties)
+            {
+                return state_id;
             }
         }
         BlockStateId(0) // Air fallback
     }
 
-    /// Resolves a persistent biome index to a runtime biome ID.
-    fn resolve_biome(&self, region: &RegionFile, index: u16) -> u8 {
-        // TODO: Use registry to convert identifier to biome ID
-        if let Some(biome) = region.biomes.get(index as usize) {
-            if let Some(num) = biome.path.strip_prefix("__biome_") {
-                if let Ok(id) = num.parse::<u8>() {
-                    return id;
-                }
-            }
+    /// Resolves a chunk palette index to a runtime biome ID.
+    fn resolve_biome(&self, chunk: &PersistentChunk, index: u16) -> u8 {
+        if let Some(biome_key) = chunk.biomes.get(index as usize)
+            && let Some(id) = self.registry.biomes.id_from_key(biome_key)
+        {
+            return id as u8;
         }
         0 // Plains fallback
-    }
-
-    /// Rebuilds the block state and biome tables to remove unused entries.
-    fn rebuild_tables(&self, mut region: RegionFile) -> RegionFile {
-        // Collect all used block state and biome indices
-        let mut used_block_states = vec![false; region.block_states.len()];
-        let mut used_biomes = vec![false; region.biomes.len()];
-
-        // Always keep air (index 0)
-        if !used_block_states.is_empty() {
-            used_block_states[0] = true;
-        }
-
-        for chunk in region.chunks.iter().flatten() {
-            for section in &chunk.sections {
-                match section {
-                    PersistentSection::Homogeneous {
-                        block_state,
-                        biomes,
-                    } => {
-                        if let Some(used) = used_block_states.get_mut(*block_state as usize) {
-                            *used = true;
-                        }
-                        self.mark_biomes_used(biomes, &mut used_biomes);
-                    }
-                    PersistentSection::Heterogeneous {
-                        palette, biomes, ..
-                    } => {
-                        for &idx in palette {
-                            if let Some(used) = used_block_states.get_mut(idx as usize) {
-                                *used = true;
-                            }
-                        }
-                        self.mark_biomes_used(biomes, &mut used_biomes);
-                    }
-                }
-            }
-        }
-
-        // Build remapping tables
-        let mut block_state_remap: Vec<u32> = vec![0; region.block_states.len()];
-        let mut new_block_states = Vec::new();
-        for (old_idx, &used) in used_block_states.iter().enumerate() {
-            if used {
-                block_state_remap[old_idx] = new_block_states.len() as u32;
-                new_block_states.push(region.block_states[old_idx].clone());
-            }
-        }
-
-        let mut biome_remap: Vec<u16> = vec![0; region.biomes.len()];
-        let mut new_biomes = Vec::new();
-        for (old_idx, &used) in used_biomes.iter().enumerate() {
-            if used {
-                biome_remap[old_idx] = new_biomes.len() as u16;
-                new_biomes.push(region.biomes[old_idx].clone());
-            }
-        }
-
-        // Remap all indices in chunks
-        for chunk in region.chunks.iter_mut().flatten() {
-            for section in &mut chunk.sections {
-                match section {
-                    PersistentSection::Homogeneous {
-                        block_state,
-                        biomes,
-                    } => {
-                        *block_state = block_state_remap[*block_state as usize];
-                        self.remap_biomes(biomes, &biome_remap);
-                    }
-                    PersistentSection::Heterogeneous {
-                        palette, biomes, ..
-                    } => {
-                        for idx in palette.iter_mut() {
-                            *idx = block_state_remap[*idx as usize];
-                        }
-                        self.remap_biomes(biomes, &biome_remap);
-                    }
-                }
-            }
-        }
-
-        region.block_states = new_block_states;
-        region.biomes = new_biomes;
-        region
-    }
-
-    fn mark_biomes_used(&self, biomes: &PersistentBiomeData, used: &mut [bool]) {
-        match biomes {
-            PersistentBiomeData::Homogeneous { biome } => {
-                if let Some(u) = used.get_mut(*biome as usize) {
-                    *u = true;
-                }
-            }
-            PersistentBiomeData::Heterogeneous { palette, .. } => {
-                for &idx in palette {
-                    if let Some(u) = used.get_mut(idx as usize) {
-                        *u = true;
-                    }
-                }
-            }
-        }
-    }
-
-    fn remap_biomes(&self, biomes: &mut PersistentBiomeData, remap: &[u16]) {
-        match biomes {
-            PersistentBiomeData::Homogeneous { biome } => {
-                *biome = remap[*biome as usize];
-            }
-            PersistentBiomeData::Heterogeneous { palette, .. } => {
-                for idx in palette.iter_mut() {
-                    *idx = remap[*idx as usize];
-                }
-            }
-        }
     }
 }
