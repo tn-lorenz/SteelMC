@@ -84,15 +84,3 @@ pub trait ChunkGenerator: Send + Sync {
     /// Applies biome decorations to the chunk.
     fn apply_biome_decorations(&self, chunk_guard: &mut ChunkGuard);
 }
-
-/// A simple chunk generator that does nothing.
-pub struct SimpleChunkGenerator;
-
-impl ChunkGenerator for SimpleChunkGenerator {
-    fn create_structures(&self, _chunk_guard: &mut ChunkGuard) {}
-    fn create_biomes(&self, _chunk_guard: &mut ChunkGuard) {}
-    fn fill_from_noise(&self, _chunk_guard: &mut ChunkGuard) {}
-    fn build_surface(&self, _chunk_guard: &mut ChunkGuard) {}
-    fn apply_carvers(&self, _chunk_guard: &mut ChunkGuard) {}
-    fn apply_biome_decorations(&self, _chunk_guard: &mut ChunkGuard) {}
-}
