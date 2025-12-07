@@ -5,10 +5,9 @@ use std::time::Duration;
 use parking_lot::Mutex as ParkingMutex;
 use rayon::iter::{IntoParallelRefIterator, ParallelBridge, ParallelIterator};
 use rayon::{ThreadPool, ThreadPoolBuilder};
-use rustc_hash::{FxBuildHasher, FxHashMap};
+use rustc_hash::FxBuildHasher;
 use steel_protocol::packets::game::CSetChunkCenter;
-use steel_registry::blocks::BlockRegistry;
-use steel_registry::vanilla_blocks;
+use steel_registry::{Registry, vanilla_blocks};
 use steel_utils::ChunkPos;
 use tokio::runtime::Runtime;
 use tokio_util::task::TaskTracker;
@@ -23,6 +22,7 @@ use crate::chunk::{
     chunk_access::ChunkStatus, chunk_generation_task::ChunkGenerationTask,
     flat_chunk_generator::FlatChunkGenerator, world_gen_context::WorldGenContext,
 };
+use crate::chunk_saver::RegionManager;
 use crate::config::STEEL_CONFIG;
 use crate::player::Player;
 
@@ -36,7 +36,7 @@ pub struct ChunkMap {
     /// Map of active chunks.
     pub chunks: scc::HashMap<ChunkPos, Arc<ChunkHolder>, FxBuildHasher>,
     /// Map of chunks currently being unloaded.
-    pub unloading_chunks: ParkingMutex<FxHashMap<ChunkPos, Arc<ChunkHolder>>>,
+    pub unloading_chunks: scc::HashMap<ChunkPos, Arc<ChunkHolder>, FxBuildHasher>,
     /// Queue of pending generation tasks.
     pub pending_generation_tasks: ParkingMutex<Vec<Arc<ChunkGenerationTask>>>,
     /// Tracker for background generation tasks.
@@ -49,31 +49,35 @@ pub struct ChunkMap {
     pub thread_pool: Arc<ThreadPool>,
     /// The runtime to use for chunk tasks.
     pub chunk_runtime: Arc<Runtime>,
+    /// Manager for chunk saving and loading.
+    pub region_manager: Arc<RegionManager>,
 }
 
 impl ChunkMap {
     /// Creates a new chunk map.
     #[must_use]
     #[allow(clippy::missing_panics_doc, clippy::unwrap_used)]
-    pub fn new(block_registry: &BlockRegistry, chunk_runtime: Arc<Runtime>) -> Self {
+    pub fn new(registry: &Arc<Registry>, chunk_runtime: Arc<Runtime>) -> Self {
         Self {
             chunks: scc::HashMap::with_capacity_and_hasher(1000, FxBuildHasher),
-            unloading_chunks: ParkingMutex::new(FxHashMap::with_capacity_and_hasher(
-                1000,
-                FxBuildHasher,
-            )),
+            unloading_chunks: scc::HashMap::with_capacity_and_hasher(1000, FxBuildHasher),
             pending_generation_tasks: ParkingMutex::new(Vec::new()),
             task_tracker: TaskTracker::new(),
             chunk_tickets: ParkingMutex::new(ChunkTicketManager::new()),
             world_gen_context: Arc::new(WorldGenContext {
                 generator: Arc::new(ChunkGeneratorType::Flat(FlatChunkGenerator::new(
-                    block_registry.get_default_state_id(vanilla_blocks::BEDROCK), // Bedrock
-                    block_registry.get_default_state_id(vanilla_blocks::DIRT),    // Dirt
-                    block_registry.get_default_state_id(vanilla_blocks::GRASS_BLOCK), // Grass Block
+                    registry
+                        .blocks
+                        .get_default_state_id(vanilla_blocks::BEDROCK), // Bedrock
+                    registry.blocks.get_default_state_id(vanilla_blocks::DIRT), // Dirt
+                    registry
+                        .blocks
+                        .get_default_state_id(vanilla_blocks::GRASS_BLOCK), // Grass Block
                 ))),
             }),
             thread_pool: Arc::new(ThreadPoolBuilder::new().build().unwrap()),
             chunk_runtime,
+            region_manager: Arc::new(RegionManager::new("world/overworld", registry.clone())),
         }
     }
 
@@ -127,9 +131,9 @@ impl ChunkMap {
             } else {
                 new_level?;
 
-                if let Some(entry) = self.unloading_chunks.lock().remove(pos) {
-                    let _ = self.chunks.insert_sync(*pos, entry.clone());
-                    entry
+                if let Some(entry) = self.unloading_chunks.remove_sync(pos) {
+                    let _ = self.chunks.insert_sync(*pos, entry.1.clone());
+                    entry.1
                 } else {
                     let holder = Arc::new(ChunkHolder::new(*pos, new_level.unwrap()));
                     let _ = self.chunks.insert_sync(*pos, holder.clone());
@@ -152,7 +156,7 @@ impl ChunkMap {
                 .chunks
                 .remove_if_sync(pos, |chunk| Arc::strong_count(chunk) == 2)
             {
-                let _ = self.unloading_chunks.lock().insert(*pos, holder);
+                let _ = self.unloading_chunks.insert_sync(*pos, holder.clone());
             } else {
                 chunk_holder.ticket_level.store(u8::MAX, Ordering::Relaxed);
                 chunk_holder.update_highest_allowed_status(u8::MAX);
@@ -227,7 +231,7 @@ impl ChunkMap {
             log::debug!(
                 "Chunk map entries: {}, unloading chunks: {}",
                 self.chunks.len(),
-                self.unloading_chunks.lock().len()
+                self.unloading_chunks.len()
             );
         }
     }
@@ -235,13 +239,46 @@ impl ChunkMap {
     /// Saves a chunk to disk.
     ///
     /// This function is currently a placeholder for the actual saving logic.
-    #[allow(clippy::unused_async)]
-    pub async fn save_chunk(&self, chunk_holder: &Arc<ChunkHolder>) {
-        let _pos = chunk_holder.get_pos();
-        // Access the chunk to ensure it's loaded and ready for saving
-        // We use ChunkStatus::StructureReferences as the minimum requirement, effectively checking if any data exists.
-        let _saved = chunk_holder.try_chunk(ChunkStatus::StructureReferences);
-        //TODO: Save the chunk to disk
+    #[allow(clippy::missing_panics_doc, clippy::unwrap_used)]
+    pub async fn save_chunk(&self, chunk_holder: &Arc<ChunkHolder>, chunk_map: &Arc<ChunkMap>) {
+        let chunk = chunk_holder.try_chunk(ChunkStatus::StructureStarts);
+
+        if let Some(chunk) = chunk {
+            let status = chunk_holder
+                .persisted_status()
+                .expect("The check above confirmed it exists");
+
+            let result = chunk_map.region_manager.save_chunk(chunk, status).await;
+
+            match result {
+                Ok(_) => {
+                    let res = chunk_map
+                        .unloading_chunks
+                        .remove_async(&chunk_holder.get_pos())
+                        .await;
+                    if res.is_some() {
+                        if let Err(e) = chunk_map
+                            .region_manager
+                            .release_chunk(chunk_holder.get_pos())
+                            .await
+                        {
+                            log::error!("Error releasing chunk: {e}");
+                        }
+                    } else {
+                        // Chunk was recovered
+                    }
+                }
+                Err(e) => {
+                    log::error!("Error saving chunk: {e}");
+                }
+            }
+        } else {
+            // Chunk was at Empty stage so no need to save it
+            let _ = chunk_map
+                .unloading_chunks
+                .remove_async(&chunk_holder.get_pos())
+                .await;
+        }
     }
 
     /// Processes chunks that are pending unload.
@@ -250,18 +287,16 @@ impl ChunkMap {
     /// If a chunk is only held by the map (strong count is 1), it is removed
     /// and a background task is spawned to save it.
     pub fn process_unloads(self: &Arc<Self>) {
-        self.unloading_chunks.lock().retain(|_, holder| {
+        self.unloading_chunks.iter_sync(|_pos, holder| {
             // If the strong count is 1, it means only this map holds a reference to the chunk.
             // We can safely unload it.
-            if Arc::strong_count(&*holder) == 1 {
+            if Arc::strong_count(holder) == 1 {
                 let holder_clone = holder.clone();
                 let map_clone = self.clone();
 
                 self.task_tracker.spawn(async move {
-                    map_clone.save_chunk(&holder_clone).await;
+                    map_clone.save_chunk(&holder_clone, &map_clone).await;
                 });
-                // Remove from unloading_chunks.
-                return false;
             }
             true
         });

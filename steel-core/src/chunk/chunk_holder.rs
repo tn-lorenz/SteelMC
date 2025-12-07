@@ -232,75 +232,61 @@ impl ChunkHolder {
         // This is one of the `crate::chunk::chunk_status_tasks` functions.
         let task = step.task;
         let self_clone = self.clone();
+        let region_manager = chunk_map.region_manager.clone();
 
-        let future =
-            chunk_map.task_tracker.spawn(async move {
-                if target_status == ChunkStatus::Empty {
-                    match rayon_spawn(&thread_pool, move || {
-                        task(context, step, &cache, self_clone)
-                    })
-                    .await
-                    {
-                        Ok(()) => {
-                            sender.send_modify(|chunk| {
-                                if let ChunkResult::Ok(s) = chunk {
-                                    //log::info!("Task completed for {:?}", target_status);
-
-                                    if *s < target_status {
-                                        *s = target_status;
-                                    }
-                                }
-                            });
-                            Some(())
-                        }
-                        Err(e) => {
-                            log::error!("Chunk generation task failed: {e}");
-                            sender.send_replace(ChunkResult::Failed);
-                            None
-                        }
-                    }
+        let future = chunk_map.task_tracker.spawn(async move {
+            if target_status == ChunkStatus::Empty {
+                if let Ok(Some((chunk, status))) = region_manager.load_chunk(self_clone.pos).await {
+                    self_clone.insert_chunk(chunk, status);
                 } else {
-                    let parent_status = target_status
-                        .parent()
-                        .expect("Target status must have parent if not Empty");
-
-                    //log::info!(
-                    //    "Parent status: {:?}, target status: {:?}",
-                    //    parent_status,
-                    //    target_status
-                    //);
-
-                    let has_parent = self_clone.try_chunk(parent_status).is_some();
-
-                    assert!(has_parent, "Parent chunk missing");
-
-                    match rayon_spawn(&thread_pool, move || {
+                    rayon_spawn(&thread_pool, move || {
                         task(context, step, &cache, self_clone)
                     })
                     .await
-                    {
-                        Ok(()) => {
-                            sender.send_modify(|chunk| if let ChunkResult::Ok(s) = chunk {
-                            if *s < target_status {
-                                *s = target_status;
-                            } else if *s != ChunkStatus::Full {
-                                panic!(
-                                    "Task completed for {:?}, but status is already at {:?}",
-                                    target_status, *s
-                                );
+                    .expect("Should never fail creating an empty chunk");
+                }
+                Some(())
+            } else {
+                let parent_status = target_status
+                    .parent()
+                    .expect("Target status must have parent if not Empty");
+
+                //log::info!(
+                //    "Parent status: {:?}, target status: {:?}",
+                //    parent_status,
+                //    target_status
+                //);
+
+                let has_parent = self_clone.try_chunk(parent_status).is_some();
+
+                assert!(has_parent, "Parent chunk missing");
+
+                match rayon_spawn(&thread_pool, move || {
+                    task(context, step, &cache, self_clone)
+                })
+                .await
+                {
+                    Ok(()) => {
+                        sender.send_modify(|chunk| {
+                            if let ChunkResult::Ok(s) = chunk {
+                                if *s < target_status {
+                                    *s = target_status;
+                                } else if *s != ChunkStatus::Full {
+                                    // Means it advanced a loaded chunk
+                                }
                             }
                         });
-                            //log::info!("Task completed for {:?}", target_status);
-                            Some(())
-                        }
-                        Err(e) => {
-                            log::error!("Chunk generation task failed: {e}");
-                            sender.send_replace(ChunkResult::Failed);
-                            None
-                        }
+                        //log::info!("Task completed for {:?}", target_status);
+                        Some(())
+                    }
+                    Err(e) => {
+                        log::error!("Chunk generation task failed: {e}");
+                        sender.send_replace(ChunkResult::Failed);
+                        None
                     }
                 }
-            });
+            }
+        });
 
         Some(Box::pin(async move {
             match future.await {
@@ -351,17 +337,17 @@ impl ChunkHolder {
     /// # Panics
     /// Panics if the chunk is not at `ProtoChunk` stage or completed.
     pub fn upgrade_to_full(&self) {
-        {
-            let mut data = self.data.write();
+        let mut data = self.data.write();
+
+        self.sender.send_modify(|chunk| {
             replace_with_or_abort(&mut *data, |chunk| match chunk {
                 Some(ChunkAccess::Proto(proto_chunk)) => {
                     Some(ChunkAccess::Full(LevelChunk::from_proto(proto_chunk)))
                 }
+                Some(ChunkAccess::Full(level_chunk)) => Some(ChunkAccess::Full(level_chunk)),
                 _ => unreachable!(),
             });
-        }
 
-        self.sender.send_modify(|chunk| {
             *chunk = ChunkResult::Ok(ChunkStatus::Full);
         });
     }
@@ -369,9 +355,7 @@ impl ChunkHolder {
     /// Inserts a chunk into the holder with a specific status.
     pub fn insert_chunk(&self, chunk: ChunkAccess, status: ChunkStatus) {
         self.data.write().replace(chunk);
-        self.sender.send_modify(|c| {
-            *c = ChunkResult::Ok(status);
-        });
+        self.sender.send_replace(ChunkResult::Ok(status));
     }
 
     /// Cancels the current generation task.

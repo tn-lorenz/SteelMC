@@ -207,13 +207,4 @@ impl ChunkAccess {
             Self::Proto(proto_chunk) => &proto_chunk.sections,
         }
     }
-
-    /// Returns the chunk status.
-    #[must_use]
-    pub const fn status(&self) -> ChunkStatus {
-        match self {
-            Self::Full(_) => ChunkStatus::Full,
-            Self::Proto(_) => ChunkStatus::Empty, // Proto chunks track their own status elsewhere
-        }
-    }
 }

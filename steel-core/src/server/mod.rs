@@ -50,7 +50,7 @@ impl Server {
 
         Server {
             key_store: KeyStore::create(),
-            worlds: vec![Arc::new(World::new(&registry.blocks, chunk_runtime))],
+            worlds: vec![Arc::new(World::new(&registry, chunk_runtime))],
             registry,
             registry_cache,
             tick_rate_manager: RwLock::new(TickRateManager::new()),

@@ -23,14 +23,11 @@ impl ChunkStatusTasks {
         _cache: &Arc<StaticCache2D<Arc<ChunkHolder>>>,
         holder: Arc<ChunkHolder>,
     ) -> Result<(), anyhow::Error> {
-        // TODO: Check if chunk exists on disk and load it.
-        // For now, create a new empty chunk.
         let sections = (0..24) // Standard height?
             .map(|_| ChunkSection::new_empty())
             .collect::<Vec<_>>()
             .into_boxed_slice();
 
-        // TODO: Use upgrade_to_full if the loaded chunk is full.
         let proto_chunk = ProtoChunk::new(Sections { sections }, holder.get_pos());
 
         //log::info!("Inserted proto chunk for {:?}", holder.get_pos());

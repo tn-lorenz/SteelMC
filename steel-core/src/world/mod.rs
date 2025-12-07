@@ -2,7 +2,7 @@
 use std::sync::Arc;
 
 use scc::HashMap;
-use steel_registry::blocks::BlockRegistry;
+use steel_registry::Registry;
 use tokio::runtime::Runtime;
 use uuid::Uuid;
 
@@ -22,9 +22,9 @@ impl World {
     /// Creates a new world.
     #[allow(clippy::new_without_default)]
     #[must_use]
-    pub fn new(block_registry: &BlockRegistry, chunk_runtime: Arc<Runtime>) -> Self {
+    pub fn new(registry: &Arc<Registry>, chunk_runtime: Arc<Runtime>) -> Self {
         Self {
-            chunk_map: Arc::new(ChunkMap::new(block_registry, chunk_runtime)),
+            chunk_map: Arc::new(ChunkMap::new(registry, chunk_runtime)),
             players: HashMap::new(),
         }
     }
