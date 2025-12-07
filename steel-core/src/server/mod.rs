@@ -76,7 +76,7 @@ impl Server {
                 game_type: GameType::Survival,
                 previous_game_type: None,
                 is_debug: false,
-                is_flat: false,
+                is_flat: true,
                 last_death_location: None,
                 portal_cooldown: 0,
                 sea_level: 64,

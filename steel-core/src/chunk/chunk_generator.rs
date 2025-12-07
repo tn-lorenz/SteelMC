@@ -42,7 +42,11 @@ impl Deref for ChunkGuard<'_> {
     #[allow(clippy::unwrap_used)]
     fn deref(&self) -> &Self::Target {
         // SAFETY: It needs to contain a mutex guard to be dereferenceable and the chunk access is guaranteed to be there by it's creator.
-        self.guard.as_deref().unwrap().as_ref().unwrap()
+        self.guard
+            .as_deref()
+            .unwrap()
+            .as_ref()
+            .expect("Chunk should be loaded")
     }
 }
 
@@ -51,7 +55,11 @@ impl DerefMut for ChunkGuard<'_> {
     #[allow(clippy::unwrap_used)]
     fn deref_mut(&mut self) -> &mut Self::Target {
         // SAFETY: It needs to contain a mutex guard to be dereferenceable and the chunk access is guaranteed to be there by it's creator.
-        self.guard.as_deref_mut().unwrap().as_mut().unwrap()
+        self.guard
+            .as_deref_mut()
+            .unwrap()
+            .as_mut()
+            .expect("Chunk should be loaded")
     }
 }
 
