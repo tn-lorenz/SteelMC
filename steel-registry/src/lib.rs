@@ -45,6 +45,7 @@ pub mod dialog;
 pub mod dimension_type;
 pub mod frog_variant;
 pub mod instrument;
+pub mod item_stack;
 pub mod items;
 pub mod jukebox_song;
 pub mod painting_variant;
