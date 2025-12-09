@@ -270,37 +270,40 @@ fn extract_attributes_to_effects(effects: &mut BiomeEffects, attributes: &HashMa
     // Extract background_music
     if let Some(music_value) = attributes.get("minecraft:audio/background_music")
         && let Ok(music) = serde_json::from_value::<BackgroundMusic>(music_value.clone())
-            && let Some(default) = music.default {
-                effects.music = Some(vec![WeightedMusic {
-                    data: Music {
-                        replace_current_music: false,
-                        max_delay: default.max_delay,
-                        min_delay: default.min_delay,
-                        sound: default.sound,
-                    },
-                    weight: 1,
-                }]);
-            }
+        && let Some(default) = music.default
+    {
+        effects.music = Some(vec![WeightedMusic {
+            data: Music {
+                replace_current_music: false,
+                max_delay: default.max_delay,
+                min_delay: default.min_delay,
+                sound: default.sound,
+            },
+            weight: 1,
+        }]);
+    }
 
     // Extract ambient_sounds
     if let Some(ambient_value) = attributes.get("minecraft:audio/ambient_sounds")
-        && let Ok(ambient) = serde_json::from_value::<AmbientSounds>(ambient_value.clone()) {
-            effects.ambient_sound = ambient.loop_sound;
-            effects.additions_sound = ambient.additions;
-            effects.mood_sound = ambient.mood;
-        }
+        && let Ok(ambient) = serde_json::from_value::<AmbientSounds>(ambient_value.clone())
+    {
+        effects.ambient_sound = ambient.loop_sound;
+        effects.additions_sound = ambient.additions;
+        effects.mood_sound = ambient.mood;
+    }
 
     // Extract ambient_particles
     if let Some(Value::Array(particles)) = attributes.get("minecraft:visual/ambient_particles")
         && let Some(first) = particles.first()
-            && let Ok(particle) = serde_json::from_value::<AmbientParticle>(first.clone()) {
-                effects.particle = Some(Particle {
-                    options: ParticleOptions {
-                        particle_type: particle.particle.particle_type,
-                    },
-                    probability: particle.probability,
-                });
-            }
+        && let Ok(particle) = serde_json::from_value::<AmbientParticle>(first.clone())
+    {
+        effects.particle = Some(Particle {
+            options: ParticleOptions {
+                particle_type: particle.particle.particle_type,
+            },
+            probability: particle.probability,
+        });
+    }
 }
 
 fn generate_temperature_modifier(modifier: &TemperatureModifier) -> TokenStream {

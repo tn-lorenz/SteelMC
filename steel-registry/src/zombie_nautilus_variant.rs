@@ -53,7 +53,8 @@ impl ZombieNautilusVariantRegistry {
         let id = self.zombie_nautilus_variants_by_id.len();
         self.zombie_nautilus_variants_by_key
             .insert(zombie_nautilus_variant.key.clone(), id);
-        self.zombie_nautilus_variants_by_id.push(zombie_nautilus_variant);
+        self.zombie_nautilus_variants_by_id
+            .push(zombie_nautilus_variant);
         id
     }
 
@@ -105,4 +106,3 @@ impl Default for ZombieNautilusVariantRegistry {
         Self::new()
     }
 }
-
