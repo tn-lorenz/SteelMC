@@ -1,5 +1,6 @@
 //! This module contains the `World` struct, which represents a world.
 use std::sync::Arc;
+use std::time::Duration;
 
 use scc::HashMap;
 use steel_registry::Registry;
@@ -34,10 +35,16 @@ impl World {
         self.chunk_map.tick_b(tick_count);
 
         // Tick players
+        let start = tokio::time::Instant::now();
         self.players.iter_sync(|_uuid, player| {
             player.tick();
 
             true
         });
+        let player_tick_elapsed = start.elapsed();
+        const SLOW_PLAYER_TICK_THRESHOLD: Duration = Duration::from_micros(250);
+        if player_tick_elapsed >= SLOW_PLAYER_TICK_THRESHOLD {
+            log::warn!("Player tick slow: {player_tick_elapsed:?}");
+        }
     }
 }

@@ -3,7 +3,7 @@ use std::sync::atomic::Ordering;
 use std::time::Duration;
 
 use parking_lot::Mutex as ParkingMutex;
-use rayon::iter::{IntoParallelRefIterator, ParallelBridge, ParallelIterator};
+use rayon::iter::{IntoParallelIterator, IntoParallelRefIterator, ParallelIterator};
 use rayon::{ThreadPool, ThreadPoolBuilder};
 use rustc_hash::FxBuildHasher;
 use steel_protocol::packets::game::CSetChunkCenter;
@@ -109,7 +109,8 @@ impl ChunkMap {
             return;
         }
         //log::info!("Running {} generation tasks", pending.len());
-        pending.drain(..).par_bridge().for_each(|task| {
+        let tasks = pending.drain(..).collect::<Vec<_>>();
+        tasks.into_par_iter().for_each(|task| {
             self.task_tracker
                 .spawn_on(async move { task.run().await }, self.chunk_runtime.handle());
         });
