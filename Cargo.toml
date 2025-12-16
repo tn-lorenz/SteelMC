@@ -7,6 +7,7 @@ members = [
     "steel-registry",
     "steel-utils",
     "steel-core",
+    "steel-crypto",
 ]
 
 [workspace.package]
@@ -26,14 +27,14 @@ tokio = { version = "1.48", features = [
     "signal",
 ] }
 tokio-util = { version = "0.7.16", features = ["rt"] }
-scc = { version = "3.4.2" }
+scc = { version = "3.4.6" }
 serde = { version = "1.0.228", features = ["derive"] }
 serde_json = "1.0.145"
 thiserror = "2.0.17"
 proc-macro2 = "1.0.101"
 quote = "1.0.41"
 crossbeam = "0.8.4"
-uuid = { version = "1.18.1", features = ["serde"] }
+uuid = { version = "1.18.1", features = ["serde", "v4"] }
 log = "0.4.28"
 simdnbt = "0.8.0"
 enum_dispatch = "0.3.13"
