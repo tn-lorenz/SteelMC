@@ -1,5 +1,6 @@
 //! This module is responsible for sending chunks to the client.
-use std::{collections::HashSet, sync::Arc};
+use rustc_hash::FxHashSet;
+use std::sync::Arc;
 
 use steel_protocol::packets::game::{
     CChunkBatchFinished, CChunkBatchStart, CForgetLevelChunk, CLevelChunkWithLight,
@@ -20,7 +21,7 @@ use crate::{
 #[derive(Debug)]
 pub struct ChunkSender {
     /// A list of chunks that are waiting to be sent to the client.
-    pub pending_chunks: HashSet<ChunkPos>,
+    pub pending_chunks: FxHashSet<ChunkPos>,
     /// The number of batches that have been sent to the client but have not been acknowledged yet.
     pub unacknowledged_batches: u16,
     /// The number of chunks that should be sent to the client per tick.
@@ -143,7 +144,7 @@ impl ChunkSender {
 impl Default for ChunkSender {
     fn default() -> Self {
         Self {
-            pending_chunks: HashSet::new(),
+            pending_chunks: FxHashSet::default(),
             unacknowledged_batches: 0,
             desired_chunks_per_tick: 32.0,
             batch_quota: 0.0,

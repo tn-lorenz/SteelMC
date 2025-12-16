@@ -1,4 +1,4 @@
-use std::collections::HashMap;
+use rustc_hash::FxHashMap;
 use steel_utils::Identifier;
 
 use crate::RegistryExt;
@@ -38,7 +38,7 @@ pub type ChickenVariantRef = &'static ChickenVariant;
 
 pub struct ChickenVariantRegistry {
     chicken_variants_by_id: Vec<ChickenVariantRef>,
-    chicken_variants_by_key: HashMap<Identifier, usize>,
+    chicken_variants_by_key: FxHashMap<Identifier, usize>,
     allows_registering: bool,
 }
 
@@ -47,7 +47,7 @@ impl ChickenVariantRegistry {
     pub fn new() -> Self {
         Self {
             chicken_variants_by_id: Vec::new(),
-            chicken_variants_by_key: HashMap::new(),
+            chicken_variants_by_key: FxHashMap::default(),
             allows_registering: true,
         }
     }

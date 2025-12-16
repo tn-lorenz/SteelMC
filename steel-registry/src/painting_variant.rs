@@ -1,4 +1,4 @@
-use std::collections::HashMap;
+use rustc_hash::FxHashMap;
 use steel_utils::Identifier;
 use steel_utils::text::TextComponent;
 
@@ -19,7 +19,7 @@ pub type PaintingVariantRef = &'static PaintingVariant;
 
 pub struct PaintingVariantRegistry {
     painting_variants_by_id: Vec<PaintingVariantRef>,
-    painting_variants_by_key: HashMap<Identifier, usize>,
+    painting_variants_by_key: FxHashMap<Identifier, usize>,
     allows_registering: bool,
 }
 
@@ -28,7 +28,7 @@ impl PaintingVariantRegistry {
     pub fn new() -> Self {
         Self {
             painting_variants_by_id: Vec::new(),
-            painting_variants_by_key: HashMap::new(),
+            painting_variants_by_key: FxHashMap::default(),
             allows_registering: true,
         }
     }

@@ -1,4 +1,4 @@
-use std::collections::HashMap;
+use rustc_hash::FxHashMap;
 
 use steel_utils::Identifier;
 
@@ -32,8 +32,8 @@ pub type ItemRef = &'static Item;
 
 pub struct ItemRegistry {
     items_by_id: Vec<ItemRef>,
-    items_by_key: HashMap<Identifier, usize>,
-    tags: HashMap<Identifier, Vec<ItemRef>>,
+    items_by_key: FxHashMap<Identifier, usize>,
+    tags: FxHashMap<Identifier, Vec<ItemRef>>,
     allows_registering: bool,
 }
 
@@ -48,8 +48,8 @@ impl ItemRegistry {
     pub fn new() -> Self {
         Self {
             items_by_id: Vec::new(),
-            items_by_key: HashMap::new(),
-            tags: HashMap::new(),
+            items_by_key: FxHashMap::default(),
+            tags: FxHashMap::default(),
             allows_registering: true,
         }
     }

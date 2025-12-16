@@ -1,4 +1,4 @@
-use std::collections::HashMap;
+use rustc_hash::FxHashMap;
 use steel_utils::Identifier;
 use steel_utils::text::TextComponent;
 
@@ -45,7 +45,7 @@ pub type DialogRef = &'static Dialog;
 
 pub struct DialogRegistry {
     dialogs_by_id: Vec<DialogRef>,
-    dialogs_by_key: HashMap<Identifier, usize>,
+    dialogs_by_key: FxHashMap<Identifier, usize>,
     allows_registering: bool,
 }
 
@@ -54,7 +54,7 @@ impl DialogRegistry {
     pub fn new() -> Self {
         Self {
             dialogs_by_id: Vec::new(),
-            dialogs_by_key: HashMap::new(),
+            dialogs_by_key: FxHashMap::default(),
             allows_registering: true,
         }
     }

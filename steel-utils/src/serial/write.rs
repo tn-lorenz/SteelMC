@@ -1,8 +1,5 @@
-#![allow(missing_docs)]
-use std::{
-    collections::HashMap,
-    io::{Result, Write},
-};
+#![allow(missing_docs, clippy::disallowed_types)]
+use std::io::{Result, Write};
 
 use simdnbt::{
     ToNbtTag,
@@ -106,7 +103,9 @@ impl<T: WriteTo, Z: WriteTo> WriteTo for (T, Z) {
 }
 
 #[allow(missing_docs)]
-impl<K: WriteTo, V: WriteTo, S: ::std::hash::BuildHasher> WriteTo for HashMap<K, V, S> {
+impl<K: WriteTo, V: WriteTo, S: ::std::hash::BuildHasher> WriteTo
+    for std::collections::HashMap<K, V, S>
+{
     fn write(&self, writer: &mut impl Write) -> Result<()> {
         VarInt(self.len() as i32).write(writer)?;
         for (key, value) in self {

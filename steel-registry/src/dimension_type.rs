@@ -1,4 +1,4 @@
-use std::collections::HashMap;
+use rustc_hash::FxHashMap;
 use steel_utils::Identifier;
 
 use crate::RegistryExt;
@@ -38,7 +38,7 @@ pub type DimensionTypeRef = &'static DimensionType;
 
 pub struct DimensionTypeRegistry {
     dimension_types_by_id: Vec<DimensionTypeRef>,
-    dimension_types_by_key: HashMap<Identifier, usize>,
+    dimension_types_by_key: FxHashMap<Identifier, usize>,
     allows_registering: bool,
 }
 
@@ -47,7 +47,7 @@ impl DimensionTypeRegistry {
     pub fn new() -> Self {
         Self {
             dimension_types_by_id: Vec::new(),
-            dimension_types_by_key: HashMap::new(),
+            dimension_types_by_key: FxHashMap::default(),
             allows_registering: true,
         }
     }

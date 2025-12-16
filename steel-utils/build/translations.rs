@@ -49,7 +49,7 @@ pub(crate) fn build() -> TokenStream {
     translations_vec.sort_by_key(|(k, _)| *k);
 
     // Track used constant names to handle collisions
-    let mut used_names = std::collections::HashMap::new();
+    let mut used_names = rustc_hash::FxHashMap::default();
 
     // Store entries for the PHF map. The strings must live until `build()` is called on the map builder.
     let mut phf_map_entries = Vec::new();

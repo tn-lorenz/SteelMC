@@ -1,4 +1,4 @@
-use std::collections::HashMap;
+use rustc_hash::FxHashMap;
 use steel_utils::Identifier;
 
 use crate::RegistryExt;
@@ -9,7 +9,7 @@ pub struct TrimMaterial {
     pub key: Identifier,
     pub asset_name: String,
     pub description: StyledTextComponent,
-    pub override_armor_assets: HashMap<Identifier, String>,
+    pub override_armor_assets: FxHashMap<Identifier, String>,
 }
 
 /// Represents a translatable text component that can also include styling.
@@ -23,7 +23,7 @@ pub type TrimMaterialRef = &'static TrimMaterial;
 
 pub struct TrimMaterialRegistry {
     trim_materials_by_id: Vec<TrimMaterialRef>,
-    trim_materials_by_key: HashMap<Identifier, usize>,
+    trim_materials_by_key: FxHashMap<Identifier, usize>,
     allows_registering: bool,
 }
 
@@ -32,7 +32,7 @@ impl TrimMaterialRegistry {
     pub fn new() -> Self {
         Self {
             trim_materials_by_id: Vec::new(),
-            trim_materials_by_key: HashMap::new(),
+            trim_materials_by_key: FxHashMap::default(),
             allows_registering: true,
         }
     }

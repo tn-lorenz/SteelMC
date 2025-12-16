@@ -1,4 +1,4 @@
-use std::collections::HashMap;
+use rustc_hash::FxHashMap;
 use steel_utils::Identifier;
 
 use crate::RegistryExt;
@@ -30,7 +30,7 @@ pub type ZombieNautilusVariantRef = &'static ZombieNautilusVariant;
 
 pub struct ZombieNautilusVariantRegistry {
     zombie_nautilus_variants_by_id: Vec<ZombieNautilusVariantRef>,
-    zombie_nautilus_variants_by_key: HashMap<Identifier, usize>,
+    zombie_nautilus_variants_by_key: FxHashMap<Identifier, usize>,
     allows_registering: bool,
 }
 
@@ -39,7 +39,7 @@ impl ZombieNautilusVariantRegistry {
     pub fn new() -> Self {
         Self {
             zombie_nautilus_variants_by_id: Vec::new(),
-            zombie_nautilus_variants_by_key: HashMap::new(),
+            zombie_nautilus_variants_by_key: FxHashMap::default(),
             allows_registering: true,
         }
     }

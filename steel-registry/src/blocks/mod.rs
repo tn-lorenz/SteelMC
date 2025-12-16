@@ -1,7 +1,7 @@
 pub mod behaviour;
 pub mod properties;
 
-use std::collections::HashMap;
+use rustc_hash::FxHashMap;
 
 use crate::RegistryExt;
 use crate::blocks::behaviour::BlockBehaviourProperties;
@@ -68,8 +68,8 @@ pub type BlockRef = &'static Block;
 // The central registry for all blocks.
 pub struct BlockRegistry {
     blocks_by_id: Vec<BlockRef>,
-    blocks_by_key: HashMap<Identifier, usize>,
-    tags: HashMap<Identifier, Vec<BlockRef>>,
+    blocks_by_key: FxHashMap<Identifier, usize>,
+    tags: FxHashMap<Identifier, Vec<BlockRef>>,
     allows_registering: bool,
     pub state_to_block_lookup: Vec<BlockRef>,
     /// Maps state IDs to block IDs (parallel to `state_to_block_lookup` for O(1) lookup)
@@ -92,8 +92,8 @@ impl BlockRegistry {
     pub fn new() -> Self {
         Self {
             blocks_by_id: Vec::new(),
-            blocks_by_key: HashMap::new(),
-            tags: HashMap::new(),
+            blocks_by_key: FxHashMap::default(),
+            tags: FxHashMap::default(),
             allows_registering: true,
             state_to_block_lookup: Vec::new(),
             state_to_block_id: Vec::new(),

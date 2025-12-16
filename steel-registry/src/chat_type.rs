@@ -1,4 +1,4 @@
-use std::collections::HashMap;
+use rustc_hash::FxHashMap;
 use steel_utils::Identifier;
 
 use crate::RegistryExt;
@@ -34,7 +34,7 @@ pub type ChatTypeRef = &'static ChatType;
 
 pub struct ChatTypeRegistry {
     chat_types_by_id: Vec<ChatTypeRef>,
-    chat_types_by_key: HashMap<Identifier, usize>,
+    chat_types_by_key: FxHashMap<Identifier, usize>,
     allows_registering: bool,
 }
 
@@ -43,7 +43,7 @@ impl ChatTypeRegistry {
     pub fn new() -> Self {
         Self {
             chat_types_by_id: Vec::new(),
-            chat_types_by_key: HashMap::new(),
+            chat_types_by_key: FxHashMap::default(),
             allows_registering: true,
         }
     }

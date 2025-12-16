@@ -1,4 +1,4 @@
-use std::collections::HashMap;
+use rustc_hash::FxHashMap;
 use steel_utils::Identifier;
 use steel_utils::text::TextComponent;
 
@@ -18,7 +18,7 @@ pub type JukeboxSongRef = &'static JukeboxSong;
 
 pub struct JukeboxSongRegistry {
     jukebox_songs_by_id: Vec<JukeboxSongRef>,
-    jukebox_songs_by_key: HashMap<Identifier, usize>,
+    jukebox_songs_by_key: FxHashMap<Identifier, usize>,
     allows_registering: bool,
 }
 
@@ -27,7 +27,7 @@ impl JukeboxSongRegistry {
     pub fn new() -> Self {
         Self {
             jukebox_songs_by_id: Vec::new(),
-            jukebox_songs_by_key: HashMap::new(),
+            jukebox_songs_by_key: FxHashMap::default(),
             allows_registering: true,
         }
     }

@@ -161,7 +161,8 @@ impl MessageCache {
     /// # Panics
     /// Panics if the deque is empty while attempting to pop (should never happen as we check `!deque.is_empty()`).
     pub fn push(&mut self, last_seen_signatures: &LastSeen, current_signature: Option<&[u8; 256]>) {
-        use std::collections::{HashSet, VecDeque};
+        use rustc_hash::FxHashSet;
+        use std::collections::VecDeque;
 
         log::debug!(
             "push: adding {} lastSeen + {} current = {} total signatures to cache (current cache size: {})",
@@ -186,7 +187,7 @@ impl MessageCache {
         }
 
         // Create a set of all signatures we're pushing for O(1) lookup
-        let push_set: HashSet<Box<[u8]>> = deque.iter().cloned().collect();
+        let push_set: FxHashSet<Box<[u8]>> = deque.iter().cloned().collect();
 
         // Vanilla's push algorithm:
         // for(int i = 0; !deque.isEmpty() && i < this.entries.length; ++i) {

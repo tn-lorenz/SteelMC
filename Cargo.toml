@@ -42,6 +42,7 @@ anyhow = "1.0.100"
 parking_lot = { version = "0.12.5", features = ["nightly"] }
 rayon = "1.11.0"
 wincode = { version = "0.2.1", features = ["derive"] }
+rustc-hash = "2.1.1"
 
 
 [profile.release]

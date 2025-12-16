@@ -1,7 +1,5 @@
-use std::{
-    collections::{BTreeMap, HashMap},
-    fs,
-};
+use rustc_hash::FxHashMap;
+use std::{collections::BTreeMap, fs};
 
 use heck::ToSnakeCase;
 use proc_macro2::{Ident, Span, TokenStream};
@@ -22,7 +20,7 @@ pub(crate) fn build() -> TokenStream {
         serde_json::from_str(&fs::read_to_string("build_assets/packets.json").unwrap())
             .expect("Failed to parse packets.json");
 
-    let mut phases: HashMap<String, TokenStream> = HashMap::new();
+    let mut phases: FxHashMap<String, TokenStream> = FxHashMap::default();
 
     let version = packets.version;
     parse_packets(
@@ -59,7 +57,7 @@ pub(crate) fn build() -> TokenStream {
 pub(crate) fn parse_packets(
     packets: BTreeMap<String, Vec<String>>,
     prefix: Ident,
-    phases: &mut HashMap<String, TokenStream>,
+    phases: &mut FxHashMap<String, TokenStream>,
 ) {
     for packet in packets {
         let inner = phases.entry(packet.0.to_snake_case()).or_default();

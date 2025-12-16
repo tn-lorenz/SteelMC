@@ -1,4 +1,4 @@
-use std::collections::HashMap;
+use rustc_hash::FxHashMap;
 use steel_utils::Identifier;
 
 use crate::RegistryExt;
@@ -12,8 +12,8 @@ pub struct Biome {
     pub temperature_modifier: TemperatureModifier,
     pub effects: BiomeEffects,
     pub creature_spawn_probability: f32,
-    pub spawners: HashMap<String, Vec<SpawnerData>>,
-    pub spawn_costs: HashMap<Identifier, SpawnCost>,
+    pub spawners: FxHashMap<String, Vec<SpawnerData>>,
+    pub spawn_costs: FxHashMap<Identifier, SpawnCost>,
     pub carvers: Vec<Identifier>,
     pub features: Vec<Vec<Identifier>>,
 }
@@ -106,7 +106,7 @@ pub type BiomeRef = &'static Biome;
 
 pub struct BiomeRegistry {
     biomes_by_id: Vec<BiomeRef>,
-    biomes_by_key: HashMap<Identifier, usize>,
+    biomes_by_key: FxHashMap<Identifier, usize>,
     allows_registering: bool,
 }
 
@@ -115,7 +115,7 @@ impl BiomeRegistry {
     pub fn new() -> Self {
         Self {
             biomes_by_id: Vec::new(),
-            biomes_by_key: HashMap::new(),
+            biomes_by_key: FxHashMap::default(),
             allows_registering: true,
         }
     }

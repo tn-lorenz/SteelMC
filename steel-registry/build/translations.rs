@@ -63,7 +63,7 @@ pub(crate) fn build() -> TokenStream {
     translations_vec.sort_by_key(|(k, _)| *k);
 
     // Track used constant names to handle collisions
-    let mut used_names = std::collections::HashMap::new();
+    let mut used_names = rustc_hash::FxHashMap::default();
 
     for (key, value) in translations_vec {
         let text = match value.as_str() {

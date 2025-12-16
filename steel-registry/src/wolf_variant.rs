@@ -1,4 +1,4 @@
-use std::collections::HashMap;
+use rustc_hash::FxHashMap;
 use steel_utils::Identifier;
 
 use crate::RegistryExt;
@@ -37,7 +37,7 @@ pub type WolfVariantRef = &'static WolfVariant;
 
 pub struct WolfVariantRegistry {
     wolf_variants_by_id: Vec<WolfVariantRef>,
-    wolf_variants_by_key: HashMap<Identifier, usize>,
+    wolf_variants_by_key: FxHashMap<Identifier, usize>,
     allows_registering: bool,
 }
 
@@ -46,7 +46,7 @@ impl WolfVariantRegistry {
     pub fn new() -> Self {
         Self {
             wolf_variants_by_id: Vec::new(),
-            wolf_variants_by_key: HashMap::new(),
+            wolf_variants_by_key: FxHashMap::default(),
             allows_registering: true,
         }
     }

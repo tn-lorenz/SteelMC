@@ -1,4 +1,5 @@
-use std::{any::Any, collections::HashMap, fmt::Debug, marker::PhantomData};
+use rustc_hash::FxHashMap;
+use std::{any::Any, fmt::Debug, marker::PhantomData};
 
 use steel_utils::Identifier;
 
@@ -50,7 +51,7 @@ impl<T> DataComponentType<T> {
 }
 
 pub struct DataComponentRegistry {
-    components_by_key: HashMap<Identifier, usize>,
+    components_by_key: FxHashMap<Identifier, usize>,
     allows_registering: bool,
 }
 
@@ -64,7 +65,7 @@ impl DataComponentRegistry {
     #[must_use]
     pub fn new() -> Self {
         Self {
-            components_by_key: HashMap::new(),
+            components_by_key: FxHashMap::default(),
             allows_registering: true,
         }
     }
@@ -98,7 +99,7 @@ impl RegistryExt for DataComponentRegistry {
 
 #[derive(Debug)]
 pub struct DataComponentMap {
-    map: HashMap<Identifier, Box<dyn ComponentValue>>,
+    map: FxHashMap<Identifier, Box<dyn ComponentValue>>,
 }
 
 impl Default for DataComponentMap {
@@ -111,13 +112,13 @@ impl DataComponentMap {
     #[must_use]
     pub fn new() -> Self {
         Self {
-            map: HashMap::new(),
+            map: FxHashMap::default(),
         }
     }
 
     #[must_use]
     pub fn common_item_components() -> Self {
-        let mut map = HashMap::new();
+        let mut map = FxHashMap::default();
         map.insert(
             MAX_STACK_SIZE.key.clone(),
             Box::new(64i32) as Box<dyn ComponentValue>,
@@ -223,7 +224,7 @@ impl PartialEq for ComponentPatchEntry {
 /// - Components that are explicitly removed (`Removed`)
 #[derive(Debug, Default)]
 pub struct DataComponentPatch {
-    entries: HashMap<Identifier, ComponentPatchEntry>,
+    entries: FxHashMap<Identifier, ComponentPatchEntry>,
 }
 
 impl PartialEq for DataComponentPatch {
@@ -241,7 +242,7 @@ impl DataComponentPatch {
     #[must_use]
     pub fn new() -> Self {
         Self {
-            entries: HashMap::new(),
+            entries: FxHashMap::default(),
         }
     }
 
@@ -333,7 +334,7 @@ pub fn effective_components_equal(
     proto_b: &DataComponentMap,
     patch_b: &DataComponentPatch,
 ) -> bool {
-    let mut all_keys = std::collections::HashSet::new();
+    let mut all_keys = rustc_hash::FxHashSet::default();
 
     for key in proto_a.keys() {
         if !patch_a.is_removed(key) {

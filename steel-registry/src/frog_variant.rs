@@ -1,4 +1,4 @@
-use std::collections::HashMap;
+use rustc_hash::FxHashMap;
 use steel_utils::Identifier;
 
 use crate::RegistryExt;
@@ -29,7 +29,7 @@ pub type FrogVariantRef = &'static FrogVariant;
 
 pub struct FrogVariantRegistry {
     frog_variants_by_id: Vec<FrogVariantRef>,
-    frog_variants_by_key: HashMap<Identifier, usize>,
+    frog_variants_by_key: FxHashMap<Identifier, usize>,
     allows_registering: bool,
 }
 
@@ -38,7 +38,7 @@ impl FrogVariantRegistry {
     pub fn new() -> Self {
         Self {
             frog_variants_by_id: Vec::new(),
-            frog_variants_by_key: HashMap::new(),
+            frog_variants_by_key: FxHashMap::default(),
             allows_registering: true,
         }
     }

@@ -1,4 +1,4 @@
-use std::collections::HashMap;
+use rustc_hash::FxHashMap;
 use steel_utils::Identifier;
 
 use crate::RegistryExt;
@@ -38,7 +38,7 @@ pub type PigVariantRef = &'static PigVariant;
 
 pub struct PigVariantRegistry {
     pig_variants_by_id: Vec<PigVariantRef>,
-    pig_variants_by_key: HashMap<Identifier, usize>,
+    pig_variants_by_key: FxHashMap<Identifier, usize>,
     allows_registering: bool,
 }
 
@@ -47,7 +47,7 @@ impl PigVariantRegistry {
     pub fn new() -> Self {
         Self {
             pig_variants_by_id: Vec::new(),
-            pig_variants_by_key: HashMap::new(),
+            pig_variants_by_key: FxHashMap::default(),
             allows_registering: true,
         }
     }

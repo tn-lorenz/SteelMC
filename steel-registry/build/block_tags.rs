@@ -1,4 +1,5 @@
-use std::{collections::HashMap, fs, path::Path};
+use rustc_hash::FxHashMap;
+use std::{fs, path::Path};
 
 use heck::ToShoutySnakeCase;
 use proc_macro2::{Ident, Span, TokenStream};
@@ -11,10 +12,10 @@ struct TagJson {
 }
 
 /// Reads all tag JSON files and returns a map of tag name -> values
-fn read_all_tags(tag_dir: &str) -> HashMap<String, Vec<String>> {
-    let mut tags = HashMap::new();
+fn read_all_tags(tag_dir: &str) -> FxHashMap<String, Vec<String>> {
+    let mut tags = FxHashMap::default();
 
-    fn read_directory(dir: &Path, base_path: &Path, tags: &mut HashMap<String, Vec<String>>) {
+    fn read_directory(dir: &Path, base_path: &Path, tags: &mut FxHashMap<String, Vec<String>>) {
         for entry in fs::read_dir(dir).unwrap() {
             let entry = entry.unwrap();
             let path = entry.path();
@@ -48,8 +49,8 @@ fn read_all_tags(tag_dir: &str) -> HashMap<String, Vec<String>> {
 /// Resolves tag references recursively and returns a flattened list of block keys
 fn resolve_tag(
     tag_name: &str,
-    all_tags: &HashMap<String, Vec<String>>,
-    resolved_cache: &mut HashMap<String, Vec<String>>,
+    all_tags: &FxHashMap<String, Vec<String>>,
+    resolved_cache: &mut FxHashMap<String, Vec<String>>,
     visiting: &mut Vec<String>,
 ) -> Vec<String> {
     // Check if already resolved
@@ -88,7 +89,7 @@ fn resolve_tag(
     visiting.pop();
 
     // Remove duplicates while preserving order
-    let mut seen = std::collections::HashSet::new();
+    let mut seen = rustc_hash::FxHashSet::default();
     resolved.retain(|x| seen.insert(x.clone()));
 
     resolved_cache.insert(tag_name.to_string(), resolved.clone());
@@ -104,8 +105,8 @@ pub(crate) fn build() -> TokenStream {
     let all_tags = read_all_tags(tag_dir);
 
     // Resolve all tags
-    let mut resolved_tags: HashMap<String, Vec<String>> = HashMap::new();
-    let mut resolved_cache = HashMap::new();
+    let mut resolved_tags: FxHashMap<String, Vec<String>> = FxHashMap::default();
+    let mut resolved_cache = FxHashMap::default();
 
     for tag_name in all_tags.keys() {
         let mut visiting = Vec::new();

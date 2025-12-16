@@ -13,3 +13,4 @@ allowed-duplicate-crates = [
     "windows_x86_64_msvc",
     "crypto-common",
 ]
+disallowed-types = ["std::collections::HashMap", "std::collections::HashSet"]

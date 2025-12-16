@@ -1,4 +1,5 @@
-use std::{collections::HashMap, fs};
+use rustc_hash::FxHashMap;
+use std::fs;
 
 use heck::ToShoutySnakeCase;
 use proc_macro2::{Ident, Span, TokenStream};
@@ -51,7 +52,7 @@ fn parse_hex_color(hex: &str) -> i32 {
 #[derive(Serialize, Deserialize, Debug)]
 pub struct BiomeJson {
     #[serde(default)]
-    attributes: HashMap<String, Value>,
+    attributes: FxHashMap<String, Value>,
 
     has_precipitation: bool,
     temperature: f32,
@@ -65,9 +66,9 @@ pub struct BiomeJson {
     #[serde(default)]
     creature_spawn_probability: f32,
     #[serde(default)]
-    spawners: HashMap<String, Vec<SpawnerData>>,
+    spawners: FxHashMap<String, Vec<SpawnerData>>,
     #[serde(default)]
-    spawn_costs: HashMap<Identifier, SpawnCost>,
+    spawn_costs: FxHashMap<Identifier, SpawnCost>,
 
     carvers: VecOrSingle<Identifier>,
     features: Vec<Vec<Identifier>>,
@@ -250,7 +251,10 @@ struct AmbientParticle {
     probability: f32,
 }
 
-fn extract_attributes_to_effects(effects: &mut BiomeEffects, attributes: &HashMap<String, Value>) {
+fn extract_attributes_to_effects(
+    effects: &mut BiomeEffects,
+    attributes: &FxHashMap<String, Value>,
+) {
     // Extract sky_color
     if let Some(Value::String(sky_color)) = attributes.get("minecraft:visual/sky_color") {
         effects.sky_color = parse_hex_color(sky_color);
@@ -348,10 +352,13 @@ where
     quote! { vec![#(#items),*] }
 }
 
-fn generate_hashmap_string<T, F>(map: &HashMap<String, T>, f: F) -> TokenStream
+fn generate_hashmap_string<T, F>(map: &FxHashMap<String, T>, f: F) -> TokenStream
 where
     F: Fn(&T) -> TokenStream,
 {
+    if map.is_empty() {
+        return quote! { rustc_hash::FxHashMap::default() };
+    }
     let entries: Vec<_> = map
         .iter()
         .map(|(k, v)| {
@@ -359,13 +366,16 @@ where
             quote! { (#k.to_string(), #val) }
         })
         .collect();
-    quote! { HashMap::from([#(#entries),*]) }
+    quote! { rustc_hash::FxHashMap::from_iter([#(#entries),*]) }
 }
 
-fn generate_hashmap_resource<T, F>(map: &HashMap<Identifier, T>, f: F) -> TokenStream
+fn generate_hashmap_resource<T, F>(map: &FxHashMap<Identifier, T>, f: F) -> TokenStream
 where
     F: Fn(&T) -> TokenStream,
 {
+    if map.is_empty() {
+        return quote! { rustc_hash::FxHashMap::default() };
+    }
     let entries: Vec<_> = map
         .iter()
         .map(|(k, v)| {
@@ -374,7 +384,7 @@ where
             quote! { (#key, #val) }
         })
         .collect();
-    quote! { HashMap::from([#(#entries),*]) }
+    quote! { rustc_hash::FxHashMap::from_iter([#(#entries),*]) }
 }
 
 fn generate_spawner_data(data: &SpawnerData) -> TokenStream {
@@ -549,7 +559,7 @@ pub(crate) fn build() -> TokenStream {
         use steel_utils::Identifier;
         use std::borrow::Cow;
         use std::sync::LazyLock;
-        use std::collections::HashMap;
+        use rustc_hash::FxHashMap;
     });
 
     // Generate static biome definitions

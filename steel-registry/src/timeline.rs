@@ -1,4 +1,4 @@
-use std::collections::HashMap;
+use rustc_hash::FxHashMap;
 use steel_utils::Identifier;
 
 use crate::RegistryExt;
@@ -13,8 +13,8 @@ pub type TimelineRef = &'static Timeline;
 
 pub struct TimelineRegistry {
     timelines_by_id: Vec<TimelineRef>,
-    timelines_by_key: HashMap<Identifier, usize>,
-    tags: HashMap<Identifier, Vec<TimelineRef>>,
+    timelines_by_key: FxHashMap<Identifier, usize>,
+    tags: FxHashMap<Identifier, Vec<TimelineRef>>,
     allows_registering: bool,
 }
 
@@ -23,8 +23,8 @@ impl TimelineRegistry {
     pub fn new() -> Self {
         Self {
             timelines_by_id: Vec::new(),
-            timelines_by_key: HashMap::new(),
-            tags: HashMap::new(),
+            timelines_by_key: FxHashMap::default(),
+            tags: FxHashMap::default(),
             allows_registering: true,
         }
     }

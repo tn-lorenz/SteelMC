@@ -1,4 +1,5 @@
-use std::{collections::HashMap, fs};
+use rustc_hash::FxHashMap;
+use std::fs;
 
 use heck::ToShoutySnakeCase;
 use proc_macro2::{Ident, Span, TokenStream};
@@ -11,7 +12,7 @@ pub struct TrimMaterialJson {
     asset_name: String,
     description: StyledTextComponent,
     #[serde(default)]
-    override_armor_assets: HashMap<Identifier, String>,
+    override_armor_assets: FxHashMap<Identifier, String>,
 }
 
 #[derive(Deserialize, Debug)]
@@ -40,7 +41,10 @@ where
     }
 }
 
-fn generate_hashmap_resource_string(map: &HashMap<Identifier, String>) -> TokenStream {
+fn generate_hashmap_resource_string(map: &FxHashMap<Identifier, String>) -> TokenStream {
+    if map.is_empty() {
+        return quote! { rustc_hash::FxHashMap::default() };
+    }
     let entries: Vec<_> = map
         .iter()
         .map(|(k, v)| {
@@ -48,7 +52,7 @@ fn generate_hashmap_resource_string(map: &HashMap<Identifier, String>) -> TokenS
             quote! { (#key, #v.to_string()) }
         })
         .collect();
-    quote! { HashMap::from([#(#entries),*]) }
+    quote! { rustc_hash::FxHashMap::from_iter([#(#entries),*]) }
 }
 
 pub(crate) fn build() -> TokenStream {
@@ -86,7 +90,7 @@ pub(crate) fn build() -> TokenStream {
         use steel_utils::Identifier;
         use std::borrow::Cow;
         use std::sync::LazyLock;
-        use std::collections::HashMap;
+        use rustc_hash::FxHashMap;
     });
 
     // Generate static trim material definitions

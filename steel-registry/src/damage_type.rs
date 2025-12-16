@@ -1,4 +1,4 @@
-use std::collections::HashMap;
+use rustc_hash::FxHashMap;
 use steel_utils::Identifier;
 
 use crate::RegistryExt;
@@ -45,7 +45,7 @@ pub type DamageTypeRef = &'static DamageType;
 
 pub struct DamageTypeRegistry {
     damage_types_by_id: Vec<DamageTypeRef>,
-    damage_types_by_key: HashMap<Identifier, usize>,
+    damage_types_by_key: FxHashMap<Identifier, usize>,
     allows_registering: bool,
 }
 
@@ -54,7 +54,7 @@ impl DamageTypeRegistry {
     pub fn new() -> Self {
         Self {
             damage_types_by_id: Vec::new(),
-            damage_types_by_key: HashMap::new(),
+            damage_types_by_key: FxHashMap::default(),
             allows_registering: true,
         }
     }

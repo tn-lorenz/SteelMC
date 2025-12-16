@@ -1,4 +1,4 @@
-use std::collections::HashMap;
+use rustc_hash::FxHashMap;
 use steel_utils::Identifier;
 
 use crate::RegistryExt;
@@ -39,7 +39,7 @@ pub type CowVariantRef = &'static CowVariant;
 
 pub struct CowVariantRegistry {
     cow_variants_by_id: Vec<CowVariantRef>,
-    cow_variants_by_key: HashMap<Identifier, usize>,
+    cow_variants_by_key: FxHashMap<Identifier, usize>,
     allows_registering: bool,
 }
 
@@ -48,7 +48,7 @@ impl CowVariantRegistry {
     pub fn new() -> Self {
         Self {
             cow_variants_by_id: Vec::new(),
-            cow_variants_by_key: HashMap::new(),
+            cow_variants_by_key: FxHashMap::default(),
             allows_registering: true,
         }
     }

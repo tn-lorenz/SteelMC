@@ -1,4 +1,4 @@
-use std::collections::HashMap;
+use rustc_hash::FxHashMap;
 use steel_utils::Identifier;
 
 use crate::RegistryExt;
@@ -15,7 +15,7 @@ pub type BannerPatternRef = &'static BannerPattern;
 
 pub struct BannerPatternRegistry {
     banner_patterns_by_id: Vec<BannerPatternRef>,
-    banner_patterns_by_key: HashMap<Identifier, usize>,
+    banner_patterns_by_key: FxHashMap<Identifier, usize>,
     allows_registering: bool,
 }
 
@@ -24,7 +24,7 @@ impl BannerPatternRegistry {
     pub fn new() -> Self {
         Self {
             banner_patterns_by_id: Vec::new(),
-            banner_patterns_by_key: HashMap::new(),
+            banner_patterns_by_key: FxHashMap::default(),
             allows_registering: true,
         }
     }

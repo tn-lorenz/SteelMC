@@ -1,4 +1,4 @@
-use std::collections::HashMap;
+use rustc_hash::FxHashMap;
 use steel_utils::Identifier;
 use steel_utils::text::TextComponent;
 
@@ -19,7 +19,7 @@ pub type InstrumentRef = &'static Instrument;
 
 pub struct InstrumentRegistry {
     instruments_by_id: Vec<InstrumentRef>,
-    instruments_by_key: HashMap<Identifier, usize>,
+    instruments_by_key: FxHashMap<Identifier, usize>,
     allows_registering: bool,
 }
 
@@ -28,7 +28,7 @@ impl InstrumentRegistry {
     pub fn new() -> Self {
         Self {
             instruments_by_id: Vec::new(),
-            instruments_by_key: HashMap::new(),
+            instruments_by_key: FxHashMap::default(),
             allows_registering: true,
         }
     }

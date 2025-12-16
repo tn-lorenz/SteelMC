@@ -1,4 +1,4 @@
-use std::collections::HashMap;
+use rustc_hash::FxHashMap;
 use steel_utils::Identifier;
 use steel_utils::text::TextComponent;
 
@@ -17,7 +17,7 @@ pub type TrimPatternRef = &'static TrimPattern;
 
 pub struct TrimPatternRegistry {
     trim_patterns_by_id: Vec<TrimPatternRef>,
-    trim_patterns_by_key: HashMap<Identifier, usize>,
+    trim_patterns_by_key: FxHashMap<Identifier, usize>,
     allows_registering: bool,
 }
 
@@ -26,7 +26,7 @@ impl TrimPatternRegistry {
     pub fn new() -> Self {
         Self {
             trim_patterns_by_id: Vec::new(),
-            trim_patterns_by_key: HashMap::new(),
+            trim_patterns_by_key: FxHashMap::default(),
             allows_registering: true,
         }
     }
