@@ -5,6 +5,7 @@
 //! signed chat system, including RSA key pair generation, SHA256withRSA signing,
 //! and signature verification.
 
+pub mod key_store;
 pub mod mojang_api;
 pub mod rsa_utils;
 pub mod signature;

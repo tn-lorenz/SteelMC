@@ -69,16 +69,14 @@ static KEY_CACHE: LazyLock<RwLock<MojangKeyCache>> =
 ///
 /// This is cached for 1 hour to avoid unnecessary API calls.
 /// Returns the player certificate keys used for validating player profile keys.
-fn fetch_mojang_public_keys() -> Result<Vec<RsaPublicKey>, Box<dyn std::error::Error>> {
+async fn fetch_mojang_public_keys() -> Result<Vec<RsaPublicKey>, Box<dyn std::error::Error>> {
     log::info!("Fetching Mojang public keys from session server...");
 
     // Make HTTP request to Mojang's session server
-    let response = ureq::get(MOJANG_SESSION_SERVER)
-        .timeout(Duration::from_secs(10))
-        .call()?;
+    let response = reqwest::get(MOJANG_SESSION_SERVER).await?;
 
     // Parse JSON response
-    let session_info: SessionServerResponse = response.into_json()?;
+    let session_info: SessionServerResponse = response.json().await?;
 
     // Extract and decode the player certificate keys
     let mut keys = Vec::new();
@@ -110,7 +108,7 @@ fn fetch_mojang_public_keys() -> Result<Vec<RsaPublicKey>, Box<dyn std::error::E
 ///
 /// The keys are cached for 1 hour and automatically refreshed when needed.
 #[must_use]
-pub fn get_profile_key_validator() -> Box<dyn SignatureValidator> {
+pub async fn get_profile_key_validator() -> Box<dyn SignatureValidator> {
     // Check if we need to refresh the cache
     {
         let cache = KEY_CACHE.read();
@@ -119,17 +117,20 @@ pub fn get_profile_key_validator() -> Box<dyn SignatureValidator> {
         }
     }
 
-    // Need to refresh - acquire write lock
-    let mut cache = KEY_CACHE.write();
+    {
+        // Need to refresh - acquire write lock
+        let cache = KEY_CACHE.read();
 
-    // Double-check after acquiring write lock (another thread may have refreshed)
-    if !cache.needs_refresh() && !cache.keys.is_empty() {
-        return Box::new(MultiKeyValidator::new(cache.keys.clone()));
+        // Double-check after acquiring write lock (another thread may have refreshed)
+        if !cache.needs_refresh() && !cache.keys.is_empty() {
+            return Box::new(MultiKeyValidator::new(cache.keys.clone()));
+        }
     }
 
     // Fetch new keys
-    match fetch_mojang_public_keys() {
+    match fetch_mojang_public_keys().await {
         Ok(keys) => {
+            let mut cache = KEY_CACHE.write();
             cache.keys = keys.clone();
             cache.fetched_at = Some(Instant::now());
             log::info!("Mojang public keys cached successfully");

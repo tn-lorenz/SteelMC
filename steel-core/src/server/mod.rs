@@ -1,6 +1,4 @@
 //! This module contains the `Server` struct, which is the main entry point for the server.
-/// The key store for the server.
-pub mod key_store;
 /// The registry cache for the server.
 pub mod registry_cache;
 /// The tick rate manager for the server.
@@ -9,6 +7,7 @@ pub mod tick_rate_manager;
 use std::{sync::Arc, time::Instant};
 
 use parking_lot::RwLock;
+use steel_crypto::key_store::KeyStore;
 use steel_protocol::packets::game::{CLogin, CommonPlayerSpawnInfo};
 use steel_registry::Registry;
 use steel_utils::{Identifier, types::GameType};
@@ -17,10 +16,7 @@ use tokio::{runtime::Runtime, task::spawn_blocking};
 use tokio_util::sync::CancellationToken;
 
 use crate::{
-    config::STEEL_CONFIG,
-    player::Player,
-    server::{key_store::KeyStore, registry_cache::RegistryCache},
-    world::World,
+    config::STEEL_CONFIG, player::Player, server::registry_cache::RegistryCache, world::World,
 };
 
 /// The main server struct.

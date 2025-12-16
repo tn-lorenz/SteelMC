@@ -1,3 +1,4 @@
+cargo-features = ["codegen-backend"]
 [workspace]
 resolver = "2"
 members = [
@@ -34,23 +35,33 @@ thiserror = "2.0.17"
 proc-macro2 = "1.0.101"
 quote = "1.0.41"
 crossbeam = "0.8.4"
-uuid = { version = "1.18.1", features = ["serde", "v4"] }
-log = "0.4.28"
+uuid = { version = "1.19", features = ["serde", "v4"] }
+log = "0.4.29"
 simdnbt = "0.8.0"
 enum_dispatch = "0.3.13"
 anyhow = "1.0.100"
 parking_lot = { version = "0.12.5", features = ["nightly"] }
 rayon = "1.11.0"
-wincode = { version = "0.2.1", features = ["derive"] }
+wincode = { version = "0.2.2", features = ["derive"] }
 rustc-hash = "2.1.1"
+reqwest = { version = "0.12.24", features = [
+    "json",
+    "rustls-tls",
+], default-features = false }
+rsa = { version = "0.10.0-rc.10", features = ["sha2"] }
 
 
 [profile.release]
 lto = true
 codegen-units = 1
+panic = "abort"
 
 [profile.bench]
 debug = true
+
+[profile.dev]
+debug = 0
+#codegen-backend = "cranelift"
 
 [workspace.lints.rust]
 missing_docs = "warn"
