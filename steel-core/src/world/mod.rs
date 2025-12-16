@@ -47,8 +47,7 @@ impl World {
             true
         });
         let player_tick_elapsed = start.elapsed();
-        const SLOW_PLAYER_TICK_THRESHOLD: Duration = Duration::from_micros(250);
-        if player_tick_elapsed >= SLOW_PLAYER_TICK_THRESHOLD {
+        if player_tick_elapsed >= Duration::from_millis(100) {
             log::warn!("Player tick slow: {player_tick_elapsed:?}");
         }
     }
