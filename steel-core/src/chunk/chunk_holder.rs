@@ -365,18 +365,6 @@ impl ChunkHolder {
             task.mark_for_cancel();
         }
     }
-
-    /// Forces the chunk to fail.
-    pub fn force_fail(&self) {
-        let mut task_guard = self.generation_task.lock();
-        if let Some(task) = task_guard.take() {
-            task.mark_for_cancel();
-            log::info!("Force failing chunk at {:?}", self.pos);
-
-            //self.sender.send_replace(ChunkResult::Failed);
-            self.sender.send_replace(ChunkResult::Unloaded);
-        }
-    }
 }
 
 fn rayon_spawn<F, R>(thread_pool: &rayon::ThreadPool, func: F) -> impl Future<Output = R>

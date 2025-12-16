@@ -150,7 +150,7 @@ impl ChunkMap {
             Some(chunk_holder)
         } else {
             //log::info!("Unloading chunk at {pos:?}");
-            chunk_holder.force_fail();
+            chunk_holder.cancel_generation_task();
 
             // Check for two cause we are also holding a reference to the chunk
             if let Some((_, holder)) = self
