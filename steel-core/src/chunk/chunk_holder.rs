@@ -1,11 +1,13 @@
 //! `ChunkHolder` manages chunk state and asynchronous generation tasks.
 use futures::Future;
-use parking_lot::{Mutex as ParkingMutex, RwLock as ParkingRwLock};
 use replace_with::replace_with_or_abort;
 use std::fmt::Debug;
 use std::sync::Arc;
 use std::sync::atomic::{AtomicU8, AtomicUsize, Ordering};
-use steel_utils::ChunkPos;
+use steel_utils::{
+    ChunkPos,
+    locks::{SyncMutex, SyncRwLock},
+};
 use tokio::select;
 use tokio::sync::{oneshot, watch};
 
@@ -45,10 +47,10 @@ pub enum ChunkResult {
 ///
 /// `ChunkResult::Ok(ChunkStatus::Full)` -> data is `Some(ChunkAccess::Full(LevelChunk))`
 pub struct ChunkHolder {
-    data: ParkingRwLock<Option<ChunkAccess>>,
+    data: SyncRwLock<Option<ChunkAccess>>,
     chunk_result: watch::Receiver<ChunkResult>,
     sender: watch::Sender<ChunkResult>,
-    generation_task: ParkingMutex<Option<Arc<ChunkGenerationTask>>>,
+    generation_task: SyncMutex<Option<Arc<ChunkGenerationTask>>>,
     pos: ChunkPos,
     /// The current ticket level of the chunk.
     pub ticket_level: AtomicU8,
@@ -74,10 +76,10 @@ impl ChunkHolder {
         );
 
         Self {
-            data: ParkingRwLock::new(None),
+            data: SyncRwLock::new(None),
             chunk_result: receiver,
             sender,
-            generation_task: ParkingMutex::new(None),
+            generation_task: SyncMutex::new(None),
             pos,
             ticket_level: AtomicU8::new(ticket_level),
             started_work: AtomicUsize::new(usize::MAX),
@@ -143,7 +145,7 @@ impl ChunkHolder {
 
     /// Gets access to the chunk if it has reached the given status.
     #[inline]
-    pub fn try_chunk(&self, status: ChunkStatus) -> Option<&ParkingRwLock<Option<ChunkAccess>>> {
+    pub fn try_chunk(&self, status: ChunkStatus) -> Option<&SyncRwLock<Option<ChunkAccess>>> {
         match &*self.chunk_result.borrow() {
             ChunkResult::Ok(s) if status <= *s => Some(&self.data),
             _ => None,
@@ -154,7 +156,7 @@ impl ChunkHolder {
     pub fn await_chunk(
         &self,
         status: ChunkStatus,
-    ) -> impl Future<Output = Option<&ParkingRwLock<Option<ChunkAccess>>>> {
+    ) -> impl Future<Output = Option<&SyncRwLock<Option<ChunkAccess>>>> {
         let mut subscriber = self.sender.subscribe();
         let mut status_subscriber = self.highest_allowed_status_sender.subscribe();
         async move {

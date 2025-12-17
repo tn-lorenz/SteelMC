@@ -6,10 +6,10 @@ pub mod tick_rate_manager;
 
 use std::{sync::Arc, time::Instant};
 
-use parking_lot::RwLock;
 use steel_crypto::key_store::KeyStore;
 use steel_protocol::packets::game::{CLogin, CommonPlayerSpawnInfo};
 use steel_registry::Registry;
+use steel_utils::locks::SyncRwLock;
 use steel_utils::{Identifier, types::GameType};
 use tick_rate_manager::TickRateManager;
 use tokio::{runtime::Runtime, task::spawn_blocking};
@@ -30,7 +30,7 @@ pub struct Server {
     /// A list of all the worlds on the server.
     pub worlds: Vec<Arc<World>>,
     /// The tick rate manager for the server.
-    pub tick_rate_manager: RwLock<TickRateManager>,
+    pub tick_rate_manager: SyncRwLock<TickRateManager>,
 }
 
 impl Server {
@@ -49,7 +49,7 @@ impl Server {
             worlds: vec![Arc::new(World::new(&registry, chunk_runtime))],
             registry,
             registry_cache,
-            tick_rate_manager: RwLock::new(TickRateManager::new()),
+            tick_rate_manager: SyncRwLock::new(TickRateManager::new()),
         }
     }
 

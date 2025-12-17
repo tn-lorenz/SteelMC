@@ -9,9 +9,8 @@ use std::{
     },
 };
 
-use parking_lot::Mutex as ParkingMutex;
 use rayon::ThreadPool;
-use steel_utils::ChunkPos;
+use steel_utils::{ChunkPos, locks::SyncMutex};
 
 use crate::chunk::{
     chunk_access::ChunkStatus,
@@ -105,11 +104,11 @@ pub struct ChunkGenerationTask {
     /// The target generation status.
     pub target_status: ChunkStatus,
     /// The status scheduled for generation. Protected by a mutex for safe concurrent access.
-    pub scheduled_status: ParkingMutex<Option<ChunkStatus>>,
+    pub scheduled_status: SyncMutex<Option<ChunkStatus>>,
     /// Flag indicating if the task is cancelled.
     pub marked_for_cancel: AtomicBool,
     /// Futures for neighbors. Protected by a mutex.
-    pub neighbor_ready: ParkingMutex<Vec<NeighborReady>>,
+    pub neighbor_ready: SyncMutex<Vec<NeighborReady>>,
     /// Cache of required chunks.
     pub cache: Arc<StaticCache2D<Arc<ChunkHolder>>>,
     /// Whether generation is required for this task.
@@ -146,9 +145,9 @@ impl ChunkGenerationTask {
             chunk_map,
             pos,
             target_status,
-            scheduled_status: parking_lot::Mutex::new(None),
+            scheduled_status: SyncMutex::new(None),
             marked_for_cancel: AtomicBool::new(false),
-            neighbor_ready: parking_lot::Mutex::new(Vec::new()),
+            neighbor_ready: SyncMutex::new(Vec::new()),
             cache: Arc::new(cache),
             needs_generation: AtomicBool::new(true),
             thread_pool,

@@ -20,15 +20,13 @@ use steel_protocol::{
     utils::{ConnectionProtocol, EnqueuedPacket, PacketError, RawPacket},
 };
 use steel_registry::packets::play;
+use steel_utils::locks::{AsyncMutex, SyncMutex};
 use steel_utils::{text::TextComponent, translations};
 use tokio::{
     io::{BufReader, BufWriter},
     net::tcp::{OwnedReadHalf, OwnedWriteHalf},
     select,
-    sync::{
-        Mutex,
-        mpsc::{UnboundedReceiver, UnboundedSender},
-    },
+    sync::mpsc::{UnboundedReceiver, UnboundedSender},
 };
 use tokio_util::sync::CancellationToken;
 
@@ -44,12 +42,12 @@ pub struct JavaConnection {
     outgoing_packets: UnboundedSender<EnqueuedPacket>,
     cancel_token: CancellationToken,
     compression: Option<CompressionInfo>,
-    network_writer: Arc<Mutex<TCPNetworkEncoder<BufWriter<OwnedWriteHalf>>>>,
+    network_writer: Arc<AsyncMutex<TCPNetworkEncoder<BufWriter<OwnedWriteHalf>>>>,
     id: u64,
 
     player: Weak<Player>,
-    keep_alive_tracker: parking_lot::Mutex<KeepAliveTracker>,
-    latency: parking_lot::Mutex<u32>,
+    keep_alive_tracker: SyncMutex<KeepAliveTracker>,
+    latency: SyncMutex<u32>,
 }
 
 impl JavaConnection {
@@ -58,7 +56,7 @@ impl JavaConnection {
         outgoing_packets: UnboundedSender<EnqueuedPacket>,
         cancel_token: CancellationToken,
         compression: Option<CompressionInfo>,
-        network_writer: Arc<Mutex<TCPNetworkEncoder<BufWriter<OwnedWriteHalf>>>>,
+        network_writer: Arc<AsyncMutex<TCPNetworkEncoder<BufWriter<OwnedWriteHalf>>>>,
         id: u64,
         player: Weak<Player>,
     ) -> Self {
@@ -69,12 +67,12 @@ impl JavaConnection {
             network_writer,
             id,
             player,
-            keep_alive_tracker: parking_lot::Mutex::new(KeepAliveTracker {
+            keep_alive_tracker: SyncMutex::new(KeepAliveTracker {
                 alive_time: 0,
                 alive_pending: false,
                 alive_id: 0,
             }),
-            latency: parking_lot::Mutex::new(0),
+            latency: SyncMutex::new(0),
         }
     }
 
@@ -271,7 +269,7 @@ impl JavaConnection {
                             continue;
                         };
 
-                        if let Err(err) = self.network_writer.lock().await.write_packet(&encoded_packet).await
+                        if let Err(err) = self.network_writer.lock_async().await.write_packet(&encoded_packet).await
                         {
                             log::warn!("Failed to send packet to client {}: {err}", self.id);
                             self.close();

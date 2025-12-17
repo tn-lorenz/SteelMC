@@ -12,7 +12,6 @@ use steel_utils::{BlockStateId, ChunkPos, Identifier};
 use tokio::{
     fs::{self, File, OpenOptions},
     io::{AsyncReadExt, AsyncSeekExt, AsyncWriteExt},
-    sync::RwLock,
 };
 
 use crate::chunk::{
@@ -22,7 +21,7 @@ use crate::chunk::{
     proto_chunk::ProtoChunk,
     section::{ChunkSection, Sections},
 };
-use parking_lot::RwLock as ParkingRwLock;
+use steel_utils::locks::{AsyncRwLock, SyncRwLock};
 
 use super::{
     bit_pack::{bits_for_palette_len, pack_indices, unpack_indices},
@@ -42,7 +41,7 @@ pub struct RegionManager {
     /// Base directory for region files (e.g., "world/region").
     base_path: PathBuf,
     /// Open region file handles with their headers.
-    regions: RwLock<FxHashMap<RegionPos, RegionHandle>>,
+    regions: AsyncRwLock<FxHashMap<RegionPos, RegionHandle>>,
     /// Registry for block state and biome conversions.
     registry: Arc<Registry>,
 }
@@ -135,7 +134,7 @@ impl RegionManager {
     pub fn new(base_path: impl Into<PathBuf>, registry: Arc<Registry>) -> Self {
         Self {
             base_path: base_path.into(),
-            regions: RwLock::new(FxHashMap::default()),
+            regions: AsyncRwLock::new(FxHashMap::default()),
             registry,
         }
     }
@@ -298,7 +297,7 @@ impl RegionManager {
     #[allow(clippy::missing_panics_doc)]
     pub async fn save_chunk(
         &self,
-        chunk: &ParkingRwLock<Option<ChunkAccess>>,
+        chunk: &SyncRwLock<Option<ChunkAccess>>,
         status: ChunkStatus,
     ) -> io::Result<bool> {
         // Skip saving if chunk hasn't been modified
@@ -316,7 +315,7 @@ impl RegionManager {
         let (local_x, local_z) = RegionPos::local_chunk_pos(pos.0.x, pos.0.y);
         let index = RegionHeader::chunk_index(local_x, local_z);
 
-        let mut regions = self.regions.write().await;
+        let mut regions = self.regions.write_async().await;
 
         // Track if we opened the region (so we can close it after)
         let we_opened_region = !regions.contains_key(&region_pos);
@@ -419,7 +418,7 @@ impl RegionManager {
         let (local_x, local_z) = RegionPos::local_chunk_pos(pos.0.x, pos.0.y);
         let index = RegionHeader::chunk_index(local_x, local_z);
 
-        let mut regions = self.regions.write().await;
+        let mut regions = self.regions.write_async().await;
 
         // Track if we just opened this region
         let was_already_open = regions.contains_key(&region_pos);
@@ -479,7 +478,7 @@ impl RegionManager {
     pub async fn release_chunk(&self, pos: ChunkPos) -> io::Result<()> {
         let region_pos = RegionPos::from_chunk(pos.0.x, pos.0.y);
 
-        let mut regions = self.regions.write().await;
+        let mut regions = self.regions.write_async().await;
 
         let should_close = if let Some(handle) = regions.get_mut(&region_pos) {
             handle.loaded_chunk_count = handle.loaded_chunk_count.saturating_sub(1);
@@ -504,7 +503,7 @@ impl RegionManager {
         let (local_x, local_z) = RegionPos::local_chunk_pos(pos.0.x, pos.0.y);
         let index = RegionHeader::chunk_index(local_x, local_z);
 
-        let regions = self.regions.read().await;
+        let regions = self.regions.read_async().await;
 
         // Check cached header first
         if let Some(handle) = regions.get(&region_pos) {
@@ -536,7 +535,7 @@ impl RegionManager {
 
     /// Flushes all dirty headers to disk.
     pub async fn flush_all(&self) -> io::Result<()> {
-        let mut regions = self.regions.write().await;
+        let mut regions = self.regions.write_async().await;
 
         for handle in regions.values_mut() {
             if handle.header_dirty {

@@ -19,9 +19,9 @@ use std::{
 pub use game_profile::GameProfile;
 use message_chain::SignedMessageChain;
 use message_validator::LastSeenMessagesValidator;
-use parking_lot::Mutex;
 use profile_key::RemoteChatSession;
 pub use signature_cache::{LastSeen, MessageCache};
+use steel_utils::locks::SyncMutex;
 
 use crate::config::STEEL_CONFIG;
 
@@ -56,13 +56,13 @@ pub struct Player {
     pub client_loaded: AtomicBool,
 
     /// The player's position.
-    pub position: Mutex<Vector3<f64>>,
+    pub position: SyncMutex<Vector3<f64>>,
     /// The last chunk position of the player.
-    pub last_chunk_pos: Mutex<ChunkPos>,
+    pub last_chunk_pos: SyncMutex<ChunkPos>,
     /// The last chunk tracking view of the player.
-    pub last_tracking_view: Mutex<Option<PlayerChunkView>>,
+    pub last_tracking_view: SyncMutex<Option<PlayerChunkView>>,
     /// The chunk sender for the player.
-    pub chunk_sender: Mutex<ChunkSender>,
+    pub chunk_sender: SyncMutex<ChunkSender>,
 
     /// Counter for chat messages sent BY this player
     messages_sent: AtomicI32,
@@ -70,16 +70,16 @@ pub struct Player {
     messages_received: AtomicI32,
 
     /// Message signature cache for tracking chat messages
-    pub signature_cache: Mutex<MessageCache>,
+    pub signature_cache: SyncMutex<MessageCache>,
 
     /// Validator for client acknowledgements of messages we've sent
-    pub message_validator: Mutex<LastSeenMessagesValidator>,
+    pub message_validator: SyncMutex<LastSeenMessagesValidator>,
 
     /// Remote chat session containing the player's public key (if signed chat is enabled)
-    pub chat_session: Mutex<Option<RemoteChatSession>>,
+    pub chat_session: SyncMutex<Option<RemoteChatSession>>,
 
     /// Message chain state for tracking signed message sequence
-    pub message_chain: Mutex<Option<SignedMessageChain>>,
+    pub message_chain: SyncMutex<Option<SignedMessageChain>>,
 }
 
 impl Player {
@@ -95,16 +95,16 @@ impl Player {
 
             world,
             client_loaded: AtomicBool::new(false),
-            position: Mutex::new(Vector3::default()),
-            last_chunk_pos: Mutex::new(ChunkPos::new(0, 0)),
-            last_tracking_view: Mutex::new(None),
-            chunk_sender: Mutex::new(ChunkSender::default()),
+            position: SyncMutex::new(Vector3::default()),
+            last_chunk_pos: SyncMutex::new(ChunkPos::new(0, 0)),
+            last_tracking_view: SyncMutex::new(None),
+            chunk_sender: SyncMutex::new(ChunkSender::default()),
             messages_sent: AtomicI32::new(0),
             messages_received: AtomicI32::new(0),
-            signature_cache: Mutex::new(MessageCache::new()),
-            message_validator: Mutex::new(LastSeenMessagesValidator::new()),
-            chat_session: Mutex::new(None),
-            message_chain: Mutex::new(None),
+            signature_cache: SyncMutex::new(MessageCache::new()),
+            message_validator: SyncMutex::new(LastSeenMessagesValidator::new()),
+            chat_session: SyncMutex::new(None),
+            message_chain: SyncMutex::new(None),
         }
     }
 

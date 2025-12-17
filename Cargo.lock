@@ -2120,6 +2120,7 @@ dependencies = [
  "rsa-der",
  "serde",
  "serde_json",
+ "steel-utils",
  "thiserror",
 ]
 
@@ -2176,6 +2177,7 @@ dependencies = [
  "log",
  "md5",
  "num-traits",
+ "parking_lot",
  "phf",
  "phf_codegen",
  "proc-macro2",

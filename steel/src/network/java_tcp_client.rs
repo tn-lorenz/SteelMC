@@ -21,6 +21,7 @@ use steel_protocol::{
     utils::{ConnectionProtocol, EnqueuedPacket, PacketError, RawPacket},
 };
 use steel_registry::packets::{config, handshake, login, status};
+use steel_utils::locks::AsyncMutex;
 use steel_utils::text::TextComponent;
 use tokio::{
     io::{BufReader, BufWriter},
@@ -30,7 +31,7 @@ use tokio::{
     },
     select,
     sync::{
-        Mutex, Notify,
+        Notify,
         broadcast::{self, Sender, error::RecvError},
         mpsc::{self, UnboundedReceiver, UnboundedSender},
     },
@@ -68,7 +69,7 @@ pub struct JavaTcpClient {
     /// The unique ID of the client.
     pub id: u64,
     /// The client's game profile information.
-    pub gameprofile: Mutex<Option<GameProfile>>,
+    pub gameprofile: AsyncMutex<Option<GameProfile>>,
     /// The current connection state of the client (e.g., Handshaking, Status, Play).
     pub protocol: Arc<AtomicCell<ConnectionProtocol>>,
     /// The client's IP address.
@@ -79,7 +80,7 @@ pub struct JavaTcpClient {
     /// A queue of serialized packets to send to the network
     pub outgoing_queue: UnboundedSender<EnqueuedPacket>,
     /// The packet encoder for outgoing packets.
-    pub network_writer: Arc<Mutex<TCPNetworkEncoder<BufWriter<OwnedWriteHalf>>>>,
+    pub network_writer: Arc<AsyncMutex<TCPNetworkEncoder<BufWriter<OwnedWriteHalf>>>>,
     pub(crate) compression: Arc<AtomicCell<Option<CompressionInfo>>>,
 
     /// The shared server state.
@@ -114,13 +115,15 @@ impl JavaTcpClient {
 
         let client = Self {
             id,
-            gameprofile: Mutex::new(None),
+            gameprofile: AsyncMutex::new(None),
             address,
             protocol: Arc::new(AtomicCell::new(ConnectionProtocol::Handshake)),
             cancel_token,
 
             outgoing_queue,
-            network_writer: Arc::new(Mutex::new(TCPNetworkEncoder::new(BufWriter::new(write)))),
+            network_writer: Arc::new(AsyncMutex::new(TCPNetworkEncoder::new(BufWriter::new(
+                write,
+            )))),
             compression: Arc::new(AtomicCell::new(None)),
             server,
             challenge: AtomicCell::new([0; 4]),
@@ -148,7 +151,12 @@ impl JavaTcpClient {
             .await
             .expect("Failed to encode packet");
 
-        if let Err(err) = self.network_writer.lock().await.write_packet(&packet).await
+        if let Err(err) = self
+            .network_writer
+            .lock_async()
+            .await
+            .write_packet(&packet)
+            .await
             && !self.cancel_token.is_cancelled()
         {
             log::warn!("Failed to send packet to client {}: {}", self.id, err);
@@ -158,7 +166,12 @@ impl JavaTcpClient {
 
     /// Sends an already encoded packet immediately, without queueing.
     pub async fn send_packet_now(&self, packet: &EncodedPacket) {
-        if let Err(err) = self.network_writer.lock().await.write_packet(packet).await
+        if let Err(err) = self
+            .network_writer
+            .lock_async()
+            .await
+            .write_packet(packet)
+            .await
             && !self.cancel_token.is_cancelled()
         {
             log::warn!("Failed to send packet to client {}: {}", self.id, err);
@@ -229,7 +242,7 @@ impl JavaTcpClient {
                                 continue;
                             };
 
-                            if let Err(err) = network_writer.lock().await.write_packet(&encoded_packet).await
+                            if let Err(err) = network_writer.lock_async().await.write_packet(&encoded_packet).await
                             {
                                 log::warn!("Failed to send packet to client {id}: {err}");
                                 cancel_token.cancel();
@@ -247,7 +260,7 @@ impl JavaTcpClient {
                             Ok(connection_update) => {
                                 match connection_update {
                                     ConnectionUpdate::EnableEncryption(key) => {
-                                        network_writer.lock().await.set_encryption(&key);
+                                        network_writer.lock_async().await.set_encryption(&key);
                                         connection_updated.notify_waiters();
                                     },
                                     ConnectionUpdate::Upgrade(upgrade) => {

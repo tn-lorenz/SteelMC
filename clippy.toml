@@ -14,8 +14,16 @@ allowed-duplicate-crates = [
     "crypto-common",
 ]
 disallowed-types = [
+    # Use FxHashMap and FxHashSet instead of HashMap and HashSet.
     "std::collections::HashMap",
     "std::collections::HashSet",
+    # Use SyncMutex and SyncRwLock instead of std::sync::Mutex and std::sync::RwLock.
     "std::sync::Mutex",
     "std::sync::RwLock",
+    # Use SyncMutex and SyncRwLock instead of parking_lot::Mutex and parking_lot::RwLock.
+    "parking_lot::Mutex",
+    "parking_lot::RwLock",
+    # Use AsyncMutex and AsyncRwLock instead of tokio::sync::Mutex and tokio::sync::RwLock.
+    "tokio::sync::Mutex",
+    "tokio::sync::RwLock",
 ]

@@ -7,9 +7,9 @@ use std::sync::LazyLock;
 use std::time::{Duration, Instant};
 
 use base64::Engine;
-use parking_lot::RwLock;
 use rsa::RsaPublicKey;
 use serde::Deserialize;
+use steel_utils::locks::SyncRwLock;
 
 use crate::{
     public_key_from_bytes,
@@ -62,8 +62,8 @@ impl MojangKeyCache {
 }
 
 /// Global cache for Mojang's public key
-static KEY_CACHE: LazyLock<RwLock<MojangKeyCache>> =
-    LazyLock::new(|| RwLock::new(MojangKeyCache::new()));
+static KEY_CACHE: LazyLock<SyncRwLock<MojangKeyCache>> =
+    LazyLock::new(|| SyncRwLock::new(MojangKeyCache::new()));
 
 /// Fetches Mojang's public keys from their session server.
 ///

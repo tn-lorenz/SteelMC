@@ -2,13 +2,12 @@ use std::sync::Arc;
 use std::sync::atomic::Ordering;
 use std::time::Duration;
 
-use parking_lot::Mutex as ParkingMutex;
 use rayon::iter::{IntoParallelIterator, IntoParallelRefIterator, ParallelIterator};
 use rayon::{ThreadPool, ThreadPoolBuilder};
 use rustc_hash::FxBuildHasher;
 use steel_protocol::packets::game::CSetChunkCenter;
 use steel_registry::{Registry, vanilla_blocks};
-use steel_utils::ChunkPos;
+use steel_utils::{ChunkPos, locks::SyncMutex};
 use tokio::runtime::Runtime;
 use tokio_util::task::TaskTracker;
 
@@ -38,11 +37,11 @@ pub struct ChunkMap {
     /// Map of chunks currently being unloaded.
     pub unloading_chunks: scc::HashMap<ChunkPos, Arc<ChunkHolder>, FxBuildHasher>,
     /// Queue of pending generation tasks.
-    pub pending_generation_tasks: ParkingMutex<Vec<Arc<ChunkGenerationTask>>>,
+    pub pending_generation_tasks: SyncMutex<Vec<Arc<ChunkGenerationTask>>>,
     /// Tracker for background generation tasks.
     pub task_tracker: TaskTracker,
     /// Manager for chunk distances and tickets.
-    pub chunk_tickets: ParkingMutex<ChunkTicketManager>,
+    pub chunk_tickets: SyncMutex<ChunkTicketManager>,
     /// The world generation context.
     pub world_gen_context: Arc<WorldGenContext>,
     /// The thread pool to use for generation.
@@ -61,9 +60,9 @@ impl ChunkMap {
         Self {
             chunks: scc::HashMap::with_capacity_and_hasher(1000, FxBuildHasher),
             unloading_chunks: scc::HashMap::with_capacity_and_hasher(1000, FxBuildHasher),
-            pending_generation_tasks: ParkingMutex::new(Vec::new()),
+            pending_generation_tasks: SyncMutex::new(Vec::new()),
             task_tracker: TaskTracker::new(),
-            chunk_tickets: ParkingMutex::new(ChunkTicketManager::new()),
+            chunk_tickets: SyncMutex::new(ChunkTicketManager::new()),
             world_gen_context: Arc::new(WorldGenContext {
                 generator: Arc::new(ChunkGeneratorType::Flat(FlatChunkGenerator::new(
                     registry

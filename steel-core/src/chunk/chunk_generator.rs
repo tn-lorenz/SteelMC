@@ -3,17 +3,17 @@ use std::ops::{Deref, DerefMut};
 
 use crate::chunk::chunk_access::ChunkAccess;
 use enum_dispatch::enum_dispatch;
-use parking_lot::{RwLock as ParkingRwLock, RwLockWriteGuard};
+use steel_utils::locks::SyncRwLock;
 
 /// A guard that provides access to a chunk while holding the lock.
 pub struct ChunkGuard<'a> {
-    mutex: &'a ParkingRwLock<Option<ChunkAccess>>,
-    guard: Option<RwLockWriteGuard<'a, Option<ChunkAccess>>>,
+    mutex: &'a SyncRwLock<Option<ChunkAccess>>,
+    guard: Option<parking_lot::RwLockWriteGuard<'a, Option<ChunkAccess>>>,
 }
 
 impl<'a> ChunkGuard<'a> {
     /// Creates a new `ChunkGuard` that holds the write lock.
-    pub fn new(mutex: &'a ParkingRwLock<Option<ChunkAccess>>) -> Self {
+    pub fn new(mutex: &'a SyncRwLock<Option<ChunkAccess>>) -> Self {
         Self {
             mutex,
             guard: Some(mutex.write()),

@@ -72,7 +72,7 @@ impl JavaTcpClient {
 
         let gameprofile = self
             .gameprofile
-            .lock()
+            .lock_async()
             .await
             .clone()
             .expect("Game profile is empty");
