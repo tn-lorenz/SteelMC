@@ -561,9 +561,10 @@ impl RegionManager {
         section: &SyncRwLock<ChunkSection>,
         builder: &mut ChunkBuilder,
     ) -> PersistentSection {
-        let biomes = Self::biomes_to_persistent(&section.read().biomes, builder);
+        let section = section.read();
+        let biomes = Self::biomes_to_persistent(&section.biomes, builder);
 
-        match &section.read().states {
+        match &section.states {
             PalettedContainer::Homogeneous(block_id) => {
                 let block_idx = builder.ensure_block_state(*block_id);
                 PersistentSection::Homogeneous {

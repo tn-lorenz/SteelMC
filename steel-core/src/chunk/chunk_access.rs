@@ -155,13 +155,13 @@ impl ChunkAccess {
                 chunk
                     .sections
                     .set_relative_block(relative_x, relative_y, relative_z, value);
-                chunk.dirty.store(true, Ordering::Relaxed);
+                chunk.dirty.store(true, Ordering::Release);
             }
             Self::Proto(proto_chunk) => {
                 proto_chunk
                     .sections
                     .set_relative_block(relative_x, relative_y, relative_z, value);
-                proto_chunk.dirty.store(true, Ordering::Relaxed);
+                proto_chunk.dirty.store(true, Ordering::Release);
             }
         }
     }
