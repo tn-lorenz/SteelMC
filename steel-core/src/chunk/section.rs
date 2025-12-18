@@ -1,7 +1,7 @@
 //! This module contains the `Sections` and `ChunkSection` structs.
-use std::{fmt::Debug, io::Cursor};
+use std::{fmt::Debug, io::Cursor, sync::Arc};
 
-use steel_utils::{BlockStateId, serial::WriteTo};
+use steel_utils::{BlockStateId, locks::SyncRwLock, serial::WriteTo};
 
 use crate::chunk::paletted_container::{BiomePalette, BlockPalette};
 
@@ -9,14 +9,19 @@ use crate::chunk::paletted_container::{BiomePalette, BlockPalette};
 #[derive(Debug, Clone)]
 pub struct Sections {
     /// The sections in the collection.
-    pub sections: Box<[ChunkSection]>,
+    pub sections: Box<[Arc<SyncRwLock<ChunkSection>>]>,
 }
 
 impl Sections {
-    /// Gets the sections in the collection.
+    /// Creates a new `Sections` from a box of owned `ChunkSection`s.
     #[must_use]
-    pub const fn get(&self) -> &[ChunkSection] {
-        &self.sections
+    pub fn from_owned(sections: Box<[ChunkSection]>) -> Self {
+        Self {
+            sections: sections
+                .into_iter()
+                .map(|section| Arc::new(SyncRwLock::new(section)))
+                .collect(),
+        }
     }
 
     /// Gets a block at a relative position in the chunk.
@@ -32,14 +37,17 @@ impl Sections {
 
         let section_index = relative_y / BlockPalette::SIZE;
         let relative_y = relative_y % BlockPalette::SIZE;
-        self.sections
-            .get(section_index)
-            .map(|section| section.states.get(relative_x, relative_y, relative_z))
+        self.sections.get(section_index).map(|section| {
+            section
+                .read()
+                .states
+                .get(relative_x, relative_y, relative_z)
+        })
     }
 
     /// Sets a block at a relative position in the chunk.
     pub fn set_relative_block(
-        &mut self,
+        &self,
         relative_x: usize,
         relative_y: usize,
         relative_z: usize,
@@ -55,6 +63,7 @@ impl Sections {
         //    relative_x, relative_y, relative_z, value.0
         //);
         self.sections[idx]
+            .write()
             .states
             .set(relative_x, relative_y, relative_z, value);
     }

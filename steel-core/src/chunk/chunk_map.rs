@@ -248,7 +248,7 @@ impl ChunkMap {
                 .persisted_status()
                 .expect("The check above confirmed it exists");
 
-            let result = chunk_map.region_manager.save_chunk(chunk, status).await;
+            let result = chunk_map.region_manager.save_chunk(&chunk, status).await;
 
             match result {
                 Ok(_) => {

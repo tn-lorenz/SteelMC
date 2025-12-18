@@ -46,6 +46,9 @@ impl ChunkSender {
     }
 
     /// Sends the next batch of chunks to the client.
+    ///
+    /// # Panics
+    /// Panics if a chunk is not at Full status when it should be.
     pub fn send_next_chunks(
         &mut self,
         connection: Arc<JavaConnection>,
@@ -68,14 +71,16 @@ impl ChunkSender {
                         let mut chunks_to_send = Vec::new();
                         for holder in chunks_to_process {
                             if let Some(chunk) = holder.try_chunk(ChunkStatus::Full).map(|chunk| {
-                                let chunk = chunk.read();
-                                match &*chunk {
-                                    Some(ChunkAccess::Full(chunk)) => CLevelChunkWithLight {
+                                if let ChunkAccess::Full(chunk) =
+                                    chunk.as_ref().expect("Chunk is not loaded").as_ref()
+                                {
+                                    CLevelChunkWithLight {
                                         pos: holder.get_pos(),
                                         chunk_data: chunk.extract_chunk_data(),
                                         light_data: chunk.extract_light_data(),
-                                    },
-                                    _ => unreachable!(),
+                                    }
+                                } else {
+                                    panic!("Chunk must be at Full status to be sent to the client");
                                 }
                             }) {
                                 chunks_to_send.push(chunk);

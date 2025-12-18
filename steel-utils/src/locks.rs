@@ -27,6 +27,7 @@ impl<T: ?Sized + Send + Sync> GenericLock<T> for parking_lot::RwLock<T> {}
 ///
 /// Use [`SteelMutex::new_sync`] for synchronous contexts (`parking_lot::Mutex`)
 /// or [`SteelMutex::new_async`] for async contexts (`tokio::sync::Mutex`).
+#[derive(Debug)]
 pub struct SteelMutex<Mutex: GenericLock<T>, T: ?Sized + Send + Sync> {
     mutex: Mutex,
     _marker: PhantomData<T>,
@@ -81,6 +82,7 @@ impl<T: Sized + Send + Sync> SteelMutex<tokio::sync::Mutex<T>, T> {
 ///
 /// Use [`SteelRwLock::new_sync`] for synchronous contexts (`parking_lot::RwLock`)
 /// or [`SteelRwLock::new_async`] for async contexts (`tokio::sync::RwLock`).
+#[derive(Debug)]
 pub struct SteelRwLock<RwLock: GenericLock<T>, T: ?Sized + Send + Sync> {
     rwlock: RwLock,
     _marker: PhantomData<T>,

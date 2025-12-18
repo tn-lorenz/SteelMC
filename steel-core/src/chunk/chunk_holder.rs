@@ -1,13 +1,10 @@
 //! `ChunkHolder` manages chunk state and asynchronous generation tasks.
+use arc_swap::{ArcSwapOption, Guard};
 use futures::Future;
-use replace_with::replace_with_or_abort;
 use std::fmt::Debug;
 use std::sync::Arc;
 use std::sync::atomic::{AtomicU8, AtomicUsize, Ordering};
-use steel_utils::{
-    ChunkPos,
-    locks::{SyncMutex, SyncRwLock},
-};
+use steel_utils::{ChunkPos, locks::SyncMutex};
 use tokio::select;
 use tokio::sync::{oneshot, watch};
 
@@ -47,7 +44,7 @@ pub enum ChunkResult {
 ///
 /// `ChunkResult::Ok(ChunkStatus::Full)` -> data is `Some(ChunkAccess::Full(LevelChunk))`
 pub struct ChunkHolder {
-    data: SyncRwLock<Option<ChunkAccess>>,
+    data: ArcSwapOption<ChunkAccess>,
     chunk_result: watch::Receiver<ChunkResult>,
     sender: watch::Sender<ChunkResult>,
     generation_task: SyncMutex<Option<Arc<ChunkGenerationTask>>>,
@@ -76,7 +73,7 @@ impl ChunkHolder {
         );
 
         Self {
-            data: SyncRwLock::new(None),
+            data: ArcSwapOption::new(None),
             chunk_result: receiver,
             sender,
             generation_task: SyncMutex::new(None),
@@ -145,9 +142,9 @@ impl ChunkHolder {
 
     /// Gets access to the chunk if it has reached the given status.
     #[inline]
-    pub fn try_chunk(&self, status: ChunkStatus) -> Option<&SyncRwLock<Option<ChunkAccess>>> {
+    pub fn try_chunk(&self, status: ChunkStatus) -> Option<Guard<Option<Arc<ChunkAccess>>>> {
         match &*self.chunk_result.borrow() {
-            ChunkResult::Ok(s) if status <= *s => Some(&self.data),
+            ChunkResult::Ok(s) if status <= *s => Some(self.data.load()),
             _ => None,
         }
     }
@@ -156,7 +153,7 @@ impl ChunkHolder {
     pub fn await_chunk(
         &self,
         status: ChunkStatus,
-    ) -> impl Future<Output = Option<&SyncRwLock<Option<ChunkAccess>>>> {
+    ) -> impl Future<Output = Option<Guard<Option<Arc<ChunkAccess>>>>> {
         let mut subscriber = self.sender.subscribe();
         let mut status_subscriber = self.highest_allowed_status_sender.subscribe();
         async move {
@@ -165,7 +162,7 @@ impl ChunkHolder {
                     let chunk_result = subscriber.borrow_and_update();
                     match &*chunk_result {
                         ChunkResult::Ok(s) if status <= *s => {
-                            return Some(&self.data);
+                            return Some(self.data.load());
                         }
                         ChunkResult::Failed => {
                             return None;
@@ -339,24 +336,21 @@ impl ChunkHolder {
     /// # Panics
     /// Panics if the chunk is not at `ProtoChunk` stage or completed.
     pub fn upgrade_to_full(&self) {
-        let mut data = self.data.write();
+        let data = self.data.load_full();
 
-        self.sender.send_modify(|chunk| {
-            replace_with_or_abort(&mut *data, |chunk| match chunk {
-                Some(ChunkAccess::Proto(proto_chunk)) => {
-                    Some(ChunkAccess::Full(LevelChunk::from_proto(proto_chunk)))
-                }
-                Some(ChunkAccess::Full(level_chunk)) => Some(ChunkAccess::Full(level_chunk)),
-                _ => unreachable!(),
-            });
-
-            *chunk = ChunkResult::Ok(ChunkStatus::Full);
-        });
+        if let Some(data) = data
+            && let ChunkAccess::Proto(proto_chunk) = &*data
+        {
+            // This is a cheap clone since the sections are wrapped in an Arc
+            let full_chunk = LevelChunk::from_proto(proto_chunk.clone());
+            self.data
+                .store(Some(Arc::new(ChunkAccess::Full(full_chunk))));
+        }
     }
 
     /// Inserts a chunk into the holder with a specific status.
     pub fn insert_chunk(&self, chunk: ChunkAccess, status: ChunkStatus) {
-        self.data.write().replace(chunk);
+        self.data.store(Some(Arc::new(chunk)));
         self.sender.send_replace(ChunkResult::Ok(status));
     }
 

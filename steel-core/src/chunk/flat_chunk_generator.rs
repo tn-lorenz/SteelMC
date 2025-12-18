@@ -1,6 +1,6 @@
 use steel_utils::BlockStateId;
 
-use crate::chunk::chunk_generator::{ChunkGenerator, ChunkGuard};
+use crate::chunk::{chunk_access::ChunkAccess, chunk_generator::ChunkGenerator};
 
 /// A chunk generator that generates a flat world.
 pub struct FlatChunkGenerator {
@@ -25,11 +25,11 @@ impl FlatChunkGenerator {
 }
 
 impl ChunkGenerator for FlatChunkGenerator {
-    fn create_structures(&self, _chunk_guard: &mut ChunkGuard) {}
+    fn create_structures(&self, _chunk: &ChunkAccess) {}
 
-    fn create_biomes(&self, _chunk_guard: &mut ChunkGuard) {}
+    fn create_biomes(&self, _chunk: &ChunkAccess) {}
 
-    fn fill_from_noise(&self, chunk_guard: &mut ChunkGuard) {
+    fn fill_from_noise(&self, chunk: &ChunkAccess) {
         // Layers:
         // 0: Bedrock
         // 1-2: Dirt
@@ -42,21 +42,21 @@ impl ChunkGenerator for FlatChunkGenerator {
         for x in 0..16 {
             for z in 0..16 {
                 // Bedrock at bottom
-                chunk_guard.set_relative_block(x, 0, z, self.bedrock);
+                chunk.set_relative_block(x, 0, z, self.bedrock);
 
                 // Dirt layers
-                chunk_guard.set_relative_block(x, 1, z, self.dirt);
-                chunk_guard.set_relative_block(x, 2, z, self.dirt);
+                chunk.set_relative_block(x, 1, z, self.dirt);
+                chunk.set_relative_block(x, 2, z, self.dirt);
 
                 // Grass block
-                chunk_guard.set_relative_block(x, 3, z, self.grass);
+                chunk.set_relative_block(x, 3, z, self.grass);
             }
         }
     }
 
-    fn build_surface(&self, _chunk_guard: &mut ChunkGuard) {}
+    fn build_surface(&self, _chunk: &ChunkAccess) {}
 
-    fn apply_carvers(&self, _chunk_guard: &mut ChunkGuard) {}
+    fn apply_carvers(&self, _chunk: &ChunkAccess) {}
 
-    fn apply_biome_decorations(&self, _chunk_guard: &mut ChunkGuard) {}
+    fn apply_biome_decorations(&self, _chunk: &ChunkAccess) {}
 }

@@ -1,4 +1,5 @@
 //! This module contains the `ChunkAccess` enum, which is used to access chunks in different states.
+use std::sync::atomic::Ordering;
 use steel_utils::{BlockStateId, ChunkPos};
 use wincode::{SchemaRead, SchemaWrite};
 
@@ -143,7 +144,7 @@ impl ChunkAccess {
     /// Sets a block at a relative position in the chunk.
     /// Automatically marks the chunk as dirty.
     pub fn set_relative_block(
-        &mut self,
+        &self,
         relative_x: usize,
         relative_y: usize,
         relative_z: usize,
@@ -154,39 +155,39 @@ impl ChunkAccess {
                 chunk
                     .sections
                     .set_relative_block(relative_x, relative_y, relative_z, value);
-                chunk.dirty = true;
+                chunk.dirty.store(true, Ordering::Relaxed);
             }
             Self::Proto(proto_chunk) => {
                 proto_chunk
                     .sections
                     .set_relative_block(relative_x, relative_y, relative_z, value);
-                proto_chunk.dirty = true;
+                proto_chunk.dirty.store(true, Ordering::Relaxed);
             }
         }
     }
 
     /// Returns whether the chunk has been modified since last save.
     #[must_use]
-    pub const fn is_dirty(&self) -> bool {
+    pub fn is_dirty(&self) -> bool {
         match self {
-            Self::Full(chunk) => chunk.dirty,
-            Self::Proto(proto_chunk) => proto_chunk.dirty,
+            Self::Full(chunk) => chunk.dirty.load(Ordering::Acquire),
+            Self::Proto(proto_chunk) => proto_chunk.dirty.load(Ordering::Acquire),
         }
     }
 
     /// Marks the chunk as dirty (modified).
-    pub fn mark_dirty(&mut self) {
+    pub fn mark_dirty(&self) {
         match self {
-            Self::Full(chunk) => chunk.dirty = true,
-            Self::Proto(proto_chunk) => proto_chunk.dirty = true,
+            Self::Full(chunk) => chunk.dirty.store(true, Ordering::Release),
+            Self::Proto(proto_chunk) => proto_chunk.dirty.store(true, Ordering::Release),
         }
     }
 
     /// Clears the dirty flag (called after saving).
-    pub fn clear_dirty(&mut self) {
+    pub fn clear_dirty(&self) {
         match self {
-            Self::Full(chunk) => chunk.dirty = false,
-            Self::Proto(proto_chunk) => proto_chunk.dirty = false,
+            Self::Full(chunk) => chunk.dirty.store(false, Ordering::Release),
+            Self::Proto(proto_chunk) => proto_chunk.dirty.store(false, Ordering::Release),
         }
     }
 

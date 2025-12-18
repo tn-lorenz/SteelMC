@@ -1,5 +1,8 @@
 //! This module contains the `LevelChunk` struct, which is a chunk that is ready to be sent to the client.
-use std::io::Cursor;
+use std::{
+    io::Cursor,
+    sync::{Arc, atomic::AtomicBool},
+};
 
 use steel_protocol::packets::game::{
     ChunkPacketData, HeightmapType, Heightmaps, LightUpdatePacketData,
@@ -9,14 +12,14 @@ use steel_utils::{ChunkPos, codec::BitSet};
 use crate::chunk::{proto_chunk::ProtoChunk, section::Sections};
 
 /// A chunk that is ready to be sent to the client.
-#[derive(Debug)]
+#[derive(Debug, Clone)]
 pub struct LevelChunk {
     /// The sections of the chunk.
     pub sections: Sections,
     /// The position of the chunk.
     pub pos: ChunkPos,
     /// Whether the chunk has been modified since last save.
-    pub dirty: bool,
+    pub dirty: Arc<AtomicBool>,
 }
 
 impl LevelChunk {
@@ -26,7 +29,7 @@ impl LevelChunk {
         Self {
             sections: proto_chunk.sections,
             pos: proto_chunk.pos,
-            dirty: proto_chunk.dirty,
+            dirty: proto_chunk.dirty.clone(),
         }
     }
 
@@ -36,7 +39,7 @@ impl LevelChunk {
         Self {
             sections,
             pos,
-            dirty: false,
+            dirty: Arc::new(AtomicBool::new(false)),
         }
     }
 
@@ -47,7 +50,7 @@ impl LevelChunk {
 
         let mut cursor = Cursor::new(data);
         for section in &self.sections.sections {
-            section.write(&mut cursor);
+            section.read().write(&mut cursor);
         }
 
         ChunkPacketData {

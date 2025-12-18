@@ -6,6 +6,7 @@
 
 use std::{io, path::PathBuf, sync::Arc};
 
+use arc_swap::Guard;
 use rustc_hash::FxHashMap;
 use steel_registry::Registry;
 use steel_utils::{BlockStateId, ChunkPos, Identifier};
@@ -297,20 +298,15 @@ impl RegionManager {
     #[allow(clippy::missing_panics_doc)]
     pub async fn save_chunk(
         &self,
-        chunk: &SyncRwLock<Option<ChunkAccess>>,
+        chunk: &Guard<Option<Arc<ChunkAccess>>>,
         status: ChunkStatus,
     ) -> io::Result<bool> {
         // Skip saving if chunk hasn't been modified
-        if !chunk
-            .read()
-            .as_ref()
-            .expect("Chunk is not loaded")
-            .is_dirty()
-        {
+        if !chunk.as_ref().expect("Chunk is not loaded").is_dirty() {
             return Ok(false);
         }
 
-        let pos = chunk.read().as_ref().expect("Chunk is not loaded").pos();
+        let pos = chunk.as_ref().expect("Chunk is not loaded").pos();
         let region_pos = RegionPos::from_chunk(pos.0.x, pos.0.y);
         let (local_x, local_z) = RegionPos::local_chunk_pos(pos.0.x, pos.0.y);
         let index = RegionHeader::chunk_index(local_x, local_z);
@@ -330,13 +326,8 @@ impl RegionManager {
         };
 
         // Convert chunk to persistent format and serialize
-        let persistent = self.sections_to_persistent(
-            chunk
-                .read()
-                .as_ref()
-                .expect("Chunk is not loaded")
-                .sections(),
-        );
+        let persistent =
+            self.sections_to_persistent(chunk.as_ref().expect("Chunk is not loaded").sections());
         let data = wincode::serialize(&persistent)
             .map_err(|e| io::Error::new(io::ErrorKind::InvalidData, e.to_string()))?;
 
@@ -394,11 +385,7 @@ impl RegionManager {
         }
 
         drop(regions);
-        chunk
-            .write()
-            .as_mut()
-            .expect("Chunk is not loaded")
-            .clear_dirty();
+        chunk.as_ref().expect("Chunk is not loaded").clear_dirty();
 
         Ok(true)
     }
@@ -571,12 +558,12 @@ impl RegionManager {
 
     /// Converts a runtime section to persistent format.
     fn section_to_persistent(
-        section: &ChunkSection,
+        section: &SyncRwLock<ChunkSection>,
         builder: &mut ChunkBuilder,
     ) -> PersistentSection {
-        let biomes = Self::biomes_to_persistent(&section.biomes, builder);
+        let biomes = Self::biomes_to_persistent(&section.read().biomes, builder);
 
-        match &section.states {
+        match &section.read().states {
             PalettedContainer::Homogeneous(block_id) => {
                 let block_idx = builder.ensure_block_state(*block_id);
                 PersistentSection::Homogeneous {
@@ -681,13 +668,19 @@ impl RegionManager {
         match status {
             ChunkStatus::Full => ChunkAccess::Full(LevelChunk::from_disk(
                 Sections {
-                    sections: sections.into_boxed_slice(),
+                    sections: sections
+                        .into_iter()
+                        .map(|section| Arc::new(SyncRwLock::new(section)))
+                        .collect(),
                 },
                 pos,
             )),
             _ => ChunkAccess::Proto(ProtoChunk::from_disk(
                 Sections {
-                    sections: sections.into_boxed_slice(),
+                    sections: sections
+                        .into_iter()
+                        .map(|section| Arc::new(SyncRwLock::new(section)))
+                        .collect(),
                 },
                 pos,
             )),

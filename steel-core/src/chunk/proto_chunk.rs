@@ -1,10 +1,12 @@
 //! A proto chunk is a chunk that is still being generated.
+use std::sync::{Arc, atomic::AtomicBool};
+
 use steel_utils::ChunkPos;
 
 use crate::chunk::section::Sections;
 
 /// A chunk that is still being generated.
-#[derive(Debug)]
+#[derive(Debug, Clone)]
 pub struct ProtoChunk {
     /// The sections of the chunk.
     pub sections: Sections,
@@ -12,7 +14,7 @@ pub struct ProtoChunk {
     pub pos: ChunkPos,
     /// Whether the chunk has been modified since last save.
     /// Proto chunks start dirty since they're being generated.
-    pub dirty: bool,
+    pub dirty: Arc<AtomicBool>,
 }
 
 impl ProtoChunk {
@@ -22,7 +24,7 @@ impl ProtoChunk {
         Self {
             sections,
             pos,
-            dirty: true, // New chunks are always dirty
+            dirty: Arc::new(AtomicBool::new(true)), // New chunks are always dirty
         }
     }
 
@@ -32,7 +34,7 @@ impl ProtoChunk {
         Self {
             sections,
             pos,
-            dirty: false,
+            dirty: Arc::new(AtomicBool::new(false)),
         }
     }
 }

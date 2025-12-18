@@ -5,7 +5,7 @@ use std::sync::Arc;
 use crate::chunk::{
     chunk_access::{ChunkAccess, ChunkStatus},
     chunk_generation_task::StaticCache2D,
-    chunk_generator::{ChunkGenerator, ChunkGuard},
+    chunk_generator::ChunkGenerator,
     chunk_holder::ChunkHolder,
     chunk_pyramid::ChunkStep,
     proto_chunk::ProtoChunk,
@@ -28,7 +28,7 @@ impl ChunkStatusTasks {
             .collect::<Vec<_>>()
             .into_boxed_slice();
 
-        let proto_chunk = ProtoChunk::new(Sections { sections }, holder.get_pos());
+        let proto_chunk = ProtoChunk::new(Sections::from_owned(sections), holder.get_pos());
 
         //log::info!("Inserted proto chunk for {:?}", holder.get_pos());
 
@@ -88,7 +88,7 @@ impl ChunkStatusTasks {
             .expect("Chunk not found at status Biomes");
         context
             .generator
-            .fill_from_noise(&mut ChunkGuard::new(chunk));
+            .fill_from_noise(chunk.as_ref().expect("Chunk is not loaded").as_ref());
         Ok(())
     }
 

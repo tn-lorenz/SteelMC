@@ -1,86 +1,26 @@
 //! This module contains the `ChunkGenerator` trait, which is used to generate chunks.
-use std::ops::{Deref, DerefMut};
 
 use crate::chunk::chunk_access::ChunkAccess;
 use enum_dispatch::enum_dispatch;
-use steel_utils::locks::SyncRwLock;
-
-/// A guard that provides access to a chunk while holding the lock.
-pub struct ChunkGuard<'a> {
-    mutex: &'a SyncRwLock<Option<ChunkAccess>>,
-    guard: Option<parking_lot::RwLockWriteGuard<'a, Option<ChunkAccess>>>,
-}
-
-impl<'a> ChunkGuard<'a> {
-    /// Creates a new `ChunkGuard` that holds the write lock.
-    pub fn new(mutex: &'a SyncRwLock<Option<ChunkAccess>>) -> Self {
-        Self {
-            mutex,
-            guard: Some(mutex.write()),
-        }
-    }
-
-    /// Temporarily drops the lock, runs the provided closure, and re-acquires the lock immediately after.
-    pub fn yield_lock<F, R>(&mut self, func: F) -> R
-    where
-        F: FnOnce() -> R,
-    {
-        self.guard = None;
-
-        let result = func();
-
-        self.guard = Some(self.mutex.write());
-
-        result
-    }
-}
-
-impl Deref for ChunkGuard<'_> {
-    type Target = ChunkAccess;
-
-    #[inline]
-    #[allow(clippy::unwrap_used)]
-    fn deref(&self) -> &Self::Target {
-        // SAFETY: It needs to contain a mutex guard to be dereferenceable and the chunk access is guaranteed to be there by it's creator.
-        self.guard
-            .as_deref()
-            .unwrap()
-            .as_ref()
-            .expect("Chunk should be loaded")
-    }
-}
-
-impl DerefMut for ChunkGuard<'_> {
-    #[inline]
-    #[allow(clippy::unwrap_used)]
-    fn deref_mut(&mut self) -> &mut Self::Target {
-        // SAFETY: It needs to contain a mutex guard to be dereferenceable and the chunk access is guaranteed to be there by it's creator.
-        self.guard
-            .as_deref_mut()
-            .unwrap()
-            .as_mut()
-            .expect("Chunk should be loaded")
-    }
-}
 
 /// A trait for generating chunks.
 #[enum_dispatch]
 pub trait ChunkGenerator: Send + Sync {
     /// Creates the structures in a chunk.
-    fn create_structures(&self, chunk_guard: &mut ChunkGuard);
+    fn create_structures(&self, chunk: &ChunkAccess);
 
     /// Creates the biomes in a chunk.
-    fn create_biomes(&self, chunk_guard: &mut ChunkGuard);
+    fn create_biomes(&self, chunk: &ChunkAccess);
 
     /// Fills the chunk with noise.
-    fn fill_from_noise(&self, chunk_guard: &mut ChunkGuard);
+    fn fill_from_noise(&self, chunk: &ChunkAccess);
 
     /// Builds the surface of the chunk.
-    fn build_surface(&self, chunk_guard: &mut ChunkGuard);
+    fn build_surface(&self, chunk: &ChunkAccess);
 
     /// Applies carvers to the chunk.
-    fn apply_carvers(&self, chunk_guard: &mut ChunkGuard);
+    fn apply_carvers(&self, chunk: &ChunkAccess);
 
     /// Applies biome decorations to the chunk.
-    fn apply_biome_decorations(&self, chunk_guard: &mut ChunkGuard);
+    fn apply_biome_decorations(&self, chunk: &ChunkAccess);
 }

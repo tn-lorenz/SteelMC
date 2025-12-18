@@ -5,7 +5,7 @@ use std::sync::Arc;
 use enum_dispatch::enum_dispatch;
 
 use crate::chunk::{
-    chunk_generator::{ChunkGenerator, ChunkGuard},
+    chunk_access::ChunkAccess, chunk_generator::ChunkGenerator,
     flat_chunk_generator::FlatChunkGenerator,
 };
 
