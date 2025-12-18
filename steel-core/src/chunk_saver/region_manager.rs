@@ -534,6 +534,23 @@ impl RegionManager {
         Ok(())
     }
 
+    /// Flushes all dirty headers and closes all region file handles.
+    ///
+    /// This should be called during graceful shutdown after all chunks have been saved.
+    /// It ensures all data is persisted and file handles are properly closed.
+    pub async fn close_all(&self) -> io::Result<()> {
+        let mut regions = self.regions.write_async().await;
+
+        for (_, mut handle) in regions.drain() {
+            if handle.header_dirty {
+                Self::write_header(&mut handle.file, &handle.header).await?;
+            }
+            // File handle is dropped here, closing the file
+        }
+
+        Ok(())
+    }
+
     /// Converts sections to persistent format.
     fn sections_to_persistent(&self, sections: &Sections) -> PersistentChunk {
         let mut builder = ChunkBuilder::new(&self.registry);

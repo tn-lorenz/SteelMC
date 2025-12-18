@@ -147,4 +147,12 @@ impl World {
             true
         });
     }
+
+    /// Saves all dirty chunks in this world to disk.
+    ///
+    /// This should be called during graceful shutdown.
+    /// Returns the number of chunks saved.
+    pub async fn save_all_chunks(&self) -> std::io::Result<usize> {
+        self.chunk_map.save_all_chunks().await
+    }
 }

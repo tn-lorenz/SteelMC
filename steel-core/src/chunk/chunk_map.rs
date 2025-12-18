@@ -376,4 +376,60 @@ impl ChunkMap {
             );
         }
     }
+
+    /// Saves all dirty chunks to disk.
+    ///
+    /// This method should be called during graceful shutdown to ensure all
+    /// modified chunks are persisted. It saves:
+    /// 1. All dirty chunks in the active `chunks` map
+    /// 2. All chunks pending unload in the `unloading_chunks` map
+    /// 3. Closes all region file handles (flushing headers)
+    ///
+    /// Returns the number of chunks saved.
+    pub async fn save_all_chunks(self: &Arc<Self>) -> std::io::Result<usize> {
+        let mut saved_count = 0;
+
+        // Collect all chunks from both maps
+        let all_chunks: Vec<Arc<ChunkHolder>> = {
+            let mut chunks = Vec::new();
+            self.chunks.iter_sync(|_, holder| {
+                chunks.push(holder.clone());
+                true
+            });
+            self.unloading_chunks.iter_sync(|_, holder| {
+                chunks.push(holder.clone());
+                true
+            });
+            chunks
+        };
+
+        log::info!("Saving {} chunks...", all_chunks.len());
+
+        // Save all chunks that have data
+        for holder in &all_chunks {
+            if let Some(chunk) = holder.try_chunk(ChunkStatus::StructureStarts)
+                && let Some(status) = holder.persisted_status()
+            {
+                match self.region_manager.save_chunk(&chunk, status).await {
+                    Ok(true) => saved_count += 1,
+                    Ok(false) => {} // Not dirty
+                    Err(e) => {
+                        log::error!("Failed to save chunk at {:?}: {e}", holder.get_pos());
+                    }
+                }
+            }
+        }
+
+        // Close all region files (flushes headers and releases file handles)
+        if let Err(e) = self.region_manager.close_all().await {
+            log::error!("Failed to close region files: {e}");
+        }
+
+        log::info!(
+            "Saved {saved_count} dirty chunks (checked {} total)",
+            all_chunks.len()
+        );
+
+        Ok(saved_count)
+    }
 }
