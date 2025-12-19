@@ -15,15 +15,20 @@ allowed-duplicate-crates = [
 ]
 disallowed-types = [
     # Use FxHashMap and FxHashSet instead of HashMap and HashSet.
-    "std::collections::HashMap",
-    "std::collections::HashSet",
+    { path = "std::collections::HashMap", reason = "Use rustc_hash::FxHashMap instead of HashMap." },
+    { path = "std::collections::HashSet", reason = "Use rustc_hash::FxHashSet instead of HashSet." },
     # Use SyncMutex and SyncRwLock instead of std::sync::Mutex and std::sync::RwLock.
-    "std::sync::Mutex",
-    "std::sync::RwLock",
+    { path = "std::sync::Mutex", reason = "Use steel_utils::locks::SyncMutex instead of std::sync::Mutex." },
+    { path = "std::sync::RwLock", reason = "Use steel_utils::locks::SyncRwLock instead of std::sync::RwLock." },
     # Use SyncMutex and SyncRwLock instead of parking_lot::Mutex and parking_lot::RwLock.
-    "parking_lot::Mutex",
-    "parking_lot::RwLock",
+    { path = "parking_lot::Mutex", reason = "Use steel_utils::locks::SyncMutex instead of parking_lot::Mutex." },
+    { path = "parking_lot::RwLock", reason = "Use steel_utils::locks::SyncRwLock instead of parking_lot::RwLock." },
     # Use AsyncMutex and AsyncRwLock instead of tokio::sync::Mutex and tokio::sync::RwLock.
-    "tokio::sync::Mutex",
-    "tokio::sync::RwLock",
+    { path = "tokio::sync::Mutex", reason = "Use steel_utils::locks::AsyncMutex instead of tokio::sync::Mutex." },
+    { path = "tokio::sync::RwLock", reason = "Use steel_utils::locks::AsyncRwLock instead of tokio::sync::RwLock." },
+]
+
+disallowed-methods = [
+    # Prevent people from taking ownership of the Arc inside the ArcSwap Guard
+    { path = "arc_swap::Guard::into_inner", reason = "Holding a strong reference to a Chunk leads to stale data. Use the Guard directly for transient access." },
 ]
