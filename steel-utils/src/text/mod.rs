@@ -14,12 +14,8 @@ use crate::text::{
     color::Color, interactivity::Interactivity, style::Style, translation::TranslatedMessage,
 };
 
-/// A module for click events.
-pub mod click;
 /// A module for colors.
 pub mod color;
-/// A module for hover events.
-pub mod hover;
 /// A module for interactivity.
 pub mod interactivity;
 /// A module for locales.
@@ -117,8 +113,8 @@ impl TextComponent {
 
     /// Sets the color of the text component.
     #[must_use]
-    pub fn color(mut self, color: Color) -> Self {
-        self.style = self.style.color(color);
+    pub fn color(mut self, color: impl Into<Color>) -> Self {
+        self.style = self.style.color(color.into());
         self
     }
 

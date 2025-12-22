@@ -1,5 +1,6 @@
 mod c_chunk_batch_finished;
 mod c_chunk_batch_start;
+mod c_commands;
 mod c_disguised_chat;
 mod c_forget_level_chunk;
 mod c_game_event;
@@ -9,9 +10,11 @@ mod c_player_chat;
 mod c_player_info_update;
 mod c_set_chunk_center;
 mod c_system_chat;
+mod c_system_chat_message;
 mod chat_session_data;
 mod s_chat;
 mod s_chat_ack;
+mod s_chat_command;
 mod s_chat_command_signed;
 mod s_chat_session_update;
 mod s_chunk_batch_received;
@@ -21,6 +24,7 @@ mod s_player_load;
 
 pub use c_chunk_batch_finished::CChunkBatchFinished;
 pub use c_chunk_batch_start::CChunkBatchStart;
+pub use c_commands::{ArgumentType, CCommands, CommandNode, CommandNodeInfo, SuggestionType};
 pub use c_disguised_chat::CDisguisedChat;
 pub use c_forget_level_chunk::CForgetLevelChunk;
 pub use c_game_event::CGameEvent;
@@ -35,9 +39,11 @@ pub use c_player_chat::{CPlayerChat, ChatTypeBound, FilterType, PreviousMessage}
 pub use c_player_info_update::CPlayerInfoUpdate;
 pub use c_set_chunk_center::CSetChunkCenter;
 pub use c_system_chat::CSystemChat;
+pub use c_system_chat_message::CSystemChatMessage;
 pub use chat_session_data::RemoteChatSessionData;
 pub use s_chat::SChat;
 pub use s_chat_ack::SChatAck;
+pub use s_chat_command::SChatCommand;
 pub use s_chat_command_signed::{ArgumentSignature, LastSeenMessagesUpdate, SChatCommandSigned};
 pub use s_chat_session_update::SChatSessionUpdate;
 pub use s_chunk_batch_received::SChunkBatchReceived;

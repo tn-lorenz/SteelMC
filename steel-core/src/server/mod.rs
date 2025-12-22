@@ -4,7 +4,8 @@ pub mod registry_cache;
 /// The tick rate manager for the server.
 pub mod tick_rate_manager;
 
-use std::{sync::Arc, time::Instant};
+use std::sync::Arc;
+use std::time::Instant;
 
 use steel_crypto::key_store::KeyStore;
 use steel_protocol::packets::game::{CLogin, CommonPlayerSpawnInfo};
@@ -12,15 +13,20 @@ use steel_registry::Registry;
 use steel_utils::locks::SyncRwLock;
 use steel_utils::{Identifier, types::GameType};
 use tick_rate_manager::TickRateManager;
-use tokio::{runtime::Runtime, task::spawn_blocking};
+use tokio::runtime::Runtime;
+use tokio::task::spawn_blocking;
 use tokio_util::sync::CancellationToken;
 
-use crate::{
-    config::STEEL_CONFIG, player::Player, server::registry_cache::RegistryCache, world::World,
-};
+use crate::command::CommandDispatcher;
+use crate::config::STEEL_CONFIG;
+use crate::player::Player;
+use crate::server::registry_cache::RegistryCache;
+use crate::world::World;
 
 /// The main server struct.
 pub struct Server {
+    /// The cancellation token for graceful shutdown.
+    pub cancel_token: CancellationToken,
     /// The key store for the server.
     pub key_store: KeyStore,
     /// The registry for the server.
@@ -31,11 +37,13 @@ pub struct Server {
     pub worlds: Vec<Arc<World>>,
     /// The tick rate manager for the server.
     pub tick_rate_manager: SyncRwLock<TickRateManager>,
+    /// Saves and dispatches commands to appropriate handlers.
+    pub command_dispatcher: SyncRwLock<CommandDispatcher>,
 }
 
 impl Server {
     /// Creates a new server.
-    pub async fn new(chunk_runtime: Arc<Runtime>) -> Self {
+    pub async fn new(chunk_runtime: Arc<Runtime>, cancel_token: CancellationToken) -> Self {
         let start = Instant::now();
         let mut registry = Registry::new_vanilla();
         registry.freeze();
@@ -45,11 +53,13 @@ impl Server {
         let registry_cache = RegistryCache::new(&registry).await;
 
         Server {
+            cancel_token,
             key_store: KeyStore::create(),
             worlds: vec![Arc::new(World::new(&registry, chunk_runtime))],
             registry,
             registry_cache,
             tick_rate_manager: SyncRwLock::new(TickRateManager::new()),
+            command_dispatcher: SyncRwLock::new(CommandDispatcher::new()),
         }
     }
 
@@ -79,6 +89,10 @@ impl Server {
             },
             enforces_secure_chat: STEEL_CONFIG.enforce_secure_chat,
         });
+
+        let commands = self.command_dispatcher.read().get_commands();
+        player.connection.send_packet(commands);
+
         self.worlds[0].add_player(player);
     }
 
