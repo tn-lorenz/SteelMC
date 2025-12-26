@@ -1,7 +1,9 @@
 //! Item stack implementation.
 
+use steel_utils::Identifier;
+
 use crate::{
-    data_components::{DataComponentMap, DataComponentPatch, effective_components_equal},
+    data_components::{ComponentPatchEntry, ComponentValue, DataComponentMap, DataComponentPatch},
     items::ItemRef,
     vanilla_items::ITEMS,
 };
@@ -92,7 +94,7 @@ impl ItemStack {
         if a.is_empty() && b.is_empty() {
             return true;
         }
-        effective_components_equal(a.prototype(), &a.patch, b.prototype(), &b.patch)
+        a.components_equal(b)
     }
 
     #[must_use]
@@ -103,6 +105,55 @@ impl ItemStack {
     #[must_use]
     pub fn is(&self, item: ItemRef) -> bool {
         self.item().key == item.key
+    }
+
+    pub fn get_effective_value(&self, key: &Identifier) -> Option<&dyn ComponentValue> {
+        match self.patch.get_entry(key) {
+            Some(ComponentPatchEntry::Set(v)) => Some(v.as_ref()),
+            Some(ComponentPatchEntry::Removed) => None,
+            None => self.prototype().get_raw(key),
+        }
+    }
+
+    pub fn components_equal(&self, other: &Self) -> bool {
+        let mut all_keys = rustc_hash::FxHashSet::default();
+
+        for key in self.prototype().keys() {
+            if !self.patch.is_removed(key) {
+                all_keys.insert(key);
+            }
+        }
+        for (key, entry) in self.patch.iter() {
+            if matches!(entry, ComponentPatchEntry::Set(_)) {
+                all_keys.insert(key);
+            }
+        }
+        for key in other.prototype().keys() {
+            if !other.patch.is_removed(key) {
+                all_keys.insert(key);
+            }
+        }
+        for (key, entry) in other.patch.iter() {
+            if matches!(entry, ComponentPatchEntry::Set(_)) {
+                all_keys.insert(key);
+            }
+        }
+        for key in all_keys {
+            let val_a = self.get_effective_value(key);
+            let val_b = other.get_effective_value(key);
+
+            match (val_a, val_b) {
+                (Some(a), Some(b)) => {
+                    if !a.eq_value(b) {
+                        return false;
+                    }
+                }
+                (None, None) => {}
+                _ => return false,
+            }
+        }
+
+        true
     }
 }
 
