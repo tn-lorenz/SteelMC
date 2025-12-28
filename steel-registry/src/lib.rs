@@ -25,6 +25,7 @@ use crate::{
     instrument::InstrumentRegistry,
     items::ItemRegistry,
     jukebox_song::JukeboxSongRegistry,
+    menu_type::MenuTypeRegistry,
     painting_variant::PaintingVariantRegistry,
     pig_variant::PigVariantRegistry,
     timeline::TimelineRegistry,
@@ -50,6 +51,7 @@ pub mod instrument;
 pub mod item_stack;
 pub mod items;
 pub mod jukebox_song;
+pub mod menu_type;
 pub mod painting_variant;
 pub mod pig_variant;
 pub mod timeline;
@@ -168,6 +170,11 @@ pub mod vanilla_dialogs;
 
 #[allow(warnings)]
 #[rustfmt::skip]
+#[path = "generated/vanilla_menu_types.rs"]
+pub mod vanilla_menu_types;
+
+#[allow(warnings)]
+#[rustfmt::skip]
 #[path = "generated/vanilla_zombie_nautilus_variants.rs"]
 pub mod vanilla_zombie_nautilus_variants;
 
@@ -213,6 +220,7 @@ pub const BANNER_PATTERN_REGISTRY: Identifier = Identifier::vanilla_static("bann
 pub const JUKEBOX_SONG_REGISTRY: Identifier = Identifier::vanilla_static("jukebox_song");
 pub const INSTRUMENT_REGISTRY: Identifier = Identifier::vanilla_static("instrument");
 pub const DIALOG_REGISTRY: Identifier = Identifier::vanilla_static("dialog");
+pub const MENU_TYPE_REGISTRY: Identifier = Identifier::vanilla_static("menu");
 pub const ZOMBIE_NAUTILUS_VARIANT_REGISTRY: Identifier =
     Identifier::vanilla_static("zombie_nautilus_variant");
 pub const TIMELINE_REGISTRY: Identifier = Identifier::vanilla_static("timeline");
@@ -239,6 +247,7 @@ pub struct Registry {
     pub jukebox_songs: JukeboxSongRegistry,
     pub instruments: InstrumentRegistry,
     pub dialogs: DialogRegistry,
+    pub menu_types: MenuTypeRegistry,
     pub zombie_nautilus_variants: ZombieNautilusVariantRegistry,
     pub timelines: TimelineRegistry,
 }
@@ -311,6 +320,9 @@ impl Registry {
         let mut dialog_registry = DialogRegistry::new();
         vanilla_dialogs::register_dialogs(&mut dialog_registry);
 
+        let mut menu_type_registry = MenuTypeRegistry::new();
+        vanilla_menu_types::register_menu_types(&mut menu_type_registry);
+
         let mut zombie_nautilus_variant_registry = ZombieNautilusVariantRegistry::new();
         vanilla_zombie_nautilus_variants::register_zombie_nautilus_variants(
             &mut zombie_nautilus_variant_registry,
@@ -342,6 +354,7 @@ impl Registry {
             jukebox_songs: jukebox_song_registry,
             instruments: instrument_registry,
             dialogs: dialog_registry,
+            menu_types: menu_type_registry,
             zombie_nautilus_variants: zombie_nautilus_variant_registry,
             timelines: timeline_registry,
         }
@@ -369,6 +382,7 @@ impl Registry {
         self.jukebox_songs.freeze();
         self.instruments.freeze();
         self.dialogs.freeze();
+        self.menu_types.freeze();
         self.zombie_nautilus_variants.freeze();
         self.timelines.freeze();
     }

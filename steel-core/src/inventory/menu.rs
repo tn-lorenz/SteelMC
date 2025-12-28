@@ -24,6 +24,8 @@ pub struct MenuBehavior {
     pub slots: Vec<SlotType>,
     pub cloned_itemstacks: Vec<ItemStack>,
     pub remote_itemstacks: Vec<ItemStack>,
+    pub container_id: u32,
+    pub state_id: u32,
 }
 
 pub trait Menu {}

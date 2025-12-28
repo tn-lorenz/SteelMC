@@ -16,6 +16,7 @@ mod instruments;
 mod item_tags;
 mod items;
 mod jukebox_songs;
+mod menu_types;
 mod packets;
 mod painting_variants;
 mod pig_variants;
@@ -54,6 +55,7 @@ const DAMAGE_TYPES: &str = "damage_types";
 const JUKEBOX_SONGS: &str = "jukebox_songs";
 const INSTRUMENTS: &str = "instruments";
 const DIALOGS: &str = "dialogs";
+const MENU_TYPES: &str = "menu_types";
 const TIMELINES: &str = "timelines";
 const TIMELINE_TAGS: &str = "timeline_tags";
 const ZOMBIE_NAUTILUS_VARIANTS: &str = "zombie_nautilus_variants";
@@ -87,6 +89,7 @@ pub fn main() {
         (jukebox_songs::build(), JUKEBOX_SONGS),
         (instruments::build(), INSTRUMENTS),
         (dialogs::build(), DIALOGS),
+        (menu_types::build(), MENU_TYPES),
         (timelines::build(), TIMELINES),
         (timeline_tags::build(), TIMELINE_TAGS),
         (zombie_nautilus_variants::build(), ZOMBIE_NAUTILUS_VARIANTS),
