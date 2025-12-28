@@ -2151,6 +2151,7 @@ dependencies = [
  "cfb8",
  "crossbeam",
  "log",
+ "rustc-hash",
  "serde",
  "serde_json",
  "simdnbt",

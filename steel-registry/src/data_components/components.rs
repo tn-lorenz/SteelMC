@@ -333,3 +333,10 @@ impl DataComponentPatch {
         })
     }
 }
+
+pub fn component_try_into<T: 'static>(
+    value: &dyn ComponentValue,
+    _component: DataComponentType<T>,
+) -> Option<&T> {
+    value.as_any().downcast_ref::<T>()
+}

@@ -3,7 +3,10 @@
 use steel_utils::Identifier;
 
 use crate::{
-    data_components::{ComponentPatchEntry, ComponentValue, DataComponentMap, DataComponentPatch},
+    data_components::{
+        ComponentPatchEntry, ComponentValue, DataComponentMap, DataComponentPatch,
+        DataComponentType, component_try_into, vanilla_components::MAX_STACK_SIZE,
+    },
     items::ItemRef,
     vanilla_items::ITEMS,
 };
@@ -107,7 +110,14 @@ impl ItemStack {
         self.item().key == item.key
     }
 
-    pub fn get_effective_value(&self, key: &Identifier) -> Option<&dyn ComponentValue> {
+    pub fn max_stack_size(&self) -> i32 {
+        self.get_effective_value_raw(&MAX_STACK_SIZE.key)
+            .map_or(64, |v| {
+                component_try_into(v, MAX_STACK_SIZE).copied().unwrap_or(64)
+            })
+    }
+
+    pub fn get_effective_value_raw(&self, key: &Identifier) -> Option<&dyn ComponentValue> {
         match self.patch.get_entry(key) {
             Some(ComponentPatchEntry::Set(v)) => Some(v.as_ref()),
             Some(ComponentPatchEntry::Removed) => None,
@@ -139,8 +149,8 @@ impl ItemStack {
             }
         }
         for key in all_keys {
-            let val_a = self.get_effective_value(key);
-            let val_b = other.get_effective_value(key);
+            let val_a = self.get_effective_value_raw(key);
+            let val_b = other.get_effective_value_raw(key);
 
             match (val_a, val_b) {
                 (Some(a), Some(b)) => {
