@@ -12,12 +12,14 @@ use std::sync::Arc;
 use std::sync::atomic::{AtomicBool, AtomicI32, Ordering};
 use std::time::{Duration, SystemTime, UNIX_EPOCH};
 
+use crossbeam::atomic::AtomicCell;
 pub use game_profile::GameProfile;
 use message_chain::SignedMessageChain;
 use message_validator::LastSeenMessagesValidator;
 use profile_key::RemoteChatSession;
 pub use signature_cache::{LastSeen, MessageCache};
 use steel_utils::locks::SyncMutex;
+use steel_utils::types::GameType;
 
 use crate::config::STEEL_CONFIG;
 
@@ -74,6 +76,8 @@ pub struct Player {
 
     /// Message chain state for tracking signed message sequence
     pub message_chain: SyncMutex<Option<SignedMessageChain>>,
+
+    pub game_mode: AtomicCell<GameType>,
 }
 
 impl Player {
@@ -99,6 +103,7 @@ impl Player {
             message_validator: SyncMutex::new(LastSeenMessagesValidator::new()),
             chat_session: SyncMutex::new(None),
             message_chain: SyncMutex::new(None),
+            game_mode: AtomicCell::new(GameType::Survival),
         }
     }
 
@@ -490,6 +495,27 @@ impl Player {
                 self.gameprofile.name
             );
         }
+    }
+
+    /// Sets the player's game mode and notifies the client.
+    ///
+    /// Returns `true` if the game mode was changed, `false` if the player was already in the requested game mode.
+    pub fn set_game_mode(&self, gamemode: steel_utils::types::GameType) -> bool {
+        use steel_protocol::packets::game::{CGameEvent, GameEventType};
+
+        let current_gamemode = self.game_mode.load();
+        if current_gamemode == gamemode {
+            return false;
+        }
+
+        self.game_mode.store(gamemode);
+
+        self.connection.send_packet(CGameEvent {
+            event: GameEventType::ChangeGameMode,
+            data: gamemode.into(),
+        });
+
+        true
     }
 
     /// Cleans up player resources.

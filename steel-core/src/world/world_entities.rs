@@ -74,7 +74,7 @@ impl World {
 
         player.connection.send_packet(CGameEvent {
             event: GameEventType::ChangeGameMode,
-            data: 1.0,
+            data: player.game_mode.load().into(),
         });
     }
 }

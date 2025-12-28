@@ -125,10 +125,29 @@ pub enum GameType {
     Spectator = 3,
 }
 
+impl GameType {
+    /// Returns the name of the game type.
+    #[must_use]
+    pub const fn name(&self) -> &'static str {
+        match self {
+            GameType::Survival => "survival",
+            GameType::Creative => "creative",
+            GameType::Adventure => "adventure",
+            GameType::Spectator => "spectator",
+        }
+    }
+}
+
 #[allow(missing_docs)]
 impl From<GameType> for i8 {
     fn from(value: GameType) -> Self {
         value as i8
+    }
+}
+
+impl From<GameType> for f32 {
+    fn from(value: GameType) -> Self {
+        f32::from(value as i8)
     }
 }
 
