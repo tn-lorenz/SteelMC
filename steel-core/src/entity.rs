@@ -3,7 +3,7 @@
 use steel_registry::item_stack::ItemStack;
 use steel_utils::math::Vector3;
 
-use crate::equipment::EquipmentSlot;
+use crate::inventory::equipment::EquipmentSlot;
 
 /// A trait for living entities that can take damage, heal, and die.
 ///

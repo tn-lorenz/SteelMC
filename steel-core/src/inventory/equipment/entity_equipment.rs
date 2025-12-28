@@ -7,10 +7,6 @@ use steel_registry::item_stack::ItemStack;
 use super::EquipmentSlot;
 
 /// Equipment storage for entities (armor, hands, etc.)
-///
-/// Uses array storage indexed by `EquipmentSlot::index()` for O(1) access.
-/// Since `ItemStack` does not implement `Clone`, this provides closure-based
-/// access methods for reading and modifying slots.
 pub struct EntityEquipment {
     slots: [ItemStack; 8],
 }

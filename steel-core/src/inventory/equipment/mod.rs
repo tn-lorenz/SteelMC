@@ -6,7 +6,7 @@
 //! - [`EntityEquipment`] - Storage for entity equipment with closure-based access
 
 mod entity_equipment;
-mod slot;
+mod equipment_slot;
 
 pub use entity_equipment::EntityEquipment;
-pub use slot::{EquipmentSlot, EquipmentSlotType};
+pub use equipment_slot::{EquipmentSlot, EquipmentSlotType};

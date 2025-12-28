@@ -5,6 +5,7 @@ pub mod message_chain;
 mod message_validator;
 /// This module contains the networking implementation for the player.
 pub mod networking;
+pub mod player_inventory;
 pub mod profile_key;
 mod signature_cache;
 
@@ -22,6 +23,7 @@ use steel_utils::locks::SyncMutex;
 use steel_utils::types::GameType;
 
 use crate::config::STEEL_CONFIG;
+use crate::player::player_inventory::PlayerInventory;
 
 use steel_protocol::packets::{
     common::SCustomPayload,
@@ -32,7 +34,7 @@ use steel_protocol::packets::{
 use steel_utils::{ChunkPos, math::Vector3, text::TextComponent, translations};
 
 use crate::entity::LivingEntity;
-use crate::equipment::{EntityEquipment, EquipmentSlot};
+use crate::inventory::equipment::{EntityEquipment, EquipmentSlot};
 
 /// Re-export `PreviousMessage` as `PreviousMessageEntry` for use in `signature_cache`
 pub type PreviousMessageEntry = PreviousMessage;
@@ -96,7 +98,9 @@ pub struct Player {
 
     /// Entity equipment (armor, offhand, hands).
     /// MainHand will delegate to inventory when inventory is implemented.
-    equipment: SyncMutex<EntityEquipment>,
+    equipment: Arc<SyncMutex<EntityEquipment>>,
+
+    inventory: Arc<SyncMutex<PlayerInventory>>,
 }
 
 impl Player {
@@ -105,7 +109,10 @@ impl Player {
         gameprofile: GameProfile,
         connection: Arc<JavaConnection>,
         world: Arc<World>,
+        player: &std::sync::Weak<Player>,
     ) -> Self {
+        let entity_equipment = Arc::new(SyncMutex::new(EntityEquipment::new()));
+
         Self {
             gameprofile,
             connection,
@@ -127,7 +134,11 @@ impl Player {
             chat_session: SyncMutex::new(None),
             message_chain: SyncMutex::new(None),
             game_mode: AtomicCell::new(GameType::Survival),
-            equipment: SyncMutex::new(EntityEquipment::new()),
+            equipment: entity_equipment.clone(),
+            inventory: Arc::new(SyncMutex::new(PlayerInventory::new(
+                entity_equipment,
+                player.clone(),
+            ))),
         }
     }
 

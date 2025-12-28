@@ -79,20 +79,17 @@ impl JavaTcpClient {
 
         let world = self.server.worlds[0].clone();
 
-        let player = Arc::new_cyclic(|player| {
-            Player::new(
-                gameprofile,
-                JavaConnection::new(
-                    self.outgoing_queue.clone(),
-                    self.cancel_token.clone(),
-                    self.compression.load(),
-                    self.network_writer.clone(),
-                    self.id,
-                    player.clone(),
-                )
-                .into(),
-                world,
-            )
+        let player = Arc::new_cyclic(|player_weak| {
+            let connection = Arc::new(JavaConnection::new(
+                self.outgoing_queue.clone(),
+                self.cancel_token.clone(),
+                self.compression.load(),
+                self.network_writer.clone(),
+                self.id,
+                player_weak.clone(),
+            ));
+
+            Player::new(gameprofile, connection, world, player_weak)
         });
 
         self.connection_updates
