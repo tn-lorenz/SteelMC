@@ -16,7 +16,7 @@
 //!
 //! The client also sends the itemstacks it thinks it has on interaction, so this makes it so we only update the client if they mismatch.
 
-use steel_registry::item_stack::ItemStack;
+use steel_registry::{item_stack::ItemStack, menu_type::MenuType};
 
 use crate::inventory::slot::SlotType;
 
@@ -25,7 +25,10 @@ pub struct MenuBehavior {
     pub cloned_itemstacks: Vec<ItemStack>,
     pub remote_itemstacks: Vec<ItemStack>,
     pub container_id: u32,
+    /// Incremented every time the server and client mismatch
     pub state_id: u32,
+    /// None for player inventory. Some for all other menus
+    pub menu_type: Option<MenuType>,
 }
 
 pub trait Menu {}
