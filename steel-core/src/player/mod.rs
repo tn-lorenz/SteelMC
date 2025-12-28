@@ -31,6 +31,8 @@ use steel_protocol::packets::{
 };
 use steel_utils::{ChunkPos, math::Vector3, text::TextComponent, translations};
 
+use crate::entity::LivingEntity;
+
 /// Re-export `PreviousMessage` as `PreviousMessageEntry` for use in `signature_cache`
 pub type PreviousMessageEntry = PreviousMessage;
 
@@ -53,6 +55,17 @@ pub struct Player {
 
     /// The player's position.
     pub position: SyncMutex<Vector3<f64>>,
+
+    // LivingEntity fields
+    /// The player's health (synced with client via entity data).
+    health: AtomicCell<f32>,
+    /// The player's absorption amount (extra health from effects like Absorption).
+    absorption_amount: AtomicCell<f32>,
+    /// The player's movement speed.
+    speed: AtomicCell<f32>,
+    /// Whether the player is sprinting.
+    sprinting: AtomicBool,
+
     /// The last chunk position of the player.
     pub last_chunk_pos: SyncMutex<ChunkPos>,
     /// The last chunk tracking view of the player.
@@ -77,6 +90,7 @@ pub struct Player {
     /// Message chain state for tracking signed message sequence
     pub message_chain: SyncMutex<Option<SignedMessageChain>>,
 
+    /// The player's current game mode (Survival, Creative, Adventure, Spectator)
     pub game_mode: AtomicCell<GameType>,
 }
 
@@ -94,6 +108,10 @@ impl Player {
             world,
             client_loaded: AtomicBool::new(false),
             position: SyncMutex::new(Vector3::default()),
+            health: AtomicCell::new(20.0), // Default max health
+            absorption_amount: AtomicCell::new(0.0),
+            speed: AtomicCell::new(0.1), // Default walking speed
+            sprinting: AtomicBool::new(false),
             last_chunk_pos: SyncMutex::new(ChunkPos::new(0, 0)),
             last_tracking_view: SyncMutex::new(None),
             chunk_sender: SyncMutex::new(ChunkSender::default()),
@@ -520,4 +538,57 @@ impl Player {
 
     /// Cleans up player resources.
     pub fn cleanup(&self) {}
+}
+
+impl LivingEntity for Player {
+    fn get_health(&self) -> f32 {
+        self.health.load()
+    }
+
+    fn set_health(&mut self, health: f32) {
+        let max_health = self.get_max_health();
+        let clamped = health.clamp(0.0, max_health);
+        self.health.store(clamped);
+        // TODO: Sync health to client via entity data
+    }
+
+    fn get_max_health(&self) -> f32 {
+        // TODO: Get from attributes system when implemented
+        20.0
+    }
+
+    fn get_position(&self) -> Vector3<f64> {
+        *self.position.lock()
+    }
+
+    fn get_absorption_amount(&self) -> f32 {
+        self.absorption_amount.load()
+    }
+
+    fn set_absorption_amount(&mut self, amount: f32) {
+        self.absorption_amount.store(amount.max(0.0));
+        // TODO: Sync to client
+    }
+
+    fn get_armor_value(&self) -> i32 {
+        // TODO: Calculate from equipped items
+        0
+    }
+
+    fn is_sprinting(&self) -> bool {
+        self.sprinting.load(Ordering::Relaxed)
+    }
+
+    fn set_sprinting(&mut self, sprinting: bool) {
+        self.sprinting.store(sprinting, Ordering::Relaxed);
+        // TODO: Apply speed modifiers when attribute system is implemented
+    }
+
+    fn get_speed(&self) -> f32 {
+        self.speed.load()
+    }
+
+    fn set_speed(&mut self, speed: f32) {
+        self.speed.store(speed);
+    }
 }
