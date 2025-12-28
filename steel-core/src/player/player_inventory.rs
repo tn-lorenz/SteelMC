@@ -5,7 +5,10 @@ use std::sync::{Arc, Weak};
 use steel_registry::item_stack::ItemStack;
 use steel_utils::locks::SyncMutex;
 
-use crate::{inventory::equipment::EntityEquipment, player::Player};
+use crate::{
+    inventory::{container::Container, equipment::EntityEquipment},
+    player::Player,
+};
 
 pub struct PlayerInventory {
     slots: [ItemStack; Self::MAIN_SIZE],
@@ -47,3 +50,5 @@ impl PlayerInventory {
         self.slots[self.selected_slot as usize] = item;
     }
 }
+
+impl Container for PlayerInventory {}

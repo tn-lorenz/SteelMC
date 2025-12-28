@@ -23,5 +23,7 @@ use crate::inventory::slot::SlotType;
 pub struct MenuBehavior {
     pub slots: Vec<SlotType>,
     pub cloned_itemstacks: Vec<ItemStack>,
-    pub client_itemstacks: Vec<ItemStack>,
+    pub remote_itemstacks: Vec<ItemStack>,
 }
+
+pub trait Menu {}
