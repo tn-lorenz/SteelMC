@@ -217,6 +217,15 @@ impl PartialEq for ComponentPatchEntry {
     }
 }
 
+impl Clone for ComponentPatchEntry {
+    fn clone(&self) -> Self {
+        match self {
+            Self::Set(v) => Self::Set(v.clone_boxed()),
+            Self::Removed => Self::Removed,
+        }
+    }
+}
+
 /// A patch representing modifications to a `DataComponentMap`.
 ///
 /// Stores differences from a prototype:
@@ -235,6 +244,18 @@ impl PartialEq for DataComponentPatch {
         self.entries
             .iter()
             .all(|(k, v)| other.entries.get(k).is_some_and(|ov| v == ov))
+    }
+}
+
+impl Clone for DataComponentPatch {
+    fn clone(&self) -> Self {
+        Self {
+            entries: self
+                .entries
+                .iter()
+                .map(|(k, v)| (k.clone(), v.clone()))
+                .collect(),
+        }
     }
 }
 

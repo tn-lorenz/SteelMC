@@ -1,7 +1,6 @@
 //! Handler for the "gamemode" command.
 use std::sync::Arc;
 
-use steel_utils::text::translation::TranslatedMessage;
 use steel_utils::translations;
 use steel_utils::types::GameType;
 

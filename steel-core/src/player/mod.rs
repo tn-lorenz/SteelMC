@@ -32,6 +32,7 @@ use steel_protocol::packets::{
 use steel_utils::{ChunkPos, math::Vector3, text::TextComponent, translations};
 
 use crate::entity::LivingEntity;
+use crate::equipment::{EntityEquipment, EquipmentSlot};
 
 /// Re-export `PreviousMessage` as `PreviousMessageEntry` for use in `signature_cache`
 pub type PreviousMessageEntry = PreviousMessage;
@@ -92,6 +93,10 @@ pub struct Player {
 
     /// The player's current game mode (Survival, Creative, Adventure, Spectator)
     pub game_mode: AtomicCell<GameType>,
+
+    /// Entity equipment (armor, offhand, hands).
+    /// MainHand will delegate to inventory when inventory is implemented.
+    equipment: SyncMutex<EntityEquipment>,
 }
 
 impl Player {
@@ -122,6 +127,7 @@ impl Player {
             chat_session: SyncMutex::new(None),
             message_chain: SyncMutex::new(None),
             game_mode: AtomicCell::new(GameType::Survival),
+            equipment: SyncMutex::new(EntityEquipment::new()),
         }
     }
 
@@ -571,8 +577,13 @@ impl LivingEntity for Player {
     }
 
     fn get_armor_value(&self) -> i32 {
-        // TODO: Calculate from equipped items
+        // TODO: Calculate from equipped items when data components are implemented
+        // Will iterate over ARMOR_SLOTS and sum armor values from each piece
         0
+    }
+
+    fn get_item_by_slot(&self, slot: EquipmentSlot) -> steel_registry::item_stack::ItemStack {
+        self.equipment.lock().get_cloned(slot)
     }
 
     fn is_sprinting(&self) -> bool {

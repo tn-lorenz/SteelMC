@@ -9,6 +9,7 @@ pub mod chunk_saver;
 pub mod command;
 pub mod config;
 pub mod entity;
+pub mod equipment;
 pub mod player;
 pub mod server;
 pub mod world;

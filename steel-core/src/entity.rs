@@ -1,6 +1,9 @@
 //! This module contains entity-related traits and types.
 
+use steel_registry::item_stack::ItemStack;
 use steel_utils::math::Vector3;
+
+use crate::equipment::EquipmentSlot;
 
 /// A trait for living entities that can take damage, heal, and die.
 ///
@@ -92,4 +95,33 @@ pub trait LivingEntity {
 
     /// Sets the entity's speed.
     fn set_speed(&mut self, speed: f32);
+
+    // Equipment methods
+
+    /// Gets a clone of the item in the specified equipment slot.
+    ///
+    /// Default implementation returns an empty stack.
+    fn get_item_by_slot(&self, _slot: EquipmentSlot) -> ItemStack {
+        ItemStack::empty()
+    }
+
+    /// Gets the main hand item.
+    fn get_main_hand_item(&self) -> ItemStack {
+        self.get_item_by_slot(EquipmentSlot::MainHand)
+    }
+
+    /// Gets the off hand item.
+    fn get_off_hand_item(&self) -> ItemStack {
+        self.get_item_by_slot(EquipmentSlot::OffHand)
+    }
+
+    /// Checks if the main hand slot is empty.
+    fn is_main_hand_empty(&self) -> bool {
+        self.get_item_by_slot(EquipmentSlot::MainHand).is_empty()
+    }
+
+    /// Checks if the off hand slot is empty.
+    fn is_off_hand_empty(&self) -> bool {
+        self.get_item_by_slot(EquipmentSlot::OffHand).is_empty()
+    }
 }
