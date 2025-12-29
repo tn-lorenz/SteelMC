@@ -2,6 +2,64 @@ use steel_utils::{Identifier, types::Todo};
 
 use crate::data_components::{DataComponentRegistry, DataComponentType};
 
+/// Equipment slot for the equippable component.
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Hash)]
+pub enum EquippableSlot {
+    Head,
+    Chest,
+    Legs,
+    Feet,
+    Body,
+    Mainhand,
+    Offhand,
+    Saddle,
+}
+
+impl EquippableSlot {
+    /// Parses an equipment slot from a string (as used in items.json).
+    #[must_use]
+    pub fn parse(s: &str) -> Option<Self> {
+        match s {
+            "head" => Some(Self::Head),
+            "chest" => Some(Self::Chest),
+            "legs" => Some(Self::Legs),
+            "feet" => Some(Self::Feet),
+            "body" => Some(Self::Body),
+            "mainhand" => Some(Self::Mainhand),
+            "offhand" => Some(Self::Offhand),
+            "saddle" => Some(Self::Saddle),
+            _ => None,
+        }
+    }
+
+    /// Returns the string representation of this slot.
+    #[must_use]
+    pub const fn as_str(&self) -> &'static str {
+        match self {
+            Self::Head => "head",
+            Self::Chest => "chest",
+            Self::Legs => "legs",
+            Self::Feet => "feet",
+            Self::Body => "body",
+            Self::Mainhand => "mainhand",
+            Self::Offhand => "offhand",
+            Self::Saddle => "saddle",
+        }
+    }
+
+    /// Returns true if this is a humanoid armor slot.
+    #[must_use]
+    pub const fn is_humanoid_armor(&self) -> bool {
+        matches!(self, Self::Head | Self::Chest | Self::Legs | Self::Feet)
+    }
+}
+
+/// The equippable component data.
+#[derive(Debug, Clone, PartialEq)]
+pub struct Equippable {
+    pub slot: EquippableSlot,
+}
+
 // Basic data components
 pub const CUSTOM_DATA: DataComponentType<Todo> =
     DataComponentType::new(Identifier::vanilla_static("custom_data"));
@@ -87,7 +145,7 @@ pub const WEAPON: DataComponentType<Todo> =
 pub const ENCHANTABLE: DataComponentType<Todo> =
     DataComponentType::new(Identifier::vanilla_static("enchantable"));
 
-pub const EQUIPPABLE: DataComponentType<Todo> =
+pub const EQUIPPABLE: DataComponentType<Equippable> =
     DataComponentType::new(Identifier::vanilla_static("equippable"));
 
 pub const REPAIRABLE: DataComponentType<Todo> =

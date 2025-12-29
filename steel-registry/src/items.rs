@@ -2,7 +2,7 @@ use rustc_hash::FxHashMap;
 
 use steel_utils::Identifier;
 
-use crate::{REGISTRY, RegistryExt, blocks::BlockRef, data_components::DataComponentMap};
+use crate::{RegistryExt, blocks::BlockRef, data_components::DataComponentMap};
 
 pub struct Item {
     pub key: Identifier,

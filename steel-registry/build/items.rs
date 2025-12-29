@@ -73,6 +73,25 @@ fn generate_builder_calls(item: &Item) -> Vec<TokenStream> {
                     quote! { .builder_set(vanilla_components::#component_ident, Some(#val)) },
                 );
             }
+            "minecraft:equippable" => {
+                // Parse the equippable component to get the slot
+                if let Some(slot_str) = value.get("slot").and_then(|s| s.as_str()) {
+                    let slot_variant = match slot_str {
+                        "head" => quote! { vanilla_components::EquippableSlot::Head },
+                        "chest" => quote! { vanilla_components::EquippableSlot::Chest },
+                        "legs" => quote! { vanilla_components::EquippableSlot::Legs },
+                        "feet" => quote! { vanilla_components::EquippableSlot::Feet },
+                        "body" => quote! { vanilla_components::EquippableSlot::Body },
+                        "mainhand" => quote! { vanilla_components::EquippableSlot::Mainhand },
+                        "offhand" => quote! { vanilla_components::EquippableSlot::Offhand },
+                        "saddle" => quote! { vanilla_components::EquippableSlot::Saddle },
+                        _ => continue,
+                    };
+                    builder_calls.push(
+                        quote! { .builder_set(vanilla_components::EQUIPPABLE, Some(vanilla_components::Equippable { slot: #slot_variant })) },
+                    );
+                }
+            }
             _ => {
                 // TODO: Implement more
             }

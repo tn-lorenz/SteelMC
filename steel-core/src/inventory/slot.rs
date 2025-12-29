@@ -1,6 +1,7 @@
 //! Slot abstraction for inventory access.
 
 use enum_dispatch::enum_dispatch;
+use steel_registry::data_components::vanilla_components::EquippableSlot;
 use steel_registry::item_stack::ItemStack;
 
 use crate::inventory::SyncContainer;
@@ -111,7 +112,65 @@ impl Slot for NormalSlot {
     }
 }
 
+/// An armor slot that only accepts items equippable in the corresponding slot.
+///
+/// Based on Java's `ArmorSlot` class.
+pub struct ArmorSlot {
+    container: SyncContainer,
+    index: usize,
+    /// The equipment slot this armor slot accepts.
+    slot: EquippableSlot,
+}
+
+impl ArmorSlot {
+    /// Creates a new armor slot.
+    pub fn new(container: SyncContainer, index: usize, slot: EquippableSlot) -> Self {
+        Self {
+            container,
+            index,
+            slot,
+        }
+    }
+
+    /// Returns the equipment slot this armor slot accepts.
+    #[must_use] 
+    pub fn equipment_slot(&self) -> EquippableSlot {
+        self.slot
+    }
+}
+
+impl Slot for ArmorSlot {
+    fn with_item<R>(&self, f: impl FnOnce(&ItemStack) -> R) -> R {
+        self.container.lock().with_item(self.index, f)
+    }
+
+    fn with_item_mut<R>(&self, f: impl FnOnce(&mut ItemStack) -> R) -> R {
+        self.container.lock().with_item_mut(self.index, f)
+    }
+
+    fn set_item(&self, stack: ItemStack) {
+        self.container.lock().set_item(self.index, stack);
+    }
+
+    fn may_place(&self, stack: &ItemStack) -> bool {
+        stack.is_equippable_in_slot(self.slot)
+    }
+
+    fn get_max_stack_size(&self) -> i32 {
+        1
+    }
+
+    fn set_changed(&self) {
+        self.container.lock().set_changed();
+    }
+
+    fn get_container_slot(&self) -> usize {
+        self.index
+    }
+}
+
 #[enum_dispatch(Slot)]
 pub enum SlotType {
     Normal(NormalSlot),
+    Armor(ArmorSlot),
 }

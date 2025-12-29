@@ -62,10 +62,12 @@ impl PlayerInventory {
         }
     }
 
+    #[must_use] 
     pub fn is_hotbar_slot(slot: usize) -> bool {
         slot < Self::SELECTION_SIZE
     }
 
+    #[must_use] 
     pub fn get_selected_slot(&self) -> u8 {
         self.selected
     }
@@ -74,7 +76,7 @@ impl PlayerInventory {
         if Self::is_hotbar_slot(slot as usize) {
             self.selected = slot;
         } else {
-            panic!("Invalid hotbar slot: {}", slot);
+            panic!("Invalid hotbar slot: {slot}");
         }
     }
 
@@ -89,16 +91,19 @@ impl PlayerInventory {
     }
 
     /// Returns the number of times this inventory has been modified.
+    #[must_use] 
     pub fn get_times_changed(&self) -> u32 {
         self.times_changed
     }
 
     /// Returns the non-equipment items (main 36 slots).
+    #[must_use] 
     pub fn get_items(&self) -> &[ItemStack; Self::INVENTORY_SIZE] {
         &self.items
     }
 
     /// Finds the first empty slot in the inventory, or -1 if full.
+    #[must_use] 
     pub fn get_free_slot(&self) -> i32 {
         for i in 0..self.items.len() {
             if self.items[i].is_empty() {

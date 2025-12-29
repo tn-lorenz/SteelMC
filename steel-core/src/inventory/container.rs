@@ -8,7 +8,7 @@ use crate::player::player_inventory::PlayerInventory;
 /// Something that contains items.
 /// I also use container interchangeably with inventory as they mean approximately the same thing.
 /// But inventory could also refer to the player's inventory.
-/// Example: PlayerInventory, Chest, Temporary Crafting Table
+/// Example: `PlayerInventory`, Chest, Temporary Crafting Table
 #[enum_dispatch]
 pub trait Container {
     /// Returns the number of slots in this container.
@@ -17,7 +17,7 @@ pub trait Container {
     /// Returns true if all slots in this container are empty.
     fn is_empty(&self) -> bool {
         for i in 0..self.get_container_size() {
-            let empty = self.with_item(i, |item| item.is_empty());
+            let empty = self.with_item(i, steel_registry::item_stack::ItemStack::is_empty);
             if !empty {
                 return false;
             }
@@ -58,7 +58,7 @@ pub trait Container {
 
     /// Removes the item from the specified slot without triggering updates.
     fn remove_item_no_update(&mut self, slot: usize) -> ItemStack {
-        self.with_item_mut(slot, |item| std::mem::take(item))
+        self.with_item_mut(slot, std::mem::take)
     }
 
     /// Returns the maximum stack size for this container.

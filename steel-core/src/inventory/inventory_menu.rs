@@ -8,12 +8,13 @@
 //! - Slots 36-44: Hotbar (9 slots)
 //! - Slot 45: Offhand
 
+use steel_registry::data_components::vanilla_components::EquippableSlot;
 use steel_registry::item_stack::ItemStack;
 
 use crate::inventory::{
     SyncContainer,
     menu::{Menu, MenuBehavior},
-    slot::{NormalSlot, Slot, SlotType},
+    slot::{ArmorSlot, NormalSlot, Slot, SlotType},
 };
 
 /// Slot indices for the inventory menu.
@@ -63,10 +64,27 @@ impl InventoryMenu {
 
         // Slots 5-8: Armor (head, chest, legs, feet)
         // Maps to inventory slots 39, 38, 37, 36
-        menu_slots.push(SlotType::Normal(NormalSlot::new(inventory.clone(), 39))); // Head
-        menu_slots.push(SlotType::Normal(NormalSlot::new(inventory.clone(), 38))); // Chest
-        menu_slots.push(SlotType::Normal(NormalSlot::new(inventory.clone(), 37))); // Legs
-        menu_slots.push(SlotType::Normal(NormalSlot::new(inventory.clone(), 36))); // Feet
+        // Order matches Java's SLOT_IDS: HEAD, CHEST, LEGS, FEET
+        menu_slots.push(SlotType::Armor(ArmorSlot::new(
+            inventory.clone(),
+            39,
+            EquippableSlot::Head,
+        ))); // Head
+        menu_slots.push(SlotType::Armor(ArmorSlot::new(
+            inventory.clone(),
+            38,
+            EquippableSlot::Chest,
+        ))); // Chest
+        menu_slots.push(SlotType::Armor(ArmorSlot::new(
+            inventory.clone(),
+            37,
+            EquippableSlot::Legs,
+        ))); // Legs
+        menu_slots.push(SlotType::Armor(ArmorSlot::new(
+            inventory.clone(),
+            36,
+            EquippableSlot::Feet,
+        ))); // Feet
 
         // Slots 9-35: Main inventory (27 slots)
         // Maps to inventory slots 9-35
@@ -90,20 +108,64 @@ impl InventoryMenu {
     }
 
     /// Returns true if the given slot index is in the hotbar or offhand.
-    /// Based on Java's InventoryMenu::isHotbarSlot.
+    /// Based on Java's `InventoryMenu::isHotbarSlot`.
+    #[must_use] 
     pub fn is_hotbar_slot(slot: usize) -> bool {
-        (slot >= slots::HOTBAR_SLOT_START && slot < slots::HOTBAR_SLOT_END)
+        (slots::HOTBAR_SLOT_START..slots::HOTBAR_SLOT_END).contains(&slot)
             || slot == slots::OFFHAND_SLOT
     }
 
     /// Returns true if the given slot index is an armor slot.
+    #[must_use] 
     pub fn is_armor_slot(slot: usize) -> bool {
-        slot >= slots::ARMOR_SLOT_START && slot < slots::ARMOR_SLOT_END
+        (slots::ARMOR_SLOT_START..slots::ARMOR_SLOT_END).contains(&slot)
     }
 
     /// Returns true if the given slot index is in the main inventory.
+    #[must_use] 
     pub fn is_inventory_slot(slot: usize) -> bool {
-        slot >= slots::INV_SLOT_START && slot < slots::INV_SLOT_END
+        (slots::INV_SLOT_START..slots::INV_SLOT_END).contains(&slot)
+    }
+
+    /// Helper method to move items between inventory and hotbar.
+    fn move_between_inventory_and_hotbar(
+        &mut self,
+        slot_index: usize,
+        stack: &mut ItemStack,
+    ) -> bool {
+        if (slots::INV_SLOT_START..slots::INV_SLOT_END).contains(&slot_index) {
+            // Main inventory -> hotbar (36-45)
+            self.behavior.move_item_stack_to(
+                stack,
+                slots::HOTBAR_SLOT_START,
+                slots::HOTBAR_SLOT_END,
+                false,
+            )
+        } else if (slots::HOTBAR_SLOT_START..slots::HOTBAR_SLOT_END).contains(&slot_index) {
+            // Hotbar -> main inventory (9-36)
+            self.behavior.move_item_stack_to(
+                stack,
+                slots::INV_SLOT_START,
+                slots::INV_SLOT_END,
+                false,
+            )
+        } else if slot_index == slots::OFFHAND_SLOT {
+            // Offhand -> inventory (9-45)
+            self.behavior.move_item_stack_to(
+                stack,
+                slots::INV_SLOT_START,
+                slots::OFFHAND_SLOT,
+                false,
+            )
+        } else {
+            // Default: try to move to inventory
+            self.behavior.move_item_stack_to(
+                stack,
+                slots::INV_SLOT_START,
+                slots::OFFHAND_SLOT,
+                false,
+            )
+        }
     }
 }
 
@@ -117,14 +179,14 @@ impl Menu for InventoryMenu {
     }
 
     /// Handles shift-click (quick move) for a slot.
-    /// Based on Java's InventoryMenu::quickMoveStack.
+    /// Based on Java's `InventoryMenu::quickMoveStack`.
     fn quick_move_stack(&mut self, slot_index: usize) -> ItemStack {
         if slot_index >= self.behavior.slots.len() {
             return ItemStack::empty();
         }
 
         // Get the current item from the slot (avoiding holding a borrow)
-        let stack = self.behavior.slots[slot_index].with_item(|i| i.clone());
+        let stack = self.behavior.slots[slot_index].with_item(std::clone::Clone::clone);
         if stack.is_empty() {
             return ItemStack::empty();
         }
@@ -133,33 +195,79 @@ impl Menu for InventoryMenu {
         let mut stack_mut = stack;
 
         // Determine target range based on which slot was clicked
-        let (start, end, backwards) = if slot_index == slots::RESULT_SLOT {
+        // This matches the Java implementation in InventoryMenu::quickMoveStack
+        let moved = if slot_index == slots::RESULT_SLOT {
             // Crafting result -> inventory (9-45), prefer to fill existing stacks first
-            (slots::INV_SLOT_START, slots::OFFHAND_SLOT, true)
-        } else if slot_index >= slots::CRAFT_SLOT_START && slot_index < slots::CRAFT_SLOT_END {
+            self.behavior.move_item_stack_to(
+                &mut stack_mut,
+                slots::INV_SLOT_START,
+                slots::OFFHAND_SLOT,
+                true,
+            )
+        } else if (slots::CRAFT_SLOT_START..slots::CRAFT_SLOT_END).contains(&slot_index) {
             // Crafting grid -> inventory (9-45)
-            (slots::INV_SLOT_START, slots::OFFHAND_SLOT, false)
-        } else if slot_index >= slots::ARMOR_SLOT_START && slot_index < slots::ARMOR_SLOT_END {
+            self.behavior.move_item_stack_to(
+                &mut stack_mut,
+                slots::INV_SLOT_START,
+                slots::OFFHAND_SLOT,
+                false,
+            )
+        } else if (slots::ARMOR_SLOT_START..slots::ARMOR_SLOT_END).contains(&slot_index) {
             // Armor -> inventory (9-45)
-            (slots::INV_SLOT_START, slots::OFFHAND_SLOT, false)
-        } else if slot_index >= slots::INV_SLOT_START && slot_index < slots::INV_SLOT_END {
-            // Main inventory -> hotbar (36-45)
-            (slots::HOTBAR_SLOT_START, slots::HOTBAR_SLOT_END, false)
-        } else if slot_index >= slots::HOTBAR_SLOT_START && slot_index < slots::HOTBAR_SLOT_END {
-            // Hotbar -> main inventory (9-36)
-            (slots::INV_SLOT_START, slots::INV_SLOT_END, false)
-        } else if slot_index == slots::OFFHAND_SLOT {
-            // Offhand -> inventory (9-45)
-            (slots::INV_SLOT_START, slots::OFFHAND_SLOT, false)
+            self.behavior.move_item_stack_to(
+                &mut stack_mut,
+                slots::INV_SLOT_START,
+                slots::OFFHAND_SLOT,
+                false,
+            )
         } else {
-            // Default: try to move to inventory
-            (slots::INV_SLOT_START, slots::OFFHAND_SLOT, false)
-        };
+            // Item is in inventory/hotbar - try to equip it first
+            let equippable_slot = clicked.get_equippable_slot();
 
-        // Perform the move
-        let moved = self
-            .behavior
-            .move_item_stack_to(&mut stack_mut, start, end, backwards);
+            // Try to move to armor slot if it's armor
+            if let Some(eq_slot) = equippable_slot {
+                if eq_slot.is_humanoid_armor() {
+                    // Calculate the target armor slot index based on the equipment slot
+                    // Java: 8 - eqSlot.getIndex() where HEAD=0, CHEST=1, LEGS=2, FEET=3
+                    let armor_slot_index = match eq_slot {
+                        EquippableSlot::Head => slots::ARMOR_SLOT_START, // 5
+                        EquippableSlot::Chest => slots::ARMOR_SLOT_START + 1, // 6
+                        EquippableSlot::Legs => slots::ARMOR_SLOT_START + 2, // 7
+                        EquippableSlot::Feet => slots::ARMOR_SLOT_START + 3, // 8
+                        _ => unreachable!(),
+                    };
+
+                    // Only try to move if the target armor slot is empty
+                    if self.behavior.slots[armor_slot_index].has_item() {
+                        // Armor slot occupied, move between inventory/hotbar
+                        self.move_between_inventory_and_hotbar(slot_index, &mut stack_mut)
+                    } else {
+                        self.behavior.move_item_stack_to(
+                            &mut stack_mut,
+                            armor_slot_index,
+                            armor_slot_index + 1,
+                            false,
+                        )
+                    }
+                } else if eq_slot == EquippableSlot::Offhand {
+                    // Try to move to offhand slot if empty
+                    if self.behavior.slots[slots::OFFHAND_SLOT].has_item() {
+                        self.move_between_inventory_and_hotbar(slot_index, &mut stack_mut)
+                    } else {
+                        self.behavior.move_item_stack_to(
+                            &mut stack_mut,
+                            slots::OFFHAND_SLOT,
+                            slots::OFFHAND_SLOT + 1,
+                            false,
+                        )
+                    }
+                } else {
+                    self.move_between_inventory_and_hotbar(slot_index, &mut stack_mut)
+                }
+            } else {
+                self.move_between_inventory_and_hotbar(slot_index, &mut stack_mut)
+            }
+        };
 
         if !moved {
             return ItemStack::empty();

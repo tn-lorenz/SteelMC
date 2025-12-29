@@ -3,7 +3,6 @@ use std::fs;
 use heck::ToShoutySnakeCase;
 use proc_macro2::{Ident, Span, TokenStream};
 use quote::quote;
-use serde::Deserialize;
 
 pub(crate) fn build() -> TokenStream {
     println!("cargo:rerun-if-changed=build_assets/menutypes.json");

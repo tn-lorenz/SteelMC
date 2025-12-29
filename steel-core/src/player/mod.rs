@@ -106,13 +106,13 @@ pub struct Player {
     pub game_mode: AtomicCell<GameType>,
 
     /// Entity equipment (armor, offhand, hands).
-    /// MainHand will delegate to inventory when inventory is implemented.
+    /// `MainHand` will delegate to inventory when inventory is implemented.
     equipment: Arc<SyncMutex<EntityEquipment>>,
 
-    /// The player's inventory container (shared with inventory_menu).
+    /// The player's inventory container (shared with `inventory_menu`).
     inventory: SyncContainer,
 
-    /// The player's inventory menu (always open, even when container_id is 0).
+    /// The player's inventory menu (always open, even when `container_id` is 0).
     inventory_menu: SyncMutex<InventoryMenu>,
 }
 
@@ -593,7 +593,7 @@ impl Player {
         let mut menu = self.inventory_menu.lock();
 
         // Check container ID matches
-        if menu.behavior().container_id as i32 != packet.container_id {
+        if i32::from(menu.behavior().container_id) != packet.container_id {
             return;
         }
 

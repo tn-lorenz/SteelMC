@@ -13,7 +13,9 @@ use crate::{
     data_components::{
         ComponentPatchEntry, ComponentValue, DataComponentMap, DataComponentPatch,
         component_try_into,
-        vanilla_components::{DAMAGE, MAX_DAMAGE, MAX_STACK_SIZE, UNBREAKABLE},
+        vanilla_components::{
+            DAMAGE, EQUIPPABLE, Equippable, EquippableSlot, MAX_DAMAGE, MAX_STACK_SIZE, UNBREAKABLE,
+        },
     },
     items::ItemRef,
     vanilla_items::ITEMS,
@@ -181,6 +183,25 @@ impl ItemStack {
             .map_or(64, |v| {
                 component_try_into(v, MAX_STACK_SIZE).copied().unwrap_or(64)
             })
+    }
+
+    /// Returns the equippable component if this item has one.
+    #[must_use]
+    pub fn get_equippable(&self) -> Option<&Equippable> {
+        self.get_effective_value_raw(&EQUIPPABLE.key)
+            .and_then(|v| component_try_into(v, EQUIPPABLE))
+    }
+
+    /// Returns the equipment slot this item can be equipped to, if any.
+    #[must_use]
+    pub fn get_equippable_slot(&self) -> Option<EquippableSlot> {
+        self.get_equippable().map(|e| e.slot)
+    }
+
+    /// Returns true if this item can be equipped in the given slot.
+    #[must_use]
+    pub fn is_equippable_in_slot(&self, slot: EquippableSlot) -> bool {
+        self.get_equippable_slot() == Some(slot)
     }
 
     pub fn get_effective_value_raw(&self, key: &Identifier) -> Option<&dyn ComponentValue> {

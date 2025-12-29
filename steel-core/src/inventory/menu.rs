@@ -31,32 +31,30 @@ use std::sync::Arc;
 /// Represents the server's perception of what the client knows about a slot.
 ///
 /// This can be either:
-/// - A full ItemStack (when we've sent the item to the client)
-/// - A HashedStack (when we've received a hash from the client)
+/// - A full `ItemStack` (when we've sent the item to the client)
+/// - A `HashedStack` (when we've received a hash from the client)
 /// - Unknown (initial state, always needs sync)
 #[derive(Debug, Clone)]
+#[derive(Default)]
 pub enum RemoteSlot {
     /// We don't know what the client has (initial state).
+    #[default]
     Unknown,
-    /// We know the exact ItemStack the client should have.
+    /// We know the exact `ItemStack` the client should have.
     Known(ItemStack),
     /// We received a hash from the client and verified it matches.
     Hashed(HashedStack),
 }
 
-impl Default for RemoteSlot {
-    fn default() -> Self {
-        Self::Unknown
-    }
-}
 
 impl RemoteSlot {
     /// Creates an unknown remote slot.
+    #[must_use] 
     pub fn unknown() -> Self {
         Self::Unknown
     }
 
-    /// Forces the remote slot to a known ItemStack state.
+    /// Forces the remote slot to a known `ItemStack` state.
     /// Called when we send an item to the client.
     pub fn force(&mut self, item: &ItemStack) {
         *self = Self::Known(item.clone());
@@ -68,7 +66,8 @@ impl RemoteSlot {
         *self = Self::Hashed(hash);
     }
 
-    /// Checks if the remote slot matches the local ItemStack.
+    /// Checks if the remote slot matches the local `ItemStack`.
+    #[must_use] 
     pub fn matches(&self, local: &ItemStack) -> bool {
         match self {
             Self::Unknown => false,
@@ -78,7 +77,7 @@ impl RemoteSlot {
     }
 }
 
-/// Checks if a hashed stack matches the given ItemStack.
+/// Checks if a hashed stack matches the given `ItemStack`.
 fn hashed_stack_matches(hash: &HashedStack, item: &ItemStack) -> bool {
     match hash {
         HashedStack::Empty => item.is_empty(),
@@ -101,12 +100,12 @@ fn hashed_stack_matches(hash: &HashedStack, item: &ItemStack) -> bool {
 /// Slot index for clicking outside the inventory window (drop items).
 pub const SLOT_CLICKED_OUTSIDE: i16 = -999;
 
-/// QuickCraft (drag) type constants.
+/// `QuickCraft` (drag) type constants.
 pub const QUICKCRAFT_TYPE_CHARITABLE: i32 = 0; // Left-click drag (distribute evenly)
 pub const QUICKCRAFT_TYPE_GREEDY: i32 = 1; // Right-click drag (place one each)
 pub const QUICKCRAFT_TYPE_CLONE: i32 = 2; // Middle-click drag (creative only, full stacks)
 
-/// QuickCraft header constants (packet phase).
+/// `QuickCraft` header constants (packet phase).
 pub const QUICKCRAFT_HEADER_START: i32 = 0;
 pub const QUICKCRAFT_HEADER_CONTINUE: i32 = 1;
 pub const QUICKCRAFT_HEADER_END: i32 = 2;
@@ -119,23 +118,27 @@ pub const SLOT_SIZE: i32 = 18;
 
 /// Extracts the quickcraft type from a button mask.
 /// Type is stored in bits 2-3.
+#[must_use] 
 pub fn get_quickcraft_type(button: i32) -> i32 {
     (button >> 2) & 3
 }
 
 /// Extracts the quickcraft header (phase) from a button mask.
 /// Header is stored in bits 0-1.
+#[must_use] 
 pub fn get_quickcraft_header(button: i32) -> i32 {
     button & 3
 }
 
 /// Creates a quickcraft button mask from header and type.
+#[must_use] 
 pub fn get_quickcraft_mask(header: i32, quickcraft_type: i32) -> i32 {
     (header & 3) | ((quickcraft_type & 3) << 2)
 }
 
 /// Checks if a quickcraft type is valid for the given player.
 /// Type 2 (clone) requires creative mode (infinite materials).
+#[must_use] 
 pub fn is_valid_quickcraft_type(quickcraft_type: i32, has_infinite_materials: bool) -> bool {
     match quickcraft_type {
         0 | 1 => true,
@@ -145,6 +148,7 @@ pub fn is_valid_quickcraft_type(quickcraft_type: i32, has_infinite_materials: bo
 }
 
 /// Calculates how many items to place per slot during quickcraft.
+#[must_use] 
 pub fn get_quickcraft_place_count(
     slot_count: usize,
     quickcraft_type: i32,
@@ -159,7 +163,8 @@ pub fn get_quickcraft_place_count(
 }
 
 /// Checks if an item can be quick-placed into a slot.
-/// If ignore_size is true, doesn't check if the combined count would exceed max stack size.
+/// If `ignore_size` is true, doesn't check if the combined count would exceed max stack size.
+#[must_use] 
 pub fn can_item_quick_replace(
     slot_item: &ItemStack,
     carried: &ItemStack,
@@ -210,6 +215,7 @@ pub struct MenuBehavior {
 
 impl MenuBehavior {
     /// Creates a new menu behavior with the given slots.
+    #[must_use] 
     pub fn new(slots: Vec<SlotType>, container_id: u8, menu_type: Option<MenuType>) -> Self {
         let slot_count = slots.len();
         Self {
@@ -251,6 +257,7 @@ impl MenuBehavior {
     }
 
     /// Gets the value of a data slot.
+    #[must_use] 
     pub fn get_data(&self, index: usize) -> Option<i16> {
         self.data_slots.get(index).copied()
     }
@@ -270,16 +277,17 @@ impl MenuBehavior {
 
     /// Returns true if a slot can be dragged to during quickcraft.
     /// Menus can override this via the Menu trait.
+    #[must_use] 
     pub fn can_drag_to(&self, _slot_index: usize) -> bool {
         true
     }
 
-    /// Moves items from `item_stack` to slots in the range [start_slot, end_slot).
-    /// If `backwards` is true, iterates from end_slot-1 down to start_slot.
+    /// Moves items from `item_stack` to slots in the range [`start_slot`, `end_slot`).
+    /// If `backwards` is true, iterates from end_slot-1 down to `start_slot`.
     /// Returns true if any items were moved.
     ///
-    /// This is used by quick_move_stack implementations to distribute items.
-    /// Based on Java's AbstractContainerMenu::moveItemStackTo.
+    /// This is used by `quick_move_stack` implementations to distribute items.
+    /// Based on Java's `AbstractContainerMenu::moveItemStackTo`.
     pub fn move_item_stack_to(
         &mut self,
         item_stack: &mut ItemStack,
@@ -303,7 +311,7 @@ impl MenuBehavior {
                 }
 
                 let slot = &self.slots[dest_slot];
-                let target = slot.with_item(|i| i.clone());
+                let target = slot.with_item(std::clone::Clone::clone);
 
                 if !target.is_empty()
                     && ItemStack::is_same_item_same_components(item_stack, &target)
@@ -345,7 +353,7 @@ impl MenuBehavior {
                 dest_slot < end_slot
             } {
                 let slot = &self.slots[dest_slot];
-                let target = slot.with_item(|i| i.clone());
+                let target = slot.with_item(std::clone::Clone::clone);
 
                 if target.is_empty() && slot.may_place(item_stack) {
                     let max_stack_size = slot.get_max_stack_size_for_item(item_stack);
@@ -374,6 +382,7 @@ impl MenuBehavior {
     }
 
     /// Returns the current state ID.
+    #[must_use] 
     pub fn get_state_id(&self) -> u32 {
         self.state_id
     }
@@ -393,21 +402,25 @@ impl MenuBehavior {
     /// Returns true if a slot index is valid for this menu.
     /// -999 is used for clicking outside the inventory.
     /// -1 is also accepted (matches Java behavior, though not used by vanilla clients).
+    #[must_use] 
     pub fn is_valid_slot_index(&self, slot: i16) -> bool {
         slot == -1 || slot == -999 || (slot >= 0 && (slot as usize) < self.slots.len())
     }
 
     /// Returns the number of slots in this menu.
+    #[must_use] 
     pub fn slot_count(&self) -> usize {
         self.slots.len()
     }
 
     /// Gets a reference to a slot by index.
+    #[must_use] 
     pub fn get_slot(&self, index: usize) -> Option<&SlotType> {
         self.slots.get(index)
     }
 
     /// Gets the carried item (cursor).
+    #[must_use] 
     pub fn get_carried(&self) -> &ItemStack {
         &self.carried
     }
@@ -423,16 +436,17 @@ impl MenuBehavior {
         self.state_id
     }
 
-    /// Updates last_slots from actual slot contents.
-    /// Call this once per tick before comparing with remote_slots.
+    /// Updates `last_slots` from actual slot contents.
+    /// Call this once per tick before comparing with `remote_slots`.
     pub fn update_last_slots(&mut self) {
         for (i, slot) in self.slots.iter().enumerate() {
-            self.last_slots[i] = slot.with_item(|item| item.clone());
+            self.last_slots[i] = slot.with_item(std::clone::Clone::clone);
         }
     }
 
     /// Checks if a slot has changed compared to remote perception.
     /// Returns true if slot needs to be synced to client.
+    #[must_use] 
     pub fn slot_needs_sync(&self, index: usize) -> bool {
         if index >= self.last_slots.len() || index >= self.remote_slots.len() {
             return false;
@@ -448,6 +462,7 @@ impl MenuBehavior {
     }
 
     /// Checks if carried item needs sync.
+    #[must_use] 
     pub fn carried_needs_sync(&self) -> bool {
         !self.remote_carried.matches(&self.carried)
     }
@@ -468,7 +483,7 @@ impl MenuBehavior {
 
         // Send full container content
         let packet = CContainerSetContent {
-            container_id: self.container_id as i32,
+            container_id: i32::from(self.container_id),
             state_id: self.state_id as i32,
             items: self.last_slots.clone(),
             carried_item: self.carried.clone(),
@@ -486,7 +501,7 @@ impl MenuBehavior {
         for i in 0..self.data_slots.len() {
             self.remote_data_slots[i] = self.data_slots[i];
             let packet = CContainerSetData {
-                container_id: self.container_id as i32,
+                container_id: i32::from(self.container_id),
                 id: i as i16,
                 value: self.data_slots[i],
             };
@@ -497,9 +512,9 @@ impl MenuBehavior {
     /// Broadcasts changes to the client (incremental sync).
     /// This is called every tick to sync only changed slots.
     ///
-    /// Based on Java's AbstractContainerMenu::broadcastChanges.
-    /// Note: This does NOT increment state_id - that only happens when
-    /// processing client clicks (via increment_state_id).
+    /// Based on Java's `AbstractContainerMenu::broadcastChanges`.
+    /// Note: This does NOT increment `state_id` - that only happens when
+    /// processing client clicks (via `increment_state_id`).
     pub fn broadcast_changes(&mut self, connection: &Arc<JavaConnection>) {
         // Update last_slots from actual slot contents
         self.update_last_slots();
@@ -523,7 +538,7 @@ impl MenuBehavior {
     }
 
     /// Sends a data slot update to the client if it has changed.
-    /// Based on Java's AbstractContainerMenu::synchronizeDataSlotToRemote.
+    /// Based on Java's `AbstractContainerMenu::synchronizeDataSlotToRemote`.
     fn synchronize_data_slot_to_remote(&mut self, index: usize, connection: &Arc<JavaConnection>) {
         if self.suppress_remote_updates || index >= self.data_slots.len() {
             return;
@@ -535,7 +550,7 @@ impl MenuBehavior {
         if current != remote {
             self.remote_data_slots[index] = current;
             let packet = CContainerSetData {
-                container_id: self.container_id as i32,
+                container_id: i32::from(self.container_id),
                 id: index as i16,
                 value: current,
             };
@@ -544,7 +559,7 @@ impl MenuBehavior {
     }
 
     /// Sends a single slot update to the client.
-    /// Based on Java's AbstractContainerMenu::synchronizeSlotToRemote.
+    /// Based on Java's `AbstractContainerMenu::synchronizeSlotToRemote`.
     fn synchronize_slot_to_remote(&mut self, slot: usize, connection: &Arc<JavaConnection>) {
         if self.suppress_remote_updates || slot >= self.last_slots.len() {
             return;
@@ -553,7 +568,7 @@ impl MenuBehavior {
         let item = &self.last_slots[slot];
 
         let packet = CContainerSetSlot {
-            container_id: self.container_id as i32,
+            container_id: i32::from(self.container_id),
             state_id: self.state_id as i32,
             slot: slot as i16,
             item_stack: item.clone(),
@@ -564,7 +579,7 @@ impl MenuBehavior {
     }
 
     /// Sends the carried item (cursor) to the client.
-    /// Based on Java's AbstractContainerMenu::synchronizeCarriedToRemote.
+    /// Based on Java's `AbstractContainerMenu::synchronizeCarriedToRemote`.
     fn synchronize_carried_to_remote(&mut self, connection: &Arc<JavaConnection>) {
         if self.suppress_remote_updates {
             return;
@@ -578,9 +593,9 @@ impl MenuBehavior {
         self.mark_carried_synced();
     }
 
-    /// Sets a remote slot to a known ItemStack.
+    /// Sets a remote slot to a known `ItemStack`.
     /// Called when we know exactly what the client has (e.g., creative mode set).
-    /// Based on Java's AbstractContainerMenu::setRemoteSlot.
+    /// Based on Java's `AbstractContainerMenu::setRemoteSlot`.
     pub fn set_remote_slot_known(&mut self, slot: usize, item: &ItemStack) {
         if slot < self.remote_slots.len() {
             self.remote_slots[slot].force(item);
@@ -589,7 +604,7 @@ impl MenuBehavior {
 
     /// Handles a remote slot update from the client.
     /// This is called when the client sends us their perception of a slot.
-    /// Based on Java's AbstractContainerMenu::setRemoteSlotUnsafe.
+    /// Based on Java's `AbstractContainerMenu::setRemoteSlotUnsafe`.
     pub fn set_remote_slot(&mut self, slot: usize, hash: HashedStack) {
         if slot < self.remote_slots.len() {
             self.remote_slots[slot].receive(hash);
@@ -603,16 +618,16 @@ impl MenuBehavior {
     }
 
     /// Handles a remote carried update from the client.
-    /// Based on Java's AbstractContainerMenu::setRemoteCarried.
+    /// Based on Java's `AbstractContainerMenu::setRemoteCarried`.
     pub fn set_remote_carried(&mut self, hash: HashedStack) {
         self.remote_carried.receive(hash);
     }
 
     /// Broadcasts full state to client.
     /// This triggers slot listeners for all slots and then sends all data to remote.
-    /// Based on Java's AbstractContainerMenu::broadcastFullState.
+    /// Based on Java's `AbstractContainerMenu::broadcastFullState`.
     ///
-    /// Note: This does NOT increment state_id - it just forces a full resync.
+    /// Note: This does NOT increment `state_id` - it just forces a full resync.
     pub fn broadcast_full_state(&mut self, connection: &Arc<JavaConnection>) {
         // In Java, this first triggers slot listeners for each slot,
         // then calls sendAllDataToRemote() at the end.
@@ -621,10 +636,10 @@ impl MenuBehavior {
     }
 
     /// Handles quickcraft (drag) operations.
-    /// Based on Java's AbstractContainerMenu::doClick for ClickType.QUICK_CRAFT.
+    /// Based on Java's `AbstractContainerMenu::doClick` for `ClickType.QUICK_CRAFT`.
     pub fn do_quick_craft(&mut self, slot_num: i16, button: i8, has_infinite_materials: bool) {
         let expected_status = self.quickcraft_status;
-        let new_status = get_quickcraft_header(button as i32);
+        let new_status = get_quickcraft_header(i32::from(button));
 
         // Validate state transitions: must go 0->1->2 or stay at 1
         if (expected_status != 1 || new_status != 2) && expected_status != new_status {
@@ -640,7 +655,7 @@ impl MenuBehavior {
 
         if new_status == QUICKCRAFT_HEADER_START {
             // Starting a new drag
-            self.quickcraft_type = get_quickcraft_type(button as i32);
+            self.quickcraft_type = get_quickcraft_type(i32::from(button));
             if is_valid_quickcraft_type(self.quickcraft_type, has_infinite_materials) {
                 self.quickcraft_status = 1;
                 self.quickcraft_slots.clear();
@@ -654,7 +669,7 @@ impl MenuBehavior {
             }
             let slot_index = slot_num as usize;
             let slot = &self.slots[slot_index];
-            let slot_item = slot.with_item(|i| i.clone());
+            let slot_item = slot.with_item(std::clone::Clone::clone);
 
             if can_item_quick_replace(&slot_item, &self.carried, true)
                 && slot.may_place(&self.carried)
@@ -685,7 +700,7 @@ impl MenuBehavior {
 
                 for &slot_index in &self.quickcraft_slots.clone() {
                     let slot = &self.slots[slot_index];
-                    let slot_item = slot.with_item(|i| i.clone());
+                    let slot_item = slot.with_item(std::clone::Clone::clone);
 
                     if can_item_quick_replace(&slot_item, &self.carried, true)
                         && slot.may_place(&self.carried)
@@ -727,6 +742,7 @@ impl MenuBehavior {
     }
 
     /// Handles pickup click (left/right click to pick up or place items).
+    /// Based on Java's `AbstractContainerMenu::doClick` for ClickType.PICKUP.
     pub fn do_pickup(&mut self, slot_num: i16, button: i8) {
         // Slot -999 means clicked outside the inventory (drop items)
         if slot_num == -999 {
@@ -759,12 +775,12 @@ impl MenuBehavior {
         let slot = &self.slots[slot_index];
 
         // Get the current item in the slot
-        let slot_item = slot.with_item(|item| item.clone());
+        let slot_item = slot.with_item(std::clone::Clone::clone);
         let carried = std::mem::take(&mut self.carried);
 
         if slot_item.is_empty() {
-            // Slot is empty - place carried items
-            if !carried.is_empty() {
+            // Slot is empty - place carried items (if allowed)
+            if !carried.is_empty() && slot.may_place(&carried) {
                 let max_for_slot = slot.get_max_stack_size_for_item(&carried);
                 let requested = if button == 0 { carried.count } else { 1 };
                 let amount = requested.min(max_for_slot);
@@ -780,60 +796,89 @@ impl MenuBehavior {
                 }
 
                 slot.set_item(to_place);
+            } else {
+                // Can't place - keep carrying
+                self.carried = carried;
             }
         } else if carried.is_empty() {
-            // Carried is empty - pick up from slot
-            let amount = if button == 0 {
-                slot_item.count
-            } else {
-                (slot_item.count + 1) / 2
-            };
+            // Carried is empty - pick up from slot (if allowed)
+            if slot.may_pickup() {
+                let amount = if button == 0 {
+                    slot_item.count
+                } else {
+                    (slot_item.count + 1) / 2
+                };
 
-            let taken = slot.remove(amount);
-            self.carried = taken;
+                let taken = slot.remove(amount);
+                self.carried = taken;
+            }
         } else if ItemStack::is_same_item_same_components(&slot_item, &carried) {
-            // Same item type - try to stack
-            if button == 0 {
-                // Left click - add as many as possible to slot
-                let max = slot.get_max_stack_size_for_item(&carried);
-                let space = max - slot_item.count;
-                let to_add = space.min(carried.count);
+            // Same item type - try to stack (if slot allows this item type)
+            if slot.may_place(&carried) {
+                if button == 0 {
+                    // Left click - add as many as possible to slot
+                    let max = slot.get_max_stack_size_for_item(&carried);
+                    let space = max - slot_item.count;
+                    let to_add = space.min(carried.count);
 
-                if to_add > 0 {
-                    slot.with_item_mut(|item| {
-                        item.set_count(item.count + to_add);
-                    });
-                    let remaining = carried.count - to_add;
-                    if remaining > 0 {
-                        let mut new_carried = carried;
-                        new_carried.set_count(remaining);
-                        self.carried = new_carried;
+                    if to_add > 0 {
+                        slot.with_item_mut(|item| {
+                            item.set_count(item.count + to_add);
+                        });
+                        let remaining = carried.count - to_add;
+                        if remaining > 0 {
+                            let mut new_carried = carried;
+                            new_carried.set_count(remaining);
+                            self.carried = new_carried;
+                        }
+                    } else {
+                        self.carried = carried;
                     }
                 } else {
-                    self.carried = carried;
+                    // Right click - add one to slot
+                    let max = slot.get_max_stack_size_for_item(&carried);
+                    if slot_item.count < max {
+                        slot.with_item_mut(|item| {
+                            item.set_count(item.count + 1);
+                        });
+                        let remaining = carried.count - 1;
+                        if remaining > 0 {
+                            let mut new_carried = carried;
+                            new_carried.set_count(remaining);
+                            self.carried = new_carried;
+                        }
+                    } else {
+                        self.carried = carried;
+                    }
                 }
             } else {
-                // Right click - add one to slot
-                let max = slot.get_max_stack_size_for_item(&carried);
-                if slot_item.count < max {
-                    slot.with_item_mut(|item| {
-                        item.set_count(item.count + 1);
-                    });
-                    let remaining = carried.count - 1;
-                    if remaining > 0 {
+                // Can't place this item type in this slot
+                // In Java, if items are same type but may_place fails, try to take from slot
+                if slot.may_pickup() {
+                    // Try to add slot items to carried stack
+                    let space = carried.max_stack_size() - carried.count;
+                    if space > 0 {
+                        let take_amount = slot_item.count.min(space);
+                        let taken = slot.remove(take_amount);
                         let mut new_carried = carried;
-                        new_carried.set_count(remaining);
+                        new_carried.grow(taken.count);
                         self.carried = new_carried;
+                    } else {
+                        self.carried = carried;
                     }
                 } else {
                     self.carried = carried;
                 }
             }
         } else {
-            // Different items - swap
-            if carried.count <= slot.get_max_stack_size_for_item(&carried) {
-                slot.set_item(carried);
-                self.carried = slot_item;
+            // Different items - swap (if both operations are allowed)
+            if slot.may_pickup() && slot.may_place(&carried) {
+                if carried.count <= slot.get_max_stack_size_for_item(&carried) {
+                    slot.set_item(carried);
+                    self.carried = slot_item;
+                } else {
+                    self.carried = carried;
+                }
             } else {
                 self.carried = carried;
             }
@@ -854,7 +899,7 @@ impl MenuBehavior {
         }
 
         let slot = &self.slots[slot_index];
-        let slot_item = slot.with_item(|i| i.clone());
+        let slot_item = slot.with_item(std::clone::Clone::clone);
 
         if !slot_item.is_empty() {
             let mut cloned = slot_item.clone();
@@ -866,7 +911,8 @@ impl MenuBehavior {
     /// Handles throw (drop key Q or Ctrl+Q).
     /// button 0 = Q (drop 1), button 1 = Ctrl+Q (drop all, repeating while same item)
     ///
-    /// Note: Java version also checks player.canDropItems() before each drop.
+    /// Based on Java's `AbstractContainerMenu::doClick` for ClickType.THROW.
+    /// Note: Java version also checks `player.canDropItems()` before each drop.
     /// This would need to be handled at a higher level with player access.
     pub fn do_throw(&mut self, slot_num: i16, button: i8) {
         if slot_num < 0 {
@@ -879,6 +925,12 @@ impl MenuBehavior {
         }
 
         let slot = &self.slots[slot_index];
+
+        // Check if pickup is allowed (Java's safeTake checks this internally)
+        if !slot.may_pickup() {
+            return;
+        }
+
         let amount = if button == 0 {
             1
         } else {
@@ -888,14 +940,18 @@ impl MenuBehavior {
         let dropped = slot.remove(amount);
         if !dropped.is_empty() {
             // TODO: Actually drop the items into the world
-            log::debug!("Would drop {:?}", dropped);
+            log::debug!("Would drop {dropped:?}");
         }
         slot.set_changed();
 
         // Ctrl+Q: Keep dropping while the slot has the same item type
         if button == 1 {
             loop {
-                let current_item = slot.with_item(|i| i.clone());
+                // Check may_pickup again for each iteration (Java does this via safeTake)
+                if !slot.may_pickup() {
+                    break;
+                }
+                let current_item = slot.with_item(std::clone::Clone::clone);
                 if current_item.is_empty() || !ItemStack::is_same_item(&current_item, &dropped) {
                     break;
                 }
@@ -904,7 +960,7 @@ impl MenuBehavior {
                     break;
                 }
                 // TODO: Actually drop the items into the world
-                log::debug!("Would drop {:?}", more_dropped);
+                log::debug!("Would drop {more_dropped:?}");
                 slot.set_changed();
             }
         }
@@ -935,7 +991,7 @@ pub trait Menu {
     }
 
     /// Handles a click action in this menu.
-    /// Based on Java's AbstractContainerMenu::clicked and doClick.
+    /// Based on Java's `AbstractContainerMenu::clicked` and doClick.
     ///
     /// `has_infinite_materials` should be true if the player is in creative mode.
     fn clicked(
@@ -945,33 +1001,30 @@ pub trait Menu {
         click_type: ClickType,
         has_infinite_materials: bool,
     ) {
-        match click_type {
-            ClickType::QuickCraft => {
-                self.behavior_mut()
-                    .do_quick_craft(slot_num, button, has_infinite_materials);
+        if click_type == ClickType::QuickCraft {
+            self.behavior_mut()
+                .do_quick_craft(slot_num, button, has_infinite_materials);
+        } else {
+            // Any non-quickcraft click resets quickcraft state if in progress
+            if self.behavior().quickcraft_status != 0 {
+                self.behavior_mut().reset_quick_craft();
             }
-            _ => {
-                // Any non-quickcraft click resets quickcraft state if in progress
-                if self.behavior().quickcraft_status != 0 {
-                    self.behavior_mut().reset_quick_craft();
-                }
-                match click_type {
-                    ClickType::Pickup => self.behavior_mut().do_pickup(slot_num, button),
-                    ClickType::QuickMove => self.do_quick_move(slot_num),
-                    ClickType::Swap => self.do_swap(slot_num, button),
-                    ClickType::Clone => self
-                        .behavior_mut()
-                        .do_clone(slot_num, has_infinite_materials),
-                    ClickType::Throw => self.behavior_mut().do_throw(slot_num, button),
-                    ClickType::PickupAll => self.do_pickup_all(slot_num, button),
-                    ClickType::QuickCraft => unreachable!(),
-                }
+            match click_type {
+                ClickType::Pickup => self.behavior_mut().do_pickup(slot_num, button),
+                ClickType::QuickMove => self.do_quick_move(slot_num),
+                ClickType::Swap => self.do_swap(slot_num, button),
+                ClickType::Clone => self
+                    .behavior_mut()
+                    .do_clone(slot_num, has_infinite_materials),
+                ClickType::Throw => self.behavior_mut().do_throw(slot_num, button),
+                ClickType::PickupAll => self.do_pickup_all(slot_num, button),
+                ClickType::QuickCraft => unreachable!(),
             }
         }
     }
 
     /// Handles quick move (shift-click).
-    /// Based on Java's AbstractContainerMenu::doClick for ClickType.QUICK_MOVE.
+    /// Based on Java's `AbstractContainerMenu::doClick` for `ClickType.QUICK_MOVE`.
     fn do_quick_move(&mut self, slot_num: i16) {
         if slot_num < 0 {
             return;
@@ -990,7 +1043,7 @@ pub trait Menu {
         }
 
         // Get the initial item for comparison
-        let initial_item = self.behavior().slots[slot_index].with_item(|i| i.clone());
+        let initial_item = self.behavior().slots[slot_index].with_item(std::clone::Clone::clone);
         if initial_item.is_empty() {
             return;
         }
@@ -999,7 +1052,7 @@ pub trait Menu {
         let mut result = self.quick_move_stack(slot_index);
 
         while !result.is_empty() {
-            let current_item = self.behavior().slots[slot_index].with_item(|i| i.clone());
+            let current_item = self.behavior().slots[slot_index].with_item(std::clone::Clone::clone);
             if !ItemStack::is_same_item(&current_item, &result) {
                 break;
             }
@@ -1010,7 +1063,7 @@ pub trait Menu {
     /// Handles swap (number keys to swap with hotbar).
     /// button is the hotbar slot (0-8) or 40 for offhand.
     ///
-    /// Default implementation for InventoryMenu where we have direct slot access.
+    /// Default implementation for `InventoryMenu` where we have direct slot access.
     fn do_swap(&mut self, slot_num: i16, button: i8) {
         if slot_num < 0 {
             return;
@@ -1027,7 +1080,7 @@ pub trait Menu {
         let hotbar_slot_index = if button == 40 {
             // Offhand
             45
-        } else if button >= 0 && button < 9 {
+        } else if (0..9).contains(&button) {
             // Hotbar slots 36-44 map to button 0-8
             36 + button as usize
         } else {
@@ -1041,8 +1094,8 @@ pub trait Menu {
         let target_slot = &behavior.slots[slot_index];
         let source_slot = &behavior.slots[hotbar_slot_index];
 
-        let target_item = target_slot.with_item(|i| i.clone());
-        let source_item = source_slot.with_item(|i| i.clone());
+        let target_item = target_slot.with_item(std::clone::Clone::clone);
+        let source_item = source_slot.with_item(std::clone::Clone::clone);
 
         if source_item.is_empty() && target_item.is_empty() {
             return;
@@ -1088,6 +1141,7 @@ pub trait Menu {
 
     /// Handles pickup all (double-click).
     /// Collects matching items from all slots into the carried stack.
+    /// Based on Java's `AbstractContainerMenu::doClick` for `ClickType.PICKUP_ALL`.
     fn do_pickup_all(&mut self, slot_num: i16, button: i8) {
         if slot_num < 0 {
             return;
@@ -1099,10 +1153,13 @@ pub trait Menu {
             return;
         }
 
-        let slot_has_item = behavior.slots[slot_index].with_item(|i| !i.is_empty());
+        let slot = &behavior.slots[slot_index];
+        let slot_has_item = slot.with_item(|i| !i.is_empty());
+        let slot_may_pickup = slot.may_pickup();
 
-        // Can only pickup all if carried is not empty and slot is empty or can't be picked up
-        if behavior.carried.is_empty() || slot_has_item {
+        // Can only pickup all if carried is not empty and (slot is empty or can't be picked up)
+        // Java: if (!carried.isEmpty() && (!slotxx.hasItem() || !slotxx.mayPickup(player)))
+        if behavior.carried.is_empty() || (slot_has_item && slot_may_pickup) {
             return;
         }
 
@@ -1122,10 +1179,13 @@ pub trait Menu {
             let mut i = start;
             while i >= 0 && i < slot_count as i32 && self.behavior().carried.count < max_stack {
                 let target_slot = &self.behavior().slots[i as usize];
-                let target_item = target_slot.with_item(|item| item.clone());
+                let target_item = target_slot.with_item(std::clone::Clone::clone);
 
+                // Java checks: target.hasItem() && canItemQuickReplace(target, carried, true)
+                //              && target.mayPickup(player) && this.canTakeItemForPickAll(carried, target)
                 if !target_item.is_empty()
                     && can_item_quick_replace(&target_item, &carried_item, true)
+                    && target_slot.may_pickup()
                     && self.can_take_item_for_pick_all(&carried_item, i as usize)
                 {
                     // First pass: skip full stacks; Second pass: include full stacks
