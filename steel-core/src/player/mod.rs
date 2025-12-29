@@ -36,7 +36,13 @@ use steel_protocol::packets::{
 use steel_utils::{ChunkPos, math::Vector3, text::TextComponent, translations};
 
 use crate::entity::LivingEntity;
-use crate::inventory::equipment::{EntityEquipment, EquipmentSlot};
+use crate::inventory::{
+    container::ContainerType,
+    equipment::{EntityEquipment, EquipmentSlot},
+    inventory_menu::InventoryMenu,
+    menu::Menu,
+    slot::Slot,
+};
 
 /// Re-export `PreviousMessage` as `PreviousMessageEntry` for use in `signature_cache`
 pub type PreviousMessageEntry = PreviousMessage;
@@ -103,6 +109,9 @@ pub struct Player {
     equipment: Arc<SyncMutex<EntityEquipment>>,
 
     inventory: Arc<SyncMutex<PlayerInventory>>,
+
+    /// The player's inventory menu (always open, even when container_id is 0).
+    inventory_menu: SyncMutex<InventoryMenu>,
 }
 
 impl Player {
@@ -114,6 +123,16 @@ impl Player {
         player: &std::sync::Weak<Player>,
     ) -> Self {
         let entity_equipment = Arc::new(SyncMutex::new(EntityEquipment::new()));
+
+        let inventory = Arc::new(SyncMutex::new(PlayerInventory::new(
+            entity_equipment.clone(),
+            player.clone(),
+        )));
+
+        // Create wrapped container for the inventory menu
+        let inventory_container = Arc::new(SyncMutex::new(ContainerType::PlayerInventory(
+            PlayerInventory::new(entity_equipment.clone(), player.clone()),
+        )));
 
         Self {
             gameprofile,
@@ -137,10 +156,8 @@ impl Player {
             message_chain: SyncMutex::new(None),
             game_mode: AtomicCell::new(GameType::Survival),
             equipment: entity_equipment.clone(),
-            inventory: Arc::new(SyncMutex::new(PlayerInventory::new(
-                entity_equipment,
-                player.clone(),
-            ))),
+            inventory,
+            inventory_menu: SyncMutex::new(InventoryMenu::new(inventory_container)),
         }
     }
 
@@ -163,6 +180,9 @@ impl Player {
         self.chunk_sender
             .lock()
             .send_next_chunks(self.connection.clone(), &self.world, chunk_pos);
+
+        // Broadcast inventory changes to client
+        self.broadcast_inventory_changes();
 
         self.connection.tick();
 
@@ -573,22 +593,57 @@ impl Player {
 
     /// Handles a container click packet (slot interaction).
     pub fn handle_container_click(&self, packet: SContainerClick) {
-        log::debug!(
-            "Player {} clicked slot {} in container {} with {:?}",
-            self.gameprofile.name,
-            packet.slot_num,
-            packet.container_id,
-            packet.click_type
-        );
-        // TODO: Implement container click handling
-        // This handles all inventory interactions:
-        // - Pickup: Left/right click to pick up or place items
-        // - QuickMove: Shift-click to move items between inventories
-        // - Swap: Number keys to swap with hotbar
-        // - Clone: Middle-click to clone in creative
-        // - Throw: Drop key to throw items
-        // - QuickCraft: Click-drag to distribute items
-        // - PickupAll: Double-click to collect all of same type
+        let mut menu = self.inventory_menu.lock();
+        let behavior = menu.behavior_mut();
+
+        // Check container ID matches
+        if behavior.container_id as i32 != packet.container_id {
+            return;
+        }
+
+        // Handle spectator mode - just resync the inventory
+        if self.game_mode.load() == GameType::Spectator {
+            behavior.send_all_data_to_remote(&self.connection);
+            return;
+        }
+
+        // Validate slot index
+        if !behavior.is_valid_slot_index(packet.slot_num) {
+            log::debug!(
+                "Player {} clicked invalid slot index: {}, available: {}",
+                self.gameprofile.name,
+                packet.slot_num,
+                behavior.slot_count()
+            );
+            return;
+        }
+
+        // Check if we need a full resync (state ID mismatch)
+        let full_resync_needed = packet.state_id as u32 != behavior.get_state_id();
+
+        // Suppress remote updates during click handling
+        behavior.suppress_remote_updates();
+
+        // Handle the click
+        behavior.clicked(packet.slot_num, packet.button_num, packet.click_type);
+
+        // Update remote slots from the client's perception
+        for (slot, hash) in packet.changed_slots {
+            behavior.set_remote_slot(slot as usize, hash);
+        }
+
+        // Update remote carried from the client's perception
+        behavior.set_remote_carried(packet.carried_item);
+
+        // Resume remote updates
+        behavior.resume_remote_updates();
+
+        // Broadcast changes or full state depending on whether we had a state mismatch
+        if full_resync_needed {
+            behavior.broadcast_full_state(&self.connection);
+        } else {
+            behavior.broadcast_changes(&self.connection);
+        }
     }
 
     /// Handles a container close packet.
@@ -620,17 +675,59 @@ impl Player {
 
     /// Handles a creative mode slot set packet.
     pub fn handle_set_creative_mode_slot(&self, packet: SSetCreativeModeSlot) {
-        log::info!(
-            "Player {} set creative slot {} to {:?}",
-            self.gameprofile.name,
-            packet.slot_num,
-            packet.item_stack
-        );
-        // TODO: Implement creative mode slot handling
-        // This should:
-        // - Verify player is in creative mode
-        // - Validate the item (check for illegal items/NBT)
-        // - Set the slot in the player's inventory
+        // Only allow in creative mode
+        if self.game_mode.load() != GameType::Creative {
+            return;
+        }
+
+        let drop = packet.slot_num < 0;
+        let item_stack = packet.item_stack;
+
+        // Validate slot range (1-45 for inventory menu)
+        let valid_slot = packet.slot_num >= 1 && packet.slot_num <= 45;
+        let valid_data = item_stack.is_empty() || item_stack.count <= item_stack.max_stack_size();
+
+        if valid_slot && valid_data {
+            let mut menu = self.inventory_menu.lock();
+            let slot_index = packet.slot_num as usize;
+
+            if let Some(slot) = menu.behavior().get_slot(slot_index) {
+                slot.set_item(item_stack.clone());
+            }
+
+            menu.behavior_mut()
+                .set_remote_slot_known(slot_index, &item_stack);
+            menu.behavior_mut().broadcast_changes(&self.connection);
+        } else if drop && valid_data {
+            // TODO: Implement drop spam throttling
+            // For now, just drop the item
+            if !item_stack.is_empty() {
+                // TODO: Actually drop the item into the world
+                log::debug!(
+                    "Player {} would drop {:?} in creative mode",
+                    self.gameprofile.name,
+                    item_stack
+                );
+            }
+        }
+    }
+
+    /// Sends all inventory slots to the client (full sync).
+    /// This should be called when the player first joins.
+    pub fn send_inventory_to_remote(&self) {
+        self.inventory_menu
+            .lock()
+            .behavior_mut()
+            .send_all_data_to_remote(&self.connection);
+    }
+
+    /// Broadcasts inventory changes to the client (incremental sync).
+    /// This is called every tick to sync only changed slots.
+    pub fn broadcast_inventory_changes(&self) {
+        self.inventory_menu
+            .lock()
+            .behavior_mut()
+            .broadcast_changes(&self.connection);
     }
 
     /// Cleans up player resources.

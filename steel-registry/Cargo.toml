@@ -9,6 +9,8 @@ steel-utils = { path = "../steel-utils" }
 serde_json.workspace = true
 serde.workspace = true
 rustc-hash.workspace = true
+log.workspace = true
+
 
 [build-dependencies]
 proc-macro2.workspace = true

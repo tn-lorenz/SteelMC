@@ -2169,6 +2169,7 @@ name = "steel-registry"
 version = "0.0.0"
 dependencies = [
  "heck",
+ "log",
  "proc-macro2",
  "quote",
  "rustc-hash",

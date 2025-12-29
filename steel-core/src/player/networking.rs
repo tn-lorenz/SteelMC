@@ -205,6 +205,8 @@ impl JavaConnection {
             play::S_PLAYER_LOADED => {
                 let _ = SPlayerLoad::read_packet(data)?;
                 player.client_loaded.store(true, Ordering::Relaxed);
+                // Send initial inventory to client
+                player.send_inventory_to_remote();
             }
             play::S_CHAT_COMMAND => {
                 server.command_dispatcher.read().handle_command(
