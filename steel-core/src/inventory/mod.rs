@@ -2,7 +2,7 @@ use std::sync::Arc;
 
 use steel_utils::locks::SyncMutex;
 
-use crate::inventory::container::{Container, ContainerType};
+use crate::inventory::container::ContainerType;
 
 pub mod container;
 pub mod equipment;

@@ -1,7 +1,16 @@
 use rustc_hash::FxHashMap;
-use std::{any::Any, fmt::Debug, marker::PhantomData};
+use std::{
+    any::Any,
+    fmt::Debug,
+    io::{Read, Result, Write},
+    marker::PhantomData,
+};
 
-use steel_utils::Identifier;
+use steel_utils::{
+    Identifier,
+    codec::VarInt,
+    serial::{ReadFrom, WriteTo},
+};
 
 use crate::{
     RegistryExt,
@@ -339,4 +348,44 @@ pub fn component_try_into<T: 'static>(
     _component: DataComponentType<T>,
 ) -> Option<&T> {
     value.as_any().downcast_ref::<T>()
+}
+
+impl WriteTo for DataComponentPatch {
+    fn write(&self, writer: &mut impl Write) -> Result<()> {
+        // Format: VarInt addedCount, VarInt removedCount, then added entries, then removed entries
+        // TODO: Implement full component serialization when needed
+        // For now, we write an empty patch. Full implementation requires:
+        // - Component type registry IDs
+        // - Per-component-type codecs for serializing values
+        VarInt(0).write(writer)?; // added count
+        VarInt(0).write(writer)?; // removed count
+        Ok(())
+    }
+}
+
+impl ReadFrom for DataComponentPatch {
+    fn read(data: &mut impl Read) -> Result<Self> {
+        // Format: VarInt addedCount, VarInt removedCount, then added entries, then removed entries
+        // TODO: Implement full component deserialization when needed
+        // For now, we skip the data and return an empty patch
+        let added_count = VarInt::read(data)?.0 as usize;
+        let removed_count = VarInt::read(data)?.0 as usize;
+
+        // Skip added components (each is: VarInt type_id, then type-specific data)
+        // Since we don't know the type-specific codec, we can't properly skip
+        // For now, we assume empty patches in practice
+        if added_count > 0 || removed_count > 0 {
+            // This is a limitation - we can't properly deserialize non-empty patches
+            // without the full component codec system
+            return Err(std::io::Error::new(
+                std::io::ErrorKind::InvalidData,
+                format!(
+                    "Non-empty DataComponentPatch deserialization not yet supported ({} added, {} removed)",
+                    added_count, removed_count
+                ),
+            ));
+        }
+
+        Ok(Self::new())
+    }
 }

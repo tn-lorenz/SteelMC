@@ -6,7 +6,7 @@ use rayon::iter::{IntoParallelIterator, IntoParallelRefIterator, ParallelIterato
 use rayon::{ThreadPool, ThreadPoolBuilder};
 use rustc_hash::FxBuildHasher;
 use steel_protocol::packets::game::CSetChunkCenter;
-use steel_registry::{REGISTRY, Registry, vanilla_blocks};
+use steel_registry::{REGISTRY, vanilla_blocks};
 use steel_utils::{ChunkPos, locks::SyncMutex};
 use tokio::runtime::Runtime;
 use tokio_util::task::TaskTracker;

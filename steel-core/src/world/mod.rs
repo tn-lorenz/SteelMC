@@ -4,7 +4,6 @@ use std::time::Duration;
 
 use scc::HashMap;
 use steel_protocol::packets::game::{CPlayerChat, CSystemChat};
-use steel_registry::Registry;
 use tokio::runtime::Runtime;
 use uuid::Uuid;
 

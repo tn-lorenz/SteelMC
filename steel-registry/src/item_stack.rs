@@ -1,11 +1,18 @@
 //! Item stack implementation.
 
-use steel_utils::Identifier;
+use std::io::{Read, Result, Write};
+
+use steel_utils::{
+    Identifier,
+    codec::VarInt,
+    serial::{ReadFrom, WriteTo},
+};
 
 use crate::{
+    REGISTRY,
     data_components::{
         ComponentPatchEntry, ComponentValue, DataComponentMap, DataComponentPatch,
-        DataComponentType, component_try_into, vanilla_components::MAX_STACK_SIZE,
+        component_try_into, vanilla_components::MAX_STACK_SIZE,
     },
     items::ItemRef,
     vanilla_items::ITEMS,
@@ -174,5 +181,38 @@ impl std::fmt::Display for ItemStack {
         } else {
             write!(f, "{} {}", self.count, self.item.key)
         }
+    }
+}
+
+impl WriteTo for ItemStack {
+    fn write(&self, writer: &mut impl Write) -> Result<()> {
+        if self.is_empty() {
+            VarInt(0).write(writer)?;
+        } else {
+            VarInt(self.count).write(writer)?;
+            // Write item ID as VarInt
+            let item_id = *REGISTRY.items.get_id(self.item);
+            VarInt(item_id as i32).write(writer)?;
+            // Write DataComponentPatch
+            self.patch.write(writer)?;
+        }
+        Ok(())
+    }
+}
+
+impl ReadFrom for ItemStack {
+    fn read(data: &mut impl Read) -> Result<Self> {
+        let count = VarInt::read(data)?.0;
+        if count <= 0 {
+            return Ok(Self::empty());
+        }
+
+        let item_id = VarInt::read(data)?.0 as usize;
+        let item = REGISTRY.items.by_id(item_id).unwrap_or(&ITEMS.air);
+
+        // Read DataComponentPatch
+        let patch = DataComponentPatch::read(data)?;
+
+        Ok(Self { item, count, patch })
     }
 }
