@@ -12,7 +12,8 @@ use crate::{
     REGISTRY,
     data_components::{
         ComponentPatchEntry, ComponentValue, DataComponentMap, DataComponentPatch,
-        component_try_into, vanilla_components::MAX_STACK_SIZE,
+        component_try_into,
+        vanilla_components::{DAMAGE, MAX_DAMAGE, MAX_STACK_SIZE, UNBREAKABLE},
     },
     items::ItemRef,
     vanilla_items::ITEMS,
@@ -88,6 +89,64 @@ impl ItemStack {
 
     pub fn set_count(&mut self, count: i32) {
         self.count = count;
+    }
+
+    /// Increases the count by the given amount.
+    pub fn grow(&mut self, amount: i32) {
+        self.count += amount;
+    }
+
+    /// Decreases the count by the given amount.
+    pub fn shrink(&mut self, amount: i32) {
+        self.count -= amount;
+    }
+
+    /// Returns true if this item can stack (max stack size > 1 and not damaged).
+    /// Damaged items cannot stack.
+    #[must_use]
+    pub fn is_stackable(&self) -> bool {
+        self.max_stack_size() > 1 && (!self.is_damageable_item() || !self.is_damaged())
+    }
+
+    /// Returns true if this item can take damage.
+    #[must_use]
+    pub fn is_damageable_item(&self) -> bool {
+        self.has_component(&MAX_DAMAGE.key)
+            && !self.has_component(&UNBREAKABLE.key)
+            && self.has_component(&DAMAGE.key)
+    }
+
+    /// Returns true if this item has taken damage.
+    #[must_use]
+    pub fn is_damaged(&self) -> bool {
+        self.is_damageable_item() && self.get_damage_value() > 0
+    }
+
+    /// Gets the current damage value of this item.
+    #[must_use]
+    pub fn get_damage_value(&self) -> i32 {
+        self.get_effective_value_raw(&DAMAGE.key)
+            .map_or(0, |v| component_try_into(v, DAMAGE).copied().unwrap_or(0))
+            .clamp(0, self.get_max_damage())
+    }
+
+    /// Gets the maximum damage this item can take before breaking.
+    #[must_use]
+    pub fn get_max_damage(&self) -> i32 {
+        self.get_effective_value_raw(&MAX_DAMAGE.key)
+            .map_or(0, |v| {
+                component_try_into(v, MAX_DAMAGE).copied().unwrap_or(0)
+            })
+    }
+
+    /// Returns true if this item has the specified component.
+    #[must_use]
+    pub fn has_component(&self, key: &Identifier) -> bool {
+        match self.patch.get_entry(key) {
+            Some(ComponentPatchEntry::Set(_)) => true,
+            Some(ComponentPatchEntry::Removed) => false,
+            None => self.prototype().get_raw(key).is_some(),
+        }
     }
 
     #[must_use]

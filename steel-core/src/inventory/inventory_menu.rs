@@ -13,7 +13,7 @@ use steel_registry::item_stack::ItemStack;
 use crate::inventory::{
     SyncContainer,
     menu::{Menu, MenuBehavior},
-    slot::{NormalSlot, SlotType},
+    slot::{NormalSlot, Slot, SlotType},
 };
 
 /// Slot indices for the inventory menu.
@@ -89,9 +89,11 @@ impl InventoryMenu {
         }
     }
 
-    /// Returns true if the given slot index is in the hotbar.
+    /// Returns true if the given slot index is in the hotbar or offhand.
+    /// Based on Java's InventoryMenu::isHotbarSlot.
     pub fn is_hotbar_slot(slot: usize) -> bool {
-        slot >= slots::HOTBAR_SLOT_START && slot < slots::HOTBAR_SLOT_END
+        (slot >= slots::HOTBAR_SLOT_START && slot < slots::HOTBAR_SLOT_END)
+            || slot == slots::OFFHAND_SLOT
     }
 
     /// Returns true if the given slot index is an armor slot.
@@ -114,21 +116,71 @@ impl Menu for InventoryMenu {
         &mut self.behavior
     }
 
-    /*
-    fn clicked(&mut self, slot: i16, button: i8, click_type: ClickType) {
-        // TODO: Implement click handling
-        // For now, just log the click
-        log::trace!(
-            "InventoryMenu clicked: slot={}, button={}, click_type={:?}",
-            slot,
-            button,
-            click_type
-        );
-    } */
+    /// Handles shift-click (quick move) for a slot.
+    /// Based on Java's InventoryMenu::quickMoveStack.
+    fn quick_move_stack(&mut self, slot_index: usize) -> ItemStack {
+        if slot_index >= self.behavior.slots.len() {
+            return ItemStack::empty();
+        }
 
-    fn quick_move_stack(&mut self, _slot_index: usize) -> ItemStack {
-        // TODO: Implement shift-click logic
-        // For now, return empty (no movement)
-        ItemStack::empty()
+        // Get the current item from the slot (avoiding holding a borrow)
+        let stack = self.behavior.slots[slot_index].with_item(|i| i.clone());
+        if stack.is_empty() {
+            return ItemStack::empty();
+        }
+
+        let clicked = stack.clone();
+        let mut stack_mut = stack;
+
+        // Determine target range based on which slot was clicked
+        let (start, end, backwards) = if slot_index == slots::RESULT_SLOT {
+            // Crafting result -> inventory (9-45), prefer to fill existing stacks first
+            (slots::INV_SLOT_START, slots::OFFHAND_SLOT, true)
+        } else if slot_index >= slots::CRAFT_SLOT_START && slot_index < slots::CRAFT_SLOT_END {
+            // Crafting grid -> inventory (9-45)
+            (slots::INV_SLOT_START, slots::OFFHAND_SLOT, false)
+        } else if slot_index >= slots::ARMOR_SLOT_START && slot_index < slots::ARMOR_SLOT_END {
+            // Armor -> inventory (9-45)
+            (slots::INV_SLOT_START, slots::OFFHAND_SLOT, false)
+        } else if slot_index >= slots::INV_SLOT_START && slot_index < slots::INV_SLOT_END {
+            // Main inventory -> hotbar (36-45)
+            (slots::HOTBAR_SLOT_START, slots::HOTBAR_SLOT_END, false)
+        } else if slot_index >= slots::HOTBAR_SLOT_START && slot_index < slots::HOTBAR_SLOT_END {
+            // Hotbar -> main inventory (9-36)
+            (slots::INV_SLOT_START, slots::INV_SLOT_END, false)
+        } else if slot_index == slots::OFFHAND_SLOT {
+            // Offhand -> inventory (9-45)
+            (slots::INV_SLOT_START, slots::OFFHAND_SLOT, false)
+        } else {
+            // Default: try to move to inventory
+            (slots::INV_SLOT_START, slots::OFFHAND_SLOT, false)
+        };
+
+        // Perform the move
+        let moved = self
+            .behavior
+            .move_item_stack_to(&mut stack_mut, start, end, backwards);
+
+        if !moved {
+            return ItemStack::empty();
+        }
+
+        // Update the source slot with the remaining items
+        self.behavior.slots[slot_index].set_item(stack_mut.clone());
+
+        // Check if unchanged
+        if stack_mut.count == clicked.count {
+            return ItemStack::empty();
+        }
+
+        self.behavior.slots[slot_index].set_changed();
+        clicked
+    }
+
+    /// Returns true if the item can be taken from the slot during pickup all.
+    /// Prevents taking from the crafting result slot.
+    fn can_take_item_for_pick_all(&self, _carried: &ItemStack, slot_index: usize) -> bool {
+        // Can't pickup-all from the crafting result slot
+        slot_index != slots::RESULT_SLOT
     }
 }

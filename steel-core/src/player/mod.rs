@@ -37,6 +37,7 @@ use steel_utils::{ChunkPos, math::Vector3, text::TextComponent, translations};
 
 use crate::entity::LivingEntity;
 use crate::inventory::{
+    SyncContainer,
     container::ContainerType,
     equipment::{EntityEquipment, EquipmentSlot},
     inventory_menu::InventoryMenu,
@@ -108,7 +109,8 @@ pub struct Player {
     /// MainHand will delegate to inventory when inventory is implemented.
     equipment: Arc<SyncMutex<EntityEquipment>>,
 
-    inventory: Arc<SyncMutex<PlayerInventory>>,
+    /// The player's inventory container (shared with inventory_menu).
+    inventory: SyncContainer,
 
     /// The player's inventory menu (always open, even when container_id is 0).
     inventory_menu: SyncMutex<InventoryMenu>,
@@ -124,13 +126,8 @@ impl Player {
     ) -> Self {
         let entity_equipment = Arc::new(SyncMutex::new(EntityEquipment::new()));
 
-        let inventory = Arc::new(SyncMutex::new(PlayerInventory::new(
-            entity_equipment.clone(),
-            player.clone(),
-        )));
-
-        // Create wrapped container for the inventory menu
-        let inventory_container = Arc::new(SyncMutex::new(ContainerType::PlayerInventory(
+        // Create a single shared inventory container used by both the player and inventory menu
+        let inventory: SyncContainer = Arc::new(SyncMutex::new(ContainerType::PlayerInventory(
             PlayerInventory::new(entity_equipment.clone(), player.clone()),
         )));
 
@@ -156,8 +153,8 @@ impl Player {
             message_chain: SyncMutex::new(None),
             game_mode: AtomicCell::new(GameType::Survival),
             equipment: entity_equipment.clone(),
-            inventory,
-            inventory_menu: SyncMutex::new(InventoryMenu::new(inventory_container)),
+            inventory: inventory.clone(),
+            inventory_menu: SyncMutex::new(InventoryMenu::new(inventory)),
         }
     }
 
@@ -594,55 +591,61 @@ impl Player {
     /// Handles a container click packet (slot interaction).
     pub fn handle_container_click(&self, packet: SContainerClick) {
         let mut menu = self.inventory_menu.lock();
-        let behavior = menu.behavior_mut();
 
         // Check container ID matches
-        if behavior.container_id as i32 != packet.container_id {
+        if menu.behavior().container_id as i32 != packet.container_id {
             return;
         }
 
         // Handle spectator mode - just resync the inventory
         if self.game_mode.load() == GameType::Spectator {
-            behavior.send_all_data_to_remote(&self.connection);
+            menu.behavior_mut()
+                .send_all_data_to_remote(&self.connection);
             return;
         }
 
         // Validate slot index
-        if !behavior.is_valid_slot_index(packet.slot_num) {
+        if !menu.behavior().is_valid_slot_index(packet.slot_num) {
             log::debug!(
                 "Player {} clicked invalid slot index: {}, available: {}",
                 self.gameprofile.name,
                 packet.slot_num,
-                behavior.slot_count()
+                menu.behavior().slot_count()
             );
             return;
         }
 
         // Check if we need a full resync (state ID mismatch)
-        let full_resync_needed = packet.state_id as u32 != behavior.get_state_id();
+        let full_resync_needed = packet.state_id as u32 != menu.behavior().get_state_id();
 
         // Suppress remote updates during click handling
-        behavior.suppress_remote_updates();
+        menu.behavior_mut().suppress_remote_updates();
 
-        // Handle the click
-        behavior.clicked(packet.slot_num, packet.button_num, packet.click_type);
+        // Handle the click using the Menu trait method
+        let has_infinite_materials = self.game_mode.load() == GameType::Creative;
+        menu.clicked(
+            packet.slot_num,
+            packet.button_num,
+            packet.click_type,
+            has_infinite_materials,
+        );
 
         // Update remote slots from the client's perception
         for (slot, hash) in packet.changed_slots {
-            behavior.set_remote_slot(slot as usize, hash);
+            menu.behavior_mut().set_remote_slot(slot as usize, hash);
         }
 
         // Update remote carried from the client's perception
-        behavior.set_remote_carried(packet.carried_item);
+        menu.behavior_mut().set_remote_carried(packet.carried_item);
 
         // Resume remote updates
-        behavior.resume_remote_updates();
+        menu.behavior_mut().resume_remote_updates();
 
         // Broadcast changes or full state depending on whether we had a state mismatch
         if full_resync_needed {
-            behavior.broadcast_full_state(&self.connection);
+            menu.behavior_mut().broadcast_full_state(&self.connection);
         } else {
-            behavior.broadcast_changes(&self.connection);
+            menu.behavior_mut().broadcast_changes(&self.connection);
         }
     }
 
