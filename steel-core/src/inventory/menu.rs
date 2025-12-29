@@ -16,7 +16,6 @@
 //!
 //! The client also sends the itemstacks it thinks it has on interaction, so this makes it so we only update the client if they mismatch.
 
-use steel_protocol::packets::game::ClickType;
 use steel_registry::{item_stack::ItemStack, menu_type::MenuType};
 
 use crate::inventory::slot::{Slot, SlotType};
@@ -127,7 +126,7 @@ pub trait Menu {
     fn behavior_mut(&mut self) -> &mut MenuBehavior;
 
     /// Handles a click action in this menu.
-    fn clicked(&mut self, slot: i16, button: i8, click_type: ClickType);
+    //fn clicked(&mut self, slot: i16, button: i8, click_type: ClickType);
 
     /// Handles shift-click (quick move) for a slot.
     /// Returns the resulting item stack (empty if fully moved).

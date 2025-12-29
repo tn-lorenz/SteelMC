@@ -6,7 +6,7 @@ use rayon::iter::{IntoParallelIterator, IntoParallelRefIterator, ParallelIterato
 use rayon::{ThreadPool, ThreadPoolBuilder};
 use rustc_hash::FxBuildHasher;
 use steel_protocol::packets::game::CSetChunkCenter;
-use steel_registry::{Registry, vanilla_blocks};
+use steel_registry::{REGISTRY, Registry, vanilla_blocks};
 use steel_utils::{ChunkPos, locks::SyncMutex};
 use tokio::runtime::Runtime;
 use tokio_util::task::TaskTracker;
@@ -56,7 +56,7 @@ impl ChunkMap {
     /// Creates a new chunk map.
     #[must_use]
     #[allow(clippy::missing_panics_doc, clippy::unwrap_used)]
-    pub fn new(registry: &Arc<Registry>, chunk_runtime: Arc<Runtime>) -> Self {
+    pub fn new(chunk_runtime: Arc<Runtime>) -> Self {
         Self {
             chunks: scc::HashMap::with_capacity_and_hasher(1000, FxBuildHasher),
             unloading_chunks: scc::HashMap::with_capacity_and_hasher(1000, FxBuildHasher),
@@ -65,18 +65,18 @@ impl ChunkMap {
             chunk_tickets: SyncMutex::new(ChunkTicketManager::new()),
             world_gen_context: Arc::new(WorldGenContext {
                 generator: Arc::new(ChunkGeneratorType::Flat(FlatChunkGenerator::new(
-                    registry
+                    REGISTRY
                         .blocks
                         .get_default_state_id(vanilla_blocks::BEDROCK), // Bedrock
-                    registry.blocks.get_default_state_id(vanilla_blocks::DIRT), // Dirt
-                    registry
+                    REGISTRY.blocks.get_default_state_id(vanilla_blocks::DIRT), // Dirt
+                    REGISTRY
                         .blocks
                         .get_default_state_id(vanilla_blocks::GRASS_BLOCK), // Grass Block
                 ))),
             }),
             thread_pool: Arc::new(ThreadPoolBuilder::new().build().unwrap()),
             chunk_runtime,
-            region_manager: Arc::new(RegionManager::new("world/overworld", registry.clone())),
+            region_manager: Arc::new(RegionManager::new("world/overworld")),
         }
     }
 

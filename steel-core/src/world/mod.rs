@@ -27,9 +27,9 @@ impl World {
     /// Creates a new world.
     #[allow(clippy::new_without_default)]
     #[must_use]
-    pub fn new(registry: &Arc<Registry>, chunk_runtime: Arc<Runtime>) -> Self {
+    pub fn new(chunk_runtime: Arc<Runtime>) -> Self {
         Self {
-            chunk_map: Arc::new(ChunkMap::new(registry, chunk_runtime)),
+            chunk_map: Arc::new(ChunkMap::new(chunk_runtime)),
             players: HashMap::new(),
         }
     }

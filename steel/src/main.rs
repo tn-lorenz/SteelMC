@@ -5,6 +5,7 @@ use std::sync::Arc;
 use log::LevelFilter;
 use simplelog::{ColorChoice, Config, TermLogger, TerminalMode};
 use steel::SteelServer;
+use steel_registry::REGISTRY;
 use steel_utils::{Identifier, translations};
 use tokio::runtime::Runtime;
 use tokio_util::task::TaskTracker;
@@ -80,9 +81,7 @@ async fn main_async(chunk_runtime: Arc<Runtime>) {
 
     log::info!(
         "{:?}",
-        steel
-            .server
-            .registry
+        REGISTRY
             .items
             .get_tag(&Identifier::vanilla_static("swords"))
             .expect("swords tag should exist")

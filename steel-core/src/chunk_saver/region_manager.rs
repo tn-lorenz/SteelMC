@@ -8,7 +8,7 @@ use std::{io, path::PathBuf, sync::Arc};
 
 use arc_swap::Guard;
 use rustc_hash::FxHashMap;
-use steel_registry::Registry;
+use steel_registry::{REGISTRY, Registry};
 use steel_utils::{BlockStateId, ChunkPos, Identifier};
 use tokio::{
     fs::{self, File, OpenOptions},
@@ -43,8 +43,6 @@ pub struct RegionManager {
     base_path: PathBuf,
     /// Open region file handles with their headers.
     regions: AsyncRwLock<FxHashMap<RegionPos, RegionHandle>>,
-    /// Registry for block state and biome conversions.
-    registry: Arc<Registry>,
 }
 
 /// An open region file with its header.
@@ -132,11 +130,10 @@ impl RegionManager {
     /// # Arguments
     /// * `base_path` - Directory where region files are stored.
     /// * `registry` - The registry for block state and biome conversions.
-    pub fn new(base_path: impl Into<PathBuf>, registry: Arc<Registry>) -> Self {
+    pub fn new(base_path: impl Into<PathBuf>) -> Self {
         Self {
             base_path: base_path.into(),
             regions: AsyncRwLock::new(FxHashMap::default()),
-            registry,
         }
     }
 
@@ -553,7 +550,7 @@ impl RegionManager {
 
     /// Converts sections to persistent format.
     fn sections_to_persistent(&self, sections: &Sections) -> PersistentChunk {
-        let mut builder = ChunkBuilder::new(&self.registry);
+        let mut builder = ChunkBuilder::new(&REGISTRY);
 
         let persistent_sections = sections
             .sections
@@ -809,8 +806,7 @@ impl RegionManager {
                 .map(|(k, v)| (k.as_str(), v.as_str()))
                 .collect();
 
-            if let Some(state_id) = self
-                .registry
+            if let Some(state_id) = REGISTRY
                 .blocks
                 .state_id_from_properties(&state.name, &properties)
             {
@@ -823,7 +819,7 @@ impl RegionManager {
     /// Resolves a chunk palette index to a runtime biome ID.
     fn resolve_biome(&self, chunk: &PersistentChunk, index: u16) -> u8 {
         if let Some(biome_key) = chunk.biomes.get(index as usize)
-            && let Some(id) = self.registry.biomes.id_from_key(biome_key)
+            && let Some(id) = REGISTRY.biomes.id_from_key(biome_key)
         {
             return id as u8;
         }

@@ -7,6 +7,8 @@
 )]
 #![allow(internal_features)]
 
+use std::{fmt::Debug, ops::Deref, sync::OnceLock};
+
 use steel_utils::Identifier;
 
 use crate::{
@@ -60,6 +62,7 @@ pub mod trim_pattern;
 pub mod wolf_sound_variant;
 pub mod wolf_variant;
 pub mod zombie_nautilus_variant;
+
 
 #[allow(warnings)]
 #[rustfmt::skip]
@@ -193,6 +196,25 @@ pub mod vanilla_timeline_tags;
 #[path = "generated/vanilla_packets.rs"]
 pub mod packets;
 
+
+pub struct RegistryLock(OnceLock<Registry>);
+
+impl RegistryLock {
+    pub fn init(&self, value: Registry) -> Result<(), Registry> {
+        self.0.set(value)
+    }
+}
+
+impl Deref for RegistryLock {
+    type Target = Registry;
+
+    fn deref(&self) -> &Self::Target {
+        self.0.get().expect("Registry not init")
+    }
+}
+
+pub static REGISTRY: RegistryLock = RegistryLock(OnceLock::new());
+
 pub trait RegistryExt {
     fn freeze(&mut self);
 }
@@ -250,6 +272,14 @@ pub struct Registry {
     pub menu_types: MenuTypeRegistry,
     pub zombie_nautilus_variants: ZombieNautilusVariantRegistry,
     pub timelines: TimelineRegistry,
+}
+
+impl Debug for Registry {
+    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        f.write_str("Registry {")
+            .and_then(|_| f.write_fmt(format_args!("Blocks Loaded: {}", self.blocks.len())))
+            .and_then(|_| f.write_str("}"))
+    }
 }
 
 impl Registry {

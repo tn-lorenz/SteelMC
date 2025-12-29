@@ -13,7 +13,7 @@ use steel_registry::{
     BANNER_PATTERN_REGISTRY, BIOMES_REGISTRY, BLOCKS_REGISTRY, CAT_VARIANT_REGISTRY,
     CHAT_TYPE_REGISTRY, CHICKEN_VARIANT_REGISTRY, COW_VARIANT_REGISTRY, DAMAGE_TYPE_REGISTRY,
     DIMENSION_TYPE_REGISTRY, FROG_VARIANT_REGISTRY, INSTRUMENT_REGISTRY, ITEMS_REGISTRY,
-    JUKEBOX_SONG_REGISTRY, PAINTING_VARIANT_REGISTRY, PIG_VARIANT_REGISTRY, Registry,
+    JUKEBOX_SONG_REGISTRY, PAINTING_VARIANT_REGISTRY, PIG_VARIANT_REGISTRY, REGISTRY, Registry,
     TIMELINE_REGISTRY, TRIM_MATERIAL_REGISTRY, TRIM_PATTERN_REGISTRY, WOLF_SOUND_VARIANT_REGISTRY,
     WOLF_VARIANT_REGISTRY, ZOMBIE_NAUTILUS_VARIANT_REGISTRY,
 };
@@ -32,9 +32,9 @@ pub struct RegistryCache {
 
 impl RegistryCache {
     /// Creates a new `RegistryCache` from the given registry.
-    pub async fn new(registry: &Registry) -> Self {
-        let registry_packets = Self::build_registry_packets(registry);
-        let tags_by_registry_packet = Self::build_tags_packet(registry);
+    pub async fn new() -> Self {
+        let registry_packets = Self::build_registry_packets(&REGISTRY);
+        let tags_by_registry_packet = Self::build_tags_packet(&REGISTRY);
 
         let (registry_packets, tags_packet) =
             build_compressed_packets(registry_packets, tags_by_registry_packet).await;

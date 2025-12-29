@@ -8,7 +8,6 @@
 //! - Slots 36-44: Hotbar (9 slots)
 //! - Slot 45: Offhand
 
-use steel_protocol::packets::game::ClickType;
 use steel_registry::item_stack::ItemStack;
 
 use crate::inventory::{
@@ -115,6 +114,7 @@ impl Menu for InventoryMenu {
         &mut self.behavior
     }
 
+    /*
     fn clicked(&mut self, slot: i16, button: i8, click_type: ClickType) {
         // TODO: Implement click handling
         // For now, just log the click
@@ -124,7 +124,7 @@ impl Menu for InventoryMenu {
             button,
             click_type
         );
-    }
+    } */
 
     fn quick_move_stack(&mut self, _slot_index: usize) -> ItemStack {
         // TODO: Implement shift-click logic

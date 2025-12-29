@@ -9,7 +9,7 @@ use std::time::Instant;
 
 use steel_crypto::key_store::KeyStore;
 use steel_protocol::packets::game::{CLogin, CommonPlayerSpawnInfo};
-use steel_registry::Registry;
+use steel_registry::{REGISTRY, Registry};
 use steel_utils::locks::SyncRwLock;
 use steel_utils::{Identifier, types::GameType};
 use tick_rate_manager::TickRateManager;
@@ -29,8 +29,6 @@ pub struct Server {
     pub cancel_token: CancellationToken,
     /// The key store for the server.
     pub key_store: KeyStore,
-    /// The registry for the server.
-    pub registry: Arc<Registry>,
     /// The registry cache for the server.
     pub registry_cache: RegistryCache,
     /// A list of all the worlds on the server.
@@ -49,14 +47,16 @@ impl Server {
         registry.freeze();
         log::info!("Vanilla registry loaded in {:?}", start.elapsed());
 
-        let registry = Arc::new(registry);
-        let registry_cache = RegistryCache::new(&registry).await;
+        REGISTRY
+            .init(registry)
+            .expect("We should be the ones who init the REGISTRY");
+
+        let registry_cache = RegistryCache::new().await;
 
         Server {
             cancel_token,
             key_store: KeyStore::create(),
-            worlds: vec![Arc::new(World::new(&registry, chunk_runtime))],
-            registry,
+            worlds: vec![Arc::new(World::new(chunk_runtime))],
             registry_cache,
             tick_rate_manager: SyncRwLock::new(TickRateManager::new()),
             command_dispatcher: SyncRwLock::new(CommandDispatcher::new()),
