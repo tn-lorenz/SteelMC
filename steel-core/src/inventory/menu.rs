@@ -16,9 +16,80 @@
 //!
 //! The client also sends the itemstacks it thinks it has on interaction, so this makes it so we only update the client if they mismatch.
 
-use steel_registry::{item_stack::ItemStack, menu_type::MenuType};
+use steel_protocol::packets::game::HashedStack;
+use steel_registry::{REGISTRY, item_stack::ItemStack, menu_type::MenuType};
 
 use crate::inventory::slot::{Slot, SlotType};
+
+/// Represents the server's perception of what the client knows about a slot.
+///
+/// This can be either:
+/// - A full ItemStack (when we've sent the item to the client)
+/// - A HashedStack (when we've received a hash from the client)
+/// - Unknown (initial state, always needs sync)
+#[derive(Debug, Clone)]
+pub enum RemoteSlot {
+    /// We don't know what the client has (initial state).
+    Unknown,
+    /// We know the exact ItemStack the client should have.
+    Known(ItemStack),
+    /// We received a hash from the client and verified it matches.
+    Hashed(HashedStack),
+}
+
+impl Default for RemoteSlot {
+    fn default() -> Self {
+        Self::Unknown
+    }
+}
+
+impl RemoteSlot {
+    /// Creates an unknown remote slot.
+    pub fn unknown() -> Self {
+        Self::Unknown
+    }
+
+    /// Forces the remote slot to a known ItemStack state.
+    /// Called when we send an item to the client.
+    pub fn force(&mut self, item: &ItemStack) {
+        *self = Self::Known(item.clone());
+    }
+
+    /// Receives a hashed stack from the client.
+    /// Called when the client sends us their perception.
+    pub fn receive(&mut self, hash: HashedStack) {
+        *self = Self::Hashed(hash);
+    }
+
+    /// Checks if the remote slot matches the local ItemStack.
+    pub fn matches(&self, local: &ItemStack) -> bool {
+        match self {
+            Self::Unknown => false,
+            Self::Known(remote) => ItemStack::matches(remote, local),
+            Self::Hashed(hash) => hashed_stack_matches(hash, local),
+        }
+    }
+}
+
+/// Checks if a hashed stack matches the given ItemStack.
+fn hashed_stack_matches(hash: &HashedStack, item: &ItemStack) -> bool {
+    match hash {
+        HashedStack::Empty => item.is_empty(),
+        HashedStack::Item {
+            item_id,
+            count,
+            components: _,
+        } => {
+            if item.is_empty() {
+                return false;
+            }
+            // Check item type and count match
+            // TODO: Component hash verification would go here
+            let local_id = *REGISTRY.items.get_id(item.item) as i32;
+            local_id == *item_id && item.count == *count
+        }
+    }
+}
 
 /// Shared behavior and state for all menu types.
 pub struct MenuBehavior {
@@ -27,11 +98,11 @@ pub struct MenuBehavior {
     /// Cloned itemstacks from the actual slots (updated each sync).
     pub last_slots: Vec<ItemStack>,
     /// The client's perception of the itemstacks.
-    pub remote_slots: Vec<ItemStack>,
+    pub remote_slots: Vec<RemoteSlot>,
     /// The item being carried by the cursor.
     pub carried: ItemStack,
     /// The client's perception of the carried item.
-    pub remote_carried: ItemStack,
+    pub remote_carried: RemoteSlot,
     /// The container ID (0 for player inventory).
     pub container_id: u8,
     /// Incremented every time the server and client mismatch.
@@ -47,9 +118,9 @@ impl MenuBehavior {
         Self {
             slots,
             last_slots: vec![ItemStack::empty(); slot_count],
-            remote_slots: vec![ItemStack::empty(); slot_count],
+            remote_slots: vec![RemoteSlot::Unknown; slot_count],
             carried: ItemStack::empty(),
-            remote_carried: ItemStack::empty(),
+            remote_carried: RemoteSlot::Unknown,
             container_id,
             state_id: 0,
             menu_type,
@@ -96,24 +167,24 @@ impl MenuBehavior {
         if index >= self.last_slots.len() || index >= self.remote_slots.len() {
             return false;
         }
-        !ItemStack::matches(&self.last_slots[index], &self.remote_slots[index])
+        !self.remote_slots[index].matches(&self.last_slots[index])
     }
 
     /// Marks a slot as synced (updates remote perception).
     pub fn mark_slot_synced(&mut self, index: usize) {
         if index < self.last_slots.len() && index < self.remote_slots.len() {
-            self.remote_slots[index] = self.last_slots[index].clone();
+            self.remote_slots[index].force(&self.last_slots[index]);
         }
     }
 
     /// Checks if carried item needs sync.
     pub fn carried_needs_sync(&self) -> bool {
-        !ItemStack::matches(&self.carried, &self.remote_carried)
+        !self.remote_carried.matches(&self.carried)
     }
 
     /// Marks carried as synced.
     pub fn mark_carried_synced(&mut self) {
-        self.remote_carried = self.carried.clone();
+        self.remote_carried.force(&self.carried);
     }
 }
 

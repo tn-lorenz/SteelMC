@@ -22,11 +22,11 @@ use crate::{
 #[derive(Debug, Clone)]
 pub struct ItemStack {
     /// The item type. AIR represents an empty stack.
-    item: ItemRef,
+    pub item: ItemRef,
     /// The number of items in this stack.
-    count: i32,
+    pub count: i32,
     /// Modifications to the prototype components.
-    patch: DataComponentPatch,
+    pub patch: DataComponentPatch,
 }
 
 impl Default for ItemStack {
