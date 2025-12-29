@@ -10,7 +10,8 @@ use steel_protocol::packet_writer::TCPNetworkEncoder;
 use steel_protocol::packets::common::{CDisconnect, CKeepAlive, SCustomPayload, SKeepAlive};
 use steel_protocol::packets::game::{
     SChat, SChatAck, SChatCommand, SChatSessionUpdate, SChunkBatchReceived, SClientTickEnd,
-    SMovePlayerPos, SMovePlayerPosRot, SMovePlayerRot, SPlayerLoad,
+    SContainerButtonClick, SContainerClick, SContainerClose, SContainerSlotStateChanged,
+    SMovePlayerPos, SMovePlayerPosRot, SMovePlayerRot, SPlayerLoad, SSetCreativeModeSlot,
 };
 use steel_protocol::utils::{ConnectionProtocol, EnqueuedPacket, PacketError, RawPacket};
 use steel_registry::packets::play;
@@ -211,6 +212,23 @@ impl JavaConnection {
                     SChatCommand::read_packet(data)?.command,
                     &server,
                 );
+            }
+            play::S_CONTAINER_BUTTON_CLICK => {
+                player.handle_container_button_click(SContainerButtonClick::read_packet(data)?);
+            }
+            play::S_CONTAINER_CLICK => {
+                player.handle_container_click(SContainerClick::read_packet(data)?);
+            }
+            play::S_CONTAINER_CLOSE => {
+                player.handle_container_close(SContainerClose::read_packet(data)?);
+            }
+            play::S_CONTAINER_SLOT_STATE_CHANGED => {
+                player.handle_container_slot_state_changed(
+                    SContainerSlotStateChanged::read_packet(data)?,
+                );
+            }
+            play::S_SET_CREATIVE_MODE_SLOT => {
+                player.handle_set_creative_mode_slot(SSetCreativeModeSlot::read_packet(data)?);
             }
             id => log::info!("play packet id {id} is not known"),
         }

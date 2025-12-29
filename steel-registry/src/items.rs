@@ -2,12 +2,17 @@ use rustc_hash::FxHashMap;
 
 use steel_utils::Identifier;
 
-use crate::{RegistryExt, blocks::BlockRef, data_components::DataComponentMap};
+use crate::{REGISTRY, RegistryExt, blocks::BlockRef, data_components::DataComponentMap};
 
-#[derive(Debug)]
 pub struct Item {
     pub key: Identifier,
     pub components: DataComponentMap,
+}
+
+impl std::fmt::Debug for Item {
+    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        f.debug_struct("Item").field("key", &self.key).finish()
+    }
 }
 
 impl Item {

@@ -152,12 +152,18 @@ impl From<GameType> for f32 {
 }
 
 /// An identifier used by Minecraft.
-#[derive(Debug, Clone, PartialEq, Eq, Hash, Default)]
+#[derive(Clone, PartialEq, Eq, Hash, Default)]
 pub struct Identifier {
     /// The namespace of the identifier.
     pub namespace: Cow<'static, str>,
     /// The path of the identifier.
     pub path: Cow<'static, str>,
+}
+
+impl std::fmt::Debug for Identifier {
+    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        f.write_str(&format!("{}:{}", self.namespace, self.path))
+    }
 }
 
 impl Identifier {

@@ -28,7 +28,9 @@ use crate::player::player_inventory::PlayerInventory;
 use steel_protocol::packets::{
     common::SCustomPayload,
     game::{
-        CPlayerChat, FilterType, PreviousMessage, SChat, SChatAck, SChatSessionUpdate, SMovePlayer,
+        CPlayerChat, FilterType, PreviousMessage, SChat, SChatAck, SChatSessionUpdate,
+        SContainerButtonClick, SContainerClick, SContainerClose, SContainerSlotStateChanged,
+        SMovePlayer, SSetCreativeModeSlot,
     },
 };
 use steel_utils::{ChunkPos, math::Vector3, text::TextComponent, translations};
@@ -551,6 +553,84 @@ impl Player {
         });
 
         true
+    }
+
+    /// Handles a container button click packet (e.g., enchanting table buttons).
+    pub fn handle_container_button_click(&self, packet: SContainerButtonClick) {
+        log::debug!(
+            "Player {} clicked button {} in container {}",
+            self.gameprofile.name,
+            packet.button_id,
+            packet.container_id
+        );
+        // TODO: Implement container button click handling
+        // This is used for things like:
+        // - Enchanting table level selection
+        // - Stonecutter recipe selection
+        // - Loom pattern selection
+        // - Lectern page turning
+    }
+
+    /// Handles a container click packet (slot interaction).
+    pub fn handle_container_click(&self, packet: SContainerClick) {
+        log::debug!(
+            "Player {} clicked slot {} in container {} with {:?}",
+            self.gameprofile.name,
+            packet.slot_num,
+            packet.container_id,
+            packet.click_type
+        );
+        // TODO: Implement container click handling
+        // This handles all inventory interactions:
+        // - Pickup: Left/right click to pick up or place items
+        // - QuickMove: Shift-click to move items between inventories
+        // - Swap: Number keys to swap with hotbar
+        // - Clone: Middle-click to clone in creative
+        // - Throw: Drop key to throw items
+        // - QuickCraft: Click-drag to distribute items
+        // - PickupAll: Double-click to collect all of same type
+    }
+
+    /// Handles a container close packet.
+    pub fn handle_container_close(&self, packet: SContainerClose) {
+        log::debug!(
+            "Player {} closed container {}",
+            self.gameprofile.name,
+            packet.container_id
+        );
+        // TODO: Implement container close handling
+        // This should:
+        // - Drop any items held by cursor back to player or ground
+        // - Clean up server-side container state
+        // - Notify any block entities (like chests) that the player left
+    }
+
+    /// Handles a container slot state changed packet (e.g., crafter slot toggle).
+    pub fn handle_container_slot_state_changed(&self, packet: SContainerSlotStateChanged) {
+        log::debug!(
+            "Player {} changed slot {} state to {} in container {}",
+            self.gameprofile.name,
+            packet.slot_id,
+            packet.new_state,
+            packet.container_id
+        );
+        // TODO: Implement slot state change handling
+        // This is used for the crafter block to enable/disable slots
+    }
+
+    /// Handles a creative mode slot set packet.
+    pub fn handle_set_creative_mode_slot(&self, packet: SSetCreativeModeSlot) {
+        log::info!(
+            "Player {} set creative slot {} to {:?}",
+            self.gameprofile.name,
+            packet.slot_num,
+            packet.item_stack
+        );
+        // TODO: Implement creative mode slot handling
+        // This should:
+        // - Verify player is in creative mode
+        // - Validate the item (check for illegal items/NBT)
+        // - Set the slot in the player's inventory
     }
 
     /// Cleans up player resources.
