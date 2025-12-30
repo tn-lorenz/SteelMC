@@ -141,13 +141,13 @@ impl InventoryMenu {
     }
 
     /// Returns a reference to the crafting container.
-    #[must_use] 
+    #[must_use]
     pub fn crafting_container(&self) -> &SyncCraftingContainer {
         &self.crafting_container
     }
 
     /// Returns a reference to the result container.
-    #[must_use] 
+    #[must_use]
     pub fn result_container(&self) -> &SyncResultContainer {
         &self.result_container
     }
@@ -330,9 +330,12 @@ impl Menu for InventoryMenu {
 
         // Call on_take for the result slot to consume ingredients
         // This must happen after set_item so the slot reflects the new state
-        if slot_index == slots::RESULT_SLOT {
-            self.behavior.slots[slot_index].on_take(&clicked);
-        }
+        if slot_index == slots::RESULT_SLOT
+            && let Some(mut remainder) = self.behavior.slots[slot_index].on_take(&clicked) {
+                // Try to place crafting remainders (e.g., empty buckets) back in inventory
+                self.place_item_back_in_inventory(&mut remainder);
+                // If couldn't fit, items are lost (would need to drop in world)
+            }
 
         clicked
     }
@@ -346,6 +349,10 @@ impl Menu for InventoryMenu {
 
     /// Called when the inventory menu is closed.
     /// Returns crafting grid items to the player's inventory.
+    ///
+    /// Java's behavior (via `placeItemBackInInventory`):
+    /// 1. Try to stack with existing items (selected slot, offhand, then all slots)
+    /// 2. Try to place in empty slots (hotbar first, then main inventory)
     fn removed(&mut self) {
         // Clear the carried item first
         let carried = std::mem::take(&mut self.behavior.carried);
@@ -353,34 +360,111 @@ impl Menu for InventoryMenu {
         // If player was holding something, try to return it to inventory
         if !carried.is_empty() {
             let mut remaining = carried;
-            // Try to add to inventory (slots 9-45)
-            self.behavior.move_item_stack_to(
-                &mut remaining,
-                slots::INV_SLOT_START,
-                slots::OFFHAND_SLOT,
-                false,
-            );
+            self.place_item_back_in_inventory(&mut remaining);
             // If couldn't fit, items are lost (would need to drop in world)
         }
 
-        // Clear crafting grid and return items to inventory
-        let mut crafting = self.crafting_container.lock();
-        for i in 0..crafting.get_container_size() {
-            let item = crafting.remove_item_no_update(i);
-            if !item.is_empty() {
-                let mut remaining = item;
-                // Try to add to inventory (slots 9-45)
-                self.behavior.move_item_stack_to(
-                    &mut remaining,
-                    slots::INV_SLOT_START,
-                    slots::OFFHAND_SLOT,
-                    false,
-                );
-                // If couldn't fit, items are lost (would need to drop in world)
-            }
+        // Collect all items from crafting grid first (to release the lock)
+        let crafting_items: Vec<ItemStack> = {
+            let mut crafting = self.crafting_container.lock();
+            (0..crafting.get_container_size())
+                .map(|i| crafting.remove_item_no_update(i))
+                .filter(|item| !item.is_empty())
+                .collect()
+        };
+
+        // Now place collected items back in inventory
+        for item in crafting_items {
+            let mut remaining = item;
+            self.place_item_back_in_inventory(&mut remaining);
+            // If couldn't fit, items are lost (would need to drop in world)
         }
 
         // Clear the result slot (it's virtual, just clear it)
         self.result_container.lock().set_item(0, ItemStack::empty());
+    }
+}
+
+impl InventoryMenu {
+    /// Places an item back in the player's inventory, preferring hotbar over main inventory.
+    ///
+    /// Based on Java's `Inventory.placeItemBackInInventory`:
+    /// 1. First try to stack with existing matching items
+    /// 2. Then try to place in empty hotbar slots (36-44 in menu = 0-8 in inventory)
+    /// 3. Finally try main inventory slots (9-35 in menu = 9-35 in inventory)
+    fn place_item_back_in_inventory(&mut self, item: &mut ItemStack) {
+        if item.is_empty() {
+            return;
+        }
+
+        // First pass: try to stack with existing items in hotbar
+        if item.is_stackable() {
+            self.behavior.move_item_stack_to(
+                item,
+                slots::HOTBAR_SLOT_START,
+                slots::HOTBAR_SLOT_END,
+                false,
+            );
+        }
+
+        // Second pass: try to stack with existing items in main inventory
+        if !item.is_empty() && item.is_stackable() {
+            self.behavior.move_item_stack_to(
+                item,
+                slots::INV_SLOT_START,
+                slots::INV_SLOT_END,
+                false,
+            );
+        }
+
+        // Third pass: try empty slots in hotbar first
+        if !item.is_empty() {
+            // move_item_stack_to already handles empty slot placement in second pass,
+            // but we already tried stacking. Now force empty slot search.
+            for slot_idx in slots::HOTBAR_SLOT_START..slots::HOTBAR_SLOT_END {
+                if item.is_empty() {
+                    break;
+                }
+                let slot = &self.behavior.slots[slot_idx];
+                if !slot.has_item() && slot.may_place(item) {
+                    let max_size = slot.get_max_stack_size_for_item(item);
+                    let to_place = item.count.min(max_size);
+                    let mut placed = item.clone();
+                    placed.set_count(to_place);
+                    item.shrink(to_place);
+                    slot.set_item(placed);
+                    slot.set_changed();
+                }
+            }
+        }
+
+        // Fourth pass: try empty slots in main inventory
+        if !item.is_empty() {
+            for slot_idx in slots::INV_SLOT_START..slots::INV_SLOT_END {
+                if item.is_empty() {
+                    break;
+                }
+                let slot = &self.behavior.slots[slot_idx];
+                if !slot.has_item() && slot.may_place(item) {
+                    let max_size = slot.get_max_stack_size_for_item(item);
+                    let to_place = item.count.min(max_size);
+                    let mut placed = item.clone();
+                    placed.set_count(to_place);
+                    item.shrink(to_place);
+                    slot.set_item(placed);
+                    slot.set_changed();
+                }
+            }
+        }
+
+        // Finally try offhand if still have items
+        if !item.is_empty() {
+            let slot = &self.behavior.slots[slots::OFFHAND_SLOT];
+            if !slot.has_item() && slot.may_place(item) {
+                slot.set_item(item.clone());
+                slot.set_changed();
+                item.set_count(0);
+            }
+        }
     }
 }

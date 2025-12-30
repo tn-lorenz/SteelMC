@@ -121,6 +121,18 @@ impl Container for ResultContainer {
         self.result = stack;
     }
 
+    /// Removes items from the result container.
+    ///
+    /// Unlike normal containers, this **always takes the entire stack**
+    /// regardless of the `count` parameter. This matches Java's
+    /// `ResultContainer.removeItem()` behavior which uses `takeItem()`.
+    ///
+    /// This ensures that right-clicking on a crafting result takes the
+    /// full crafted item, not half of it.
+    fn remove_item(&mut self, _slot: usize, _count: i32) -> ItemStack {
+        std::mem::take(&mut self.result)
+    }
+
     fn set_changed(&mut self) {
         // Result container doesn't track dirty state.
     }

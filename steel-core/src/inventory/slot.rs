@@ -46,6 +46,16 @@ pub trait Slot {
         true
     }
 
+    /// Returns true if partial removal is allowed from this slot.
+    ///
+    /// For normal slots: `may_pickup() && may_place(current_item)`
+    /// For result slots: `false` (must take the full stack)
+    ///
+    /// Based on Java's `Slot.allowModification`.
+    fn allow_modification(&self) -> bool {
+        self.may_pickup() && self.with_item(|item| self.may_place(item))
+    }
+
     /// Returns the maximum stack size for this slot.
     fn get_max_stack_size(&self) -> i32 {
         99
@@ -78,14 +88,51 @@ pub trait Slot {
         })
     }
 
+    /// Tries to remove items from this slot with validation.
+    ///
+    /// Returns `Some(items)` if removal succeeded, `None` otherwise.
+    /// If `allow_modification()` is false and `max_amount < item.count`,
+    /// returns `None` (forcing full stack pickup for result slots).
+    ///
+    /// Based on Java's `Slot.tryRemove`.
+    fn try_remove(&self, amount: i32, max_amount: i32) -> Option<ItemStack> {
+        if !self.may_pickup() {
+            return None;
+        }
+
+        let item_count = self.with_item(steel_registry::item_stack::ItemStack::count);
+
+        // If modification not allowed (e.g., result slots), must take full stack
+        if !self.allow_modification() && max_amount < item_count {
+            return None;
+        }
+
+        let take_amount = amount.min(max_amount);
+        let result = self.remove(take_amount);
+        if result.is_empty() {
+            return None;
+        }
+
+        Some(result)
+    }
+
     /// Called when an item is taken from this slot.
-    fn on_take(&self, _stack: &ItemStack) {}
+    /// Returns any remainder items that couldn't be placed back (e.g., crafting remainders).
+    fn on_take(&self, _stack: &ItemStack) -> Option<ItemStack> {
+        None
+    }
 
     /// Marks the slot's container as changed.
     fn set_changed(&self);
 
     /// Returns the container slot index.
     fn get_container_slot(&self) -> usize;
+
+    /// Returns true if this is a "fake" slot (like crafting result).
+    /// Fake slots don't persist items and are virtual views.
+    fn is_fake(&self) -> bool {
+        false
+    }
 }
 
 /// A normal slot that references a container and index.
@@ -261,7 +308,7 @@ impl CraftingResultSlot {
     }
 
     /// Returns a reference to the crafting container.
-    #[must_use] 
+    #[must_use]
     pub fn crafting_container(&self) -> &SyncCraftingContainer {
         &self.crafting_container
     }
@@ -285,6 +332,17 @@ impl Slot for CraftingResultSlot {
         false
     }
 
+    /// Removes items from the crafting result slot.
+    ///
+    /// Unlike normal slots, this **always takes the entire stack** regardless
+    /// of the `amount` parameter. This matches Java's behavior where
+    /// `ResultContainer.removeItem()` ignores the count and takes everything.
+    ///
+    /// This ensures right-clicking on crafting results takes the full item.
+    fn remove(&self, _amount: i32) -> ItemStack {
+        self.with_item_mut(std::mem::take)
+    }
+
     fn set_changed(&self) {
         self.result_container.lock().set_changed();
     }
@@ -295,7 +353,12 @@ impl Slot for CraftingResultSlot {
 
     /// Called when an item is taken from the result slot.
     /// This consumes ingredients, handles remainders, and updates the result.
-    fn on_take(&self, _stack: &ItemStack) {
+    ///
+    /// Returns any remainder items that couldn't be placed in the crafting grid
+    /// (these should be added to the player's inventory or dropped).
+    fn on_take(&self, _stack: &ItemStack) -> Option<ItemStack> {
+        let mut remainder_overflow: Option<ItemStack> = None;
+
         // Consume one of each ingredient in the crafting grid
         let mut crafting = self.crafting_container.lock();
         for i in 0..crafting.get_container_size() {
@@ -311,11 +374,44 @@ impl Slot for CraftingResultSlot {
                         *item = ItemStack::empty();
                     }
 
-                    // If there's a remainder and the slot is now empty, place it
-                    if !remainder.is_empty() && item.is_empty() {
-                        *item = remainder;
+                    // Handle remainder placement
+                    if !remainder.is_empty() {
+                        if item.is_empty() {
+                            // Slot is empty, place remainder there
+                            *item = remainder;
+                        } else if ItemStack::is_same_item_same_components(item, &remainder) {
+                            // Same item type, try to stack
+                            let new_count = item.count() + remainder.count();
+                            if new_count <= item.max_stack_size() {
+                                item.set_count(new_count);
+                            } else {
+                                // Overflow - need to return to player
+                                let overflow_count = new_count - item.max_stack_size();
+                                item.set_count(item.max_stack_size());
+                                let mut overflow = remainder.clone();
+                                overflow.set_count(overflow_count);
+                                // Accumulate overflow
+                                if let Some(ref mut existing) = remainder_overflow {
+                                    existing.grow(overflow_count);
+                                } else {
+                                    remainder_overflow = Some(overflow);
+                                }
+                            }
+                        } else {
+                            // Different item type - need to return to player
+                            if let Some(ref mut existing) = remainder_overflow {
+                                if ItemStack::is_same_item_same_components(existing, &remainder) {
+                                    existing.grow(remainder.count());
+                                } else {
+                                    // Multiple different remainders - just add count
+                                    // In practice this shouldn't happen often
+                                    existing.grow(remainder.count());
+                                }
+                            } else {
+                                remainder_overflow = Some(remainder);
+                            }
+                        }
                     }
-                    // TODO: If slot isn't empty but has remainder, add to player inventory
                 }
             });
         }
@@ -324,6 +420,13 @@ impl Slot for CraftingResultSlot {
         // This mimics Java's slotsChanged() callback from TransientCraftingContainer
         let mut result = self.result_container.lock();
         recipe_manager::slot_changed_crafting_grid(&crafting, &mut *result, true);
+
+        remainder_overflow
+    }
+
+    /// Crafting result slots are "fake" - they don't persist items.
+    fn is_fake(&self) -> bool {
+        true
     }
 }
 

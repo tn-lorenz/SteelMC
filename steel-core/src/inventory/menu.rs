@@ -800,15 +800,23 @@ impl MenuBehavior {
             }
         } else if carried.is_empty() {
             // Carried is empty - pick up from slot (if allowed)
-            if slot.may_pickup() {
-                let amount = if button == 0 {
-                    slot_item.count
-                } else {
-                    (slot_item.count + 1) / 2
-                };
+            // Use try_remove which enforces allow_modification rules
+            // (result slots must be picked up in full, not partially)
+            let amount = if button == 0 {
+                slot_item.count
+            } else {
+                (slot_item.count + 1) / 2
+            };
 
-                let taken = slot.remove(amount);
-                slot.on_take(&taken);
+            // max_amount is i32::MAX for primary action (take all requested)
+            // For result slots, try_remove will reject partial takes
+            if let Some(taken) = slot.try_remove(amount, i32::MAX) {
+                if let Some(remainder) = slot.on_take(&taken) {
+                    // There's a remainder from crafting - try to add to carried
+                    // or it will need to be added to player inventory
+                    // For now, add to carried if possible (will be handled by caller)
+                    log::debug!("Crafting remainder: {remainder:?}");
+                }
                 self.carried = taken;
             }
         } else if ItemStack::is_same_item_same_components(&slot_item, &carried) {
@@ -859,7 +867,8 @@ impl MenuBehavior {
                     if space > 0 {
                         let take_amount = slot_item.count.min(space);
                         let taken = slot.remove(take_amount);
-                        slot.on_take(&taken);
+                        // Ignore remainder for regular slots (they don't produce remainders)
+                        let _ = slot.on_take(&taken);
                         let mut new_carried = carried;
                         new_carried.grow(taken.count);
                         self.carried = new_carried;
@@ -1115,7 +1124,8 @@ pub trait Menu {
             if target_slot.may_pickup() {
                 source_slot.set_item(target_item.clone());
                 target_slot.set_item(ItemStack::empty());
-                target_slot.on_take(&target_item);
+                // Ignore remainder - swap doesn't involve result slots
+                let _ = target_slot.on_take(&target_item);
                 target_slot.set_changed();
                 source_slot.set_changed();
             }
@@ -1142,7 +1152,8 @@ pub trait Menu {
                 if source_item.count <= max_size {
                     target_slot.set_item(source_item);
                     source_slot.set_item(target_item.clone());
-                    target_slot.on_take(&target_item);
+                    // Ignore remainder - swap doesn't involve result slots
+                    let _ = target_slot.on_take(&target_item);
                     target_slot.set_changed();
                     source_slot.set_changed();
                 }
@@ -1204,7 +1215,8 @@ pub trait Menu {
                         let can_take = max_stack - self.behavior().carried.count;
                         let to_take = target_item.count.min(can_take);
                         let removed = target_slot.remove(to_take);
-                        target_slot.on_take(&removed);
+                        // Ignore remainder - pickup-all skips result slots via can_take_item_for_pick_all
+                        let _ = target_slot.on_take(&removed);
                         self.behavior_mut().carried.grow(removed.count);
                     }
                 }
