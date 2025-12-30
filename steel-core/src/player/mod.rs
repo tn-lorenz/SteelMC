@@ -38,7 +38,7 @@ use steel_utils::{ChunkPos, math::Vector3, text::TextComponent, translations};
 use crate::entity::LivingEntity;
 use crate::inventory::{
     SyncContainer,
-    container::ContainerType,
+    container::{Container, ContainerType},
     equipment::{EntityEquipment, EquipmentSlot},
     inventory_menu::InventoryMenu,
     menu::Menu,
@@ -623,24 +623,13 @@ impl Player {
 
         // Handle the click using the Menu trait method
         let has_infinite_materials = self.game_mode.load() == GameType::Creative;
-        let items_to_drop = menu.clicked(
+        menu.clicked(
             packet.slot_num,
             packet.button_num,
             packet.click_type,
             has_infinite_materials,
-            &self,
+            self,
         );
-
-        // TODO: Drop items that couldn't fit in the inventory
-        // These items should be spawned as item entities at the player's position
-        // Java: player.drop(item, false) for each item in items_to_drop
-        for item in items_to_drop {
-            log::debug!(
-                "Player {} should drop item that couldn't fit: {:?}",
-                self.gameprofile.name,
-                item
-            );
-        }
 
         // Update remote slots from the client's perception
         for (slot, hash) in packet.changed_slots {
@@ -674,7 +663,7 @@ impl Player {
         // - Clear the cursor item
         if packet.container_id == i32::from(InventoryMenu::CONTAINER_ID) {
             let mut menu = self.inventory_menu.lock();
-            menu.removed();
+            menu.removed(self);
         }
         // TODO: Handle other container types (chests, crafting tables, etc.)
         // - Notify any block entities that the player left
@@ -748,6 +737,53 @@ impl Player {
             .lock()
             .behavior_mut()
             .broadcast_changes(&self.connection);
+    }
+
+    /// Drops an item into the world.
+    ///
+    /// Based on Java's `Player.drop(ItemStack, boolean throwRandomly)`.
+    ///
+    /// - `throw_randomly`: If true, the item is thrown in a random direction (like pressing Q).
+    ///   If false, it's thrown in the direction the player is facing.
+    pub fn drop_item(&self, item: steel_registry::item_stack::ItemStack, throw_randomly: bool) {
+        if item.is_empty() {
+            return;
+        }
+        // TODO: Spawn an ItemEntity in the world at the player's position
+        // For now, just log it
+        log::debug!(
+            "Player {} dropped item: {:?} (throw_randomly: {})",
+            self.gameprofile.name,
+            item,
+            throw_randomly
+        );
+    }
+
+    /// Returns true if the player can drop items.
+    ///
+    /// Based on Java's `Player.canDropItems()`.
+    /// Returns false if the player is dead, removed, or has a flag preventing item drops.
+    #[must_use]
+    pub fn can_drop_items(&self) -> bool {
+        // TODO: Check if player is alive and not removed
+        // For now, always return true
+        true
+    }
+
+    /// Tries to add an item to the player's inventory, dropping it if it doesn't fit.
+    ///
+    /// Based on Java's `Inventory.placeItemBackInInventory`.
+    pub fn add_item_or_drop(&self, mut item: steel_registry::item_stack::ItemStack) {
+        if item.is_empty() {
+            return;
+        }
+
+        // Try to add to inventory
+        let added = self.inventory.lock().add(&mut item);
+        if !added || !item.is_empty() {
+            // Couldn't fit everything, drop the rest
+            self.drop_item(item, false);
+        }
     }
 
     /// Cleans up player resources.

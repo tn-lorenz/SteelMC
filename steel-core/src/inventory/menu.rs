@@ -24,7 +24,6 @@ use steel_registry::{REGISTRY, item_stack::ItemStack, menu_type::MenuType};
 
 use crate::{
     inventory::{
-        SyncContainer,
         container::Container,
         slot::{Slot, SlotType},
     },
@@ -639,7 +638,13 @@ impl MenuBehavior {
 
     /// Handles quickcraft (drag) operations.
     /// Based on Java's `AbstractContainerMenu::doClick` for `ClickType.QUICK_CRAFT`.
-    pub fn do_quick_craft(&mut self, slot_num: i16, button: i8, has_infinite_materials: bool) {
+    pub fn do_quick_craft(
+        &mut self,
+        slot_num: i16,
+        button: i8,
+        has_infinite_materials: bool,
+        player: &Player,
+    ) {
         let expected_status = self.quickcraft_status;
         let new_status = get_quickcraft_header(i32::from(button));
 
@@ -688,7 +693,7 @@ impl MenuBehavior {
                     // Only one slot - treat as a regular pickup click
                     let slot = self.quickcraft_slots[0];
                     self.reset_quick_craft();
-                    self.do_pickup(slot as i16, self.quickcraft_type as i8);
+                    self.do_pickup(slot as i16, self.quickcraft_type as i8, player);
                     return;
                 }
 
@@ -745,25 +750,20 @@ impl MenuBehavior {
 
     /// Handles pickup click (left/right click to pick up or place items).
     /// Based on Java's `AbstractContainerMenu::doClick` for ClickType.PICKUP.
-    pub fn do_pickup(&mut self, slot_num: i16, button: i8) {
+    pub fn do_pickup(&mut self, slot_num: i16, button: i8, player: &Player) {
         // Slot -999 means clicked outside the inventory (drop items)
         if slot_num == -999 {
             if !self.carried.is_empty() {
                 if button == 0 {
                     // Left click outside - drop all carried items
-                    // TODO: Actually drop the items into the world
-                    log::debug!("Would drop all carried: {:?}", self.carried);
-                    self.carried = ItemStack::empty();
+                    let to_drop = std::mem::take(&mut self.carried);
+                    player.drop_item(to_drop, true);
                 } else {
                     // Right click outside - drop one carried item
-                    // TODO: Actually drop one item into the world
-                    log::debug!("Would drop one carried");
-                    let new_count = self.carried.count - 1;
-                    if new_count <= 0 {
-                        self.carried = ItemStack::empty();
-                    } else {
-                        self.carried.set_count(new_count);
-                    }
+                    let mut to_drop = self.carried.clone();
+                    to_drop.set_count(1);
+                    self.carried.shrink(1);
+                    player.drop_item(to_drop, true);
                 }
             }
             return;
@@ -815,11 +815,9 @@ impl MenuBehavior {
             // max_amount is i32::MAX for primary action (take all requested)
             // For result slots, try_remove will reject partial takes
             if let Some(taken) = slot.try_remove(amount, i32::MAX) {
-                if let Some(remainder) = slot.on_take(&taken) {
-                    // There's a remainder from crafting - try to add to carried
-                    // or it will need to be added to player inventory
-                    // For now, add to carried if possible (will be handled by caller)
-                    log::debug!("Crafting remainder: {remainder:?}");
+                if let Some(remainder) = slot.on_take(&taken, player) {
+                    // There's a remainder from crafting - add to player inventory or drop
+                    player.add_item_or_drop(remainder);
                 }
                 self.carried = taken;
             }
@@ -871,8 +869,10 @@ impl MenuBehavior {
                     if space > 0 {
                         let take_amount = slot_item.count.min(space);
                         let taken = slot.remove(take_amount);
-                        // Ignore remainder for regular slots (they don't produce remainders)
-                        let _ = slot.on_take(&taken);
+                        // Handle any remainder (regular slots don't produce remainders, but be safe)
+                        if let Some(remainder) = slot.on_take(&taken, player) {
+                            player.add_item_or_drop(remainder);
+                        }
                         let mut new_carried = carried;
                         new_carried.grow(taken.count);
                         self.carried = new_carried;
@@ -925,9 +925,7 @@ impl MenuBehavior {
     /// button 0 = Q (drop 1), button 1 = Ctrl+Q (drop all, repeating while same item)
     ///
     /// Based on Java's `AbstractContainerMenu::doClick` for ClickType.THROW.
-    /// Note: Java version also checks `player.canDropItems()` before each drop.
-    /// This would need to be handled at a higher level with player access.
-    pub fn do_throw(&mut self, slot_num: i16, button: i8) {
+    pub fn do_throw(&mut self, slot_num: i16, button: i8, player: &Player) {
         if slot_num < 0 {
             return;
         }
@@ -944,6 +942,11 @@ impl MenuBehavior {
             return;
         }
 
+        // Java checks player.canDropItems() before each drop
+        if !player.can_drop_items() {
+            return;
+        }
+
         let amount = if button == 0 {
             1
         } else {
@@ -952,8 +955,7 @@ impl MenuBehavior {
 
         let dropped = slot.remove(amount);
         if !dropped.is_empty() {
-            // TODO: Actually drop the items into the world
-            log::debug!("Would drop {dropped:?}");
+            player.drop_item(dropped.clone(), true);
         }
         slot.set_changed();
 
@@ -964,6 +966,10 @@ impl MenuBehavior {
                 if !slot.may_pickup() {
                     break;
                 }
+                // Java checks player.canDropItems() before each drop
+                if !player.can_drop_items() {
+                    break;
+                }
                 let current_item = slot.with_item(std::clone::Clone::clone);
                 if current_item.is_empty() || !ItemStack::is_same_item(&current_item, &dropped) {
                     break;
@@ -972,8 +978,7 @@ impl MenuBehavior {
                 if more_dropped.is_empty() {
                     break;
                 }
-                // TODO: Actually drop the items into the world
-                log::debug!("Would drop {more_dropped:?}");
+                player.drop_item(more_dropped, true);
                 slot.set_changed();
             }
         }
@@ -990,12 +995,11 @@ pub trait Menu {
 
     /// Handles shift-click (quick move) for a slot.
     ///
-    /// Returns a tuple of (original_clicked_item, items_to_drop).
-    /// - `original_clicked_item`: The item that was in the slot before the move (empty if fully moved)
-    /// - `items_to_drop`: Items that couldn't fit in the inventory and should be dropped in the world
+    /// Returns the item that was originally in the slot (before any move occurred),
+    /// or empty if nothing was moved.
     ///
     /// Based on Java's `AbstractContainerMenu::quickMoveStack`.
-    fn quick_move_stack(&mut self, slot_index: usize) -> (ItemStack, Vec<ItemStack>);
+    fn quick_move_stack(&mut self, slot_index: usize, player: &Player) -> ItemStack;
 
     /// Returns true if this menu is still valid for the player.
     fn still_valid(&self) -> bool {
@@ -1011,18 +1015,18 @@ pub trait Menu {
     /// Called when the menu is closed/removed.
     /// Override to handle cleanup like returning crafting grid items to the player.
     /// The default implementation clears the carried item by dropping it.
-    fn removed(&mut self) {
-        // Default: just clear the carried item (caller should handle dropping it)
-        self.behavior_mut().carried = ItemStack::empty();
+    fn removed(&mut self, player: &Player) {
+        // Default: drop the carried item
+        let carried = std::mem::take(&mut self.behavior_mut().carried);
+        if !carried.is_empty() {
+            player.drop_item(carried, false);
+        }
     }
 
     /// Handles a click action in this menu.
     /// Based on Java's `AbstractContainerMenu::clicked` and doClick.
     ///
     /// `has_infinite_materials` should be true if the player is in creative mode.
-    ///
-    /// Returns a list of items that should be dropped in the world (e.g., items that
-    /// couldn't fit in inventory during shift-click on crafting result).
     fn clicked(
         &mut self,
         slot_num: i16,
@@ -1030,11 +1034,10 @@ pub trait Menu {
         click_type: ClickType,
         has_infinite_materials: bool,
         player: &Player,
-    ) -> Vec<ItemStack> {
+    ) {
         if click_type == ClickType::QuickCraft {
             self.behavior_mut()
-                .do_quick_craft(slot_num, button, has_infinite_materials);
-            Vec::new()
+                .do_quick_craft(slot_num, button, has_infinite_materials, player);
         } else {
             // Any non-quickcraft click resets quickcraft state if in progress
             if self.behavior().quickcraft_status != 0 {
@@ -1042,26 +1045,23 @@ pub trait Menu {
             }
             match click_type {
                 ClickType::Pickup => {
-                    self.behavior_mut().do_pickup(slot_num, button);
-                    Vec::new()
+                    self.behavior_mut().do_pickup(slot_num, button, player);
                 }
-                ClickType::QuickMove => self.do_quick_move(slot_num),
+                ClickType::QuickMove => {
+                    self.do_quick_move(slot_num, player);
+                }
                 ClickType::Swap => {
-                    self.do_swap(slot_num, button, &player.inventory);
-                    Vec::new()
+                    self.do_swap(slot_num, button, player);
                 }
                 ClickType::Clone => {
                     self.behavior_mut()
                         .do_clone(slot_num, has_infinite_materials);
-                    Vec::new()
                 }
                 ClickType::Throw => {
-                    self.behavior_mut().do_throw(slot_num, button);
-                    Vec::new()
+                    self.behavior_mut().do_throw(slot_num, button, player);
                 }
                 ClickType::PickupAll => {
-                    self.do_pickup_all(slot_num, button);
-                    Vec::new()
+                    self.do_pickup_all(slot_num, button, player);
                 }
                 ClickType::QuickCraft => unreachable!(),
             }
@@ -1070,36 +1070,31 @@ pub trait Menu {
 
     /// Handles quick move (shift-click).
     /// Based on Java's `AbstractContainerMenu::doClick` for `ClickType.QUICK_MOVE`.
-    ///
-    /// Returns a list of items that should be dropped in the world (couldn't fit in inventory).
-    fn do_quick_move(&mut self, slot_num: i16) -> Vec<ItemStack> {
-        let mut all_items_to_drop = Vec::new();
-
+    fn do_quick_move(&mut self, slot_num: i16, player: &Player) {
         if slot_num < 0 {
-            return all_items_to_drop;
+            return;
         }
 
         let slot_index = slot_num as usize;
         let slot_count = self.behavior().slots.len();
         if slot_index >= slot_count {
-            return all_items_to_drop;
+            return;
         }
 
         // Check if slot allows pickup
         let may_pickup = self.behavior().slots[slot_index].may_pickup();
         if !may_pickup {
-            return all_items_to_drop;
+            return;
         }
 
         // Get the initial item for comparison
         let initial_item = self.behavior().slots[slot_index].with_item(std::clone::Clone::clone);
         if initial_item.is_empty() {
-            return all_items_to_drop;
+            return;
         }
 
         // Call quick_move_stack in a loop while the item type remains the same
-        let (mut result, mut items_to_drop) = self.quick_move_stack(slot_index);
-        all_items_to_drop.append(&mut items_to_drop);
+        let mut result = self.quick_move_stack(slot_index, player);
 
         while !result.is_empty() {
             let current_item =
@@ -1107,12 +1102,8 @@ pub trait Menu {
             if !ItemStack::is_same_item(&current_item, &result) {
                 break;
             }
-            let (new_result, mut more_items_to_drop) = self.quick_move_stack(slot_index);
-            result = new_result;
-            all_items_to_drop.append(&mut more_items_to_drop);
+            result = self.quick_move_stack(slot_index, player);
         }
-
-        all_items_to_drop
     }
 
     /// Handles swap (number keys to swap with hotbar).
@@ -1121,7 +1112,7 @@ pub trait Menu {
     /// Based on Java's `AbstractContainerMenu::doClick` for `ClickType.SWAP`.
     /// Unlike menu slots, this accesses the player's inventory directly using the button
     /// as the inventory slot index (0-8 for hotbar, 40 for offhand).
-    fn do_swap(&mut self, slot_num: i16, button: i8, inventory: &SyncContainer) {
+    fn do_swap(&mut self, slot_num: i16, button: i8, player: &Player) {
         // Validate button is a valid hotbar slot (0-8) or offhand (40)
         if !((0..9).contains(&button) || button == 40) {
             return;
@@ -1139,6 +1130,7 @@ pub trait Menu {
 
         let target_slot = &behavior.slots[slot_index];
         let inventory_slot = button as usize;
+        let inventory = &player.inventory;
 
         // Get items from target slot (menu) and source (player inventory)
         let target_item = target_slot.with_item(std::clone::Clone::clone);
@@ -1157,7 +1149,9 @@ pub trait Menu {
                     .lock()
                     .set_item(inventory_slot, target_item.clone());
                 target_slot.set_by_player(ItemStack::empty(), &target_item);
-                let _ = target_slot.on_take(&target_item);
+                if let Some(remainder) = target_slot.on_take(&target_item, player) {
+                    player.add_item_or_drop(remainder);
+                }
             }
         } else if target_item.is_empty() {
             // Move from inventory to target
@@ -1188,21 +1182,24 @@ pub trait Menu {
                     let mut to_place = source_item.clone();
                     to_place.set_count(max_size);
                     target_slot.set_by_player(to_place, &target_item);
-                    let _ = target_slot.on_take(&target_item);
-                    // Try to add target item to inventory, drop if can't fit
-                    let mut inv = inventory.lock();
-                    inv.with_item_mut(inventory_slot, |i| i.shrink(max_size));
-                    let mut remaining_target = target_item.clone();
-                    if !inv.add(&mut remaining_target) {
-                        // TODO: Drop remaining_target - for now it's lost
+                    if let Some(remainder) = target_slot.on_take(&target_item, player) {
+                        player.add_item_or_drop(remainder);
                     }
+                    // Try to add target item to inventory, drop if can't fit
+                    {
+                        let mut inv = inventory.lock();
+                        inv.with_item_mut(inventory_slot, |i| i.shrink(max_size));
+                    }
+                    player.add_item_or_drop(target_item);
                 } else {
                     // Simple swap
                     inventory
                         .lock()
                         .set_item(inventory_slot, target_item.clone());
                     target_slot.set_by_player(source_item, &target_item);
-                    let _ = target_slot.on_take(&target_item);
+                    if let Some(remainder) = target_slot.on_take(&target_item, player) {
+                        player.add_item_or_drop(remainder);
+                    }
                 }
             }
         }
@@ -1211,7 +1208,7 @@ pub trait Menu {
     /// Handles pickup all (double-click).
     /// Collects matching items from all slots into the carried stack.
     /// Based on Java's `AbstractContainerMenu::doClick` for `ClickType.PICKUP_ALL`.
-    fn do_pickup_all(&mut self, slot_num: i16, button: i8) {
+    fn do_pickup_all(&mut self, slot_num: i16, _button: i8, player: &Player) {
         if slot_num < 0 {
             return;
         }
@@ -1237,7 +1234,8 @@ pub trait Menu {
         let slot_count = behavior.slots.len();
 
         // Determine iteration direction based on button
-        let (start, step): (i32, i32) = if button == 0 {
+        // Java uses button == 0 for forward, button == 1 for reverse
+        let (start, step): (i32, i32) = if _button == 0 {
             (0, 1)
         } else {
             (slot_count as i32 - 1, -1)
@@ -1261,9 +1259,7 @@ pub trait Menu {
                     if pass != 0 || target_item.count != target_item.max_stack_size() {
                         let can_take = max_stack - self.behavior().carried.count;
                         let to_take = target_item.count.min(can_take);
-                        let removed = target_slot.remove(to_take);
-                        // Ignore remainder - pickup-all skips result slots via can_take_item_for_pick_all
-                        let _ = target_slot.on_take(&removed);
+                        let removed = target_slot.safe_take(to_take, i32::MAX, player);
                         self.behavior_mut().carried.grow(removed.count);
                     }
                 }

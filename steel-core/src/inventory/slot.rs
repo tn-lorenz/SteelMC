@@ -11,6 +11,7 @@ use crate::inventory::SyncContainer;
 use crate::inventory::container::Container;
 use crate::inventory::crafting::{CraftingContainer, ResultContainer};
 use crate::inventory::recipe_manager;
+use crate::player::Player;
 
 /// A synchronized crafting container.
 pub type SyncCraftingContainer = Arc<SyncMutex<CraftingContainer>>;
@@ -131,8 +132,26 @@ pub trait Slot {
 
     /// Called when an item is taken from this slot.
     /// Returns any remainder items that couldn't be placed back (e.g., crafting remainders).
-    fn on_take(&self, _stack: &ItemStack) -> Option<ItemStack> {
+    fn on_take(&self, _stack: &ItemStack, _player: &Player) -> Option<ItemStack> {
         None
+    }
+
+    /// Safely takes items from this slot with all checks and callbacks.
+    ///
+    /// This combines `try_remove` and `on_take` into a single operation,
+    /// matching Java's `Slot.safeTake(amount, maxAmount, player)`.
+    ///
+    /// Returns the items taken (empty if nothing could be taken).
+    fn safe_take(&self, amount: i32, max_amount: i32, player: &Player) -> ItemStack {
+        if let Some(taken) = self.try_remove(amount, max_amount) {
+            if let Some(remainder) = self.on_take(&taken, player) {
+                // Try to add remainder to player inventory, or drop it
+                player.add_item_or_drop(remainder);
+            }
+            taken
+        } else {
+            ItemStack::empty()
+        }
     }
 
     /// Marks the slot's container as changed.
@@ -387,7 +406,7 @@ impl Slot for CraftingResultSlot {
     ///
     /// Returns any remainder items that couldn't be placed in the crafting grid
     /// (these should be added to the player's inventory or dropped).
-    fn on_take(&self, _stack: &ItemStack) -> Option<ItemStack> {
+    fn on_take(&self, _stack: &ItemStack, _player: &Player) -> Option<ItemStack> {
         // TODO: Add statistics/achievement tracking here.
         // Java calls checkTakeAchievements(carried) which triggers:
         // - carried.onCraftedBy(player, removeCount) for achievements
