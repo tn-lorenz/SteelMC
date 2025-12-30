@@ -207,6 +207,7 @@ pub mod packets;
 pub struct RegistryLock(OnceLock<Registry>);
 
 impl RegistryLock {
+    #[allow(clippy::result_large_err)]
     pub fn init(&self, value: Registry) -> Result<(), Registry> {
         self.0.set(value)
     }

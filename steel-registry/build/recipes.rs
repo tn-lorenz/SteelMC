@@ -5,6 +5,7 @@ use std::{fs, path::Path};
 use heck::ToSnakeCase;
 use proc_macro2::{Ident, Span, TokenStream};
 use quote::quote;
+use rustc_hash::FxHashMap;
 use serde::Deserialize;
 use serde_json::Value;
 
@@ -121,8 +122,7 @@ fn parse_shaped_recipe(recipe_name: &str, recipe: &RecipeJson) -> Option<ShapedR
         .unwrap_or(0);
 
     // Build ingredient map from key
-    let mut ingredient_map: std::collections::HashMap<char, TokenStream> =
-        std::collections::HashMap::new();
+    let mut ingredient_map: FxHashMap<char, TokenStream> = FxHashMap::default();
     ingredient_map.insert(' ', quote! { Ingredient::Empty });
 
     for (key_char, value) in key {

@@ -29,16 +29,27 @@ use crate::player::Player;
 
 /// Slot indices for the inventory menu.
 pub mod slots {
+    /// Slot index for the crafting result (slot 0).
     pub const RESULT_SLOT: usize = 0;
+    /// Start of the 2x2 crafting grid (slot 1).
     pub const CRAFT_SLOT_START: usize = 1;
+    /// End of the 2x2 crafting grid (slot 5, exclusive).
     pub const CRAFT_SLOT_END: usize = 5;
+    /// Start of armor slots (slot 5).
     pub const ARMOR_SLOT_START: usize = 5;
+    /// End of armor slots (slot 9, exclusive).
     pub const ARMOR_SLOT_END: usize = 9;
+    /// Start of main inventory (slot 9).
     pub const INV_SLOT_START: usize = 9;
+    /// End of main inventory (slot 36, exclusive).
     pub const INV_SLOT_END: usize = 36;
+    /// Start of hotbar (slot 36).
     pub const HOTBAR_SLOT_START: usize = 36;
+    /// End of hotbar (slot 45, exclusive).
     pub const HOTBAR_SLOT_END: usize = 45;
+    /// Offhand slot index (slot 45).
     pub const OFFHAND_SLOT: usize = 45;
+    /// Total number of slots in the inventory menu.
     pub const TOTAL_SLOTS: usize = 46;
 }
 

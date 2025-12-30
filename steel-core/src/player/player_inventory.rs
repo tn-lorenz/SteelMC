@@ -31,12 +31,17 @@ fn slot_to_equipment(slot: usize) -> Option<EquipmentSlot> {
     }
 }
 
+/// Player inventory container managing the main inventory and equipment.
+///
+/// Contains 36 main inventory slots (0-8 hotbar, 9-35 main) plus equipment slots
+/// (armor, offhand, etc.) accessed through the Container trait.
 pub struct PlayerInventory {
     /// The 36 main inventory slots (0-8 hotbar, 9-35 main).
     items: [ItemStack; Self::INVENTORY_SIZE],
     /// Entity equipment (armor, hands).
     equipment: Arc<SyncMutex<EntityEquipment>>,
     /// Weak reference to the player.
+    #[allow(dead_code)]
     player: Weak<Player>,
     /// Currently selected hotbar slot (0-8).
     selected: u8,
@@ -52,6 +57,7 @@ impl PlayerInventory {
     /// Slot index for offhand.
     pub const SLOT_OFFHAND: usize = 40;
 
+    /// Creates a new player inventory with empty slots.
     pub fn new(equipment: Arc<SyncMutex<EntityEquipment>>, player: Weak<Player>) -> Self {
         Self {
             items: std::array::from_fn(|_| ItemStack::empty()),
@@ -62,16 +68,23 @@ impl PlayerInventory {
         }
     }
 
+    /// Returns true if the given slot index is a hotbar slot (0-8).
     #[must_use]
     pub fn is_hotbar_slot(slot: usize) -> bool {
         slot < Self::SELECTION_SIZE
     }
 
+    /// Returns the currently selected hotbar slot (0-8).
     #[must_use]
     pub fn get_selected_slot(&self) -> u8 {
         self.selected
     }
 
+    /// Sets the selected hotbar slot.
+    ///
+    /// # Panics
+    ///
+    /// Panics if the slot is not a valid hotbar slot (must be 0-8).
     pub fn set_selected_slot(&mut self, slot: u8) {
         if Self::is_hotbar_slot(slot as usize) {
             self.selected = slot;
@@ -80,10 +93,12 @@ impl PlayerInventory {
         }
     }
 
+    /// Executes a function with a reference to the currently selected item.
     pub fn with_selected_item<R>(&self, f: impl FnOnce(&ItemStack) -> R) -> R {
         f(&self.items[self.selected as usize])
     }
 
+    /// Executes a function with a mutable reference to the currently selected item.
     pub fn with_selected_item_mut<R>(&mut self, f: impl FnOnce(&mut ItemStack) -> R) -> R {
         let result = f(&mut self.items[self.selected as usize]);
         self.set_changed();

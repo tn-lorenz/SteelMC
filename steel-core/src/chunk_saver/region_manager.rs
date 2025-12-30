@@ -324,7 +324,7 @@ impl RegionManager {
 
         // Convert chunk to persistent format and serialize
         let persistent =
-            self.sections_to_persistent(chunk.as_ref().expect("Chunk is not loaded").sections());
+            Self::sections_to_persistent(chunk.as_ref().expect("Chunk is not loaded").sections());
         let data = wincode::serialize(&persistent)
             .map_err(|e| io::Error::new(io::ErrorKind::InvalidData, e.to_string()))?;
 
@@ -445,7 +445,7 @@ impl RegionManager {
 
         // Convert to runtime format (persistent is dropped after this - no duplication!)
         let status = entry.status;
-        let chunk = self.persistent_to_chunk(&persistent, pos, status);
+        let chunk = Self::persistent_to_chunk(&persistent, pos, status);
 
         // Increment ref count
         handle.loaded_chunk_count += 1;
@@ -549,7 +549,7 @@ impl RegionManager {
     }
 
     /// Converts sections to persistent format.
-    fn sections_to_persistent(&self, sections: &Sections) -> PersistentChunk {
+    fn sections_to_persistent(sections: &Sections) -> PersistentChunk {
         let mut builder = ChunkBuilder::new(&REGISTRY);
 
         let persistent_sections = sections
@@ -669,7 +669,6 @@ impl RegionManager {
     /// Converts a persistent chunk to runtime format.
     /// The returned chunk is not dirty (freshly loaded from disk).
     fn persistent_to_chunk(
-        &self,
         persistent: &PersistentChunk,
         pos: ChunkPos,
         status: ChunkStatus,
@@ -677,7 +676,7 @@ impl RegionManager {
         let sections: Vec<ChunkSection> = persistent
             .sections
             .iter()
-            .map(|section| self.persistent_to_section(section, persistent))
+            .map(|section| Self::persistent_to_section(section, persistent))
             .collect();
 
         match status {
@@ -704,7 +703,6 @@ impl RegionManager {
 
     /// Converts a persistent section to runtime format.
     fn persistent_to_section(
-        &self,
         persistent: &PersistentSection,
         chunk: &PersistentChunk,
     ) -> ChunkSection {
@@ -713,8 +711,8 @@ impl RegionManager {
                 block_state,
                 biomes,
             } => {
-                let block_id = self.resolve_block_state(chunk, *block_state);
-                let biome_data = self.persistent_to_biomes(biomes, chunk);
+                let block_id = Self::resolve_block_state(chunk, *block_state);
+                let biome_data = Self::persistent_to_biomes(biomes, chunk);
 
                 ChunkSection {
                     states: PalettedContainer::Homogeneous(block_id),
@@ -733,7 +731,7 @@ impl RegionManager {
                 // Build runtime palette by resolving section-local -> chunk -> runtime
                 let runtime_palette: Vec<BlockStateId> = palette
                     .iter()
-                    .map(|&idx| self.resolve_block_state(chunk, idx))
+                    .map(|&idx| Self::resolve_block_state(chunk, idx))
                     .collect();
 
                 // Build cube
@@ -749,7 +747,7 @@ impl RegionManager {
                 }
 
                 let states = PalettedContainer::from_cube(cube);
-                let biome_data = self.persistent_to_biomes(biomes, chunk);
+                let biome_data = Self::persistent_to_biomes(biomes, chunk);
 
                 ChunkSection {
                     states,
@@ -761,13 +759,12 @@ impl RegionManager {
 
     /// Converts persistent biome data to runtime format.
     fn persistent_to_biomes(
-        &self,
         persistent: &PersistentBiomeData,
         chunk: &PersistentChunk,
     ) -> PalettedContainer<u8, 4> {
         match persistent {
             PersistentBiomeData::Homogeneous { biome } => {
-                let biome_id = self.resolve_biome(chunk, *biome);
+                let biome_id = Self::resolve_biome(chunk, *biome);
                 PalettedContainer::Homogeneous(biome_id)
             }
             PersistentBiomeData::Heterogeneous {
@@ -780,7 +777,7 @@ impl RegionManager {
                 // Resolve section-local palette -> chunk palette -> runtime
                 let runtime_palette: Vec<u8> = palette
                     .iter()
-                    .map(|&idx| self.resolve_biome(chunk, idx))
+                    .map(|&idx| Self::resolve_biome(chunk, idx))
                     .collect();
 
                 let mut cube = Box::new([[[0u8; 4]; 4]; 4]);
@@ -797,7 +794,7 @@ impl RegionManager {
     }
 
     /// Resolves a chunk palette index to a runtime `BlockStateId`.
-    fn resolve_block_state(&self, chunk: &PersistentChunk, index: u16) -> BlockStateId {
+    fn resolve_block_state(chunk: &PersistentChunk, index: u16) -> BlockStateId {
         if let Some(state) = chunk.block_states.get(index as usize) {
             // Convert properties to the format expected by the registry
             let properties: Vec<(&str, &str)> = state
@@ -817,7 +814,7 @@ impl RegionManager {
     }
 
     /// Resolves a chunk palette index to a runtime biome ID.
-    fn resolve_biome(&self, chunk: &PersistentChunk, index: u16) -> u8 {
+    fn resolve_biome(chunk: &PersistentChunk, index: u16) -> u8 {
         if let Some(biome_key) = chunk.biomes.get(index as usize)
             && let Some(id) = REGISTRY.biomes.id_from_key(biome_key)
         {

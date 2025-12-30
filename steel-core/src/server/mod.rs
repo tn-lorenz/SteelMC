@@ -41,6 +41,10 @@ pub struct Server {
 
 impl Server {
     /// Creates a new server.
+    ///
+    /// # Panics
+    ///
+    /// Panics if the global registry has already been initialized.
     pub async fn new(chunk_runtime: Arc<Runtime>, cancel_token: CancellationToken) -> Self {
         let start = Instant::now();
         let mut registry = Registry::new_vanilla();

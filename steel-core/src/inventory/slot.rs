@@ -518,10 +518,18 @@ impl Slot for CraftingResultSlot {
     }
 }
 
+/// Enum of all slot types that implement the Slot trait.
+///
+/// This enum uses `enum_dispatch` to efficiently delegate Slot trait methods
+/// to the appropriate slot type implementation.
 #[enum_dispatch(Slot)]
 pub enum SlotType {
+    /// Normal inventory slot with no restrictions.
     Normal(NormalSlot),
+    /// Armor slot that only accepts armor items.
     Armor(ArmorSlot),
+    /// Crafting grid slot for crafting input.
     CraftingGrid(CraftingGridSlot),
+    /// Crafting result slot (fake, doesn't persist items).
     CraftingResult(CraftingResultSlot),
 }

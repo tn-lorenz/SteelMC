@@ -18,7 +18,7 @@ pub enum CraftingCategory {
 impl CraftingCategory {
     /// Parses a category from a JSON string.
     #[must_use]
-    pub fn from_str(s: &str) -> Self {
+    pub fn parse_json(s: &str) -> Self {
         match s {
             "building" => Self::Building,
             "redstone" => Self::Redstone,

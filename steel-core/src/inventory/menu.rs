@@ -103,12 +103,16 @@ pub const SLOT_CLICKED_OUTSIDE: i16 = -999;
 
 /// `QuickCraft` (drag) type constants.
 pub const QUICKCRAFT_TYPE_CHARITABLE: i32 = 0; // Left-click drag (distribute evenly)
+/// Right-click drag mode (place one item in each slot).
 pub const QUICKCRAFT_TYPE_GREEDY: i32 = 1; // Right-click drag (place one each)
+/// Middle-click drag mode (creative only, place full stacks).
 pub const QUICKCRAFT_TYPE_CLONE: i32 = 2; // Middle-click drag (creative only, full stacks)
 
 /// `QuickCraft` header constants (packet phase).
 pub const QUICKCRAFT_HEADER_START: i32 = 0;
+/// Continue adding slots to the drag operation.
 pub const QUICKCRAFT_HEADER_CONTINUE: i32 = 1;
+/// Finish the drag operation and distribute items.
 pub const QUICKCRAFT_HEADER_END: i32 = 2;
 
 /// Number of slots per row in standard inventory grids.
@@ -751,6 +755,7 @@ impl MenuBehavior {
 
     /// Handles pickup click (left/right click to pick up or place items).
     /// Based on Java's `AbstractContainerMenu::doClick` for ClickType.PICKUP.
+    #[allow(clippy::too_many_lines)]
     pub fn do_pickup(&mut self, slot_num: i16, button: i8, player: &Player) {
         // Slot -999 means clicked outside the inventory (drop items)
         if slot_num == -999 {
@@ -1211,7 +1216,7 @@ pub trait Menu {
     /// Handles pickup all (double-click).
     /// Collects matching items from all slots into the carried stack.
     /// Based on Java's `AbstractContainerMenu::doClick` for `ClickType.PICKUP_ALL`.
-    fn do_pickup_all(&mut self, slot_num: i16, _button: i8, player: &Player) {
+    fn do_pickup_all(&mut self, slot_num: i16, button: i8, player: &Player) {
         if slot_num < 0 {
             return;
         }
@@ -1238,7 +1243,7 @@ pub trait Menu {
 
         // Determine iteration direction based on button
         // Java uses button == 0 for forward, button == 1 for reverse
-        let (start, step): (i32, i32) = if _button == 0 {
+        let (start, step): (i32, i32) = if button == 0 {
             (0, 1)
         } else {
             (slot_count as i32 - 1, -1)

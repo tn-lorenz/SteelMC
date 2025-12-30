@@ -169,7 +169,12 @@ pub trait Container {
     }
 }
 
+/// Enum of all container types that implement the Container trait.
+///
+/// This enum uses `enum_dispatch` to efficiently delegate Container trait methods
+/// to the appropriate container type implementation.
 #[enum_dispatch(Container)]
 pub enum ContainerType {
+    /// Player inventory container.
     PlayerInventory(PlayerInventory),
 }
