@@ -10,6 +10,7 @@ use steel_utils::locks::SyncMutex;
 use crate::inventory::SyncContainer;
 use crate::inventory::container::Container;
 use crate::inventory::crafting::{CraftingContainer, ResultContainer};
+use crate::inventory::recipe_manager;
 
 /// A synchronized crafting container.
 pub type SyncCraftingContainer = Arc<SyncMutex<CraftingContainer>>;
@@ -185,13 +186,29 @@ impl Slot for ArmorSlot {
 /// recipe recalculation when changed.
 pub struct CraftingGridSlot {
     container: SyncCraftingContainer,
+    result_container: SyncResultContainer,
     index: usize,
 }
 
 impl CraftingGridSlot {
     /// Creates a new crafting grid slot.
-    pub fn new(container: SyncCraftingContainer, index: usize) -> Self {
-        Self { container, index }
+    pub fn new(
+        container: SyncCraftingContainer,
+        result_container: SyncResultContainer,
+        index: usize,
+    ) -> Self {
+        Self {
+            container,
+            result_container,
+            index,
+        }
+    }
+
+    /// Updates the crafting result based on current grid contents.
+    fn update_result(&self) {
+        let crafting = self.container.lock();
+        let mut result = self.result_container.lock();
+        recipe_manager::slot_changed_crafting_grid(&crafting, &mut *result, true);
     }
 }
 
@@ -206,10 +223,14 @@ impl Slot for CraftingGridSlot {
 
     fn set_item(&self, stack: ItemStack) {
         self.container.lock().set_item(self.index, stack);
+        // Update crafting result when grid contents change
+        self.update_result();
     }
 
     fn set_changed(&self) {
         self.container.lock().set_changed();
+        // Update crafting result when grid contents change
+        self.update_result();
     }
 
     fn get_container_slot(&self) -> usize {
@@ -240,6 +261,7 @@ impl CraftingResultSlot {
     }
 
     /// Returns a reference to the crafting container.
+    #[must_use] 
     pub fn crafting_container(&self) -> &SyncCraftingContainer {
         &self.crafting_container
     }
@@ -272,7 +294,7 @@ impl Slot for CraftingResultSlot {
     }
 
     /// Called when an item is taken from the result slot.
-    /// This consumes ingredients and handles remainders.
+    /// This consumes ingredients, handles remainders, and updates the result.
     fn on_take(&self, _stack: &ItemStack) {
         // Consume one of each ingredient in the crafting grid
         let mut crafting = self.crafting_container.lock();
@@ -297,6 +319,11 @@ impl Slot for CraftingResultSlot {
                 }
             });
         }
+
+        // Update the crafting result based on remaining ingredients
+        // This mimics Java's slotsChanged() callback from TransientCraftingContainer
+        let mut result = self.result_container.lock();
+        recipe_manager::slot_changed_crafting_grid(&crafting, &mut *result, true);
     }
 }
 

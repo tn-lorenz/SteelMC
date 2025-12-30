@@ -808,6 +808,7 @@ impl MenuBehavior {
                 };
 
                 let taken = slot.remove(amount);
+                slot.on_take(&taken);
                 self.carried = taken;
             }
         } else if ItemStack::is_same_item_same_components(&slot_item, &carried) {
@@ -858,6 +859,7 @@ impl MenuBehavior {
                     if space > 0 {
                         let take_amount = slot_item.count.min(space);
                         let taken = slot.remove(take_amount);
+                        slot.on_take(&taken);
                         let mut new_carried = carried;
                         new_carried.grow(taken.count);
                         self.carried = new_carried;
@@ -1111,8 +1113,9 @@ pub trait Menu {
         if source_item.is_empty() {
             // Move from target to hotbar
             if target_slot.may_pickup() {
-                source_slot.set_item(target_item);
+                source_slot.set_item(target_item.clone());
                 target_slot.set_item(ItemStack::empty());
+                target_slot.on_take(&target_item);
                 target_slot.set_changed();
                 source_slot.set_changed();
             }
@@ -1138,7 +1141,8 @@ pub trait Menu {
                 let max_size = target_slot.get_max_stack_size_for_item(&source_item);
                 if source_item.count <= max_size {
                     target_slot.set_item(source_item);
-                    source_slot.set_item(target_item);
+                    source_slot.set_item(target_item.clone());
+                    target_slot.on_take(&target_item);
                     target_slot.set_changed();
                     source_slot.set_changed();
                 }
@@ -1200,6 +1204,7 @@ pub trait Menu {
                         let can_take = max_stack - self.behavior().carried.count;
                         let to_take = target_item.count.min(can_take);
                         let removed = target_slot.remove(to_take);
+                        target_slot.on_take(&removed);
                         self.behavior_mut().carried.grow(removed.count);
                     }
                 }

@@ -181,7 +181,7 @@ impl CraftingInput {
     }
 
     /// Computes the bounding box of non-empty items.
-    /// Returns (start_x, start_y, width, height) or None if empty.
+    /// Returns (`start_x`, `start_y`, width, height) or None if empty.
     #[must_use]
     pub fn bounding_box(&self) -> Option<(usize, usize, usize, usize)> {
         let mut min_x = self.width;

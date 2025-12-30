@@ -80,6 +80,7 @@ impl InventoryMenu {
         for i in 0..4 {
             menu_slots.push(SlotType::CraftingGrid(CraftingGridSlot::new(
                 crafting_container.clone(),
+                result_container.clone(),
                 i,
             )));
         }
@@ -140,11 +141,13 @@ impl InventoryMenu {
     }
 
     /// Returns a reference to the crafting container.
+    #[must_use] 
     pub fn crafting_container(&self) -> &SyncCraftingContainer {
         &self.crafting_container
     }
 
     /// Returns a reference to the result container.
+    #[must_use] 
     pub fn result_container(&self) -> &SyncResultContainer {
         &self.result_container
     }
@@ -324,6 +327,13 @@ impl Menu for InventoryMenu {
         }
 
         self.behavior.slots[slot_index].set_changed();
+
+        // Call on_take for the result slot to consume ingredients
+        // This must happen after set_item so the slot reflects the new state
+        if slot_index == slots::RESULT_SLOT {
+            self.behavior.slots[slot_index].on_take(&clicked);
+        }
+
         clicked
     }
 
