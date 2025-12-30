@@ -20,6 +20,7 @@ mod menu_types;
 mod packets;
 mod painting_variants;
 mod pig_variants;
+mod recipes;
 mod timeline_tags;
 mod timelines;
 mod trim_materials;
@@ -59,6 +60,7 @@ const MENU_TYPES: &str = "menu_types";
 const TIMELINES: &str = "timelines";
 const TIMELINE_TAGS: &str = "timeline_tags";
 const ZOMBIE_NAUTILUS_VARIANTS: &str = "zombie_nautilus_variants";
+const RECIPES: &str = "recipes";
 
 pub fn main() {
     if !Path::new(OUT_DIR).exists() {
@@ -93,6 +95,7 @@ pub fn main() {
         (timelines::build(), TIMELINES),
         (timeline_tags::build(), TIMELINE_TAGS),
         (zombie_nautilus_variants::build(), ZOMBIE_NAUTILUS_VARIANTS),
+        (recipes::build(), RECIPES),
     ];
 
     for (content, file_name) in vanilla_builds {

@@ -30,6 +30,7 @@ use crate::{
     menu_type::MenuTypeRegistry,
     painting_variant::PaintingVariantRegistry,
     pig_variant::PigVariantRegistry,
+    recipe::RecipeRegistry,
     timeline::TimelineRegistry,
     trim_material::TrimMaterialRegistry,
     trim_pattern::TrimPatternRegistry,
@@ -56,6 +57,7 @@ pub mod jukebox_song;
 pub mod menu_type;
 pub mod painting_variant;
 pub mod pig_variant;
+pub mod recipe;
 pub mod timeline;
 pub mod trim_material;
 pub mod trim_pattern;
@@ -193,6 +195,11 @@ pub mod vanilla_timeline_tags;
 
 #[allow(warnings)]
 #[rustfmt::skip]
+#[path = "generated/vanilla_recipes.rs"]
+pub mod vanilla_recipes;
+
+#[allow(warnings)]
+#[rustfmt::skip]
 #[path = "generated/vanilla_packets.rs"]
 pub mod packets;
 
@@ -272,6 +279,7 @@ pub struct Registry {
     pub menu_types: MenuTypeRegistry,
     pub zombie_nautilus_variants: ZombieNautilusVariantRegistry,
     pub timelines: TimelineRegistry,
+    pub recipes: RecipeRegistry,
 }
 
 impl Debug for Registry {
@@ -362,6 +370,10 @@ impl Registry {
         vanilla_timelines::register_timelines(&mut timeline_registry);
         vanilla_timeline_tags::register_timeline_tags(&mut timeline_registry);
 
+        // Recipe registry
+        let mut recipe_registry = RecipeRegistry::new();
+        vanilla_recipes::register_recipes(&mut recipe_registry);
+
         Self {
             blocks: block_registry,
             data_components: data_component_registry,
@@ -387,6 +399,7 @@ impl Registry {
             menu_types: menu_type_registry,
             zombie_nautilus_variants: zombie_nautilus_variant_registry,
             timelines: timeline_registry,
+            recipes: recipe_registry,
         }
     }
 
@@ -415,5 +428,6 @@ impl Registry {
         self.menu_types.freeze();
         self.zombie_nautilus_variants.freeze();
         self.timelines.freeze();
+        self.recipes.freeze();
     }
 }

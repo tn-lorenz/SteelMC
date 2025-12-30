@@ -1,11 +1,21 @@
 //! Slot abstraction for inventory access.
 
+use std::sync::Arc;
+
 use enum_dispatch::enum_dispatch;
 use steel_registry::data_components::vanilla_components::EquippableSlot;
 use steel_registry::item_stack::ItemStack;
+use steel_utils::locks::SyncMutex;
 
 use crate::inventory::SyncContainer;
 use crate::inventory::container::Container;
+use crate::inventory::crafting::{CraftingContainer, ResultContainer};
+
+/// A synchronized crafting container.
+pub type SyncCraftingContainer = Arc<SyncMutex<CraftingContainer>>;
+
+/// A synchronized result container.
+pub type SyncResultContainer = Arc<SyncMutex<ResultContainer>>;
 
 /// A slot is a view into a single position in a container.
 /// Slots handle locking the container and provide access to items.
@@ -133,7 +143,7 @@ impl ArmorSlot {
     }
 
     /// Returns the equipment slot this armor slot accepts.
-    #[must_use] 
+    #[must_use]
     pub fn equipment_slot(&self) -> EquippableSlot {
         self.slot
     }
@@ -169,8 +179,131 @@ impl Slot for ArmorSlot {
     }
 }
 
+/// A slot in a crafting grid.
+///
+/// This slot holds items placed in the crafting grid and triggers
+/// recipe recalculation when changed.
+pub struct CraftingGridSlot {
+    container: SyncCraftingContainer,
+    index: usize,
+}
+
+impl CraftingGridSlot {
+    /// Creates a new crafting grid slot.
+    pub fn new(container: SyncCraftingContainer, index: usize) -> Self {
+        Self { container, index }
+    }
+}
+
+impl Slot for CraftingGridSlot {
+    fn with_item<R>(&self, f: impl FnOnce(&ItemStack) -> R) -> R {
+        self.container.lock().with_item(self.index, f)
+    }
+
+    fn with_item_mut<R>(&self, f: impl FnOnce(&mut ItemStack) -> R) -> R {
+        self.container.lock().with_item_mut(self.index, f)
+    }
+
+    fn set_item(&self, stack: ItemStack) {
+        self.container.lock().set_item(self.index, stack);
+    }
+
+    fn set_changed(&self) {
+        self.container.lock().set_changed();
+    }
+
+    fn get_container_slot(&self) -> usize {
+        self.index
+    }
+}
+
+/// A slot that displays the crafting result.
+///
+/// This slot shows what can be crafted from the current grid contents.
+/// When an item is taken from this slot, it consumes ingredients from the grid
+/// and handles crafting remainders (e.g., buckets from milk buckets).
+pub struct CraftingResultSlot {
+    result_container: SyncResultContainer,
+    crafting_container: SyncCraftingContainer,
+}
+
+impl CraftingResultSlot {
+    /// Creates a new crafting result slot.
+    pub fn new(
+        result_container: SyncResultContainer,
+        crafting_container: SyncCraftingContainer,
+    ) -> Self {
+        Self {
+            result_container,
+            crafting_container,
+        }
+    }
+
+    /// Returns a reference to the crafting container.
+    pub fn crafting_container(&self) -> &SyncCraftingContainer {
+        &self.crafting_container
+    }
+}
+
+impl Slot for CraftingResultSlot {
+    fn with_item<R>(&self, f: impl FnOnce(&ItemStack) -> R) -> R {
+        self.result_container.lock().with_item(0, f)
+    }
+
+    fn with_item_mut<R>(&self, f: impl FnOnce(&mut ItemStack) -> R) -> R {
+        self.result_container.lock().with_item_mut(0, f)
+    }
+
+    fn set_item(&self, stack: ItemStack) {
+        self.result_container.lock().set_item(0, stack);
+    }
+
+    /// Cannot place items directly in the result slot.
+    fn may_place(&self, _stack: &ItemStack) -> bool {
+        false
+    }
+
+    fn set_changed(&self) {
+        self.result_container.lock().set_changed();
+    }
+
+    fn get_container_slot(&self) -> usize {
+        0
+    }
+
+    /// Called when an item is taken from the result slot.
+    /// This consumes ingredients and handles remainders.
+    fn on_take(&self, _stack: &ItemStack) {
+        // Consume one of each ingredient in the crafting grid
+        let mut crafting = self.crafting_container.lock();
+        for i in 0..crafting.get_container_size() {
+            crafting.with_item_mut(i, |item| {
+                if !item.is_empty() {
+                    // Get the remainder before consuming
+                    let remainder = item.item().get_crafting_remainder();
+
+                    // Consume one item
+                    if item.count() > 1 {
+                        item.set_count(item.count() - 1);
+                    } else {
+                        *item = ItemStack::empty();
+                    }
+
+                    // If there's a remainder and the slot is now empty, place it
+                    if !remainder.is_empty() && item.is_empty() {
+                        *item = remainder;
+                    }
+                    // TODO: If slot isn't empty but has remainder, add to player inventory
+                }
+            });
+        }
+    }
+}
+
 #[enum_dispatch(Slot)]
 pub enum SlotType {
     Normal(NormalSlot),
     Armor(ArmorSlot),
+    CraftingGrid(CraftingGridSlot),
+    CraftingResult(CraftingResultSlot),
 }

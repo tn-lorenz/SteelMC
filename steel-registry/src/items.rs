@@ -2,11 +2,18 @@ use rustc_hash::FxHashMap;
 
 use steel_utils::Identifier;
 
-use crate::{RegistryExt, blocks::BlockRef, data_components::DataComponentMap};
+use crate::{
+    REGISTRY, RegistryExt, blocks::BlockRef, data_components::DataComponentMap,
+    item_stack::ItemStack,
+};
 
+/// A Minecraft item type.
 pub struct Item {
     pub key: Identifier,
     pub components: DataComponentMap,
+    /// The item key returned when this item is used in crafting (e.g., "bucket" from milk_bucket).
+    /// Stored as an Identifier to avoid circular reference issues during initialization.
+    pub craft_remainder: Option<Identifier>,
 }
 
 impl std::fmt::Debug for Item {
@@ -21,6 +28,7 @@ impl Item {
         Self {
             key: block.key.clone(),
             components: DataComponentMap::common_item_components(),
+            craft_remainder: None,
         }
     }
 
@@ -29,6 +37,23 @@ impl Item {
         Self {
             key: Identifier::vanilla_static(name),
             components: DataComponentMap::common_item_components(),
+            craft_remainder: None,
+        }
+    }
+
+    /// Returns the item stack that remains after this item is used in crafting.
+    /// For example, milk_bucket returns an empty bucket.
+    #[must_use]
+    pub fn get_crafting_remainder(&self) -> ItemStack {
+        match &self.craft_remainder {
+            Some(remainder_key) => {
+                if let Some(remainder_item) = REGISTRY.items.by_key(remainder_key) {
+                    ItemStack::new(remainder_item)
+                } else {
+                    ItemStack::empty()
+                }
+            }
+            None => ItemStack::empty(),
         }
     }
 }

@@ -8,13 +8,21 @@
 //! - Slots 36-44: Hotbar (9 slots)
 //! - Slot 45: Offhand
 
+use std::sync::Arc;
+
 use steel_registry::data_components::vanilla_components::EquippableSlot;
 use steel_registry::item_stack::ItemStack;
+use steel_utils::locks::SyncMutex;
 
 use crate::inventory::{
     SyncContainer,
+    crafting::{CraftingContainer, ResultContainer},
     menu::{Menu, MenuBehavior},
-    slot::{ArmorSlot, NormalSlot, Slot, SlotType},
+    recipe_manager,
+    slot::{
+        ArmorSlot, CraftingGridSlot, CraftingResultSlot, NormalSlot, Slot, SlotType,
+        SyncCraftingContainer, SyncResultContainer,
+    },
 };
 
 /// Slot indices for the inventory menu.
@@ -36,6 +44,10 @@ pub mod slots {
 /// This is always open when no other menu is open.
 pub struct InventoryMenu {
     behavior: MenuBehavior,
+    /// The 2x2 crafting grid container.
+    crafting_container: SyncCraftingContainer,
+    /// The crafting result container.
+    result_container: SyncResultContainer,
 }
 
 impl InventoryMenu {
@@ -51,15 +63,24 @@ impl InventoryMenu {
     pub fn new(inventory: SyncContainer) -> Self {
         let mut menu_slots = Vec::with_capacity(slots::TOTAL_SLOTS);
 
-        // Slot 0: Crafting result (placeholder - not backed by real storage yet)
-        // For now, we'll use a dummy slot that maps to slot 0 of inventory
-        // TODO: Implement proper crafting result slot
-        menu_slots.push(SlotType::Normal(NormalSlot::new(inventory.clone(), 0)));
+        // Create the crafting containers
+        let crafting_container: SyncCraftingContainer =
+            Arc::new(SyncMutex::new(CraftingContainer::new(2, 2)));
+        let result_container: SyncResultContainer =
+            Arc::new(SyncMutex::new(ResultContainer::new()));
 
-        // Slots 1-4: Crafting grid (placeholder)
-        // TODO: Implement proper crafting grid slots
+        // Slot 0: Crafting result
+        menu_slots.push(SlotType::CraftingResult(CraftingResultSlot::new(
+            result_container.clone(),
+            crafting_container.clone(),
+        )));
+
+        // Slots 1-4: 2x2 Crafting grid
         for i in 0..4 {
-            menu_slots.push(SlotType::Normal(NormalSlot::new(inventory.clone(), i)));
+            menu_slots.push(SlotType::CraftingGrid(CraftingGridSlot::new(
+                crafting_container.clone(),
+                i,
+            )));
         }
 
         // Slots 5-8: Armor (head, chest, legs, feet)
@@ -104,25 +125,45 @@ impl InventoryMenu {
 
         Self {
             behavior: MenuBehavior::new(menu_slots, Self::CONTAINER_ID, None),
+            crafting_container,
+            result_container,
         }
+    }
+
+    /// Updates the crafting result based on the current grid contents.
+    /// Should be called whenever a crafting grid slot changes.
+    pub fn update_crafting_result(&self) {
+        let crafting = self.crafting_container.lock();
+        let mut result = self.result_container.lock();
+        recipe_manager::slot_changed_crafting_grid(&crafting, &mut *result, true);
+    }
+
+    /// Returns a reference to the crafting container.
+    pub fn crafting_container(&self) -> &SyncCraftingContainer {
+        &self.crafting_container
+    }
+
+    /// Returns a reference to the result container.
+    pub fn result_container(&self) -> &SyncResultContainer {
+        &self.result_container
     }
 
     /// Returns true if the given slot index is in the hotbar or offhand.
     /// Based on Java's `InventoryMenu::isHotbarSlot`.
-    #[must_use] 
+    #[must_use]
     pub fn is_hotbar_slot(slot: usize) -> bool {
         (slots::HOTBAR_SLOT_START..slots::HOTBAR_SLOT_END).contains(&slot)
             || slot == slots::OFFHAND_SLOT
     }
 
     /// Returns true if the given slot index is an armor slot.
-    #[must_use] 
+    #[must_use]
     pub fn is_armor_slot(slot: usize) -> bool {
         (slots::ARMOR_SLOT_START..slots::ARMOR_SLOT_END).contains(&slot)
     }
 
     /// Returns true if the given slot index is in the main inventory.
-    #[must_use] 
+    #[must_use]
     pub fn is_inventory_slot(slot: usize) -> bool {
         (slots::INV_SLOT_START..slots::INV_SLOT_END).contains(&slot)
     }

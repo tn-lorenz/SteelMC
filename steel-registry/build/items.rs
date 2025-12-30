@@ -30,6 +30,29 @@ fn get_component_ident(name: &str) -> Option<Ident> {
     Some(Ident::new(&shouty_name, Span::call_site()))
 }
 
+/// Returns the crafting remainder item key for a given item, if any.
+/// Based on vanilla Minecraft's Item.Properties.craftRemainder() calls.
+fn get_craft_remainder(item_name: &str) -> Option<&'static str> {
+    match item_name {
+        // Buckets return empty bucket
+        "water_bucket"
+        | "lava_bucket"
+        | "milk_bucket"
+        | "powder_snow_bucket"
+        | "pufferfish_bucket"
+        | "salmon_bucket"
+        | "cod_bucket"
+        | "tropical_fish_bucket"
+        | "axolotl_bucket"
+        | "tadpole_bucket" => Some("bucket"),
+        // Bottles return empty glass bottle
+        "dragon_breath" | "honey_bottle" => Some("glass_bottle"),
+        // Potions also return glass bottles when used in crafting
+        "potion" => Some("glass_bottle"),
+        _ => None,
+    }
+}
+
 fn generate_builder_calls(item: &Item) -> Vec<TokenStream> {
     let mut builder_calls = Vec::new();
 
@@ -132,11 +155,18 @@ pub(crate) fn build() -> TokenStream {
         } else {
             let builder_calls = generate_builder_calls(item);
 
+            let craft_remainder_value = if let Some(remainder) = get_craft_remainder(&item.name) {
+                quote! { Some(Identifier::vanilla_static(#remainder)) }
+            } else {
+                quote! { None }
+            };
+
             item_construction.extend(quote! {
                 #item_ident: Item {
                     key: Identifier::vanilla_static(#item_name_str),
                     components: DataComponentMap::common_item_components()
                         #(#builder_calls)*,
+                    craft_remainder: #craft_remainder_value,
                 },
             });
         }

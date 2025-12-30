@@ -34,8 +34,7 @@ use std::sync::Arc;
 /// - A full `ItemStack` (when we've sent the item to the client)
 /// - A `HashedStack` (when we've received a hash from the client)
 /// - Unknown (initial state, always needs sync)
-#[derive(Debug, Clone)]
-#[derive(Default)]
+#[derive(Debug, Clone, Default)]
 pub enum RemoteSlot {
     /// We don't know what the client has (initial state).
     #[default]
@@ -46,10 +45,9 @@ pub enum RemoteSlot {
     Hashed(HashedStack),
 }
 
-
 impl RemoteSlot {
     /// Creates an unknown remote slot.
-    #[must_use] 
+    #[must_use]
     pub fn unknown() -> Self {
         Self::Unknown
     }
@@ -67,7 +65,7 @@ impl RemoteSlot {
     }
 
     /// Checks if the remote slot matches the local `ItemStack`.
-    #[must_use] 
+    #[must_use]
     pub fn matches(&self, local: &ItemStack) -> bool {
         match self {
             Self::Unknown => false,
@@ -118,27 +116,27 @@ pub const SLOT_SIZE: i32 = 18;
 
 /// Extracts the quickcraft type from a button mask.
 /// Type is stored in bits 2-3.
-#[must_use] 
+#[must_use]
 pub fn get_quickcraft_type(button: i32) -> i32 {
     (button >> 2) & 3
 }
 
 /// Extracts the quickcraft header (phase) from a button mask.
 /// Header is stored in bits 0-1.
-#[must_use] 
+#[must_use]
 pub fn get_quickcraft_header(button: i32) -> i32 {
     button & 3
 }
 
 /// Creates a quickcraft button mask from header and type.
-#[must_use] 
+#[must_use]
 pub fn get_quickcraft_mask(header: i32, quickcraft_type: i32) -> i32 {
     (header & 3) | ((quickcraft_type & 3) << 2)
 }
 
 /// Checks if a quickcraft type is valid for the given player.
 /// Type 2 (clone) requires creative mode (infinite materials).
-#[must_use] 
+#[must_use]
 pub fn is_valid_quickcraft_type(quickcraft_type: i32, has_infinite_materials: bool) -> bool {
     match quickcraft_type {
         0 | 1 => true,
@@ -148,7 +146,7 @@ pub fn is_valid_quickcraft_type(quickcraft_type: i32, has_infinite_materials: bo
 }
 
 /// Calculates how many items to place per slot during quickcraft.
-#[must_use] 
+#[must_use]
 pub fn get_quickcraft_place_count(
     slot_count: usize,
     quickcraft_type: i32,
@@ -164,7 +162,7 @@ pub fn get_quickcraft_place_count(
 
 /// Checks if an item can be quick-placed into a slot.
 /// If `ignore_size` is true, doesn't check if the combined count would exceed max stack size.
-#[must_use] 
+#[must_use]
 pub fn can_item_quick_replace(
     slot_item: &ItemStack,
     carried: &ItemStack,
@@ -215,7 +213,7 @@ pub struct MenuBehavior {
 
 impl MenuBehavior {
     /// Creates a new menu behavior with the given slots.
-    #[must_use] 
+    #[must_use]
     pub fn new(slots: Vec<SlotType>, container_id: u8, menu_type: Option<MenuType>) -> Self {
         let slot_count = slots.len();
         Self {
@@ -257,7 +255,7 @@ impl MenuBehavior {
     }
 
     /// Gets the value of a data slot.
-    #[must_use] 
+    #[must_use]
     pub fn get_data(&self, index: usize) -> Option<i16> {
         self.data_slots.get(index).copied()
     }
@@ -277,7 +275,7 @@ impl MenuBehavior {
 
     /// Returns true if a slot can be dragged to during quickcraft.
     /// Menus can override this via the Menu trait.
-    #[must_use] 
+    #[must_use]
     pub fn can_drag_to(&self, _slot_index: usize) -> bool {
         true
     }
@@ -382,7 +380,7 @@ impl MenuBehavior {
     }
 
     /// Returns the current state ID.
-    #[must_use] 
+    #[must_use]
     pub fn get_state_id(&self) -> u32 {
         self.state_id
     }
@@ -402,25 +400,25 @@ impl MenuBehavior {
     /// Returns true if a slot index is valid for this menu.
     /// -999 is used for clicking outside the inventory.
     /// -1 is also accepted (matches Java behavior, though not used by vanilla clients).
-    #[must_use] 
+    #[must_use]
     pub fn is_valid_slot_index(&self, slot: i16) -> bool {
         slot == -1 || slot == -999 || (slot >= 0 && (slot as usize) < self.slots.len())
     }
 
     /// Returns the number of slots in this menu.
-    #[must_use] 
+    #[must_use]
     pub fn slot_count(&self) -> usize {
         self.slots.len()
     }
 
     /// Gets a reference to a slot by index.
-    #[must_use] 
+    #[must_use]
     pub fn get_slot(&self, index: usize) -> Option<&SlotType> {
         self.slots.get(index)
     }
 
     /// Gets the carried item (cursor).
-    #[must_use] 
+    #[must_use]
     pub fn get_carried(&self) -> &ItemStack {
         &self.carried
     }
@@ -446,7 +444,7 @@ impl MenuBehavior {
 
     /// Checks if a slot has changed compared to remote perception.
     /// Returns true if slot needs to be synced to client.
-    #[must_use] 
+    #[must_use]
     pub fn slot_needs_sync(&self, index: usize) -> bool {
         if index >= self.last_slots.len() || index >= self.remote_slots.len() {
             return false;
@@ -462,7 +460,7 @@ impl MenuBehavior {
     }
 
     /// Checks if carried item needs sync.
-    #[must_use] 
+    #[must_use]
     pub fn carried_needs_sync(&self) -> bool {
         !self.remote_carried.matches(&self.carried)
     }
@@ -1052,7 +1050,8 @@ pub trait Menu {
         let mut result = self.quick_move_stack(slot_index);
 
         while !result.is_empty() {
-            let current_item = self.behavior().slots[slot_index].with_item(std::clone::Clone::clone);
+            let current_item =
+                self.behavior().slots[slot_index].with_item(std::clone::Clone::clone);
             if !ItemStack::is_same_item(&current_item, &result) {
                 break;
             }
