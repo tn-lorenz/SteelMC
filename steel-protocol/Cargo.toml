@@ -6,7 +6,7 @@ edition.workspace = true
 
 [dependencies]
 aes = "0.9.0-rc.2"
-async-compression = { version = "0.4.32", features = ["tokio", "zlib"] }
+async-compression = { version = "0.4.36", features = ["tokio", "zlib"] }
 steel-utils = { path = "../steel-utils" }
 tokio.workspace = true
 thiserror.workspace = true

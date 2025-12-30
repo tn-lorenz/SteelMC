@@ -110,7 +110,7 @@ pub struct Player {
     equipment: Arc<SyncMutex<EntityEquipment>>,
 
     /// The player's inventory container (shared with `inventory_menu`).
-    inventory: SyncContainer,
+    pub inventory: SyncContainer,
 
     /// The player's inventory menu (always open, even when `container_id` is 0).
     inventory_menu: SyncMutex<InventoryMenu>,
@@ -628,6 +628,7 @@ impl Player {
             packet.button_num,
             packet.click_type,
             has_infinite_materials,
+            &self,
         );
 
         // TODO: Drop items that couldn't fit in the inventory

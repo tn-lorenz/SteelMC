@@ -111,6 +111,62 @@ pub trait Container {
             self.set_item(i, ItemStack::empty());
         }
     }
+
+    /// Tries to add an item to the container.
+    ///
+    /// First tries to stack with existing matching items, then tries empty slots.
+    /// Returns true if the entire stack was added, false if some or all couldn't fit.
+    /// The passed stack is modified to contain any remaining items.
+    ///
+    /// Based on Java's `Inventory.add(ItemStack)`.
+    fn add(&mut self, stack: &mut ItemStack) -> bool {
+        if stack.is_empty() {
+            return true;
+        }
+
+        let size = self.get_container_size();
+
+        // First pass: try to stack with existing items
+        if stack.is_stackable() {
+            for slot in 0..size {
+                if stack.is_empty() {
+                    return true;
+                }
+                let can_stack = self.with_item(slot, |existing| {
+                    !existing.is_empty() && ItemStack::is_same_item_same_components(existing, stack)
+                });
+                if can_stack {
+                    let max_size = self.get_max_stack_size_for_item(stack);
+                    self.with_item_mut(slot, |existing| {
+                        let space = max_size - existing.count();
+                        if space > 0 {
+                            let to_add = stack.count().min(space);
+                            existing.grow(to_add);
+                            stack.shrink(to_add);
+                        }
+                    });
+                }
+            }
+        }
+
+        // Second pass: try empty slots
+        for slot in 0..size {
+            if stack.is_empty() {
+                return true;
+            }
+            let is_empty = self.with_item(slot, ItemStack::is_empty);
+            if is_empty && self.can_place_item(slot, stack) {
+                let max_size = self.get_max_stack_size_for_item(stack);
+                let to_place = stack.count().min(max_size);
+                let mut placed = stack.clone();
+                placed.set_count(to_place);
+                self.set_item(slot, placed);
+                stack.shrink(to_place);
+            }
+        }
+
+        stack.is_empty()
+    }
 }
 
 #[enum_dispatch(Container)]

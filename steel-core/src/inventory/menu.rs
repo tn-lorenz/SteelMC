@@ -23,8 +23,12 @@ use steel_protocol::packets::game::{
 use steel_registry::{REGISTRY, item_stack::ItemStack, menu_type::MenuType};
 
 use crate::{
-    inventory::slot::{Slot, SlotType},
-    player::networking::JavaConnection,
+    inventory::{
+        SyncContainer,
+        container::Container,
+        slot::{Slot, SlotType},
+    },
+    player::{Player, networking::JavaConnection},
 };
 use std::sync::Arc;
 
@@ -1025,6 +1029,7 @@ pub trait Menu {
         button: i8,
         click_type: ClickType,
         has_infinite_materials: bool,
+        player: &Player,
     ) -> Vec<ItemStack> {
         if click_type == ClickType::QuickCraft {
             self.behavior_mut()
@@ -1042,7 +1047,7 @@ pub trait Menu {
                 }
                 ClickType::QuickMove => self.do_quick_move(slot_num),
                 ClickType::Swap => {
-                    self.do_swap(slot_num, button);
+                    self.do_swap(slot_num, button, &player.inventory);
                     Vec::new()
                 }
                 ClickType::Clone => {
@@ -1110,35 +1115,18 @@ pub trait Menu {
         all_items_to_drop
     }
 
-    /// Returns the menu slot index for the given hotbar/offhand button.
-    ///
-    /// This maps the button number from a swap click (0-8 for hotbar, 40 for offhand)
-    /// to the corresponding slot index in this menu.
-    ///
-    /// Returns `None` if the button doesn't correspond to a valid slot in this menu.
-    ///
-    /// The default implementation uses the InventoryMenu layout:
-    /// - Hotbar slots 0-8 map to menu slots 36-44
-    /// - Offhand (button 40) maps to menu slot 45
-    ///
-    /// Other menu types should override this to provide their own mapping.
-    fn get_hotbar_slot_for_swap(&self, button: i8) -> Option<usize> {
-        if button == 40 {
-            // Offhand - menu slot 45 in InventoryMenu
-            Some(45)
-        } else if (0..9).contains(&button) {
-            // Hotbar slots 36-44 in InventoryMenu
-            Some(36 + button as usize)
-        } else {
-            None
-        }
-    }
-
     /// Handles swap (number keys to swap with hotbar).
     /// button is the hotbar slot (0-8) or 40 for offhand.
     ///
     /// Based on Java's `AbstractContainerMenu::doClick` for `ClickType.SWAP`.
-    fn do_swap(&mut self, slot_num: i16, button: i8) {
+    /// Unlike menu slots, this accesses the player's inventory directly using the button
+    /// as the inventory slot index (0-8 for hotbar, 40 for offhand).
+    fn do_swap(&mut self, slot_num: i16, button: i8, inventory: &SyncContainer) {
+        // Validate button is a valid hotbar slot (0-8) or offhand (40)
+        if !((0..9).contains(&button) || button == 40) {
+            return;
+        }
+
         if slot_num < 0 {
             return;
         }
@@ -1149,62 +1137,72 @@ pub trait Menu {
             return;
         }
 
-        // Get the hotbar/offhand slot index using the menu-specific mapping
-        let Some(hotbar_slot_index) = self.get_hotbar_slot_for_swap(button) else {
-            return;
-        };
-
-        if hotbar_slot_index >= behavior.slots.len() {
-            return;
-        }
-
         let target_slot = &behavior.slots[slot_index];
-        let source_slot = &behavior.slots[hotbar_slot_index];
+        let inventory_slot = button as usize;
 
+        // Get items from target slot (menu) and source (player inventory)
         let target_item = target_slot.with_item(std::clone::Clone::clone);
-        let source_item = source_slot.with_item(std::clone::Clone::clone);
+        let source_item = inventory
+            .lock()
+            .with_item(inventory_slot, std::clone::Clone::clone);
 
         if source_item.is_empty() && target_item.is_empty() {
             return;
         }
 
         if source_item.is_empty() {
-            // Move from target to hotbar
+            // Move from target to inventory
             if target_slot.may_pickup() {
-                source_slot.set_by_player(target_item.clone(), &ItemStack::empty());
+                inventory
+                    .lock()
+                    .set_item(inventory_slot, target_item.clone());
                 target_slot.set_by_player(ItemStack::empty(), &target_item);
-                // Ignore remainder - swap doesn't involve result slots
                 let _ = target_slot.on_take(&target_item);
-                target_slot.set_changed();
-                source_slot.set_changed();
             }
         } else if target_item.is_empty() {
-            // Move from hotbar to target
+            // Move from inventory to target
             if target_slot.may_place(&source_item) {
                 let max_size = target_slot.get_max_stack_size_for_item(&source_item);
-                if source_item.count <= max_size {
-                    target_slot.set_by_player(source_item.clone(), &ItemStack::empty());
-                    source_slot.set_by_player(ItemStack::empty(), &source_item);
-                } else {
+                if source_item.count > max_size {
+                    // Split the stack
                     let mut to_place = source_item.clone();
                     to_place.set_count(max_size);
                     target_slot.set_by_player(to_place, &ItemStack::empty());
-                    source_slot.with_item_mut(|i| i.shrink(max_size));
+                    inventory
+                        .lock()
+                        .with_item_mut(inventory_slot, |i| i.shrink(max_size));
+                } else {
+                    // Move entire stack
+                    inventory
+                        .lock()
+                        .set_item(inventory_slot, ItemStack::empty());
+                    target_slot.set_by_player(source_item, &ItemStack::empty());
                 }
-                target_slot.set_changed();
-                source_slot.set_changed();
             }
         } else {
-            // Swap items
+            // Swap items between target and inventory
             if target_slot.may_pickup() && target_slot.may_place(&source_item) {
                 let max_size = target_slot.get_max_stack_size_for_item(&source_item);
-                if source_item.count <= max_size {
-                    target_slot.set_by_player(source_item.clone(), &target_item);
-                    source_slot.set_by_player(target_item.clone(), &source_item);
-                    // Ignore remainder - swap doesn't involve result slots
+                if source_item.count > max_size {
+                    // Source is too big - place partial and add target to inventory
+                    let mut to_place = source_item.clone();
+                    to_place.set_count(max_size);
+                    target_slot.set_by_player(to_place, &target_item);
                     let _ = target_slot.on_take(&target_item);
-                    target_slot.set_changed();
-                    source_slot.set_changed();
+                    // Try to add target item to inventory, drop if can't fit
+                    let mut inv = inventory.lock();
+                    inv.with_item_mut(inventory_slot, |i| i.shrink(max_size));
+                    let mut remaining_target = target_item.clone();
+                    if !inv.add(&mut remaining_target) {
+                        // TODO: Drop remaining_target - for now it's lost
+                    }
+                } else {
+                    // Simple swap
+                    inventory
+                        .lock()
+                        .set_item(inventory_slot, target_item.clone());
+                    target_slot.set_by_player(source_item, &target_item);
+                    let _ = target_slot.on_take(&target_item);
                 }
             }
         }
