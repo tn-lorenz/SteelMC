@@ -362,7 +362,7 @@ impl MenuBehavior {
                     let mut placed = item_stack.clone();
                     placed.set_count(to_place);
                     item_stack.shrink(to_place);
-                    slot.set_item(placed);
+                    slot.set_by_player(placed, &ItemStack::empty());
                     slot.set_changed();
                     anything_changed = true;
                     break;
@@ -683,6 +683,7 @@ impl MenuBehavior {
                 && (self.quickcraft_type == QUICKCRAFT_TYPE_CLONE
                     || self.carried.count > self.quickcraft_slots.len() as i32)
                 && self.can_drag_to(slot_index)
+                && !self.quickcraft_slots.contains(&slot_index)
             {
                 self.quickcraft_slots.push(slot_index);
             }
@@ -1027,6 +1028,8 @@ pub trait Menu {
     /// Based on Java's `AbstractContainerMenu::clicked` and doClick.
     ///
     /// `has_infinite_materials` should be true if the player is in creative mode.
+    ///
+    /// TODO: Add `tryItemClickBehaviourOverride` for bundle item support.
     fn clicked(
         &mut self,
         slot_num: i16,
