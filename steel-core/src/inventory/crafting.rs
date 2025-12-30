@@ -3,7 +3,10 @@
 //! This module provides the `CraftingContainer` for the crafting grid,
 //! `ResultContainer` for crafting output, and `CraftingInput` for recipe matching.
 
-use steel_registry::item_stack::ItemStack;
+use steel_registry::{
+    item_stack::ItemStack,
+    recipe::{CraftingInput, PositionedCraftingInput},
+};
 
 use crate::inventory::container::Container;
 
@@ -46,11 +49,18 @@ impl CraftingContainer {
     /// This is used for recipe matching.
     #[must_use]
     pub fn as_input(&self) -> CraftingInput {
-        CraftingInput {
-            width: self.width,
-            height: self.height,
-            items: self.items.clone(),
-        }
+        CraftingInput::new(self.width, self.height, self.items.clone())
+    }
+
+    /// Creates a positioned `CraftingInput` representing the current state of the grid.
+    ///
+    /// The positioned input contains a trimmed version of the grid (only the
+    /// bounding box of non-empty items) along with the offset from the original
+    /// grid origin. This is used when consuming ingredients to correctly map
+    /// recipe slots back to the original crafting grid slots.
+    #[must_use]
+    pub fn as_positioned_input(&self) -> PositionedCraftingInput {
+        self.as_input().as_positioned()
     }
 
     /// Returns a reference to the items in the grid.
@@ -135,87 +145,5 @@ impl Container for ResultContainer {
 
     fn set_changed(&mut self) {
         // Result container doesn't track dirty state.
-    }
-}
-
-/// An immutable snapshot of a crafting grid for recipe matching.
-///
-/// This is created from a `CraftingContainer` and used to test recipes
-/// without holding a borrow on the container.
-#[derive(Clone)]
-pub struct CraftingInput {
-    width: usize,
-    height: usize,
-    items: Vec<ItemStack>,
-}
-
-impl CraftingInput {
-    /// Returns the width of the crafting grid.
-    #[must_use]
-    pub fn width(&self) -> usize {
-        self.width
-    }
-
-    /// Returns the height of the crafting grid.
-    #[must_use]
-    pub fn height(&self) -> usize {
-        self.height
-    }
-
-    /// Returns the item at the given position.
-    #[must_use]
-    pub fn get_item(&self, x: usize, y: usize) -> &ItemStack {
-        &self.items[y * self.width + x]
-    }
-
-    /// Returns the total number of slots.
-    #[must_use]
-    pub fn size(&self) -> usize {
-        self.items.len()
-    }
-
-    /// Returns a reference to all items.
-    #[must_use]
-    pub fn items(&self) -> &[ItemStack] {
-        &self.items
-    }
-
-    /// Returns true if all slots are empty.
-    #[must_use]
-    pub fn is_empty(&self) -> bool {
-        self.items.iter().all(ItemStack::is_empty)
-    }
-
-    /// Returns the number of non-empty slots.
-    #[must_use]
-    pub fn ingredient_count(&self) -> usize {
-        self.items.iter().filter(|s| !s.is_empty()).count()
-    }
-
-    /// Computes the bounding box of non-empty items.
-    /// Returns (`start_x`, `start_y`, width, height) or None if empty.
-    #[must_use]
-    pub fn bounding_box(&self) -> Option<(usize, usize, usize, usize)> {
-        let mut min_x = self.width;
-        let mut max_x = 0;
-        let mut min_y = self.height;
-        let mut max_y = 0;
-
-        for y in 0..self.height {
-            for x in 0..self.width {
-                if !self.get_item(x, y).is_empty() {
-                    min_x = min_x.min(x);
-                    max_x = max_x.max(x);
-                    min_y = min_y.min(y);
-                    max_y = max_y.max(y);
-                }
-            }
-        }
-
-        if min_x > max_x || min_y > max_y {
-            None
-        } else {
-            Some((min_x, min_y, max_x - min_x + 1, max_y - min_y + 1))
-        }
     }
 }

@@ -5,6 +5,9 @@ use steel_registry::item_stack::ItemStack;
 
 use crate::player::player_inventory::PlayerInventory;
 
+/// Default distance buffer for container interaction range checks.
+pub const DEFAULT_DISTANCE_BUFFER: f32 = 4.0;
+
 /// Something that contains items.
 /// I also use container interchangeably with inventory as they mean approximately the same thing.
 /// But inventory could also refer to the player's inventory.
@@ -66,8 +69,31 @@ pub trait Container {
         99
     }
 
+    /// Returns the maximum stack size for a specific item in this container.
+    ///
+    /// Takes the minimum of the container's max stack size and the item's max stack size.
+    /// Based on Java's `Container.getMaxStackSize(ItemStack)`.
+    fn get_max_stack_size_for_item(&self, item: &ItemStack) -> i32 {
+        self.get_max_stack_size().min(item.max_stack_size())
+    }
+
     /// Marks this container as changed (dirty) for saving/syncing.
     fn set_changed(&mut self);
+
+    /// Returns true if the player can still interact with this container.
+    ///
+    /// This is used to validate that:
+    /// - The container still exists (e.g., chest block hasn't been destroyed)
+    /// - The player is within interaction range
+    /// - Any other conditions for valid interaction
+    ///
+    /// The default implementation always returns true (e.g., for player inventory).
+    /// Block-based containers should override this to check block existence and distance.
+    ///
+    /// Based on Java's `Container.stillValid(Player)`.
+    fn still_valid(&self) -> bool {
+        true
+    }
 
     /// Returns true if the specified item can be placed in the specified slot.
     fn can_place_item(&self, _slot: usize, _stack: &ItemStack) -> bool {

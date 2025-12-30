@@ -99,6 +99,13 @@ pub struct CraftingInput {
 }
 
 impl CraftingInput {
+    /// An empty crafting input.
+    pub const EMPTY: CraftingInput = CraftingInput {
+        width: 0,
+        height: 0,
+        items: Vec::new(),
+    };
+
     /// Creates a new crafting input.
     #[must_use]
     pub fn new(width: usize, height: usize, items: Vec<ItemStack>) -> Self {
@@ -170,6 +177,88 @@ impl CraftingInput {
     #[must_use]
     pub fn count_non_empty(&self) -> usize {
         self.items.iter().filter(|s| !s.is_empty()).count()
+    }
+
+    /// Creates a positioned crafting input from this grid.
+    ///
+    /// The positioned input contains a trimmed version of the grid (only the
+    /// bounding box of non-empty items) along with the offset from the original
+    /// grid origin.
+    #[must_use]
+    pub fn as_positioned(&self) -> PositionedCraftingInput {
+        if self.width == 0 || self.height == 0 {
+            return PositionedCraftingInput::EMPTY;
+        }
+
+        let Some((min_x, min_y, max_x, max_y)) = self.get_bounds() else {
+            return PositionedCraftingInput::EMPTY;
+        };
+
+        let new_width = max_x - min_x + 1;
+        let new_height = max_y - min_y + 1;
+
+        // If the bounds match the original grid, no need to create a new input
+        if new_width == self.width && new_height == self.height {
+            return PositionedCraftingInput {
+                input: self.clone(),
+                left: min_x,
+                top: min_y,
+            };
+        }
+
+        // Create a trimmed input containing only the bounding box
+        let mut new_items = Vec::with_capacity(new_width * new_height);
+        for y in 0..new_height {
+            for x in 0..new_width {
+                let index = (x + min_x) + (y + min_y) * self.width;
+                new_items.push(self.items[index].clone());
+            }
+        }
+
+        PositionedCraftingInput {
+            input: CraftingInput::new(new_width, new_height, new_items),
+            left: min_x,
+            top: min_y,
+        }
+    }
+}
+
+/// A crafting input with position information.
+///
+/// This represents a trimmed crafting grid (containing only the bounding box
+/// of non-empty items) along with the offset from the original grid origin.
+/// This is used when consuming ingredients to correctly map recipe slots back
+/// to the original crafting grid slots.
+#[derive(Debug, Clone)]
+pub struct PositionedCraftingInput {
+    /// The trimmed crafting input.
+    pub input: CraftingInput,
+    /// The X offset from the original grid origin.
+    pub left: usize,
+    /// The Y offset from the original grid origin.
+    pub top: usize,
+}
+
+impl PositionedCraftingInput {
+    /// An empty positioned crafting input.
+    pub const EMPTY: PositionedCraftingInput = PositionedCraftingInput {
+        input: CraftingInput::EMPTY,
+        left: 0,
+        top: 0,
+    };
+
+    /// Converts a position in the trimmed input back to the original grid slot index.
+    ///
+    /// # Arguments
+    /// * `x` - X position in the trimmed input (0 to input.width-1)
+    /// * `y` - Y position in the trimmed input (0 to input.height-1)
+    /// * `grid_width` - Width of the original crafting grid
+    ///
+    /// # Returns
+    /// The slot index in the original crafting grid.
+    #[must_use]
+    pub fn to_grid_slot(&self, x: usize, y: usize, grid_width: usize) -> usize {
+        (x + self.left) + (y + self.top) * grid_width
     }
 }
 

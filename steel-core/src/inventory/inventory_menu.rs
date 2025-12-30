@@ -225,15 +225,21 @@ impl Menu for InventoryMenu {
 
     /// Handles shift-click (quick move) for a slot.
     /// Based on Java's `InventoryMenu::quickMoveStack`.
-    fn quick_move_stack(&mut self, slot_index: usize) -> ItemStack {
+    ///
+    /// Returns a tuple of (original_clicked_item, items_to_drop).
+    /// The `items_to_drop` contains any items that couldn't fit in the inventory
+    /// and should be dropped in the world.
+    fn quick_move_stack(&mut self, slot_index: usize) -> (ItemStack, Vec<ItemStack>) {
+        let mut items_to_drop = Vec::new();
+
         if slot_index >= self.behavior.slots.len() {
-            return ItemStack::empty();
+            return (ItemStack::empty(), items_to_drop);
         }
 
         // Get the current item from the slot (avoiding holding a borrow)
         let stack = self.behavior.slots[slot_index].with_item(std::clone::Clone::clone);
         if stack.is_empty() {
-            return ItemStack::empty();
+            return (ItemStack::empty(), items_to_drop);
         }
 
         let clicked = stack.clone();
@@ -315,7 +321,7 @@ impl Menu for InventoryMenu {
         };
 
         if !moved {
-            return ItemStack::empty();
+            return (ItemStack::empty(), items_to_drop);
         }
 
         // Update the source slot with the remaining items
@@ -323,21 +329,30 @@ impl Menu for InventoryMenu {
 
         // Check if unchanged
         if stack_mut.count == clicked.count {
-            return ItemStack::empty();
+            return (ItemStack::empty(), items_to_drop);
         }
 
         self.behavior.slots[slot_index].set_changed();
 
         // Call on_take for the result slot to consume ingredients
         // This must happen after set_item so the slot reflects the new state
-        if slot_index == slots::RESULT_SLOT
-            && let Some(mut remainder) = self.behavior.slots[slot_index].on_take(&clicked) {
+        if slot_index == slots::RESULT_SLOT {
+            if let Some(mut remainder) = self.behavior.slots[slot_index].on_take(&clicked) {
                 // Try to place crafting remainders (e.g., empty buckets) back in inventory
                 self.place_item_back_in_inventory(&mut remainder);
-                // If couldn't fit, items are lost (would need to drop in world)
+                if !remainder.is_empty() {
+                    items_to_drop.push(remainder);
+                }
             }
 
-        clicked
+            // Java: if (slotIndex == 0) { player.drop(stack, false); }
+            // Drop any items from the result slot that couldn't fit in the inventory
+            if !stack_mut.is_empty() {
+                items_to_drop.push(stack_mut);
+            }
+        }
+
+        (clicked, items_to_drop)
     }
 
     /// Returns true if the item can be taken from the slot during pickup all.

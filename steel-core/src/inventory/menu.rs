@@ -793,7 +793,7 @@ impl MenuBehavior {
                     self.carried = new_carried;
                 }
 
-                slot.set_item(to_place);
+                slot.set_by_player(to_place, &ItemStack::empty());
             } else {
                 // Can't place - keep carrying
                 self.carried = carried;
@@ -883,7 +883,7 @@ impl MenuBehavior {
             // Different items - swap (if both operations are allowed)
             if slot.may_pickup() && slot.may_place(&carried) {
                 if carried.count <= slot.get_max_stack_size_for_item(&carried) {
-                    slot.set_item(carried);
+                    slot.set_by_player(carried, &slot_item);
                     self.carried = slot_item;
                 } else {
                     self.carried = carried;
@@ -985,8 +985,13 @@ pub trait Menu {
     fn behavior_mut(&mut self) -> &mut MenuBehavior;
 
     /// Handles shift-click (quick move) for a slot.
-    /// Returns the resulting item stack (empty if fully moved).
-    fn quick_move_stack(&mut self, slot_index: usize) -> ItemStack;
+    ///
+    /// Returns a tuple of (original_clicked_item, items_to_drop).
+    /// - `original_clicked_item`: The item that was in the slot before the move (empty if fully moved)
+    /// - `items_to_drop`: Items that couldn't fit in the inventory and should be dropped in the world
+    ///
+    /// Based on Java's `AbstractContainerMenu::quickMoveStack`.
+    fn quick_move_stack(&mut self, slot_index: usize) -> (ItemStack, Vec<ItemStack>);
 
     /// Returns true if this menu is still valid for the player.
     fn still_valid(&self) -> bool {
@@ -1011,30 +1016,48 @@ pub trait Menu {
     /// Based on Java's `AbstractContainerMenu::clicked` and doClick.
     ///
     /// `has_infinite_materials` should be true if the player is in creative mode.
+    ///
+    /// Returns a list of items that should be dropped in the world (e.g., items that
+    /// couldn't fit in inventory during shift-click on crafting result).
     fn clicked(
         &mut self,
         slot_num: i16,
         button: i8,
         click_type: ClickType,
         has_infinite_materials: bool,
-    ) {
+    ) -> Vec<ItemStack> {
         if click_type == ClickType::QuickCraft {
             self.behavior_mut()
                 .do_quick_craft(slot_num, button, has_infinite_materials);
+            Vec::new()
         } else {
             // Any non-quickcraft click resets quickcraft state if in progress
             if self.behavior().quickcraft_status != 0 {
                 self.behavior_mut().reset_quick_craft();
             }
             match click_type {
-                ClickType::Pickup => self.behavior_mut().do_pickup(slot_num, button),
+                ClickType::Pickup => {
+                    self.behavior_mut().do_pickup(slot_num, button);
+                    Vec::new()
+                }
                 ClickType::QuickMove => self.do_quick_move(slot_num),
-                ClickType::Swap => self.do_swap(slot_num, button),
-                ClickType::Clone => self
-                    .behavior_mut()
-                    .do_clone(slot_num, has_infinite_materials),
-                ClickType::Throw => self.behavior_mut().do_throw(slot_num, button),
-                ClickType::PickupAll => self.do_pickup_all(slot_num, button),
+                ClickType::Swap => {
+                    self.do_swap(slot_num, button);
+                    Vec::new()
+                }
+                ClickType::Clone => {
+                    self.behavior_mut()
+                        .do_clone(slot_num, has_infinite_materials);
+                    Vec::new()
+                }
+                ClickType::Throw => {
+                    self.behavior_mut().do_throw(slot_num, button);
+                    Vec::new()
+                }
+                ClickType::PickupAll => {
+                    self.do_pickup_all(slot_num, button);
+                    Vec::new()
+                }
                 ClickType::QuickCraft => unreachable!(),
             }
         }
@@ -1042,31 +1065,36 @@ pub trait Menu {
 
     /// Handles quick move (shift-click).
     /// Based on Java's `AbstractContainerMenu::doClick` for `ClickType.QUICK_MOVE`.
-    fn do_quick_move(&mut self, slot_num: i16) {
+    ///
+    /// Returns a list of items that should be dropped in the world (couldn't fit in inventory).
+    fn do_quick_move(&mut self, slot_num: i16) -> Vec<ItemStack> {
+        let mut all_items_to_drop = Vec::new();
+
         if slot_num < 0 {
-            return;
+            return all_items_to_drop;
         }
 
         let slot_index = slot_num as usize;
         let slot_count = self.behavior().slots.len();
         if slot_index >= slot_count {
-            return;
+            return all_items_to_drop;
         }
 
         // Check if slot allows pickup
         let may_pickup = self.behavior().slots[slot_index].may_pickup();
         if !may_pickup {
-            return;
+            return all_items_to_drop;
         }
 
         // Get the initial item for comparison
         let initial_item = self.behavior().slots[slot_index].with_item(std::clone::Clone::clone);
         if initial_item.is_empty() {
-            return;
+            return all_items_to_drop;
         }
 
         // Call quick_move_stack in a loop while the item type remains the same
-        let mut result = self.quick_move_stack(slot_index);
+        let (mut result, mut items_to_drop) = self.quick_move_stack(slot_index);
+        all_items_to_drop.append(&mut items_to_drop);
 
         while !result.is_empty() {
             let current_item =
@@ -1074,14 +1102,42 @@ pub trait Menu {
             if !ItemStack::is_same_item(&current_item, &result) {
                 break;
             }
-            result = self.quick_move_stack(slot_index);
+            let (new_result, mut more_items_to_drop) = self.quick_move_stack(slot_index);
+            result = new_result;
+            all_items_to_drop.append(&mut more_items_to_drop);
+        }
+
+        all_items_to_drop
+    }
+
+    /// Returns the menu slot index for the given hotbar/offhand button.
+    ///
+    /// This maps the button number from a swap click (0-8 for hotbar, 40 for offhand)
+    /// to the corresponding slot index in this menu.
+    ///
+    /// Returns `None` if the button doesn't correspond to a valid slot in this menu.
+    ///
+    /// The default implementation uses the InventoryMenu layout:
+    /// - Hotbar slots 0-8 map to menu slots 36-44
+    /// - Offhand (button 40) maps to menu slot 45
+    ///
+    /// Other menu types should override this to provide their own mapping.
+    fn get_hotbar_slot_for_swap(&self, button: i8) -> Option<usize> {
+        if button == 40 {
+            // Offhand - menu slot 45 in InventoryMenu
+            Some(45)
+        } else if (0..9).contains(&button) {
+            // Hotbar slots 36-44 in InventoryMenu
+            Some(36 + button as usize)
+        } else {
+            None
         }
     }
 
     /// Handles swap (number keys to swap with hotbar).
     /// button is the hotbar slot (0-8) or 40 for offhand.
     ///
-    /// Default implementation for `InventoryMenu` where we have direct slot access.
+    /// Based on Java's `AbstractContainerMenu::doClick` for `ClickType.SWAP`.
     fn do_swap(&mut self, slot_num: i16, button: i8) {
         if slot_num < 0 {
             return;
@@ -1093,15 +1149,8 @@ pub trait Menu {
             return;
         }
 
-        // Determine the hotbar/offhand slot index in the menu
-        // For InventoryMenu: hotbar is slots 36-44, offhand is slot 45
-        let hotbar_slot_index = if button == 40 {
-            // Offhand
-            45
-        } else if (0..9).contains(&button) {
-            // Hotbar slots 36-44 map to button 0-8
-            36 + button as usize
-        } else {
+        // Get the hotbar/offhand slot index using the menu-specific mapping
+        let Some(hotbar_slot_index) = self.get_hotbar_slot_for_swap(button) else {
             return;
         };
 
@@ -1122,8 +1171,8 @@ pub trait Menu {
         if source_item.is_empty() {
             // Move from target to hotbar
             if target_slot.may_pickup() {
-                source_slot.set_item(target_item.clone());
-                target_slot.set_item(ItemStack::empty());
+                source_slot.set_by_player(target_item.clone(), &ItemStack::empty());
+                target_slot.set_by_player(ItemStack::empty(), &target_item);
                 // Ignore remainder - swap doesn't involve result slots
                 let _ = target_slot.on_take(&target_item);
                 target_slot.set_changed();
@@ -1134,12 +1183,12 @@ pub trait Menu {
             if target_slot.may_place(&source_item) {
                 let max_size = target_slot.get_max_stack_size_for_item(&source_item);
                 if source_item.count <= max_size {
-                    target_slot.set_item(source_item);
-                    source_slot.set_item(ItemStack::empty());
+                    target_slot.set_by_player(source_item.clone(), &ItemStack::empty());
+                    source_slot.set_by_player(ItemStack::empty(), &source_item);
                 } else {
                     let mut to_place = source_item.clone();
                     to_place.set_count(max_size);
-                    target_slot.set_item(to_place);
+                    target_slot.set_by_player(to_place, &ItemStack::empty());
                     source_slot.with_item_mut(|i| i.shrink(max_size));
                 }
                 target_slot.set_changed();
@@ -1150,8 +1199,8 @@ pub trait Menu {
             if target_slot.may_pickup() && target_slot.may_place(&source_item) {
                 let max_size = target_slot.get_max_stack_size_for_item(&source_item);
                 if source_item.count <= max_size {
-                    target_slot.set_item(source_item);
-                    source_slot.set_item(target_item.clone());
+                    target_slot.set_by_player(source_item.clone(), &target_item);
+                    source_slot.set_by_player(target_item.clone(), &source_item);
                     // Ignore remainder - swap doesn't involve result slots
                     let _ = target_slot.on_take(&target_item);
                     target_slot.set_changed();

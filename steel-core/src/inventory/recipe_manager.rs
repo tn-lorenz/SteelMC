@@ -6,7 +6,7 @@
 use steel_registry::{
     REGISTRY,
     item_stack::ItemStack,
-    recipe::{CraftingInput, CraftingRecipe},
+    recipe::{CraftingRecipe, PositionedCraftingInput},
 };
 
 use super::container::Container;
@@ -24,7 +24,7 @@ pub fn slot_changed_crafting_grid<R: Container>(
     result: &mut R,
     is_2x2: bool,
 ) {
-    let input = create_crafting_input(crafting);
+    let input = crafting.as_input();
 
     let recipe = if is_2x2 {
         REGISTRY.recipes.find_crafting_recipe_2x2(&input)
@@ -40,12 +40,6 @@ pub fn slot_changed_crafting_grid<R: Container>(
     result.set_item(0, result_stack);
 }
 
-/// Creates a `CraftingInput` from a `CraftingContainer`.
-fn create_crafting_input(crafting: &CraftingContainer) -> CraftingInput {
-    let items: Vec<ItemStack> = crafting.items().to_vec();
-    CraftingInput::new(crafting.width(), crafting.height(), items)
-}
-
 /// Finds a matching recipe for the given crafting container.
 ///
 /// # Arguments
@@ -59,11 +53,38 @@ pub fn find_recipe(
     crafting: &CraftingContainer,
     is_2x2: bool,
 ) -> Option<&'static dyn CraftingRecipe> {
-    let input = create_crafting_input(crafting);
+    let input = crafting.as_input();
 
     if is_2x2 {
         REGISTRY.recipes.find_crafting_recipe_2x2(&input)
     } else {
         REGISTRY.recipes.find_crafting_recipe(&input)
     }
+}
+
+/// Gets the remaining items (crafting remainders) for a recipe.
+///
+/// This queries the recipe for its remaining items, which may include
+/// items like empty buckets when using milk buckets in a recipe.
+///
+/// # Arguments
+/// * `crafting` - The crafting container
+/// * `is_2x2` - Whether this is a 2x2 crafting grid
+///
+/// # Returns
+/// A vector of remaining items for each slot in the positioned input,
+/// along with the positioned input for mapping back to grid slots.
+/// Returns None if no recipe matches.
+#[must_use]
+pub fn get_remaining_items(
+    crafting: &CraftingContainer,
+    is_2x2: bool,
+) -> Option<(Vec<ItemStack>, PositionedCraftingInput)> {
+    let positioned = crafting.as_positioned_input();
+    let recipe = find_recipe(crafting, is_2x2)?;
+
+    // Get remainders from the recipe using the positioned (trimmed) input
+    let remainders = recipe.get_remaining_items(&positioned.input);
+
+    Some((remainders, positioned))
 }

@@ -8,7 +8,8 @@ mod ingredient;
 mod registry;
 
 pub use crafting::{
-    CraftingCategory, CraftingInput, CraftingRecipe, RecipeResult, ShapedRecipe, ShapelessRecipe,
+    CraftingCategory, CraftingInput, CraftingRecipe, PositionedCraftingInput, RecipeResult,
+    ShapedRecipe, ShapelessRecipe,
 };
 pub use ingredient::Ingredient;
 pub use registry::RecipeRegistry;

@@ -623,12 +623,23 @@ impl Player {
 
         // Handle the click using the Menu trait method
         let has_infinite_materials = self.game_mode.load() == GameType::Creative;
-        menu.clicked(
+        let items_to_drop = menu.clicked(
             packet.slot_num,
             packet.button_num,
             packet.click_type,
             has_infinite_materials,
         );
+
+        // TODO: Drop items that couldn't fit in the inventory
+        // These items should be spawned as item entities at the player's position
+        // Java: player.drop(item, false) for each item in items_to_drop
+        for item in items_to_drop {
+            log::debug!(
+                "Player {} should drop item that couldn't fit: {:?}",
+                self.gameprofile.name,
+                item
+            );
+        }
 
         // Update remote slots from the client's perception
         for (slot, hash) in packet.changed_slots {
