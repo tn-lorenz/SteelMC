@@ -16,6 +16,7 @@ use steel_utils::locks::SyncMutex;
 
 use crate::inventory::{
     SyncContainer,
+    container::Container,
     crafting::{CraftingContainer, ResultContainer},
     menu::{Menu, MenuBehavior},
     recipe_manager,
@@ -331,5 +332,45 @@ impl Menu for InventoryMenu {
     fn can_take_item_for_pick_all(&self, _carried: &ItemStack, slot_index: usize) -> bool {
         // Can't pickup-all from the crafting result slot
         slot_index != slots::RESULT_SLOT
+    }
+
+    /// Called when the inventory menu is closed.
+    /// Returns crafting grid items to the player's inventory.
+    fn removed(&mut self) {
+        // Clear the carried item first
+        let carried = std::mem::take(&mut self.behavior.carried);
+
+        // If player was holding something, try to return it to inventory
+        if !carried.is_empty() {
+            let mut remaining = carried;
+            // Try to add to inventory (slots 9-45)
+            self.behavior.move_item_stack_to(
+                &mut remaining,
+                slots::INV_SLOT_START,
+                slots::OFFHAND_SLOT,
+                false,
+            );
+            // If couldn't fit, items are lost (would need to drop in world)
+        }
+
+        // Clear crafting grid and return items to inventory
+        let mut crafting = self.crafting_container.lock();
+        for i in 0..crafting.get_container_size() {
+            let item = crafting.remove_item_no_update(i);
+            if !item.is_empty() {
+                let mut remaining = item;
+                // Try to add to inventory (slots 9-45)
+                self.behavior.move_item_stack_to(
+                    &mut remaining,
+                    slots::INV_SLOT_START,
+                    slots::OFFHAND_SLOT,
+                    false,
+                );
+                // If couldn't fit, items are lost (would need to drop in world)
+            }
+        }
+
+        // Clear the result slot (it's virtual, just clear it)
+        self.result_container.lock().set_item(0, ItemStack::empty());
     }
 }

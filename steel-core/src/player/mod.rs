@@ -656,11 +656,16 @@ impl Player {
             self.gameprofile.name,
             packet.container_id
         );
-        // TODO: Implement container close handling
-        // This should:
-        // - Drop any items held by cursor back to player or ground
-        // - Clean up server-side container state
-        // - Notify any block entities (like chests) that the player left
+
+        // For the player inventory menu (container_id 0), call removed() to:
+        // - Return crafting grid items to inventory
+        // - Clear the cursor item
+        if packet.container_id == i32::from(InventoryMenu::CONTAINER_ID) {
+            let mut menu = self.inventory_menu.lock();
+            menu.removed();
+        }
+        // TODO: Handle other container types (chests, crafting tables, etc.)
+        // - Notify any block entities that the player left
     }
 
     /// Handles a container slot state changed packet (e.g., crafter slot toggle).

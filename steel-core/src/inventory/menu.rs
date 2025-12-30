@@ -988,6 +988,14 @@ pub trait Menu {
         true
     }
 
+    /// Called when the menu is closed/removed.
+    /// Override to handle cleanup like returning crafting grid items to the player.
+    /// The default implementation clears the carried item by dropping it.
+    fn removed(&mut self) {
+        // Default: just clear the carried item (caller should handle dropping it)
+        self.behavior_mut().carried = ItemStack::empty();
+    }
+
     /// Handles a click action in this menu.
     /// Based on Java's `AbstractContainerMenu::clicked` and doClick.
     ///
