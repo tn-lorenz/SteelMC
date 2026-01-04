@@ -10,6 +10,7 @@ use serde::{Deserialize, Serialize};
 use wincode::{SchemaRead, SchemaWrite};
 
 use crate::{
+    codec::VarInt,
     math::{Vector2, Vector3},
     serial::{ReadFrom, WriteTo},
 };
@@ -94,24 +95,48 @@ impl ReadFrom for ChunkPos {
 pub struct BlockPos(pub Vector3<i32>);
 
 impl BlockPos {
-    // Define constants as per the Java logic, but in Rust style
+    // Define constants as per the Java logic
     const PACKED_HORIZONTAL_LEN: u32 = 26;
-    const PACKED_Y_LEN: u32 = 64 - 2 * Self::PACKED_HORIZONTAL_LEN;
-    const X_OFFSET: u32 = Self::PACKED_Y_LEN + Self::PACKED_HORIZONTAL_LEN;
-    const Z_OFFSET: u32 = 0;
+    const PACKED_Y_LEN: u32 = 12;
+    const X_OFFSET: u32 = Self::PACKED_HORIZONTAL_LEN + Self::PACKED_Y_LEN; // 38
+    const Z_OFFSET: u32 = Self::PACKED_Y_LEN; // 12
     const PACKED_X_MASK: i64 = (1i64 << Self::PACKED_HORIZONTAL_LEN) - 1;
     const PACKED_Y_MASK: i64 = (1i64 << Self::PACKED_Y_LEN) - 1;
     const PACKED_Z_MASK: i64 = (1i64 << Self::PACKED_HORIZONTAL_LEN) - 1;
 
     /// Converts the `BlockPos` to an `i64`.
+    /// Layout: X (26 bits, offset 38) | Z (26 bits, offset 12) | Y (12 bits, offset 0)
     #[must_use]
     pub fn as_i64(&self) -> i64 {
         let x = i64::from(self.0.x);
         let y = i64::from(self.0.y);
         let z = i64::from(self.0.z);
         ((x & Self::PACKED_X_MASK) << Self::X_OFFSET)
-            | (y & Self::PACKED_Y_MASK)
             | ((z & Self::PACKED_Z_MASK) << Self::Z_OFFSET)
+            | (y & Self::PACKED_Y_MASK)
+    }
+
+    /// Creates a `BlockPos` from an `i64`.
+    /// Layout: X (26 bits, offset 38) | Z (26 bits, offset 12) | Y (12 bits, offset 0)
+    #[must_use]
+    pub fn from_i64(value: i64) -> Self {
+        let x = value >> Self::X_OFFSET;
+        let y = value & Self::PACKED_Y_MASK;
+        let z = (value >> Self::Z_OFFSET) & Self::PACKED_Z_MASK;
+
+        // Sign extend the values
+        let x = (x << (64 - Self::PACKED_HORIZONTAL_LEN)) >> (64 - Self::PACKED_HORIZONTAL_LEN);
+        let y = (y << (64 - Self::PACKED_Y_LEN)) >> (64 - Self::PACKED_Y_LEN);
+        let z = (z << (64 - Self::PACKED_HORIZONTAL_LEN)) >> (64 - Self::PACKED_HORIZONTAL_LEN);
+
+        Self(Vector3::new(x as i32, y as i32, z as i32))
+    }
+}
+
+impl ReadFrom for BlockPos {
+    fn read(data: &mut impl Read) -> io::Result<Self> {
+        let packed = <i64 as ReadFrom>::read(data)?;
+        Ok(Self::from_i64(packed))
     }
 }
 
@@ -303,9 +328,57 @@ impl<'de> SchemaRead<'de> for Identifier {
 }
 
 /// Represents the hand used for an interaction.
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
 pub enum InteractionHand {
     /// The main hand.
     MainHand,
     /// The off hand.
     OffHand,
+}
+
+impl ReadFrom for InteractionHand {
+    fn read(data: &mut impl Read) -> io::Result<Self> {
+        let id = VarInt::read(data)?.0;
+        match id {
+            0 => Ok(InteractionHand::MainHand),
+            1 => Ok(InteractionHand::OffHand),
+            _ => Err(io::Error::other("Invalid InteractionHand id")),
+        }
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    #[test]
+    fn test_block_pos_roundtrip() {
+        let positions = vec![
+            BlockPos(Vector3::new(0, -61, -2)),
+            BlockPos(Vector3::new(0, 0, 0)),
+            BlockPos(Vector3::new(100, 64, -100)),
+            BlockPos(Vector3::new(-1000, -64, 1000)),
+            BlockPos(Vector3::new(33554431, 2047, 33554431)), // Max positive values
+            BlockPos(Vector3::new(-33554432, -2048, -33554432)), // Max negative values
+        ];
+
+        for pos in positions {
+            let encoded = pos.as_i64();
+            let decoded = BlockPos::from_i64(encoded);
+            assert_eq!(
+                pos, decoded,
+                "Roundtrip failed for {:?}: encoded={}, decoded={:?}",
+                pos, encoded, decoded
+            );
+        }
+    }
+
+    #[test]
+    fn test_block_pos_specific_case() {
+        // Test the specific case from the bug report
+        let pos = BlockPos(Vector3::new(0, -61, -2));
+        let encoded = pos.as_i64();
+        let decoded = BlockPos::from_i64(encoded);
+        assert_eq!(pos, decoded, "Position 0, -61, -2 failed roundtrip");
+    }
 }

@@ -1,4 +1,6 @@
-use steel_utils::{BlockPos, math::Vector3, types::InteractionHand};
+use std::io::{self, Read};
+
+use steel_utils::{BlockPos, math::Vector3, serial::ReadFrom, types::InteractionHand};
 
 use crate::{
     blocks::{BlockRef, properties::Direction},
@@ -18,6 +20,7 @@ pub struct BlockPlaceContext {
     pub replace_clicked_block: bool,
 }
 
+#[derive(Debug, Clone)]
 pub struct BlockHitResult {
     pub location: Vector3<f64>,
     pub direction: Direction,
@@ -25,6 +28,27 @@ pub struct BlockHitResult {
     pub miss: bool,
     pub inside: bool,
     pub world_border_hit: bool,
+}
+
+impl ReadFrom for BlockHitResult {
+    fn read(data: &mut impl Read) -> io::Result<Self> {
+        let block_pos = BlockPos::read(data)?;
+        let direction = Direction::read(data)?;
+        let x = f32::read(data)?;
+        let y = f32::read(data)?;
+        let z = f32::read(data)?;
+        let inside = bool::read(data)?;
+        let world_border_hit = bool::read(data)?;
+
+        Ok(BlockHitResult {
+            location: Vector3::new(f64::from(x), f64::from(y), f64::from(z)),
+            direction,
+            block_pos,
+            miss: false,
+            inside,
+            world_border_hit,
+        })
+    }
 }
 
 pub struct UseOnContext<'a> {

@@ -19,6 +19,7 @@ use message_chain::SignedMessageChain;
 use message_validator::LastSeenMessagesValidator;
 use profile_key::RemoteChatSession;
 pub use signature_cache::{LastSeen, MessageCache};
+use steel_protocol::packets::game::{SUseItem, SUseItemOn};
 use steel_utils::locks::SyncMutex;
 use steel_utils::types::GameType;
 
@@ -719,6 +720,25 @@ impl Player {
                 );
             }
         }
+    }
+
+    /// Handles the use of an item on a block.
+    pub fn handle_use_item_on(&self, packet: SUseItemOn) {
+        log::info!("Player {} used {:?}", self.gameprofile.name, packet);
+        // TODO: Implement use item on block handler
+    }
+
+    /// Handles the use of an item.
+    pub fn handle_use_item(&self, packet: SUseItem) {
+        log::info!(
+            "Player {} used {:?} (sequence: {}, yaw: {}, pitch: {})",
+            self.gameprofile.name,
+            packet.hand,
+            packet.sequence,
+            packet.y_rot,
+            packet.x_rot
+        );
+        // TODO: Implement use item handler
     }
 
     /// Sends all inventory slots to the client (full sync).

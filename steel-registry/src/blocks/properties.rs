@@ -1,6 +1,9 @@
-use std::fmt::Debug;
+use std::{
+    fmt::Debug,
+    io::{self, Read},
+};
 
-pub use steel_utils::math::Axis;
+pub use steel_utils::{codec::VarInt, math::Axis, serial::ReadFrom};
 
 pub trait Property<T>: Sync + Send {
     fn get_value(&self, value: &str) -> Option<T>;
@@ -255,6 +258,21 @@ impl PropertyEnum for Direction {
             Direction::South => "south",
             Direction::West => "west",
             Direction::East => "east",
+        }
+    }
+}
+
+impl ReadFrom for Direction {
+    fn read(data: &mut impl Read) -> io::Result<Self> {
+        let id = VarInt::read(data)?.0;
+        match id {
+            0 => Ok(Direction::Down),
+            1 => Ok(Direction::Up),
+            2 => Ok(Direction::North),
+            3 => Ok(Direction::South),
+            4 => Ok(Direction::West),
+            5 => Ok(Direction::East),
+            _ => Err(io::Error::other("Invalid Direction id")),
         }
     }
 }

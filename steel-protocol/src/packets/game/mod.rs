@@ -34,6 +34,8 @@ mod s_move_player;
 mod s_player_load;
 mod s_set_creative_mode_slot;
 mod s_set_held_item;
+mod s_use_item;
+mod s_use_item_on;
 
 pub use c_chunk_batch_finished::CChunkBatchFinished;
 pub use c_chunk_batch_start::CChunkBatchStart;
@@ -76,3 +78,5 @@ pub use s_move_player::{SMovePlayer, SMovePlayerPos, SMovePlayerPosRot, SMovePla
 pub use s_player_load::SPlayerLoad;
 pub use s_set_creative_mode_slot::SSetCreativeModeSlot;
 pub use s_set_held_item::SSetHeldItem;
+pub use s_use_item::SUseItem;
+pub use s_use_item_on::SUseItemOn;
