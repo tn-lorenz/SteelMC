@@ -1,3 +1,9 @@
+use steel_utils::{BlockPos, BlockStateId, math::Vector3};
+
+use crate::compat_traits::RegistryWorld;
+
+use crate::blocks::BlockRef;
+use crate::blocks::properties::Direction;
 pub use crate::blocks::properties::NoteBlockInstrument;
 
 #[derive(Debug, Clone, Copy)]
@@ -10,7 +16,7 @@ pub enum PushReaction {
 }
 
 #[derive(Debug)]
-pub struct BlockBehaviourProperties {
+pub struct BlockConfig {
     pub has_collision: bool,
     pub can_occlude: bool,
     pub explosion_resistance: f32,
@@ -31,7 +37,7 @@ pub struct BlockBehaviourProperties {
     pub replaceable: bool,
 }
 
-impl BlockBehaviourProperties {
+impl BlockConfig {
     /// Starts building a new set of block properties.
     #[must_use]
     pub const fn new() -> Self {
@@ -166,8 +172,52 @@ impl BlockBehaviourProperties {
     }
 }
 
-impl Default for BlockBehaviourProperties {
+impl Default for BlockConfig {
     fn default() -> Self {
         Self::new()
+    }
+}
+
+pub struct BlockPlaceContext<'a> {
+    pub clicked_pos: BlockPos,
+    pub clicked_face: Direction,
+    pub click_location: Vector3<f64>,
+    pub inside: bool,
+    pub relative_pos: BlockPos,
+    pub replace_clicked: bool,
+    pub horizontal_direction: Direction,
+    pub rotation: f32,
+    pub world: &'a dyn RegistryWorld,
+}
+
+pub trait BlockBehaviour: Send + Sync {
+    fn update_shape(
+        &self,
+        state: BlockStateId,
+        _world: &dyn RegistryWorld,
+        _pos: BlockPos,
+        _direction: Direction,
+        _neighbor_pos: BlockPos,
+        _neighbor_state: BlockStateId,
+    ) -> BlockStateId {
+        state
+    }
+
+    fn get_state_for_placement(&self, context: &BlockPlaceContext<'_>) -> Option<BlockStateId>;
+}
+
+pub struct DefaultBlockBehaviour {
+    block: BlockRef,
+}
+
+impl DefaultBlockBehaviour {
+    pub const fn new(block: BlockRef) -> Self {
+        Self { block }
+    }
+}
+
+impl BlockBehaviour for DefaultBlockBehaviour {
+    fn get_state_for_placement(&self, _context: &BlockPlaceContext<'_>) -> Option<BlockStateId> {
+        Some(self.block.default_state())
     }
 }

@@ -8,16 +8,13 @@ use crate::{
     item_stack::ItemStack,
 };
 
+pub use crate::blocks::behaviour::BlockPlaceContext;
+
 pub enum InteractionResult {
     Success,
     Fail,
     Pass,
     TryEmptyHandInteraction,
-}
-
-pub struct BlockPlaceContext {
-    pub relative_pos: BlockPos,
-    pub replace_clicked_block: bool,
 }
 
 #[derive(Debug, Clone)]
