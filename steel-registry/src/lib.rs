@@ -44,6 +44,7 @@ pub mod blocks;
 pub mod cat_variant;
 pub mod chat_type;
 pub mod chicken_variant;
+pub mod compat_traits;
 pub mod cow_variant;
 pub mod damage_type;
 pub mod data_components;
@@ -303,6 +304,8 @@ impl Registry {
 
         let mut item_registry = ItemRegistry::new();
         vanilla_items::register_items(&mut item_registry);
+        vanilla_items::assign_item_behaviors(&mut item_registry);
+        items::vanilla_item_behaviors::assign_custom_item_behaviors(&mut item_registry);
         vanilla_item_tags::register_item_tags(&mut item_registry);
 
         let mut biome_registry = BiomeRegistry::new();

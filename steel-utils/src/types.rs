@@ -301,3 +301,11 @@ impl<'de> SchemaRead<'de> for Identifier {
         Ok(())
     }
 }
+
+/// Represents the hand used for an interaction.
+pub enum InteractionHand {
+    /// The main hand.
+    MainHand,
+    /// The off hand.
+    OffHand,
+}
