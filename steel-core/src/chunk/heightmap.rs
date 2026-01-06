@@ -2,12 +2,15 @@
 //!
 //! Heightmaps are used for various purposes like spawning, pathfinding, and rendering.
 
-use steel_registry::{REGISTRY, blocks::BlockRef};
+use rustc_hash::FxHashMap;
+
+use steel_registry::{BlockStateExt, REGISTRY, blocks::BlockRef};
 use steel_utils::{BlockStateId, Identifier};
 
 /// The different types of heightmaps.
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Hash)]
 pub enum HeightmapType {
+    // Final heightmaps (sent to client, used after CARVERS status)
     /// Tracks the highest non-air block. Used for world surface calculations.
     WorldSurface,
     /// Tracks the highest motion-blocking block (solid or fluid).
@@ -16,11 +19,23 @@ pub enum HeightmapType {
     MotionBlockingNoLeaves,
     /// Tracks the highest solid block (ocean floor).
     OceanFloor,
+    // Worldgen heightmaps (used before CARVERS status)
+    /// Worldgen version of `WorldSurface`.
+    WorldSurfaceWg,
+    /// Worldgen version of `OceanFloor`.
+    OceanFloorWg,
 }
 
 impl HeightmapType {
-    /// Returns all heightmap types that should be kept after world generation.
-    pub const fn post_worldgen_types() -> &'static [HeightmapType] {
+    /// Returns worldgen heightmap types (used before CARVERS status).
+    #[must_use]
+    pub const fn worldgen_types() -> &'static [HeightmapType] {
+        &[HeightmapType::WorldSurfaceWg, HeightmapType::OceanFloorWg]
+    }
+
+    /// Returns final heightmap types (used at CARVERS status and after).
+    #[must_use]
+    pub const fn final_types() -> &'static [HeightmapType] {
         &[
             HeightmapType::WorldSurface,
             HeightmapType::MotionBlocking,
@@ -31,6 +46,9 @@ impl HeightmapType {
 
     /// Returns whether a block is "opaque" for this heightmap type.
     /// This determines whether the block counts towards the heightmap.
+    ///
+    /// # Panics
+    /// Panics if the block state ID is invalid.
     #[must_use]
     pub fn is_opaque(&self, state: BlockStateId) -> bool {
         let block = REGISTRY
@@ -38,12 +56,12 @@ impl HeightmapType {
             .by_state_id(state)
             .expect("Invalid state ID");
         match self {
-            Self::WorldSurface => !block.config.is_air,
+            Self::WorldSurface | Self::WorldSurfaceWg => !block.config.is_air,
             Self::MotionBlocking => block.config.has_collision || block.config.liquid,
             Self::MotionBlockingNoLeaves => {
                 (block.config.has_collision || block.config.liquid) && !Self::is_leaves(block)
             }
-            Self::OceanFloor => block.config.has_collision,
+            Self::OceanFloor | Self::OceanFloorWg => block.config.has_collision,
         }
     }
 
@@ -55,17 +73,83 @@ impl HeightmapType {
     }
 }
 
+/// Primes heightmaps by scanning the chunk from top to bottom.
+///
+/// Used to lazily initialize heightmaps when they don't exist yet.
+/// This scans each column from top to bottom, finding the first opaque block
+/// for each heightmap type.
+#[allow(clippy::missing_panics_doc, clippy::implicit_hasher)]
+pub fn prime_heightmaps<F>(
+    heightmaps: &mut FxHashMap<HeightmapType, Heightmap>,
+    types: &[HeightmapType],
+    min_y: i32,
+    height: i32,
+    get_block: F,
+) where
+    F: Fn(usize, i32, usize) -> BlockStateId,
+{
+    // Collect types that need priming (don't exist yet)
+    let types_to_prime: Vec<HeightmapType> = types
+        .iter()
+        .filter(|&&hm_type| !heightmaps.contains_key(&hm_type))
+        .copied()
+        .collect();
+
+    if types_to_prime.is_empty() {
+        return;
+    }
+
+    // Create missing heightmaps
+    for &hm_type in &types_to_prime {
+        heightmaps.insert(hm_type, Heightmap::new(hm_type, min_y, height));
+    }
+
+    let max_y = min_y + height;
+
+    // For each column, scan from top to bottom
+    for x in 0..16 {
+        for z in 0..16 {
+            // Track which heightmaps still need to find their first opaque block
+            let mut pending: Vec<HeightmapType> = types_to_prime.clone();
+
+            for y in (min_y..max_y).rev() {
+                if pending.is_empty() {
+                    break;
+                }
+
+                let state = get_block(x, y, z);
+                if state.is_air() {
+                    continue;
+                }
+
+                // Check each pending heightmap type
+                pending.retain(|&hm_type| {
+                    if hm_type.is_opaque(state) {
+                        heightmaps
+                            .get_mut(&hm_type)
+                            .expect("heightmap was just inserted")
+                            .set_height(x, z, y + 1);
+                        false // Remove from pending
+                    } else {
+                        true // Keep in pending
+                    }
+                });
+            }
+        }
+    }
+}
+
 /// A heightmap that tracks the highest blocks of a specific type in a chunk.
 ///
 /// The heightmap stores heights for each column in a 16x16 chunk.
-/// Heights are stored relative to min_y, so `data[index] + min_y` gives the actual Y coordinate.
+/// Heights are stored relative to `min_y`, so `data[index] + min_y` gives the actual Y coordinate.
 #[derive(Debug, Clone)]
 pub struct Heightmap {
     /// Height data stored as a flat array of 256 entries (16x16).
-    /// Each entry stores the height relative to min_y.
+    /// Each entry stores the height relative to `min_y`.
     data: Box<[u16; 256]>,
     /// The type of this heightmap.
-    heightmap_type: HeightmapType,
+    map_type: HeightmapType,
     /// The minimum Y coordinate of the world.
     min_y: i32,
     /// The total height of the world.
@@ -73,12 +157,12 @@ pub struct Heightmap {
 }
 
 impl Heightmap {
-    /// Creates a new heightmap with all heights initialized to min_y.
+    /// Creates a new heightmap with all heights initialized to `min_y`.
     #[must_use]
-    pub fn new(heightmap_type: HeightmapType, min_y: i32, height: i32) -> Self {
+    pub fn new(map_type: HeightmapType, min_y: i32, height: i32) -> Self {
         Self {
             data: Box::new([0; 256]),
-            heightmap_type,
+            map_type,
             min_y,
             height,
         }
@@ -87,7 +171,7 @@ impl Heightmap {
     /// Returns the heightmap type.
     #[must_use]
     pub const fn heightmap_type(&self) -> HeightmapType {
-        self.heightmap_type
+        self.map_type
     }
 
     /// Gets the index into the data array for the given local coordinates.
@@ -111,7 +195,7 @@ impl Heightmap {
     }
 
     /// Sets the height at the given position.
-    fn set_height(&mut self, local_x: usize, local_z: usize, height: i32) {
+    pub fn set_height(&mut self, local_x: usize, local_z: usize, height: i32) {
         debug_assert!(local_x < 16 && local_z < 16);
         let index = Self::get_index(local_x, local_z);
         self.data[index] = (height - self.min_y) as u16;
@@ -145,7 +229,7 @@ impl Heightmap {
             return false;
         }
 
-        if self.heightmap_type.is_opaque(state) {
+        if self.map_type.is_opaque(state) {
             // Block is opaque - if it's at or above current height, update
             if y >= first_available {
                 self.set_height(local_x, local_z, y + 1);
@@ -155,7 +239,7 @@ impl Heightmap {
             // Block is not opaque and is at the current top - scan down to find new height
             for scan_y in (self.min_y..y).rev() {
                 let scan_state = get_block(local_x, scan_y, local_z);
-                if self.heightmap_type.is_opaque(scan_state) {
+                if self.map_type.is_opaque(scan_state) {
                     self.set_height(local_x, local_z, scan_y + 1);
                     return true;
                 }
@@ -171,12 +255,12 @@ impl Heightmap {
     /// Gets the raw data as a slice of i64 values for serialization.
     ///
     /// The data is packed using the minimum number of bits required to store
-    /// the height range (0 to world_height).
+    /// the height range (0 to `world_height`).
     #[must_use]
     pub fn get_raw_data(&self) -> Vec<i64> {
         let bits_per_value = Self::calculate_bits_per_value(self.height);
         let values_per_long = 64 / bits_per_value;
-        let num_longs = (256 + values_per_long - 1) / values_per_long;
+        let num_longs = 256_usize.div_ceil(values_per_long);
 
         let mut result = vec![0i64; num_longs];
         let mask = (1u64 << bits_per_value) - 1;
@@ -197,7 +281,7 @@ impl Heightmap {
     pub fn set_raw_data(&mut self, data: &[i64]) {
         let bits_per_value = Self::calculate_bits_per_value(self.height);
         let values_per_long = 64 / bits_per_value;
-        let expected_longs = (256 + values_per_long - 1) / values_per_long;
+        let expected_longs = 256_usize.div_ceil(values_per_long);
 
         if data.len() != expected_longs {
             log::warn!(
@@ -262,6 +346,9 @@ impl ChunkHeightmaps {
     }
 
     /// Gets a reference to a heightmap by type.
+    ///
+    /// # Panics
+    /// Panics if called with a worldgen heightmap type (`WorldSurfaceWg`, `OceanFloorWg`).
     #[must_use]
     pub fn get(&self, heightmap_type: HeightmapType) -> &Heightmap {
         match heightmap_type {
@@ -269,10 +356,16 @@ impl ChunkHeightmaps {
             HeightmapType::MotionBlocking => &self.motion_blocking,
             HeightmapType::MotionBlockingNoLeaves => &self.motion_blocking_no_leaves,
             HeightmapType::OceanFloor => &self.ocean_floor,
+            HeightmapType::WorldSurfaceWg | HeightmapType::OceanFloorWg => {
+                panic!("ChunkHeightmaps does not store worldgen heightmaps")
+            }
         }
     }
 
     /// Gets a mutable reference to a heightmap by type.
+    ///
+    /// # Panics
+    /// Panics if called with a worldgen heightmap type (`WorldSurfaceWg`, `OceanFloorWg`).
     #[must_use]
     pub fn get_mut(&mut self, heightmap_type: HeightmapType) -> &mut Heightmap {
         match heightmap_type {
@@ -280,6 +373,9 @@ impl ChunkHeightmaps {
             HeightmapType::MotionBlocking => &mut self.motion_blocking,
             HeightmapType::MotionBlockingNoLeaves => &mut self.motion_blocking_no_leaves,
             HeightmapType::OceanFloor => &mut self.ocean_floor,
+            HeightmapType::WorldSurfaceWg | HeightmapType::OceanFloorWg => {
+                panic!("ChunkHeightmaps does not store worldgen heightmaps")
+            }
         }
     }
 

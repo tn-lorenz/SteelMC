@@ -3,7 +3,9 @@ use std::sync::atomic::Ordering;
 use steel_utils::{BlockPos, BlockStateId, ChunkPos, types::UpdateFlags};
 use wincode::{SchemaRead, SchemaWrite};
 
-use crate::chunk::{level_chunk::LevelChunk, proto_chunk::ProtoChunk, section::Sections};
+use crate::chunk::{
+    heightmap::HeightmapType, level_chunk::LevelChunk, proto_chunk::ProtoChunk, section::Sections,
+};
 
 /// The status of a chunk.
 #[derive(Debug, PartialEq, Eq, PartialOrd, Ord, Clone, Copy, SchemaWrite, SchemaRead)]
@@ -100,6 +102,30 @@ impl ChunkStatus {
             Self::Light => Some(Self::InitializeLight),
             Self::Spawn => Some(Self::Light),
             Self::Full => Some(Self::Spawn),
+        }
+    }
+
+    /// Returns the heightmap types that should be updated at this status.
+    ///
+    /// Before CARVERS status, worldgen heightmaps are used.
+    /// At CARVERS and after, final heightmaps are used.
+    #[must_use]
+    pub const fn heightmaps_after(self) -> &'static [HeightmapType] {
+        match self {
+            // Before CARVERS: use worldgen heightmaps
+            Self::Empty
+            | Self::StructureStarts
+            | Self::StructureReferences
+            | Self::Biomes
+            | Self::Noise
+            | Self::Surface => HeightmapType::worldgen_types(),
+            // CARVERS and after: use final heightmaps
+            Self::Carvers
+            | Self::Features
+            | Self::InitializeLight
+            | Self::Light
+            | Self::Spawn
+            | Self::Full => HeightmapType::final_types(),
         }
     }
 }
@@ -214,9 +240,6 @@ impl ChunkAccess {
     /// Sets a block state at the given position.
     ///
     /// Returns the old block state, or `None` if nothing changed.
-    ///
-    /// # Panics
-    /// Panics if called on a `Proto` chunk (not yet implemented).
     pub fn set_block_state(
         &self,
         pos: BlockPos,
@@ -225,9 +248,7 @@ impl ChunkAccess {
     ) -> Option<BlockStateId> {
         match self {
             Self::Full(chunk) => chunk.set_block_state(pos, state, flags),
-            Self::Proto(_) => {
-                todo!("set_block_state not implemented for ProtoChunk")
-            }
+            Self::Proto(proto_chunk) => proto_chunk.set_block_state(pos, state, flags),
         }
     }
 
@@ -236,9 +257,7 @@ impl ChunkAccess {
     pub fn get_block_state(&self, pos: BlockPos) -> BlockStateId {
         match self {
             Self::Full(chunk) => chunk.get_block_state(pos),
-            Self::Proto(_) => {
-                todo!("get_block_state not implemented for ProtoChunk")
-            }
+            Self::Proto(proto_chunk) => proto_chunk.get_block_state(pos),
         }
     }
 }

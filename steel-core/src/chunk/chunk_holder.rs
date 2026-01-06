@@ -276,6 +276,7 @@ impl ChunkHolder {
                 //);
 
                 let has_parent = self_clone.try_chunk(parent_status).is_some();
+                let self_clone2 = self_clone.clone();
 
                 assert!(has_parent, "Parent chunk missing");
 
@@ -286,6 +287,12 @@ impl ChunkHolder {
                 {
                     Ok(()) => {
                         sender.send_modify(|chunk| {
+                            // Update inner status
+                            if let Some(acc) = self_clone2.data.load().as_ref()
+                                && let ChunkAccess::Proto(chunk) = acc.as_ref()
+                            {
+                                chunk.set_status(target_status);
+                            }
                             if let ChunkResult::Ok(s) = chunk {
                                 if *s < target_status {
                                     *s = target_status;
@@ -360,7 +367,7 @@ impl ChunkHolder {
         if let Some(data) = data
             && let ChunkAccess::Proto(proto_chunk) = &*data
         {
-            // This is a cheap clone since the sections are wrapped in an Arc
+            // This is a cheap clone since the sections are wrapped in Arc
             let full_chunk = LevelChunk::from_proto(proto_chunk.clone(), self.min_y, self.height);
             self.data
                 .store(Some(Arc::new(ChunkAccess::Full(full_chunk))));

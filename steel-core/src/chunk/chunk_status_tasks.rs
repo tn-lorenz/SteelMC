@@ -28,7 +28,12 @@ impl ChunkStatusTasks {
             .collect::<Vec<_>>()
             .into_boxed_slice();
 
-        let proto_chunk = ProtoChunk::new(Sections::from_owned(sections), holder.get_pos());
+        let proto_chunk = ProtoChunk::new(
+            Sections::from_owned(sections),
+            holder.get_pos(),
+            context.min_y(),
+            context.height(),
+        );
 
         //log::info!("Inserted proto chunk for {:?}", holder.get_pos());
 

@@ -688,7 +688,7 @@ impl RegionManager {
                 Sections {
                     sections: sections
                         .into_iter()
-                        .map(|section| SyncRwLock::new(section))
+                        .map(SyncRwLock::new)
                         .collect(),
                 },
                 pos,
@@ -699,10 +699,13 @@ impl RegionManager {
                 Sections {
                     sections: sections
                         .into_iter()
-                        .map(|section| SyncRwLock::new(section))
+                        .map(SyncRwLock::new)
                         .collect(),
                 },
                 pos,
+                status,
+                min_y,
+                height,
             )),
         }
     }

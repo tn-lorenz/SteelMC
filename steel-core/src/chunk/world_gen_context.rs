@@ -62,6 +62,8 @@ impl WorldGenContext {
         self.world().get_height()
     }
 
+    #[must_use]
+    /// How many sections this dimension has
     pub fn section_count(&self) -> usize {
         (self.height() / 16) as usize
     }

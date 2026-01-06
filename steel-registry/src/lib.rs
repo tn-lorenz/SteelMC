@@ -14,7 +14,7 @@ use steel_utils::{BlockStateId, Identifier};
 use crate::{
     banner_pattern::BannerPatternRegistry,
     biome::BiomeRegistry,
-    blocks::{Block, BlockRef, BlockRegistry},
+    blocks::{BlockRef, BlockRegistry},
     cat_variant::CatVariantRegistry,
     chat_type::ChatTypeRegistry,
     chicken_variant::ChickenVariantRegistry,

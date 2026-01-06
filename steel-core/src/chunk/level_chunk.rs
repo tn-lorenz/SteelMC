@@ -30,7 +30,7 @@ pub struct LevelChunk {
     pub pos: ChunkPos,
     /// Whether the chunk has been modified since last save.
     pub dirty: Arc<AtomicBool>,
-    /// The heightmaps for this chunk (wrapped in RwLock for interior mutability).
+    /// The heightmaps for this chunk (wrapped in `RwLock` for interior mutability).
     pub heightmaps: Arc<SyncRwLock<ChunkHeightmaps>>,
     /// The minimum Y coordinate of the world this chunk belongs to.
     min_y: i32,
@@ -40,13 +40,29 @@ pub struct LevelChunk {
 
 impl LevelChunk {
     /// Creates a new `LevelChunk` from a `ProtoChunk`.
+    ///
+    /// Transfers final heightmaps from the proto chunk if available.
     #[must_use]
     pub fn from_proto(proto_chunk: ProtoChunk, min_y: i32, height: i32) -> Self {
+        // Transfer final heightmaps from proto chunk if available
+        let proto_heightmaps = proto_chunk.heightmaps.read();
+        let mut chunk_heightmaps = ChunkHeightmaps::new(min_y, height);
+
+        // Copy final heightmap data if available in proto chunk
+        for &hm_type in HeightmapType::final_types() {
+            if let Some(proto_hm) = proto_heightmaps.get(&hm_type) {
+                chunk_heightmaps
+                    .get_mut(hm_type)
+                    .set_raw_data(&proto_hm.get_raw_data());
+            }
+        }
+        drop(proto_heightmaps);
+
         Self {
             sections: proto_chunk.sections,
             pos: proto_chunk.pos,
             dirty: proto_chunk.dirty.clone(),
-            heightmaps: Arc::new(SyncRwLock::new(ChunkHeightmaps::new(min_y, height))),
+            heightmaps: Arc::new(SyncRwLock::new(chunk_heightmaps)),
             min_y,
             height,
         }
@@ -97,6 +113,7 @@ impl LevelChunk {
     /// * `state` - The new block state to set
     /// * `_flags` - Update flags (currently unused, reserved for future use)
     #[allow(unused_variables)]
+    #[must_use] 
     pub fn set_block_state(
         &self,
         pos: BlockPos,

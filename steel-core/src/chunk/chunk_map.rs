@@ -2,7 +2,6 @@ use std::sync::atomic::Ordering;
 use std::sync::{Arc, Weak};
 use std::time::Duration;
 
-use arc_swap::Guard;
 use rayon::iter::{IntoParallelIterator, IntoParallelRefIterator, ParallelIterator};
 use rayon::{ThreadPool, ThreadPoolBuilder};
 use rustc_hash::FxBuildHasher;
@@ -83,10 +82,12 @@ impl ChunkMap {
             world_gen_context: Arc::new(WorldGenContext::new(generator, world)),
             thread_pool: Arc::new(ThreadPoolBuilder::new().build().unwrap()),
             chunk_runtime,
-            region_manager: Arc::new(RegionManager::new(&format!("world/{}", dimension.key.path))),
+            region_manager: Arc::new(RegionManager::new(format!("world/{}", dimension.key.path))),
         }
     }
 
+    /// Returns a chunk if it's fully loaded
+    #[allow(clippy::missing_panics_doc)]
     pub fn get_full_chunk(&self, pos: &ChunkPos) -> Option<Arc<ChunkAccess>> {
         let chunk_holder = self.chunks.get_sync(pos)?;
         chunk_holder

@@ -2,7 +2,6 @@
 use std::sync::{Arc, Weak};
 use std::time::Duration;
 
-use arc_swap::Guard;
 use scc::HashMap;
 use steel_protocol::packets::game::{CPlayerChat, CSystemChat};
 use steel_registry::{
@@ -34,7 +33,7 @@ impl World {
     /// Creates a new world.
     ///
     /// Uses `Arc::new_cyclic` to create a cyclic reference between
-    /// the World and its ChunkMap's WorldGenContext.
+    /// the World and its `ChunkMap`'s `WorldGenContext`.
     #[allow(clippy::new_without_default)]
     #[must_use]
     pub fn new(chunk_runtime: Arc<Runtime>, dimension: DimensionTypeRef) -> Arc<Self> {

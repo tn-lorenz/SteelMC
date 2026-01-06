@@ -19,7 +19,7 @@ impl Sections {
         Self {
             sections: sections
                 .into_iter()
-                .map(|section| SyncRwLock::new(section))
+                .map(SyncRwLock::new)
                 .collect(),
         }
     }
