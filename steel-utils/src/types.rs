@@ -23,6 +23,20 @@ pub type Todo = ();
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Hash, Default)]
 pub struct BlockStateId(pub u16);
 
+impl WriteTo for BlockStateId {
+    fn write(&self, writer: &mut impl Write) -> io::Result<()> {
+        VarInt(i32::from(self.0)).write(writer)
+    }
+}
+
+impl ReadFrom for BlockStateId {
+    fn read(data: &mut impl Read) -> io::Result<Self> {
+        let id = VarInt::read(data)?.0;
+        #[allow(clippy::cast_sign_loss)]
+        Ok(Self(id as u16))
+    }
+}
+
 /// A chunk position.
 #[derive(Debug, Clone, Copy, PartialEq, Eq, PartialOrd, Ord)]
 pub struct ChunkPos(pub Vector2<i32>);
@@ -137,6 +151,124 @@ impl ReadFrom for BlockPos {
     fn read(data: &mut impl Read) -> io::Result<Self> {
         let packed = <i64 as ReadFrom>::read(data)?;
         Ok(Self::from_i64(packed))
+    }
+}
+
+/// A chunk section position (16x16x16 region).
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Hash)]
+pub struct SectionPos(pub Vector3<i32>);
+
+impl SectionPos {
+    const SECTION_BITS: i32 = 4;
+    const SECTION_SIZE: i32 = 1 << Self::SECTION_BITS; // 16
+    const SECTION_MASK: i32 = Self::SECTION_SIZE - 1; // 15
+
+    /// Creates a new `SectionPos` from section coordinates.
+    #[must_use]
+    pub const fn new(x: i32, y: i32, z: i32) -> Self {
+        Self(Vector3::new(x, y, z))
+    }
+
+    /// Creates a `SectionPos` from a `BlockPos`.
+    #[must_use]
+    pub fn from_block_pos(pos: BlockPos) -> Self {
+        Self::new(
+            pos.0.x >> Self::SECTION_BITS,
+            pos.0.y >> Self::SECTION_BITS,
+            pos.0.z >> Self::SECTION_BITS,
+        )
+    }
+
+    /// Gets the X coordinate.
+    #[must_use]
+    pub const fn x(&self) -> i32 {
+        self.0.x
+    }
+
+    /// Gets the Y coordinate.
+    #[must_use]
+    pub const fn y(&self) -> i32 {
+        self.0.y
+    }
+
+    /// Gets the Z coordinate.
+    #[must_use]
+    pub const fn z(&self) -> i32 {
+        self.0.z
+    }
+
+    /// Extracts the section-relative X coordinate from a packed position.
+    #[must_use]
+    pub const fn section_relative_x(packed: i16) -> i32 {
+        ((packed as i32) >> 8) & Self::SECTION_MASK
+    }
+
+    /// Extracts the section-relative Y coordinate from a packed position.
+    #[must_use]
+    pub const fn section_relative_y(packed: i16) -> i32 {
+        (packed as i32) & Self::SECTION_MASK
+    }
+
+    /// Extracts the section-relative Z coordinate from a packed position.
+    #[must_use]
+    pub const fn section_relative_z(packed: i16) -> i32 {
+        ((packed as i32) >> 4) & Self::SECTION_MASK
+    }
+
+    /// Converts section-relative coordinates to an absolute block X coordinate.
+    #[must_use]
+    pub const fn relative_to_block_x(&self, relative_x: i16) -> i32 {
+        (self.0.x << Self::SECTION_BITS) + Self::section_relative_x(relative_x)
+    }
+
+    /// Converts section-relative coordinates to an absolute block Y coordinate.
+    #[must_use]
+    pub const fn relative_to_block_y(&self, relative_y: i16) -> i32 {
+        (self.0.y << Self::SECTION_BITS) + Self::section_relative_y(relative_y)
+    }
+
+    /// Converts section-relative coordinates to an absolute block Z coordinate.
+    #[must_use]
+    pub const fn relative_to_block_z(&self, relative_z: i16) -> i32 {
+        (self.0.z << Self::SECTION_BITS) + Self::section_relative_z(relative_z)
+    }
+
+    /// Packs the section position into an i64.
+    #[must_use]
+    pub fn as_i64(&self) -> i64 {
+        let x = i64::from(self.0.x);
+        let y = i64::from(self.0.y);
+        let z = i64::from(self.0.z);
+
+        ((x & 0x3F_FFFF) << 42) | ((y & 0xF_FFFF) << 20) | (z & 0x3F_FFFF)
+    }
+
+    /// Unpacks a section position from an i64.
+    #[must_use]
+    pub fn from_i64(value: i64) -> Self {
+        let x = value >> 42;
+        let y = (value >> 20) & 0xF_FFFF;
+        let z = value & 0x3F_FFFF;
+
+        // Sign extend
+        let x = (x << 42) >> 42;
+        let y = (y << 44) >> 44;
+        let z = (z << 42) >> 42;
+
+        Self(Vector3::new(x as i32, y as i32, z as i32))
+    }
+}
+
+impl ReadFrom for SectionPos {
+    fn read(data: &mut impl Read) -> io::Result<Self> {
+        let packed = <i64 as ReadFrom>::read(data)?;
+        Ok(Self::from_i64(packed))
+    }
+}
+
+impl WriteTo for SectionPos {
+    fn write(&self, writer: &mut impl Write) -> io::Result<()> {
+        self.as_i64().write(writer)
     }
 }
 
