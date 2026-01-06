@@ -9,12 +9,12 @@
 
 use std::{fmt::Debug, ops::Deref, sync::OnceLock};
 
-use steel_utils::Identifier;
+use steel_utils::{BlockStateId, Identifier};
 
 use crate::{
     banner_pattern::BannerPatternRegistry,
     biome::BiomeRegistry,
-    blocks::BlockRegistry,
+    blocks::{Block, BlockRef, BlockRegistry},
     cat_variant::CatVariantRegistry,
     chat_type::ChatTypeRegistry,
     chicken_variant::ChickenVariantRegistry,
@@ -433,5 +433,18 @@ impl Registry {
         self.zombie_nautilus_variants.freeze();
         self.timelines.freeze();
         self.recipes.freeze();
+    }
+}
+
+pub trait BlockStateExt {
+    fn get_block(&self) -> BlockRef;
+}
+
+impl BlockStateExt for BlockStateId {
+    fn get_block(&self) -> BlockRef {
+        REGISTRY
+            .blocks
+            .by_state_id(*self)
+            .expect("Excpected a valid state id")
     }
 }

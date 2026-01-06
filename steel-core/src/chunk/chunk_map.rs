@@ -2,6 +2,7 @@ use std::sync::Arc;
 use std::sync::atomic::Ordering;
 use std::time::Duration;
 
+use arc_swap::Guard;
 use rayon::iter::{IntoParallelIterator, IntoParallelRefIterator, ParallelIterator};
 use rayon::{ThreadPool, ThreadPoolBuilder};
 use rustc_hash::FxBuildHasher;
@@ -11,6 +12,7 @@ use steel_utils::{ChunkPos, locks::SyncMutex};
 use tokio::runtime::Runtime;
 use tokio_util::task::TaskTracker;
 
+use crate::chunk::chunk_access::ChunkAccess;
 use crate::chunk::chunk_holder::ChunkHolder;
 use crate::chunk::chunk_ticket_manager::{
     ChunkTicketManager, LevelChange, MAX_VIEW_DISTANCE, is_full,
@@ -78,6 +80,13 @@ impl ChunkMap {
             chunk_runtime,
             region_manager: Arc::new(RegionManager::new("world/overworld")),
         }
+    }
+
+    pub fn get_full_chunk(&self, pos: &ChunkPos) -> Option<Arc<ChunkAccess>> {
+        let chunk_holder = self.chunks.get_sync(pos)?;
+        chunk_holder
+            .try_chunk(ChunkStatus::Full)
+            .map(|guard| guard.as_ref().expect("Not empty by this stage").clone())
     }
 
     /// Schedules a new generation task.

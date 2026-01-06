@@ -2,15 +2,17 @@
 use std::sync::Arc;
 use std::time::Duration;
 
+use arc_swap::Guard;
 use scc::HashMap;
 use steel_protocol::packets::game::{CPlayerChat, CSystemChat};
-use steel_registry::dimension_type::DimensionTypeRef;
+use steel_registry::{BlockStateExt, dimension_type::DimensionTypeRef};
 use steel_utils::{BlockPos, BlockStateId, ChunkPos, SectionPos, types::UpdateFlags};
 use tokio::runtime::Runtime;
 use uuid::Uuid;
 
 use crate::{
     ChunkMap,
+    chunk::chunk_access::ChunkAccess,
     player::{LastSeen, Player},
 };
 
@@ -69,6 +71,30 @@ impl World {
     pub fn is_in_valid_bounds(&self, block_pos: &BlockPos) -> bool {
         !self.is_outside_build_height(block_pos.0.y)
             && self.is_in_valid_bounds_horizontal(block_pos)
+    }
+
+    pub fn set_block(&self, pos: BlockPos, block_state: BlockStateId, flags: UpdateFlags) -> bool {
+        if !self.is_in_valid_bounds(&pos) {
+            return false;
+        }
+
+        let Some(chunk) = self.get_chunk_at(&pos) else {
+            return false;
+        };
+
+        let block = block_state.get_block();
+
+        let old_state = chunk.set_block_state(pos, block_state, flags);
+
+        todo!()
+    }
+
+    fn get_chunk_at(&self, pos: &BlockPos) -> Option<Arc<ChunkAccess>> {
+        let chunk_pos = ChunkPos::new(
+            SectionPos::block_to_section_coord(pos.0.x),
+            SectionPos::block_to_section_coord(pos.0.z),
+        );
+        self.chunk_map.get_full_chunk(&chunk_pos)
     }
 
     /// Ticks the world.
@@ -183,8 +209,6 @@ impl World {
             true
         });
     }
-
-    pub fn set_block(&self, _pos: BlockPos, _block_state: BlockStateId, _flags: UpdateFlags) {}
 
     /// Saves all dirty chunks in this world to disk.
     ///
