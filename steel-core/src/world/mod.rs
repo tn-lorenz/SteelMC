@@ -4,6 +4,7 @@ use std::time::Duration;
 
 use scc::HashMap;
 use steel_protocol::packets::game::{CPlayerChat, CSystemChat};
+use steel_registry::vanilla_blocks;
 use steel_registry::{
     BlockStateExt, REGISTRY, compat_traits::RegistryWorld, dimension_type::DimensionTypeRef,
 };
@@ -77,6 +78,22 @@ impl World {
             && self.is_in_valid_bounds_horizontal(block_pos)
     }
 
+    /// Gets the block state at the given position.
+    ///
+    /// Returns the default block state (void air) if the position is out of bounds or the chunk is not loaded.
+    #[must_use]
+    pub fn get_block_state(&self, pos: &BlockPos) -> BlockStateId {
+        if !self.is_in_valid_bounds(pos) {
+            return REGISTRY.blocks.get_base_state_id(vanilla_blocks::VOID_AIR);
+        }
+
+        let Some(chunk) = self.get_chunk_at(pos) else {
+            return REGISTRY.blocks.get_base_state_id(vanilla_blocks::VOID_AIR);
+        };
+
+        chunk.get_block_state(*pos)
+    }
+
     /// Sets a block at the given position.
     ///
     /// Returns `true` if the block was successfully set, `false` otherwise.
@@ -93,6 +110,14 @@ impl World {
             // Nothing changed
             return false;
         };
+
+        // Re-read the block state to verify our block is still there.
+        // Callbacks during set_block_state may have changed it already.
+        let new_state = self.get_block_state(&pos);
+        if new_state != block_state {
+            // Something already changed this block, don't run our updates
+            return true;
+        }
 
         let old_block = old_state.get_block();
         let new_block = block_state.get_block();
