@@ -1,3 +1,4 @@
+use bitflags::bitflags;
 use std::{
     borrow::Cow,
     fmt::{self, Display},
@@ -59,6 +60,17 @@ impl ChunkPos {
         (1, 1),
     ];
 
+    /// Safety margin in chunks for world generation dependencies.
+    /// Calculated as `(32 + GENERATION_PYRAMID.getStepTo(FULL).accumulatedDependencies().size() + 1) * 2`.
+    /// The accumulated dependencies size for FULL is 9 (radius 8 + 1).
+    const SAFETY_MARGIN_CHUNKS: i32 = (32 + 12 + 1) * 2;
+
+    /// Maximum valid chunk coordinate value.
+    /// Calculated as `SectionPos.blockToSectionCoord(MAX_HORIZONTAL_COORDINATE) - SAFETY_MARGIN_CHUNKS`.
+    pub const MAX_COORDINATE_VALUE: i32 =
+        SectionPos::block_to_section_coord(BlockPos::MAX_HORIZONTAL_COORDINATE)
+            - Self::SAFETY_MARGIN_CHUNKS;
+
     /// Returns all 8 neighbors of this chunk position.
     #[must_use]
     pub fn neighbors(&self) -> [ChunkPos; 8] {
@@ -70,6 +82,14 @@ impl ChunkPos {
     /// Creates a new `ChunkPos` with the given x and y coordinates.
     pub const fn new(x: i32, y: i32) -> Self {
         Self(Vector2::new(x, y))
+    }
+
+    /// Checks if the given chunk coordinates are within valid bounds.
+    /// Uses `Mth.absMax(x, z) <= MAX_COORDINATE_VALUE`.
+    #[must_use]
+    #[inline]
+    pub fn is_valid(x: i32, z: i32) -> bool {
+        x.abs().max(z.abs()) <= Self::MAX_COORDINATE_VALUE
     }
 
     /// Converts the `ChunkPos` to an `i64`.
@@ -117,6 +137,9 @@ impl BlockPos {
     const PACKED_X_MASK: i64 = (1i64 << Self::PACKED_HORIZONTAL_LEN) - 1;
     const PACKED_Y_MASK: i64 = (1i64 << Self::PACKED_Y_LEN) - 1;
     const PACKED_Z_MASK: i64 = (1i64 << Self::PACKED_HORIZONTAL_LEN) - 1;
+
+    /// Maximum horizontal coordinate value: `(1 << 26) / 2 - 1 = 33554431`
+    pub const MAX_HORIZONTAL_COORDINATE: i32 = (1 << Self::PACKED_HORIZONTAL_LEN) / 2 - 1;
 
     /// Converts the `BlockPos` to an `i64`.
     /// Layout: X (26 bits, offset 38) | Z (26 bits, offset 12) | Y (12 bits, offset 0)
@@ -169,13 +192,20 @@ impl SectionPos {
         Self(Vector3::new(x, y, z))
     }
 
+    /// Converts a block coordinate to a section coordinate.
+    #[must_use]
+    #[inline]
+    pub const fn block_to_section_coord(block_coord: i32) -> i32 {
+        block_coord >> Self::SECTION_BITS
+    }
+
     /// Creates a `SectionPos` from a `BlockPos`.
     #[must_use]
     pub fn from_block_pos(pos: BlockPos) -> Self {
         Self::new(
-            pos.0.x >> Self::SECTION_BITS,
-            pos.0.y >> Self::SECTION_BITS,
-            pos.0.z >> Self::SECTION_BITS,
+            Self::block_to_section_coord(pos.0.x),
+            Self::block_to_section_coord(pos.0.y),
+            Self::block_to_section_coord(pos.0.z),
         )
     }
 
@@ -512,5 +542,20 @@ mod tests {
         let encoded = pos.as_i64();
         let decoded = BlockPos::from_i64(encoded);
         assert_eq!(pos, decoded, "Position 0, -61, -2 failed roundtrip");
+    }
+}
+
+pub struct UpdateFlags(u8);
+
+bitflags! {
+    impl UpdateFlags: u8 {
+        const UPDATE_NEIGHBORS = 1;
+        const UPDATE_CLIENTS = 1 << 1;
+        const UPDATE_KNOWN_SHAPE = 1 << 2;
+        const UPDATE_SUPPRESS_DROPS = 1 << 3;
+        const UPDATE_MOVE_BY_PISTON = 1 << 4;
+        const UPDATE_SKIP_SHAPE_UPDATE_ON_WIRE = 1 << 5;
+
+        const UPDATE_ALL = Self::UPDATE_NEIGHBORS.0 | Self::UPDATE_CLIENTS.0;
     }
 }

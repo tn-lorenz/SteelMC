@@ -4,6 +4,8 @@ use std::time::Duration;
 
 use scc::HashMap;
 use steel_protocol::packets::game::{CPlayerChat, CSystemChat};
+use steel_registry::dimension_type::DimensionTypeRef;
+use steel_utils::{BlockPos, BlockStateId, ChunkPos, SectionPos, types::UpdateFlags};
 use tokio::runtime::Runtime;
 use uuid::Uuid;
 
@@ -20,17 +22,53 @@ pub struct World {
     pub chunk_map: Arc<ChunkMap>,
     /// A map of all the players in the world.
     pub players: HashMap<Uuid, Arc<Player>>,
+    /// The dimension of the world.
+    pub dimension: DimensionTypeRef,
 }
 
 impl World {
     /// Creates a new world.
     #[allow(clippy::new_without_default)]
     #[must_use]
-    pub fn new(chunk_runtime: Arc<Runtime>) -> Self {
+    pub fn new(chunk_runtime: Arc<Runtime>, dimension: DimensionTypeRef) -> Self {
         Self {
             chunk_map: Arc::new(ChunkMap::new(chunk_runtime)),
             players: HashMap::new(),
+            dimension,
         }
+    }
+
+    /// Returns the total height of the world in blocks.
+    pub fn get_height(&self) -> i32 {
+        self.dimension.height
+    }
+
+    /// Returns the minimum Y coordinate of the world.
+    pub fn get_min_y(&self) -> i32 {
+        self.dimension.min_y
+    }
+
+    /// Returns the maximum Y coordinate of the world.
+    pub fn get_max_y(&self) -> i32 {
+        self.get_min_y() + self.get_height() - 1
+    }
+
+    /// Returns whether the given Y coordinate is outside the build height.
+    pub fn is_outside_build_height(&self, block_y: i32) -> bool {
+        block_y < self.get_min_y() || block_y > self.get_max_y()
+    }
+
+    /// Returns whether the block position is within valid horizontal bounds.
+    pub fn is_in_valid_bounds_horizontal(&self, block_pos: &BlockPos) -> bool {
+        let chunk_x = SectionPos::block_to_section_coord(block_pos.0.x);
+        let chunk_z = SectionPos::block_to_section_coord(block_pos.0.z);
+        ChunkPos::is_valid(chunk_x, chunk_z)
+    }
+
+    /// Returns whether the block position is within valid world bounds.
+    pub fn is_in_valid_bounds(&self, block_pos: &BlockPos) -> bool {
+        !self.is_outside_build_height(block_pos.0.y)
+            && self.is_in_valid_bounds_horizontal(block_pos)
     }
 
     /// Ticks the world.
@@ -145,6 +183,8 @@ impl World {
             true
         });
     }
+
+    pub fn set_block(&self, _pos: BlockPos, _block_state: BlockStateId, _flags: UpdateFlags) {}
 
     /// Saves all dirty chunks in this world to disk.
     ///

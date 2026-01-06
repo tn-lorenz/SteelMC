@@ -19,6 +19,7 @@ log.workspace = true
 wincode.workspace = true
 rustc-hash.workspace = true
 parking_lot.workspace = true
+bitflags.workspace = true
 
 [dev-dependencies]
 criterion = "0.8.1"

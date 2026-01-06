@@ -2362,6 +2362,7 @@ dependencies = [
 name = "steel-utils"
 version = "0.0.0"
 dependencies = [
+ "bitflags",
  "criterion",
  "enum_dispatch",
  "heck",
