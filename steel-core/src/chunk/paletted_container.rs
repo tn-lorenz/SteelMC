@@ -294,4 +294,16 @@ impl BlockPalette {
             }
         }
     }
+
+    /// Returns `true` if this palette contains only air blocks.
+    #[must_use]
+    pub fn has_only_air(&self) -> bool {
+        match self {
+            Self::Homogeneous(v) => v.0 == 0,
+            Self::Heterogeneous(data) => {
+                // Check if all blocks in the palette are air (state ID 0)
+                data.palette.iter().all(|(v, _)| v.0 == 0)
+            }
+        }
+    }
 }

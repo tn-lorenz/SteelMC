@@ -56,6 +56,10 @@ pub struct ChunkHolder {
     /// The highest status that generation is allowed to reach.
     highest_allowed_status: watch::Receiver<u8>,
     highest_allowed_status_sender: watch::Sender<u8>,
+    /// The minimum Y coordinate of the world.
+    min_y: i32,
+    /// The total height of the world.
+    height: i32,
 }
 
 impl ChunkHolder {
@@ -64,9 +68,19 @@ impl ChunkHolder {
         self.pos
     }
 
+    /// Gets the minimum Y coordinate of the world.
+    pub fn min_y(&self) -> i32 {
+        self.min_y
+    }
+
+    /// Gets the total height of the world.
+    pub fn height(&self) -> i32 {
+        self.height
+    }
+
     /// Creates a new chunk holder.
     #[must_use]
-    pub fn new(pos: ChunkPos, ticket_level: u8) -> Self {
+    pub fn new(pos: ChunkPos, ticket_level: u8, min_y: i32, height: i32) -> Self {
         let (sender, receiver) = watch::channel(ChunkResult::Unloaded);
         let (highest_allowed_status_sender, highest_allowed_status_receiver) = watch::channel(
             generation_status(Some(ticket_level)).map_or(STATUS_NONE, |s| s.get_index() as u8),
@@ -82,6 +96,8 @@ impl ChunkHolder {
             started_work: AtomicUsize::new(usize::MAX),
             highest_allowed_status: highest_allowed_status_receiver,
             highest_allowed_status_sender,
+            min_y,
+            height,
         }
     }
 
@@ -235,7 +251,10 @@ impl ChunkHolder {
 
         let future = chunk_map.task_tracker.spawn(async move {
             if target_status == ChunkStatus::Empty {
-                if let Ok(Some((chunk, status))) = region_manager.load_chunk(self_clone.pos).await {
+                if let Ok(Some((chunk, status))) = region_manager
+                    .load_chunk(self_clone.pos, self_clone.min_y(), self_clone.height())
+                    .await
+                {
                     self_clone.insert_chunk(chunk, status);
                 } else {
                     rayon_spawn(&thread_pool, move || {
@@ -342,7 +361,7 @@ impl ChunkHolder {
             && let ChunkAccess::Proto(proto_chunk) = &*data
         {
             // This is a cheap clone since the sections are wrapped in an Arc
-            let full_chunk = LevelChunk::from_proto(proto_chunk.clone());
+            let full_chunk = LevelChunk::from_proto(proto_chunk.clone(), self.min_y, self.height);
             self.data
                 .store(Some(Arc::new(ChunkAccess::Full(full_chunk))));
         }

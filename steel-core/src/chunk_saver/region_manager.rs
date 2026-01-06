@@ -397,6 +397,8 @@ impl RegionManager {
     pub async fn load_chunk(
         &self,
         pos: ChunkPos,
+        min_y: i32,
+        height: i32,
     ) -> io::Result<Option<(ChunkAccess, ChunkStatus)>> {
         let region_pos = RegionPos::from_chunk(pos.0.x, pos.0.y);
         let (local_x, local_z) = RegionPos::local_chunk_pos(pos.0.x, pos.0.y);
@@ -445,7 +447,7 @@ impl RegionManager {
 
         // Convert to runtime format (persistent is dropped after this - no duplication!)
         let status = entry.status;
-        let chunk = Self::persistent_to_chunk(&persistent, pos, status);
+        let chunk = Self::persistent_to_chunk(&persistent, pos, status, min_y, height);
 
         // Increment ref count
         handle.loaded_chunk_count += 1;
@@ -672,6 +674,8 @@ impl RegionManager {
         persistent: &PersistentChunk,
         pos: ChunkPos,
         status: ChunkStatus,
+        min_y: i32,
+        height: i32,
     ) -> ChunkAccess {
         let sections: Vec<ChunkSection> = persistent
             .sections
@@ -684,16 +688,18 @@ impl RegionManager {
                 Sections {
                     sections: sections
                         .into_iter()
-                        .map(|section| Arc::new(SyncRwLock::new(section)))
+                        .map(|section| SyncRwLock::new(section))
                         .collect(),
                 },
                 pos,
+                min_y,
+                height,
             )),
             _ => ChunkAccess::Proto(ProtoChunk::from_disk(
                 Sections {
                     sections: sections
                         .into_iter()
-                        .map(|section| Arc::new(SyncRwLock::new(section)))
+                        .map(|section| SyncRwLock::new(section))
                         .collect(),
                 },
                 pos,

@@ -191,6 +191,8 @@ pub struct BlockPlaceContext<'a> {
 }
 
 pub trait BlockBehaviour: Send + Sync {
+    /// Called when a neighboring block changes shape.
+    /// Returns the new state for this block after considering the neighbor change.
     fn update_shape(
         &self,
         state: BlockStateId,
@@ -203,7 +205,48 @@ pub trait BlockBehaviour: Send + Sync {
         state
     }
 
+    /// Returns the block state to use when placing this block.
     fn get_state_for_placement(&self, context: &BlockPlaceContext<'_>) -> Option<BlockStateId>;
+
+    /// Called when this block is placed in the world.
+    ///
+    /// # Arguments
+    /// * `state` - The new block state that was placed
+    /// * `world` - The world the block was placed in
+    /// * `pos` - The position where the block was placed
+    /// * `old_state` - The previous block state at this position
+    /// * `moved_by_piston` - Whether the block was moved by a piston
+    #[allow(unused_variables)]
+    fn on_place(
+        &self,
+        state: BlockStateId,
+        world: &dyn RegistryWorld,
+        pos: BlockPos,
+        old_state: BlockStateId,
+        moved_by_piston: bool,
+    ) {
+        // Default: no-op
+    }
+
+    /// Called after this block is removed from the world, to affect neighbors.
+    ///
+    /// This is used for things like rails notifying neighbors when removed.
+    ///
+    /// # Arguments
+    /// * `state` - The block state that was removed
+    /// * `world` - The world the block was removed from
+    /// * `pos` - The position where the block was removed
+    /// * `moved_by_piston` - Whether the block was moved by a piston
+    #[allow(unused_variables)]
+    fn affect_neighbors_after_removal(
+        &self,
+        state: BlockStateId,
+        world: &dyn RegistryWorld,
+        pos: BlockPos,
+        moved_by_piston: bool,
+    ) {
+        // Default: no-op
+    }
 }
 
 pub struct DefaultBlockBehaviour {

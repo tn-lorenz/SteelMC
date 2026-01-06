@@ -18,12 +18,12 @@ pub struct ChunkStatusTasks;
 /// All these functions are blocking.
 impl ChunkStatusTasks {
     pub fn empty(
-        _context: Arc<WorldGenContext>,
+        context: Arc<WorldGenContext>,
         _step: &ChunkStep,
         _cache: &Arc<StaticCache2D<Arc<ChunkHolder>>>,
         holder: Arc<ChunkHolder>,
     ) -> Result<(), anyhow::Error> {
-        let sections = (0..24) // Standard height?
+        let sections = (0..context.section_count())
             .map(|_| ChunkSection::new_empty())
             .collect::<Vec<_>>()
             .into_boxed_slice();

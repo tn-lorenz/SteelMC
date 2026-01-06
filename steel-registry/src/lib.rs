@@ -438,6 +438,8 @@ impl Registry {
 
 pub trait BlockStateExt {
     fn get_block(&self) -> BlockRef;
+    fn is_air(&self) -> bool;
+    fn has_block_entity(&self) -> bool;
 }
 
 impl BlockStateExt for BlockStateId {
@@ -445,6 +447,15 @@ impl BlockStateExt for BlockStateId {
         REGISTRY
             .blocks
             .by_state_id(*self)
-            .expect("Excpected a valid state id")
+            .expect("Expected a valid state id")
+    }
+
+    fn is_air(&self) -> bool {
+        self.get_block().config.is_air
+    }
+
+    fn has_block_entity(&self) -> bool {
+        // TODO: Implement when block entities are added
+        false
     }
 }

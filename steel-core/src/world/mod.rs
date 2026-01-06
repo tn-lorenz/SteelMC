@@ -1,11 +1,13 @@
 //! This module contains the `World` struct, which represents a world.
-use std::sync::Arc;
+use std::sync::{Arc, Weak};
 use std::time::Duration;
 
 use arc_swap::Guard;
 use scc::HashMap;
 use steel_protocol::packets::game::{CPlayerChat, CSystemChat};
-use steel_registry::{BlockStateExt, dimension_type::DimensionTypeRef};
+use steel_registry::{
+    BlockStateExt, REGISTRY, compat_traits::RegistryWorld, dimension_type::DimensionTypeRef,
+};
 use steel_utils::{BlockPos, BlockStateId, ChunkPos, SectionPos, types::UpdateFlags};
 use tokio::runtime::Runtime;
 use uuid::Uuid;
@@ -30,14 +32,17 @@ pub struct World {
 
 impl World {
     /// Creates a new world.
+    ///
+    /// Uses `Arc::new_cyclic` to create a cyclic reference between
+    /// the World and its ChunkMap's WorldGenContext.
     #[allow(clippy::new_without_default)]
     #[must_use]
-    pub fn new(chunk_runtime: Arc<Runtime>, dimension: DimensionTypeRef) -> Self {
-        Self {
-            chunk_map: Arc::new(ChunkMap::new(chunk_runtime)),
+    pub fn new(chunk_runtime: Arc<Runtime>, dimension: DimensionTypeRef) -> Arc<Self> {
+        Arc::new_cyclic(|weak_self: &Weak<World>| Self {
+            chunk_map: Arc::new(ChunkMap::new(chunk_runtime, weak_self.clone(), &dimension)),
             players: HashMap::new(),
             dimension,
-        }
+        })
     }
 
     /// Returns the total height of the world in blocks.
@@ -73,6 +78,9 @@ impl World {
             && self.is_in_valid_bounds_horizontal(block_pos)
     }
 
+    /// Sets a block at the given position.
+    ///
+    /// Returns `true` if the block was successfully set, `false` otherwise.
     pub fn set_block(&self, pos: BlockPos, block_state: BlockStateId, flags: UpdateFlags) -> bool {
         if !self.is_in_valid_bounds(&pos) {
             return false;
@@ -82,11 +90,29 @@ impl World {
             return false;
         };
 
-        let block = block_state.get_block();
+        let Some(old_state) = chunk.set_block_state(pos, block_state, flags) else {
+            // Nothing changed
+            return false;
+        };
 
-        let old_state = chunk.set_block_state(pos, block_state, flags);
+        let old_block = old_state.get_block();
+        let new_block = block_state.get_block();
+        let block_changed = !std::ptr::eq(old_block, new_block);
+        let moved_by_piston = flags.contains(UpdateFlags::UPDATE_MOVE_BY_PISTON);
 
-        todo!()
+        // Call affect_neighbors_after_removal when UPDATE_NEIGHBORS is set and block changed
+        if block_changed && flags.contains(UpdateFlags::UPDATE_NEIGHBORS) {
+            let behavior = REGISTRY.blocks.get_behavior(old_block);
+            behavior.affect_neighbors_after_removal(old_state, self, pos, moved_by_piston);
+        }
+
+        // Call on_place unless UPDATE_SKIP_ON_PLACE is set
+        if !flags.contains(UpdateFlags::UPDATE_SKIP_ON_PLACE) {
+            let behavior = REGISTRY.blocks.get_behavior(new_block);
+            behavior.on_place(block_state, self, pos, old_state, moved_by_piston);
+        }
+
+        true
     }
 
     fn get_chunk_at(&self, pos: &BlockPos) -> Option<Arc<ChunkAccess>> {
@@ -218,3 +244,5 @@ impl World {
         self.chunk_map.save_all_chunks().await
     }
 }
+
+impl RegistryWorld for World {}

@@ -545,17 +545,25 @@ mod tests {
     }
 }
 
-pub struct UpdateFlags(u8);
+/// Flags that control how a block update is processed.
+#[derive(Clone, Copy, Debug, PartialEq, Eq)]
+pub struct UpdateFlags(u16);
 
 bitflags! {
-    impl UpdateFlags: u8 {
+    impl UpdateFlags: u16 {
         const UPDATE_NEIGHBORS = 1;
         const UPDATE_CLIENTS = 1 << 1;
-        const UPDATE_KNOWN_SHAPE = 1 << 2;
-        const UPDATE_SUPPRESS_DROPS = 1 << 3;
-        const UPDATE_MOVE_BY_PISTON = 1 << 4;
-        const UPDATE_SKIP_SHAPE_UPDATE_ON_WIRE = 1 << 5;
+        const UPDATE_INVISIBLE = 1 << 2;
+        const UPDATE_IMMEDIATE = 1 << 3;
+        const UPDATE_KNOWN_SHAPE = 1 << 4;
+        const UPDATE_SUPPRESS_DROPS = 1 << 5;
+        const UPDATE_MOVE_BY_PISTON = 1 << 6;
+        const UPDATE_SKIP_SHAPE_UPDATE_ON_WIRE = 1 << 7;
+        const UPDATE_SKIP_BLOCK_ENTITY_SIDEEFFECTS = 1 << 8;
+        const UPDATE_SKIP_ON_PLACE = 1 << 9;
 
-        const UPDATE_ALL = Self::UPDATE_NEIGHBORS.0 | Self::UPDATE_CLIENTS.0;
+        const UPDATE_NONE = Self::UPDATE_INVISIBLE.bits() | Self::UPDATE_SKIP_BLOCK_ENTITY_SIDEEFFECTS.bits();
+        const UPDATE_ALL = Self::UPDATE_NEIGHBORS.bits() | Self::UPDATE_CLIENTS.bits();
+        const UPDATE_ALL_IMMEDIATE = Self::UPDATE_ALL.bits() | Self::UPDATE_IMMEDIATE.bits();
     }
 }

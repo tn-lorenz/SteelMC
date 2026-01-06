@@ -61,7 +61,7 @@ impl Server {
         Server {
             cancel_token,
             key_store: KeyStore::create(),
-            worlds: vec![Arc::new(World::new(chunk_runtime, OVERWORLD))],
+            worlds: vec![World::new(chunk_runtime, OVERWORLD)],
             registry_cache,
             tick_rate_manager: SyncRwLock::new(TickRateManager::new()),
             command_dispatcher: SyncRwLock::new(CommandDispatcher::new()),

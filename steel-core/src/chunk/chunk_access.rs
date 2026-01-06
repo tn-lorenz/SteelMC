@@ -1,6 +1,6 @@
 //! This module contains the `ChunkAccess` enum, which is used to access chunks in different states.
 use std::sync::atomic::Ordering;
-use steel_utils::{BlockStateId, ChunkPos};
+use steel_utils::{BlockPos, BlockStateId, ChunkPos, types::UpdateFlags};
 use wincode::{SchemaRead, SchemaWrite};
 
 use crate::chunk::{level_chunk::LevelChunk, proto_chunk::ProtoChunk, section::Sections};
@@ -118,9 +118,11 @@ impl ChunkAccess {
     /// # Panics
     /// This function will panic if the chunk is already a full chunk.
     #[must_use]
-    pub fn into_full(self) -> Self {
+    pub fn into_full(self, min_y: i32, height: i32) -> Self {
         match self {
-            Self::Proto(proto_chunk) => Self::Full(LevelChunk::from_proto(proto_chunk)),
+            Self::Proto(proto_chunk) => {
+                Self::Full(LevelChunk::from_proto(proto_chunk, min_y, height))
+            }
             Self::Full(_) => unreachable!(),
         }
     }
@@ -206,6 +208,37 @@ impl ChunkAccess {
         match self {
             Self::Full(chunk) => &chunk.sections,
             Self::Proto(proto_chunk) => &proto_chunk.sections,
+        }
+    }
+
+    /// Sets a block state at the given position.
+    ///
+    /// Returns the old block state, or `None` if nothing changed.
+    ///
+    /// # Panics
+    /// Panics if called on a `Proto` chunk (not yet implemented).
+    pub fn set_block_state(
+        &self,
+        pos: BlockPos,
+        state: BlockStateId,
+        flags: UpdateFlags,
+    ) -> Option<BlockStateId> {
+        match self {
+            Self::Full(chunk) => chunk.set_block_state(pos, state, flags),
+            Self::Proto(_) => {
+                todo!("set_block_state not implemented for ProtoChunk")
+            }
+        }
+    }
+
+    /// Gets a block state at the given position.
+    #[must_use]
+    pub fn get_block_state(&self, pos: BlockPos) -> BlockStateId {
+        match self {
+            Self::Full(chunk) => chunk.get_block_state(pos),
+            Self::Proto(_) => {
+                todo!("get_block_state not implemented for ProtoChunk")
+            }
         }
     }
 }
