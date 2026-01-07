@@ -1,5 +1,6 @@
 use steel_utils::{BlockPos, BlockStateId, math::Vector3, types::InteractionHand};
 
+use crate::REGISTRY;
 use crate::compat_traits::{RegistryPlayer, RegistryWorld};
 use crate::item_stack::ItemStack;
 use crate::items::item::{BlockHitResult, InteractionResult};
@@ -313,6 +314,8 @@ impl DefaultBlockBehaviour {
 
 impl BlockBehaviour for DefaultBlockBehaviour {
     fn get_state_for_placement(&self, _context: &BlockPlaceContext<'_>) -> Option<BlockStateId> {
+        let test = self.block.default_state();
+        log::info!("{:?}", REGISTRY.blocks.get_properties(test));
         Some(self.block.default_state())
     }
 }

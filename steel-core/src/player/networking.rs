@@ -11,7 +11,7 @@ use steel_protocol::packets::common::{CDisconnect, CKeepAlive, SCustomPayload, S
 use steel_protocol::packets::game::{
     SChat, SChatAck, SChatCommand, SChatSessionUpdate, SChunkBatchReceived, SClientTickEnd,
     SContainerButtonClick, SContainerClick, SContainerClose, SContainerSlotStateChanged,
-    SMovePlayerPos, SMovePlayerPosRot, SMovePlayerRot, SPlayerInput, SPlayerLoad,
+    SMovePlayerPos, SMovePlayerPosRot, SMovePlayerRot, SPlayerInput, SPlayerLoad, SSetCarriedItem,
     SSetCreativeModeSlot, SUseItem, SUseItemOn,
 };
 use steel_protocol::utils::{ConnectionProtocol, EnqueuedPacket, PacketError, RawPacket};
@@ -241,6 +241,9 @@ impl JavaConnection {
             }
             play::S_USE_ITEM => {
                 player.handle_use_item(SUseItem::read_packet(data)?);
+            }
+            play::S_SET_CARRIED_ITEM => {
+                player.handle_set_carried_item(SSetCarriedItem::read_packet(data)?);
             }
             id => log::info!("play packet id {id} is not known"),
         }

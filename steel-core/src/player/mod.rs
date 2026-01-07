@@ -20,7 +20,7 @@ use message_chain::SignedMessageChain;
 use message_validator::LastSeenMessagesValidator;
 use profile_key::RemoteChatSession;
 pub use signature_cache::{LastSeen, MessageCache};
-use steel_protocol::packets::game::{SUseItem, SUseItemOn};
+use steel_protocol::packets::game::{SSetCarriedItem, SUseItem, SUseItemOn};
 use steel_utils::locks::SyncMutex;
 use steel_utils::types::GameType;
 
@@ -937,6 +937,15 @@ impl Player {
             packet.x_rot
         );
         // TODO: Implement use item handler
+    }
+
+    /// Sets selected slot
+    pub fn handle_set_carried_item(&self, packet: SSetCarriedItem) {
+        match &mut *self.inventory.lock() {
+            ContainerType::PlayerInventory(inv) => inv.set_selected_slot(packet.slot as u8),
+            #[expect(unreachable_patterns)] //Remove when another menu is added
+            _ => unreachable!("Player inventory is always PlayerInventory"),
+        }
     }
 
     /// Sends all inventory slots to the client (full sync).
