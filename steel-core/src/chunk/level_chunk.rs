@@ -2,17 +2,17 @@
 use std::{
     io::Cursor,
     sync::{
+        Arc, Weak,
         atomic::{AtomicBool, Ordering},
-        Arc,
     },
 };
 
 use steel_protocol::packets::game::{
     ChunkPacketData, HeightmapType as ProtocolHeightmapType, Heightmaps, LightUpdatePacketData,
 };
-use steel_registry::{vanilla_blocks, BlockStateExt, REGISTRY};
+use steel_registry::{BlockStateExt, REGISTRY, vanilla_blocks};
 use steel_utils::{
-    codec::BitSet, locks::SyncRwLock, types::UpdateFlags, BlockPos, BlockStateId, ChunkPos,
+    BlockPos, BlockStateId, ChunkPos, codec::BitSet, locks::SyncRwLock, types::UpdateFlags,
 };
 
 use crate::chunk::{
@@ -20,9 +20,12 @@ use crate::chunk::{
     proto_chunk::ProtoChunk,
     section::Sections,
 };
+use crate::world::World;
 
 /// A chunk that is ready to be sent to the client.
-#[derive(Debug)]
+///
+/// Similar to Java's `LevelChunk`, this holds a weak reference to the world
+/// (called `level` in Java) for callbacks during block state changes.
 pub struct LevelChunk {
     /// The sections of the chunk.
     pub sections: Sections,
@@ -36,14 +39,28 @@ pub struct LevelChunk {
     min_y: i32,
     /// The total height of the world.
     height: i32,
+    /// Weak reference to the world (called `level` in Java).
+    /// This mirrors Java's `LevelChunk.level` field.
+    level: Weak<World>,
 }
 
 impl LevelChunk {
     /// Creates a new `LevelChunk` from a `ProtoChunk`.
     ///
     /// Transfers final heightmaps from the proto chunk if available.
+    ///
+    /// # Arguments
+    /// * `proto_chunk` - The proto chunk to convert
+    /// * `min_y` - The minimum Y coordinate of the world
+    /// * `height` - The total height of the world
+    /// * `level` - Weak reference to the world (mirrors Java's `LevelChunk.level`)
     #[must_use]
-    pub fn from_proto(proto_chunk: ProtoChunk, min_y: i32, height: i32) -> Self {
+    pub fn from_proto(
+        proto_chunk: ProtoChunk,
+        min_y: i32,
+        height: i32,
+        level: Weak<World>,
+    ) -> Self {
         // Transfer final heightmaps from proto chunk if available
         let proto_heightmaps = proto_chunk.heightmaps.read();
         let mut chunk_heightmaps = ChunkHeightmaps::new(min_y, height);
@@ -65,12 +82,26 @@ impl LevelChunk {
             heightmaps: Arc::new(SyncRwLock::new(chunk_heightmaps)),
             min_y,
             height,
+            level,
         }
     }
 
     /// Creates a new `LevelChunk` that was loaded from disk (not dirty).
+    ///
+    /// # Arguments
+    /// * `sections` - The chunk sections
+    /// * `pos` - The chunk position
+    /// * `min_y` - The minimum Y coordinate of the world
+    /// * `height` - The total height of the world
+    /// * `level` - Weak reference to the world (mirrors Java's `LevelChunk.level`)
     #[must_use]
-    pub fn from_disk(sections: Sections, pos: ChunkPos, min_y: i32, height: i32) -> Self {
+    pub fn from_disk(
+        sections: Sections,
+        pos: ChunkPos,
+        min_y: i32,
+        height: i32,
+        level: Weak<World>,
+    ) -> Self {
         Self {
             sections,
             pos,
@@ -78,7 +109,16 @@ impl LevelChunk {
             heightmaps: Arc::new(SyncRwLock::new(ChunkHeightmaps::new(min_y, height))),
             min_y,
             height,
+            level,
         }
+    }
+
+    /// Returns a reference to the world if it's still alive.
+    ///
+    /// This mirrors Java's `LevelChunk.getLevel()`.
+    #[must_use]
+    pub fn get_level(&self) -> Option<Arc<World>> {
+        self.level.upgrade()
     }
 
     /// Returns the minimum Y coordinate of the world.
@@ -121,15 +161,12 @@ impl LevelChunk {
     ) -> Option<BlockStateId> {
         let y = pos.0.y;
 
-        // Bounds check - return None if out of range (vanilla behavior)
-        // Java: LevelChunk assumes valid bounds, but we add safety
         if y < self.min_y || y >= self.min_y + self.height {
             return None;
         }
 
         let section_index = self.get_section_index(y);
 
-        // Safety check for section index
         if section_index >= self.sections.sections.len() {
             return None;
         }
@@ -151,7 +188,6 @@ impl LevelChunk {
             return None;
         }
 
-        // Update heightmaps
         let min_y = self.min_y;
         let sections = &self.sections;
         self.heightmaps
@@ -165,49 +201,9 @@ impl LevelChunk {
                     .get(lx, scan_local_y, lz)
             });
 
-        // Check if section emptiness changed
-        let is_empty = section.read().states.has_only_air();
-        if was_empty != is_empty {
-            // TODO: Light engine updates
-            // self.level.get_chunk_source().get_light_engine().update_section_status(pos, is_empty);
-            // self.level.get_chunk_source().on_section_emptiness_changed(
-            //     self.pos.0.x,
-            //     SectionPos::block_to_section_coord(y),
-            //     self.pos.0.y,
-            //     is_empty
-            // );
-        }
-
-        // TODO: Light property changes
-        // if LightEngine::has_different_light_properties(old_state, state) {
-        //     ProfilerFiller profiler = Profiler::get();
-        //     profiler.push("updateSkyLightSources");
-        //     self.sky_light_sources.update(self, local_x, y, local_z);
-        //     profiler.pop_push("queueCheckLight");
-        //     self.level.get_chunk_source().get_light_engine().check_block(pos);
-        //     profiler.pop();
-        // }
-
         let old_block = old_state.get_block();
         let new_block = state.get_block();
-        let _block_changed = !std::ptr::eq(old_block, new_block);
-        let _moved_by_piston = flags.contains(UpdateFlags::UPDATE_MOVE_BY_PISTON);
-        let _side_effects = !flags.contains(UpdateFlags::UPDATE_SKIP_BLOCK_ENTITY_SIDEEFFECTS);
 
-        // TODO: Block entity handling
-        // Handle block entity removal when block type changes
-        // if block_changed && old_state.has_block_entity() && !state.should_changed_state_keep_block_entity(old_state) {
-        //     if !self.level.is_client_side() && side_effects {
-        //         let block_entity = self.level.get_block_entity(pos);
-        //         if let Some(be) = block_entity {
-        //             be.pre_remove_side_effects(pos, old_state);
-        //         }
-        //     }
-        //     self.remove_block_entity(pos);
-        // }
-
-        // LevelChunk.java:327-329: Re-read to verify the block placement "stuck"
-        // This prevents running updates if a callback already changed the block
         let current_block = section
             .read()
             .states
@@ -217,28 +213,20 @@ impl LevelChunk {
             return None;
         }
 
-        // TODO: Block entity creation/update
-        // if state.has_block_entity() {
-        //     let block_entity = self.get_block_entity(pos, EntityCreationType::CHECK);
-        //     if let Some(be) = block_entity {
-        //         if !be.is_valid_block_state(state) {
-        //             log::warn!("Found mismatched block entity @ {:?}: type = {:?}, state = {:?}",
-        //                        pos, be.get_type(), state);
-        //             self.remove_block_entity(pos);
-        //             block_entity = None;
-        //         }
-        //     }
-        //
-        //     if block_entity.is_none() {
-        //         block_entity = new_block.new_block_entity(pos, state);
-        //         if let Some(be) = block_entity {
-        //             self.add_and_register_block_entity(be);
-        //         }
-        //     } else {
-        //         block_entity.set_block_state(state);
-        //         self.update_block_entity_ticker(block_entity);
-        //     }
-        // }
+        if let Some(level) = self.get_level() {
+            let block_changed = !std::ptr::eq(old_block, new_block);
+            let moved_by_piston = flags.contains(UpdateFlags::UPDATE_MOVE_BY_PISTON);
+
+            if block_changed && (flags.contains(UpdateFlags::UPDATE_NEIGHBORS) || moved_by_piston) {
+                let behavior = REGISTRY.blocks.get_behavior(old_block);
+                behavior.affect_neighbors_after_removal(old_state, &*level, pos, moved_by_piston);
+            }
+
+            if !flags.contains(UpdateFlags::UPDATE_SKIP_ON_PLACE) {
+                let behavior = REGISTRY.blocks.get_behavior(new_block);
+                behavior.on_place(state, &*level, pos, old_state, moved_by_piston);
+            }
+        }
 
         self.mark_unsaved();
         Some(old_state)

@@ -1,18 +1,18 @@
 //! A proto chunk is a chunk that is still being generated.
 use std::sync::{
-    atomic::{AtomicBool, Ordering},
     Arc,
+    atomic::{AtomicBool, Ordering},
 };
 
 use rustc_hash::FxHashMap;
 
 use crossbeam::atomic::AtomicCell;
-use steel_registry::{vanilla_blocks, BlockStateExt, REGISTRY};
-use steel_utils::{locks::SyncRwLock, types::UpdateFlags, BlockPos, BlockStateId, ChunkPos};
+use steel_registry::{BlockStateExt, REGISTRY, vanilla_blocks};
+use steel_utils::{BlockPos, BlockStateId, ChunkPos, locks::SyncRwLock, types::UpdateFlags};
 
 use crate::chunk::{
     chunk_access::ChunkStatus,
-    heightmap::{prime_heightmaps, Heightmap, HeightmapType},
+    heightmap::{Heightmap, HeightmapType, prime_heightmaps},
     section::Sections,
 };
 
@@ -125,10 +125,6 @@ impl ProtoChunk {
     /// Sets a block state at the given position.
     ///
     /// Returns the old block state at the position, or `VOID_AIR` if out of bounds.
-    ///
-    /// Note: ProtoChunk.setBlockState in vanilla returns `VOID_AIR` when out of bounds,
-    /// unlike LevelChunk.setBlockState which would assume bounds are already checked.
-    #[allow(unused_variables)]
     pub fn set_block_state(
         &self,
         pos: BlockPos,
@@ -137,7 +133,6 @@ impl ProtoChunk {
     ) -> Option<BlockStateId> {
         let y = pos.0.y;
 
-        // ProtoChunk.java: if (this.isOutsideBuildHeight(y)) return Blocks.VOID_AIR.defaultBlockState();
         if y < self.min_y || y >= self.min_y + self.height {
             return Some(
                 REGISTRY
@@ -151,7 +146,6 @@ impl ProtoChunk {
 
         let was_empty = section.read().states.has_only_air();
         if was_empty && state.is_air() {
-            // Setting air in an already-empty section - return the state like Java
             return Some(state);
         }
 
@@ -165,28 +159,13 @@ impl ProtoChunk {
             return None;
         }
 
-        // TODO: Light engine updates (only if status >= INITIALIZE_LIGHT)
-        // if self.status >= ChunkStatus::InitializeLight {
-        //     let is_empty = section.read().states.has_only_air();
-        //     if is_empty != was_empty {
-        //         self.light_engine.update_section_status(pos, is_empty);
-        //     }
-        //     if LightEngine::has_different_light_properties(old_state, state) {
-        //         self.sky_light_sources.update(self, local_x, y, local_z);
-        //         self.light_engine.check_block(pos);
-        //     }
-        // }
-
-        // Get heightmaps for current status
         let heightmap_types = self.status().heightmaps_after();
 
-        // Prime missing heightmaps and update
         let min_y = self.min_y;
         let height = self.height;
         let sections = &self.sections;
         let mut heightmaps = self.heightmaps.write();
 
-        // Prime any missing heightmaps by scanning the chunk
         prime_heightmaps(
             &mut heightmaps,
             heightmap_types,
@@ -202,7 +181,6 @@ impl ProtoChunk {
             },
         );
 
-        // Update heightmaps
         for &hm_type in heightmap_types {
             if let Some(heightmap) = heightmaps.get_mut(&hm_type) {
                 heightmap.update(local_x, y, local_z, state, |lx, scan_y, lz| {

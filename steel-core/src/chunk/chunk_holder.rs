@@ -2,14 +2,15 @@
 use arc_swap::{ArcSwapOption, Guard};
 use futures::Future;
 use std::fmt::Debug;
-use std::sync::Arc;
 use std::sync::atomic::{AtomicU8, AtomicUsize, Ordering};
+use std::sync::{Arc, Weak};
 use steel_utils::{ChunkPos, locks::SyncMutex};
 use tokio::select;
 use tokio::sync::{oneshot, watch};
 
 use crate::chunk::chunk_generation_task::{NeighborReady, StaticCache2D};
 use crate::chunk::chunk_ticket_manager::generation_status;
+use crate::world::World;
 use crate::{
     ChunkMap,
     chunk::{
@@ -252,7 +253,12 @@ impl ChunkHolder {
         let future = chunk_map.task_tracker.spawn(async move {
             if target_status == ChunkStatus::Empty {
                 if let Ok(Some((chunk, status))) = region_manager
-                    .load_chunk(self_clone.pos, self_clone.min_y(), self_clone.height())
+                    .load_chunk(
+                        self_clone.pos,
+                        self_clone.min_y(),
+                        self_clone.height(),
+                        context.weak_world(),
+                    )
                     .await
                 {
                     self_clone.insert_chunk(chunk, status);
@@ -359,16 +365,20 @@ impl ChunkHolder {
 
     /// Upgrades the chunk to a full chunk.
     ///
+    /// # Arguments
+    /// * `level` - Weak reference to the world for the `LevelChunk`
+    ///
     /// # Panics
     /// Panics if the chunk is not at `ProtoChunk` stage or completed.
-    pub fn upgrade_to_full(&self) {
+    pub fn upgrade_to_full(&self, level: Weak<World>) {
         let data = self.data.load_full();
 
         if let Some(data) = data
             && let ChunkAccess::Proto(proto_chunk) = &*data
         {
             // This is a cheap clone since the sections are wrapped in Arc
-            let full_chunk = LevelChunk::from_proto(proto_chunk.clone(), self.min_y, self.height);
+            let full_chunk =
+                LevelChunk::from_proto(proto_chunk.clone(), self.min_y, self.height, level);
             self.data
                 .store(Some(Arc::new(ChunkAccess::Full(full_chunk))));
         }

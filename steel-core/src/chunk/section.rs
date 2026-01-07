@@ -17,10 +17,7 @@ impl Sections {
     #[must_use]
     pub fn from_owned(sections: Box<[ChunkSection]>) -> Self {
         Self {
-            sections: sections
-                .into_iter()
-                .map(SyncRwLock::new)
-                .collect(),
+            sections: sections.into_iter().map(SyncRwLock::new).collect(),
         }
     }
 

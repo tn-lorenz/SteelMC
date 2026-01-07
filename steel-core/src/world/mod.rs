@@ -5,9 +5,7 @@ use std::time::Duration;
 use scc::HashMap;
 use steel_protocol::packets::game::{CPlayerChat, CSystemChat};
 use steel_registry::vanilla_blocks;
-use steel_registry::{
-    BlockStateExt, REGISTRY, compat_traits::RegistryWorld, dimension_type::DimensionTypeRef,
-};
+use steel_registry::{REGISTRY, compat_traits::RegistryWorld, dimension_type::DimensionTypeRef};
 use steel_utils::{BlockPos, BlockStateId, ChunkPos, SectionPos, types::UpdateFlags};
 use tokio::runtime::Runtime;
 use uuid::Uuid;
@@ -97,96 +95,19 @@ impl World {
     /// Sets a block at the given position.
     ///
     /// Returns `true` if the block was successfully set, `false` otherwise.
-    /// 
-    /// This is the Rust equivalent of `Level.setBlock(BlockPos, BlockState, int, int)`.
-    /// Note: Due to architectural differences, some logic from `LevelChunk.setBlockState`
-    /// is implemented here (affectNeighborsAfterRemoval, onPlace) since `LevelChunk`
-    /// doesn't hold a reference to World in the Rust version.
     pub fn set_block(&self, pos: BlockPos, block_state: BlockStateId, flags: UpdateFlags) -> bool {
-        // Level.java:214-217: Bounds and debug checks
         if !self.is_in_valid_bounds(&pos) {
             return false;
         }
-        // TODO: Debug world check
-        // if !self.is_client_side() && self.is_debug() {
-        //     return false;
-        // }
 
         let Some(chunk) = self.get_chunk_at(&pos) else {
             return false;
         };
 
-        // Level.java:221: Call chunk.setBlockState
-        let Some(old_state) = chunk.set_block_state(pos, block_state, flags) else {
-            // Level.java:222-223: null check
+        let Some(_old_state) = chunk.set_block_state(pos, block_state, flags) else {
             return false;
         };
 
-        // Level.java:225: Re-read to verify the block is what we set
-        let new_state = self.get_block_state(&pos);
-        
-        // Level.java:226-252: Only run updates if newState == blockState
-        if new_state == block_state {
-            // Level.java:227-229: setBlocksDirty
-            // TODO: if old_state != new_state {
-            //     self.set_blocks_dirty(pos, old_state, new_state);
-            // }
-
-            // TODO: Level.java:231-235: Send block updates to clients
-            // if (flags & UPDATE_CLIENTS) != 0
-            //     && (!self.is_client_side() || (flags & UPDATE_INVISIBLE) == 0)
-            //     && (self.is_client_side() || chunk.get_full_status().is_or_after(FullChunkStatus::BLOCK_TICKING)) {
-            //     self.send_block_updated(pos, old_state, block_state, flags);
-            // }
-
-            // Level.java:237-242: Update neighbors if UPDATE_NEIGHBORS flag is set
-            // TODO: if flags.contains(UpdateFlags::UPDATE_NEIGHBORS) {
-            //     self.update_neighbors_at(pos, old_state.get_block());
-            //     if !self.is_client_side() && block_state.has_analog_output_signal() {
-            //         self.update_neighbour_for_output_signal(pos, block_state.get_block());
-            //     }
-            // }
-
-            // Level.java:244-249: Update neighbor shapes
-            // TODO: const UPDATE_LIMIT: i32 = 512;
-            // if !flags.contains(UpdateFlags::UPDATE_KNOWN_SHAPE) && UPDATE_LIMIT > 0 {
-            //     let neighbour_update_flags = flags.bits() & !34;
-            //     old_state.update_indirect_neighbour_shapes(self, pos, neighbour_update_flags, UPDATE_LIMIT - 1);
-            //     block_state.update_neighbour_shapes(self, pos, neighbour_update_flags, UPDATE_LIMIT - 1);
-            //     block_state.update_indirect_neighbour_shapes(self, pos, neighbour_update_flags, UPDATE_LIMIT - 1);
-            // }
-
-            // Level.java:251: updatePOIOnBlockStateChange (empty in vanilla Level)
-            // self.update_poi_on_block_state_change(pos, old_state, new_state);
-
-            // NOTE: In Java, these next calls happen inside LevelChunk.setBlockState (L323-331)
-            // But in Rust, LevelChunk doesn't have a World reference, so we do them here
-            // to maintain behavioral parity.
-            
-            let old_block = old_state.get_block();
-            let new_block = block_state.get_block();
-            let block_changed = !std::ptr::eq(old_block, new_block);
-            let moved_by_piston = flags.contains(UpdateFlags::UPDATE_MOVE_BY_PISTON);
-
-            // LevelChunk.java:323-325: affectNeighborsAfterRemoval
-            // Called if: (blockChanged || newBlock instanceof BaseRailBlock) && level instanceof ServerLevel 
-            //            && ((flags & UPDATE_NEIGHBORS) != 0 || movedByPiston)
-            // TODO: Check for BaseRailBlock equivalent
-            if block_changed && (flags.contains(UpdateFlags::UPDATE_NEIGHBORS) || moved_by_piston) {
-                let behavior = REGISTRY.blocks.get_behavior(old_block);
-                behavior.affect_neighbors_after_removal(old_state, self, pos, moved_by_piston);
-            }
-
-            // LevelChunk.java:330-332: onPlace
-            // Called if: !level.isClientSide() && (flags & UPDATE_SKIP_ON_PLACE) == 0
-            // TODO: Add is_client_side check
-            if !flags.contains(UpdateFlags::UPDATE_SKIP_ON_PLACE) {
-                let behavior = REGISTRY.blocks.get_behavior(new_block);
-                behavior.on_place(block_state, self, pos, old_state, moved_by_piston);
-            }
-        }
-
-        // Level.java:254: Always return true if setBlockState returned non-null
         true
     }
 

@@ -152,14 +152,14 @@ impl ChunkStatusTasks {
     }
 
     pub fn full(
-        _context: Arc<WorldGenContext>,
+        context: Arc<WorldGenContext>,
         _step: &ChunkStep,
         _cache: &Arc<StaticCache2D<Arc<ChunkHolder>>>,
         holder: Arc<ChunkHolder>,
     ) -> Result<(), anyhow::Error> {
         //panic!("Full task");
         //log::info!("Chunk {:?} upgraded to full", holder.get_pos());
-        holder.upgrade_to_full();
+        holder.upgrade_to_full(context.weak_world());
         Ok(())
     }
 }

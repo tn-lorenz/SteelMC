@@ -50,6 +50,14 @@ impl WorldGenContext {
         self.world.upgrade().expect("World has been dropped")
     }
 
+    /// Gets a weak reference to the world.
+    ///
+    /// This is useful for passing to chunks without creating a strong reference cycle.
+    #[must_use]
+    pub fn weak_world(&self) -> Weak<World> {
+        self.world.clone()
+    }
+
     /// Returns the minimum Y coordinate of the world.
     #[must_use]
     pub fn min_y(&self) -> i32 {
