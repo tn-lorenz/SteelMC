@@ -76,6 +76,20 @@ impl World {
             && self.is_in_valid_bounds_horizontal(block_pos)
     }
 
+    /// Returns the maximum build height (one above the highest placeable block).
+    /// This is `min_y + height`.
+    #[must_use]
+    pub fn max_build_height(&self) -> i32 {
+        self.get_min_y() + self.get_height()
+    }
+
+    /// Checks if a player may interact with the world at the given position.
+    /// Currently only checks if position is within world bounds.
+    #[must_use]
+    pub fn may_interact(&self, _player: &Player, pos: &BlockPos) -> bool {
+        self.is_in_valid_bounds(pos)
+    }
+
     /// Gets the block state at the given position.
     ///
     /// Returns the default block state (void air) if the position is out of bounds or the chunk is not loaded.
@@ -243,4 +257,16 @@ impl World {
     }
 }
 
-impl RegistryWorld for World {}
+impl RegistryWorld for World {
+    fn get_block_state(&self, pos: &BlockPos) -> BlockStateId {
+        Self::get_block_state(self, pos)
+    }
+
+    fn set_block(&self, pos: BlockPos, block_state: BlockStateId, flags: UpdateFlags) -> bool {
+        Self::set_block(self, pos, block_state, flags)
+    }
+
+    fn is_in_valid_bounds(&self, block_pos: &BlockPos) -> bool {
+        Self::is_in_valid_bounds(self, block_pos)
+    }
+}

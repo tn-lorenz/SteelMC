@@ -122,6 +122,8 @@ impl BlockRegistry {
         self.blocks_by_key.insert(block.key.clone(), id);
         self.blocks_by_id.push(block);
         self.block_to_base_state.push(base_state_id);
+        // Push a placeholder behavior that will be replaced by the actual behavior later
+        self.behaviors.push(&behaviour::PLACEHOLDER_BEHAVIOR);
 
         let mut state_count = 1;
         for property in block.properties {

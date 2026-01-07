@@ -11,8 +11,8 @@ use steel_protocol::packets::common::{CDisconnect, CKeepAlive, SCustomPayload, S
 use steel_protocol::packets::game::{
     SChat, SChatAck, SChatCommand, SChatSessionUpdate, SChunkBatchReceived, SClientTickEnd,
     SContainerButtonClick, SContainerClick, SContainerClose, SContainerSlotStateChanged,
-    SMovePlayerPos, SMovePlayerPosRot, SMovePlayerRot, SPlayerLoad, SSetCreativeModeSlot, SUseItem,
-    SUseItemOn,
+    SMovePlayerPos, SMovePlayerPosRot, SMovePlayerRot, SPlayerInput, SPlayerLoad,
+    SSetCreativeModeSlot, SUseItem, SUseItemOn,
 };
 use steel_protocol::utils::{ConnectionProtocol, EnqueuedPacket, PacketError, RawPacket};
 use steel_registry::packets::play;
@@ -232,6 +232,9 @@ impl JavaConnection {
             }
             play::S_SET_CREATIVE_MODE_SLOT => {
                 player.handle_set_creative_mode_slot(SSetCreativeModeSlot::read_packet(data)?);
+            }
+            play::S_PLAYER_INPUT => {
+                player.handle_player_input(SPlayerInput::read_packet(data)?);
             }
             play::S_USE_ITEM_ON => {
                 player.handle_use_item_on(SUseItemOn::read_packet(data)?);

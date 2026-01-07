@@ -298,6 +298,8 @@ impl Registry {
         let mut block_registry = BlockRegistry::new();
         vanilla_blocks::register_blocks(&mut block_registry);
         vanilla_block_tags::register_block_tags(&mut block_registry);
+        vanilla_blocks::assign_block_behaviors(&mut block_registry);
+        blocks::vanilla_block_behaviors::assign_custom_block_behaviors(&mut block_registry);
 
         let mut data_component_registry = DataComponentRegistry::new();
         vanilla_components::register_vanilla_data_components(&mut data_component_registry);

@@ -1,5 +1,6 @@
 //! This module contains all things player-related.
 pub mod chunk_sender;
+mod game_mode;
 mod game_profile;
 pub mod message_chain;
 mod message_validator;
@@ -29,11 +30,15 @@ use crate::player::player_inventory::PlayerInventory;
 use steel_protocol::packets::{
     common::SCustomPayload,
     game::{
-        CPlayerChat, FilterType, PreviousMessage, SChat, SChatAck, SChatSessionUpdate,
-        SContainerButtonClick, SContainerClick, SContainerClose, SContainerSlotStateChanged,
-        SMovePlayer, SSetCreativeModeSlot,
+        CBlockChangedAck, CBlockUpdate, CPlayerChat, FilterType, PreviousMessage, SChat, SChatAck,
+        SChatSessionUpdate, SContainerButtonClick, SContainerClick, SContainerClose,
+        SContainerSlotStateChanged, SMovePlayer, SPlayerInput, SSetCreativeModeSlot,
     },
 };
+use steel_registry::blocks::properties::Direction;
+use steel_registry::item_stack::ItemStack;
+use steel_utils::BlockPos;
+use steel_utils::types::InteractionHand;
 use steel_utils::{ChunkPos, math::Vector3, text::TextComponent, translations};
 
 use crate::entity::LivingEntity;
@@ -115,6 +120,16 @@ pub struct Player {
 
     /// The player's inventory menu (always open, even when `container_id` is 0).
     inventory_menu: SyncMutex<InventoryMenu>,
+
+    /// Tracks the last acknowledged block change sequence number.
+    ack_block_changes_up_to: AtomicI32,
+
+    /// Whether the player is sneaking (shift key down).
+    shift_key_down: AtomicBool,
+
+    /// Position we're waiting for the client to confirm via teleport ack.
+    /// If Some, we should reject interaction packets until confirmed.
+    awaiting_position_from_client: SyncMutex<Option<Vector3<f64>>>,
 }
 
 impl Player {
@@ -156,6 +171,9 @@ impl Player {
             equipment: entity_equipment.clone(),
             inventory: inventory.clone(),
             inventory_menu: SyncMutex::new(InventoryMenu::new(inventory)),
+            ack_block_changes_up_to: AtomicI32::new(-1),
+            shift_key_down: AtomicBool::new(false),
+            awaiting_position_from_client: SyncMutex::new(None),
         }
     }
 
@@ -722,10 +740,190 @@ impl Player {
         }
     }
 
+    /// Acknowledges block changes up to the given sequence number.
+    pub fn ack_block_changes_up_to(&self, sequence: i32) {
+        let current = self.ack_block_changes_up_to.load(Ordering::Relaxed);
+        if sequence > current {
+            self.ack_block_changes_up_to
+                .store(sequence, Ordering::Relaxed);
+            self.connection.send_packet(CBlockChangedAck { sequence });
+        }
+    }
+
+    /// Returns true if player is within block interaction range.
+    /// Base range is ~4.5 blocks, plus 1.0 tolerance.
+    #[must_use]
+    pub fn is_within_block_interaction_range(&self, pos: &BlockPos) -> bool {
+        let player_pos = *self.position.lock();
+        let block_center_x = f64::from(pos.x()) + 0.5;
+        let block_center_y = f64::from(pos.y()) + 0.5;
+        let block_center_z = f64::from(pos.z()) + 0.5;
+
+        // Base range is ~4.5 blocks, plus 1.0 tolerance
+        let max_range = 4.5 + 1.0;
+        let dx = player_pos.x - block_center_x;
+        let dy = player_pos.y - block_center_y;
+        let dz = player_pos.z - block_center_z;
+        (dx * dx + dy * dy + dz * dz).sqrt() <= max_range
+    }
+
+    /// Returns true if player is sneaking (secondary use active).
+    #[must_use]
+    pub fn is_secondary_use_active(&self) -> bool {
+        self.shift_key_down.load(Ordering::Relaxed)
+    }
+
+    /// Gets the item in the specified hand.
+    #[must_use]
+    pub fn get_item_in_hand(&self, hand: InteractionHand) -> ItemStack {
+        match &mut *self.inventory.lock() {
+            ContainerType::PlayerInventory(inv) => match hand {
+                InteractionHand::MainHand => inv.get_selected_item(),
+                InteractionHand::OffHand => inv.get_offhand_item(),
+            },
+            #[expect(unreachable_patterns)] //Remove when another menu is added
+            _ => unreachable!("Player inventory is always PlayerInventory"),
+        }
+    }
+
+    /// Sets the item in the specified hand.
+    pub fn set_item_in_hand(&self, hand: InteractionHand, item: ItemStack) {
+        match &mut *self.inventory.lock() {
+            ContainerType::PlayerInventory(inv) => match hand {
+                InteractionHand::MainHand => inv.set_selected_item(item),
+                InteractionHand::OffHand => inv.set_offhand_item(item),
+            },
+            #[expect(unreachable_patterns)] //Remove when another menu is added
+            _ => unreachable!("Player inventory is always PlayerInventory"),
+        }
+    }
+
+    /// Returns true if player has infinite materials (Creative mode).
+    #[must_use]
+    pub fn has_infinite_materials(&self) -> bool {
+        self.game_mode.load() == GameType::Creative
+    }
+
+    /// Returns true if we're waiting for a teleport confirmation.
+    #[must_use]
+    pub fn is_awaiting_teleport(&self) -> bool {
+        self.awaiting_position_from_client.lock().is_some()
+    }
+
+    /// Sends block update packets for a position and its neighbor.
+    fn send_block_updates(&self, pos: &BlockPos, direction: Direction) {
+        let state = self.world.get_block_state(pos);
+        self.connection.send_packet(CBlockUpdate {
+            pos: *pos,
+            block_state: state,
+        });
+
+        let neighbor_pos = direction.relative(pos);
+        let neighbor_state = self.world.get_block_state(&neighbor_pos);
+        self.connection.send_packet(CBlockUpdate {
+            pos: neighbor_pos,
+            block_state: neighbor_state,
+        });
+    }
+
+    /// Triggers arm swing animation. Currently a noop.
+    pub fn swing(&self, _hand: InteractionHand, _update_self: bool) {
+        // TODO: Send CAnimateEntity packet to nearby players
+    }
+
+    /// Handles a player input packet (movement keys, sneaking, sprinting).
+    pub fn handle_player_input(&self, packet: SPlayerInput) {
+        self.shift_key_down.store(packet.shift(), Ordering::Relaxed);
+        // Note: sprinting is handled via SPlayerCommand packet
+    }
+
     /// Handles the use of an item on a block.
+    ///
+    /// Implements the logic from Java's `ServerGamePacketListenerImpl.handleUseItemOn()`.
     pub fn handle_use_item_on(&self, packet: SUseItemOn) {
-        log::info!("Player {} used {:?}", self.gameprofile.name, packet);
-        // TODO: Implement use item on block handler
+        // 1. Check client loaded
+        if !self.client_loaded.load(Ordering::Relaxed) {
+            return;
+        }
+
+        // 2. Ack block changes
+        self.ack_block_changes_up_to(packet.sequence);
+
+        // 3. Get item in hand
+        let mut item_stack = self.get_item_in_hand(packet.hand);
+
+        let pos = &packet.block_hit.block_pos;
+        let direction = packet.block_hit.direction;
+
+        // 4. Validate interaction range
+        if !self.is_within_block_interaction_range(pos) {
+            self.send_block_updates(pos, direction);
+            return;
+        }
+
+        // 5. Validate hit location precision (must be within 1.0000001 of block center)
+        let center_x = f64::from(pos.x()) + 0.5;
+        let center_y = f64::from(pos.y()) + 0.5;
+        let center_z = f64::from(pos.z()) + 0.5;
+        let location = &packet.block_hit.location;
+        let limit = 1.000_000_1;
+
+        if (location.x - center_x).abs() >= limit
+            || (location.y - center_y).abs() >= limit
+            || (location.z - center_z).abs() >= limit
+        {
+            log::warn!(
+                "Rejecting UseItemOnPacket from {}: location {:?} too far from block {:?}",
+                self.gameprofile.name,
+                location,
+                pos
+            );
+            self.send_block_updates(pos, direction);
+            return;
+        }
+
+        // 6. Validate Y height
+        if pos.y() >= self.world.max_build_height() {
+            // TODO: Send "build.tooHigh" message to player
+            self.send_block_updates(pos, direction);
+            return;
+        }
+
+        // 7. Check awaiting teleport
+        if self.is_awaiting_teleport() {
+            self.send_block_updates(pos, direction);
+            return;
+        }
+
+        // 8. Check may_interact permission
+        if !self.world.may_interact(self, pos) {
+            self.send_block_updates(pos, direction);
+            return;
+        }
+
+        // 9. Call use_item_on
+        let result = game_mode::use_item_on(
+            self,
+            &self.world,
+            &mut item_stack,
+            packet.hand,
+            &packet.block_hit,
+        );
+
+        // 10. Update item in hand if changed
+        self.set_item_in_hand(packet.hand, item_stack);
+
+        // 11. Handle result
+        if let steel_registry::items::item::InteractionResult::Success = result {
+            // TODO: Trigger arm swing animation if needed
+            self.swing(packet.hand, true);
+        }
+
+        // 12. Always send block updates to resync client
+        self.send_block_updates(pos, direction);
+
+        // 13. Broadcast inventory changes
+        self.broadcast_inventory_changes();
     }
 
     /// Handles the use of an item.
@@ -809,6 +1007,8 @@ impl Player {
     /// Cleans up player resources.
     pub fn cleanup(&self) {}
 }
+
+impl steel_registry::compat_traits::RegistryPlayer for Player {}
 
 impl LivingEntity for Player {
     fn get_health(&self) -> f32 {

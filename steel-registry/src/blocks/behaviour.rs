@@ -1,6 +1,8 @@
-use steel_utils::{BlockPos, BlockStateId, math::Vector3};
+use steel_utils::{BlockPos, BlockStateId, math::Vector3, types::InteractionHand};
 
-use crate::compat_traits::RegistryWorld;
+use crate::compat_traits::{RegistryPlayer, RegistryWorld};
+use crate::item_stack::ItemStack;
+use crate::items::item::{BlockHitResult, InteractionResult};
 
 use crate::blocks::BlockRef;
 use crate::blocks::properties::Direction;
@@ -247,7 +249,57 @@ pub trait BlockBehaviour: Send + Sync {
     ) {
         // Default: no-op
     }
+
+    /// Called when a player uses an item on this block.
+    ///
+    /// Returns `TryEmptyHandInteraction` by default to fall through to item use.
+    /// Override this to handle block-specific interactions (e.g., opening chests,
+    /// using buttons, etc.).
+    #[allow(unused_variables, clippy::too_many_arguments)]
+    fn use_item_on(
+        &self,
+        item_stack: &ItemStack,
+        state: BlockStateId,
+        world: &dyn RegistryWorld,
+        pos: BlockPos,
+        player: &dyn RegistryPlayer,
+        hand: InteractionHand,
+        hit_result: &BlockHitResult,
+    ) -> InteractionResult {
+        InteractionResult::TryEmptyHandInteraction
+    }
+
+    /// Called when a player uses this block without an item (or as a fallback
+    /// when `use_item_on` returns `TryEmptyHandInteraction`).
+    ///
+    /// Returns `Pass` by default. Override this for blocks that have interactions
+    /// without needing an item (e.g., buttons, levers, repeaters).
+    #[allow(unused_variables)]
+    fn use_without_item(
+        &self,
+        state: BlockStateId,
+        world: &dyn RegistryWorld,
+        pos: BlockPos,
+        player: &dyn RegistryPlayer,
+        hit_result: &BlockHitResult,
+    ) -> InteractionResult {
+        InteractionResult::Pass
+    }
 }
+
+/// A placeholder behavior that returns None for placement.
+/// Used as an initial placeholder when blocks are registered, before their
+/// actual behavior is set.
+pub struct PlaceholderBlockBehaviour;
+
+impl BlockBehaviour for PlaceholderBlockBehaviour {
+    fn get_state_for_placement(&self, _context: &BlockPlaceContext<'_>) -> Option<BlockStateId> {
+        None
+    }
+}
+
+/// Static instance of placeholder behavior for use during block registration.
+pub static PLACEHOLDER_BEHAVIOR: PlaceholderBlockBehaviour = PlaceholderBlockBehaviour;
 
 pub struct DefaultBlockBehaviour {
     block: BlockRef,

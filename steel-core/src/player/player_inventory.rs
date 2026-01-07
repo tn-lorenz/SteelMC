@@ -98,6 +98,30 @@ impl PlayerInventory {
         f(&self.items[self.selected as usize])
     }
 
+    /// Returns a clone of the currently selected item (main hand).
+    #[must_use]
+    pub fn get_selected_item(&self) -> ItemStack {
+        self.items[self.selected as usize].clone()
+    }
+
+    /// Sets the currently selected item (main hand).
+    pub fn set_selected_item(&mut self, item: ItemStack) {
+        self.items[self.selected as usize] = item;
+        self.set_changed();
+    }
+
+    /// Returns a clone of the offhand item.
+    #[must_use]
+    pub fn get_offhand_item(&self) -> ItemStack {
+        self.equipment.lock().get_cloned(EquipmentSlot::OffHand)
+    }
+
+    /// Sets the offhand item.
+    pub fn set_offhand_item(&mut self, item: ItemStack) {
+        self.equipment.lock().set(EquipmentSlot::OffHand, item);
+        self.set_changed();
+    }
+
     /// Executes a function with a mutable reference to the currently selected item.
     pub fn with_selected_item_mut<R>(&mut self, f: impl FnOnce(&mut ItemStack) -> R) -> R {
         let result = f(&mut self.items[self.selected as usize]);

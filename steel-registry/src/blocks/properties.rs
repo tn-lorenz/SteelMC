@@ -238,7 +238,7 @@ impl<T: const PartialEq + PropertyEnum + 'static> EnumProperty<T> {
     }
 }
 
-#[derive(Clone, Debug)]
+#[derive(Clone, Copy, Debug)]
 #[derive_const(PartialEq)]
 pub enum Direction {
     Down,
@@ -274,6 +274,28 @@ impl ReadFrom for Direction {
             5 => Ok(Direction::East),
             _ => Err(io::Error::other("Invalid Direction id")),
         }
+    }
+}
+
+impl Direction {
+    /// Returns the block position offset for this direction.
+    #[must_use]
+    pub fn offset(&self) -> (i32, i32, i32) {
+        match self {
+            Direction::Down => (0, -1, 0),
+            Direction::Up => (0, 1, 0),
+            Direction::North => (0, 0, -1),
+            Direction::South => (0, 0, 1),
+            Direction::West => (-1, 0, 0),
+            Direction::East => (1, 0, 0),
+        }
+    }
+
+    /// Returns the block position relative to the given position in this direction.
+    #[must_use]
+    pub fn relative(&self, pos: &steel_utils::BlockPos) -> steel_utils::BlockPos {
+        let (dx, dy, dz) = self.offset();
+        pos.offset(dx, dy, dz)
     }
 }
 

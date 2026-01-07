@@ -170,6 +170,30 @@ impl BlockPos {
 
         Self(Vector3::new(x as i32, y as i32, z as i32))
     }
+
+    /// Returns a new `BlockPos` offset by the given amounts.
+    #[must_use]
+    pub fn offset(&self, dx: i32, dy: i32, dz: i32) -> Self {
+        Self(Vector3::new(self.0.x + dx, self.0.y + dy, self.0.z + dz))
+    }
+
+    /// Returns the x coordinate.
+    #[must_use]
+    pub fn x(&self) -> i32 {
+        self.0.x
+    }
+
+    /// Returns the y coordinate.
+    #[must_use]
+    pub fn y(&self) -> i32 {
+        self.0.y
+    }
+
+    /// Returns the z coordinate.
+    #[must_use]
+    pub fn z(&self) -> i32 {
+        self.0.z
+    }
 }
 
 impl ReadFrom for BlockPos {
