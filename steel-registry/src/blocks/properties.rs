@@ -297,6 +297,17 @@ impl Direction {
         let (dx, dy, dz) = self.offset();
         pos.offset(dx, dy, dz)
     }
+
+    pub fn get_axis(&self) -> Axis {
+        match self {
+            Direction::Down => Axis::Y,
+            Direction::Up => Axis::Y,
+            Direction::North => Axis::Z,
+            Direction::South => Axis::Z,
+            Direction::West => Axis::X,
+            Direction::East => Axis::X,
+        }
+    }
 }
 
 // Additional enum types for properties

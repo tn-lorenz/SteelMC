@@ -14,7 +14,7 @@ use steel_utils::{BlockStateId, Identifier};
 use crate::{
     banner_pattern::BannerPatternRegistry,
     biome::BiomeRegistry,
-    blocks::{BlockRef, BlockRegistry},
+    blocks::{BlockRef, BlockRegistry, properties::Property},
     cat_variant::CatVariantRegistry,
     chat_type::ChatTypeRegistry,
     chicken_variant::ChickenVariantRegistry,
@@ -442,6 +442,7 @@ pub trait BlockStateExt {
     fn get_block(&self) -> BlockRef;
     fn is_air(&self) -> bool;
     fn has_block_entity(&self) -> bool;
+    fn set_value<T, P: Property<T>>(&self, property: &P, value: T) -> BlockStateId;
 }
 
 impl BlockStateExt for BlockStateId {
@@ -459,5 +460,9 @@ impl BlockStateExt for BlockStateId {
     fn has_block_entity(&self) -> bool {
         // TODO: Implement when block entities are added
         false
+    }
+
+    fn set_value<T, P: Property<T>>(&self, property: &P, value: T) -> BlockStateId {
+        REGISTRY.blocks.set_property(*self, property, value)
     }
 }
