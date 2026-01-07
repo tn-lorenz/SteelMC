@@ -1,18 +1,18 @@
 //! A proto chunk is a chunk that is still being generated.
 use std::sync::{
-    Arc,
     atomic::{AtomicBool, Ordering},
+    Arc,
 };
 
 use rustc_hash::FxHashMap;
 
 use crossbeam::atomic::AtomicCell;
-use steel_registry::{BlockStateExt, REGISTRY, vanilla_blocks};
-use steel_utils::{BlockPos, BlockStateId, ChunkPos, locks::SyncRwLock, types::UpdateFlags};
+use steel_registry::{vanilla_blocks, BlockStateExt, REGISTRY};
+use steel_utils::{locks::SyncRwLock, types::UpdateFlags, BlockPos, BlockStateId, ChunkPos};
 
 use crate::chunk::{
     chunk_access::ChunkStatus,
-    heightmap::{Heightmap, HeightmapType, prime_heightmaps},
+    heightmap::{prime_heightmaps, Heightmap, HeightmapType},
     section::Sections,
 };
 
@@ -124,7 +124,10 @@ impl ProtoChunk {
 
     /// Sets a block state at the given position.
     ///
-    /// Returns the old block state at the position.
+    /// Returns the old block state at the position, or `VOID_AIR` if out of bounds.
+    ///
+    /// Note: ProtoChunk.setBlockState in vanilla returns `VOID_AIR` when out of bounds,
+    /// unlike LevelChunk.setBlockState which would assume bounds are already checked.
     #[allow(unused_variables)]
     pub fn set_block_state(
         &self,
@@ -134,7 +137,7 @@ impl ProtoChunk {
     ) -> Option<BlockStateId> {
         let y = pos.0.y;
 
-        // Check bounds - return VOID_AIR for out of bounds like Java
+        // ProtoChunk.java: if (this.isOutsideBuildHeight(y)) return Blocks.VOID_AIR.defaultBlockState();
         if y < self.min_y || y >= self.min_y + self.height {
             return Some(
                 REGISTRY

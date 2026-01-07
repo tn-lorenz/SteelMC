@@ -2,17 +2,17 @@
 use std::{
     io::Cursor,
     sync::{
-        Arc,
         atomic::{AtomicBool, Ordering},
+        Arc,
     },
 };
 
 use steel_protocol::packets::game::{
     ChunkPacketData, HeightmapType as ProtocolHeightmapType, Heightmaps, LightUpdatePacketData,
 };
-use steel_registry::BlockStateExt;
+use steel_registry::{vanilla_blocks, BlockStateExt, REGISTRY};
 use steel_utils::{
-    BlockPos, BlockStateId, ChunkPos, codec::BitSet, locks::SyncRwLock, types::UpdateFlags,
+    codec::BitSet, locks::SyncRwLock, types::UpdateFlags, BlockPos, BlockStateId, ChunkPos,
 };
 
 use crate::chunk::{
@@ -111,17 +111,29 @@ impl LevelChunk {
     /// # Arguments
     /// * `pos` - The absolute block position
     /// * `state` - The new block state to set
-    /// * `_flags` - Update flags (currently unused, reserved for future use)
-    #[allow(unused_variables)]
-    #[must_use] 
+    /// * `flags` - Update flags controlling behavior
+    #[must_use]
     pub fn set_block_state(
         &self,
         pos: BlockPos,
         state: BlockStateId,
-        _flags: UpdateFlags,
+        flags: UpdateFlags,
     ) -> Option<BlockStateId> {
         let y = pos.0.y;
+
+        // Bounds check - return None if out of range (vanilla behavior)
+        // Java: LevelChunk assumes valid bounds, but we add safety
+        if y < self.min_y || y >= self.min_y + self.height {
+            return None;
+        }
+
         let section_index = self.get_section_index(y);
+
+        // Safety check for section index
+        if section_index >= self.sections.sections.len() {
+            return None;
+        }
+
         let section = &self.sections.sections[section_index];
 
         let was_empty = section.read().states.has_only_air();
@@ -153,23 +165,79 @@ impl LevelChunk {
                     .get(lx, scan_local_y, lz)
             });
 
-        // TODO: Light engine updates
-        // let is_empty = section.read().states.has_only_air();
-        // if was_empty != is_empty {
-        //     self.level.get_chunk_source().get_light_engine().update_section_status(pos, is_empty);
-        // }
+        // Check if section emptiness changed
+        let is_empty = section.read().states.has_only_air();
+        if was_empty != is_empty {
+            // TODO: Light engine updates
+            // self.level.get_chunk_source().get_light_engine().update_section_status(pos, is_empty);
+            // self.level.get_chunk_source().on_section_emptiness_changed(
+            //     self.pos.0.x,
+            //     SectionPos::block_to_section_coord(y),
+            //     self.pos.0.y,
+            //     is_empty
+            // );
+        }
+
+        // TODO: Light property changes
         // if LightEngine::has_different_light_properties(old_state, state) {
+        //     ProfilerFiller profiler = Profiler::get();
+        //     profiler.push("updateSkyLightSources");
         //     self.sky_light_sources.update(self, local_x, y, local_z);
+        //     profiler.pop_push("queueCheckLight");
         //     self.level.get_chunk_source().get_light_engine().check_block(pos);
+        //     profiler.pop();
         // }
 
+        let old_block = old_state.get_block();
+        let new_block = state.get_block();
+        let _block_changed = !std::ptr::eq(old_block, new_block);
+        let _moved_by_piston = flags.contains(UpdateFlags::UPDATE_MOVE_BY_PISTON);
+        let _side_effects = !flags.contains(UpdateFlags::UPDATE_SKIP_BLOCK_ENTITY_SIDEEFFECTS);
+
         // TODO: Block entity handling
-        // let block_changed = old_state.get_block() != state.get_block();
-        // if block_changed && old_state.has_block_entity() {
+        // Handle block entity removal when block type changes
+        // if block_changed && old_state.has_block_entity() && !state.should_changed_state_keep_block_entity(old_state) {
+        //     if !self.level.is_client_side() && side_effects {
+        //         let block_entity = self.level.get_block_entity(pos);
+        //         if let Some(be) = block_entity {
+        //             be.pre_remove_side_effects(pos, old_state);
+        //         }
+        //     }
         //     self.remove_block_entity(pos);
         // }
+
+        // LevelChunk.java:327-329: Re-read to verify the block placement "stuck"
+        // This prevents running updates if a callback already changed the block
+        let current_block = section
+            .read()
+            .states
+            .get(local_x, local_y, local_z)
+            .get_block();
+        if !std::ptr::eq(current_block, new_block) {
+            return None;
+        }
+
+        // TODO: Block entity creation/update
         // if state.has_block_entity() {
-        //     // Create/update block entity
+        //     let block_entity = self.get_block_entity(pos, EntityCreationType::CHECK);
+        //     if let Some(be) = block_entity {
+        //         if !be.is_valid_block_state(state) {
+        //             log::warn!("Found mismatched block entity @ {:?}: type = {:?}, state = {:?}",
+        //                        pos, be.get_type(), state);
+        //             self.remove_block_entity(pos);
+        //             block_entity = None;
+        //         }
+        //     }
+        //
+        //     if block_entity.is_none() {
+        //         block_entity = new_block.new_block_entity(pos, state);
+        //         if let Some(be) = block_entity {
+        //             self.add_and_register_block_entity(be);
+        //         }
+        //     } else {
+        //         block_entity.set_block_state(state);
+        //         self.update_block_entity_ticker(block_entity);
+        //     }
         // }
 
         self.mark_unsaved();
@@ -182,14 +250,23 @@ impl LevelChunk {
         let y = pos.0.y;
         let section_index = self.get_section_index(y);
 
+        // Bounds check - return air if out of range
+        if section_index >= self.sections.sections.len() {
+            return REGISTRY.blocks.get_base_state_id(vanilla_blocks::VOID_AIR);
+        }
+
+        let section = &self.sections.sections[section_index];
+        let section_guard = section.read();
+
+        if section_guard.states.has_only_air() {
+            return REGISTRY.blocks.get_base_state_id(vanilla_blocks::VOID_AIR);
+        }
+
         let local_x = (pos.0.x & 15) as usize;
         let local_y = (y & 15) as usize;
         let local_z = (pos.0.z & 15) as usize;
 
-        self.sections.sections[section_index]
-            .read()
-            .states
-            .get(local_x, local_y, local_z)
+        section_guard.states.get(local_x, local_y, local_z)
     }
 
     /// Extracts the chunk data for sending to the client.
