@@ -108,6 +108,8 @@ impl World {
             return false;
         };
 
+        //TODO: Neighbor updates and stuff like that
+
         true
     }
 
