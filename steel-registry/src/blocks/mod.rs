@@ -48,17 +48,21 @@ impl Block {
         self
     }
 
-    /// Const helper to calculate state offset from property indices and counts
+    /// Const helper to calculate state offset from property indices and counts.
+    /// Properties are processed in reverse order to match Minecraft's encoding
+    /// (last property = inner loop with multiplier 1).
     #[must_use]
     pub const fn calculate_offset(property_indices: &[usize], property_counts: &[usize]) -> u16 {
         let mut offset = 0u16;
         let mut multiplier = 1u16;
-        let mut i = 0;
+        let len = property_indices.len();
 
-        while i < property_indices.len() {
+        // Iterate in reverse order: last property first (inner loop)
+        let mut i = len;
+        while i > 0 {
+            i -= 1;
             offset += property_indices[i] as u16 * multiplier;
             multiplier *= property_counts[i] as u16;
-            i += 1;
         }
 
         offset
@@ -191,16 +195,17 @@ impl BlockRegistry {
         // Calculate the relative state index
         let relative_index = id.0 - base_state_id;
 
-        // Decode the property indices from the relative state index
+        // Decode the property indices from the relative state index.
+        // Properties are decoded in reverse order (last property = inner loop).
         let mut index = relative_index;
-        let mut property_values = Vec::with_capacity(block.properties.len());
+        let mut property_values = vec![("", ""); block.properties.len()];
 
-        for prop in block.properties {
+        for (i, prop) in block.properties.iter().enumerate().rev() {
             let count = prop.get_possible_values().len() as u16;
             let current_index = (index % count) as usize;
 
             let possible_values = prop.get_possible_values();
-            property_values.push((prop.get_name(), possible_values[current_index]));
+            property_values[i] = (prop.get_name(), possible_values[current_index]);
 
             index /= count;
         }
@@ -250,10 +255,11 @@ impl BlockRegistry {
             property_indices[prop_idx] = value_idx;
         }
 
-        // Encode property indices to state offset
+        // Encode property indices to state offset.
+        // Properties are processed in reverse order (last property = inner loop).
         let mut offset = 0u16;
         let mut multiplier = 1u16;
-        for (idx, prop) in property_indices.iter().zip(block.properties.iter()) {
+        for (idx, prop) in property_indices.iter().zip(block.properties.iter()).rev() {
             offset += *idx as u16 * multiplier;
             multiplier *= prop.get_possible_values().len() as u16;
         }
@@ -279,11 +285,12 @@ impl BlockRegistry {
         // Calculate the relative state index
         let relative_index = id.0 - base_state_id;
 
-        // Decode the property indices from the relative state index
+        // Decode the property indices from the relative state index.
+        // Properties are decoded in reverse order (last property = inner loop).
         let mut index = relative_index;
         let mut property_value_index = 0;
 
-        for (i, prop) in block.properties.iter().enumerate() {
+        for (i, prop) in block.properties.iter().enumerate().rev() {
             let count = prop.get_possible_values().len() as u16;
             let current_index = (index % count) as usize;
 
@@ -327,13 +334,14 @@ impl BlockRegistry {
         // Calculate the relative state index
         let relative_index = id.0 - base_state_id;
 
-        // Decode all property indices from the relative state index
+        // Decode all property indices from the relative state index.
+        // Properties are decoded in reverse order (last property = inner loop).
         let mut index = relative_index;
-        let mut property_indices = Vec::with_capacity(block.properties.len());
+        let mut property_indices = vec![0usize; block.properties.len()];
 
-        for prop in block.properties {
+        for (i, prop) in block.properties.iter().enumerate().rev() {
             let count = prop.get_possible_values().len() as u16;
-            property_indices.push((index % count) as usize);
+            property_indices[i] = (index % count) as usize;
             index /= count;
         }
 
@@ -341,17 +349,15 @@ impl BlockRegistry {
         let new_value_index = property.get_internal_index(&value);
         property_indices[property_index] = new_value_index;
 
-        // Re-encode the property indices back to a state ID
-        let (new_relative_index, _) = property_indices.iter().zip(block.properties.iter()).fold(
-            (0u16, 1u16),
-            |(current_index, multiplier), (&value_idx, prop)| {
-                let count = prop.get_possible_values().len() as u16;
-                (
-                    current_index + value_idx as u16 * multiplier,
-                    multiplier * count,
-                )
-            },
-        );
+        // Re-encode the property indices back to a state ID.
+        // Properties are processed in reverse order (last property = inner loop).
+        let mut new_relative_index = 0u16;
+        let mut multiplier = 1u16;
+        for (i, prop) in block.properties.iter().enumerate().rev() {
+            let count = prop.get_possible_values().len() as u16;
+            new_relative_index += property_indices[i] as u16 * multiplier;
+            multiplier *= count;
+        }
 
         BlockStateId(base_state_id + new_relative_index)
     }
