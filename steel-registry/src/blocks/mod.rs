@@ -732,4 +732,113 @@ mod tests {
             );
         }
     }
+
+    #[test]
+    #[cfg(feature = "minecraft-src")]
+    fn test_all_block_state_ids_match_minecraft() {
+        use std::collections::HashMap;
+        use std::fs;
+
+        #[derive(serde::Deserialize)]
+        struct BlockState {
+            id: u16,
+            #[serde(default)]
+            properties: HashMap<String, String>,
+            #[serde(default)]
+            default: bool,
+        }
+
+        #[derive(serde::Deserialize)]
+        struct BlockData {
+            states: Vec<BlockState>,
+        }
+
+        // Try multiple paths to find blocks.json
+        let possible_paths = [
+            "minecraft-src/minecraft/resources/datagen-reports/blocks.json",
+            "../minecraft-src/minecraft/resources/datagen-reports/blocks.json",
+        ];
+        let json_content = possible_paths
+            .iter()
+            .find_map(|path| fs::read_to_string(path).ok())
+            .expect("Failed to read blocks.json - make sure minecraft-src is available");
+        let blocks: HashMap<String, BlockData> =
+            serde_json::from_str(&json_content).expect("Failed to parse blocks.json");
+
+        let registry = create_test_registry();
+        let mut errors = Vec::new();
+
+        for (block_name, block_data) in &blocks {
+            // Strip "minecraft:" prefix
+            let key = Identifier::vanilla_static(
+                block_name
+                    .strip_prefix("minecraft:")
+                    .unwrap_or(block_name)
+                    .to_string()
+                    .leak(),
+            );
+
+            let Some(block) = registry.by_key(&key) else {
+                errors.push(format!("Block {} not found in registry", block_name));
+                continue;
+            };
+
+            // Verify default state
+            for state in &block_data.states {
+                if state.default {
+                    let our_default = registry.get_default_state_id(block);
+                    if our_default.0 != state.id {
+                        errors.push(format!(
+                            "{}: default state mismatch - expected {}, got {}",
+                            block_name, state.id, our_default.0
+                        ));
+                    }
+                }
+            }
+
+            // Verify all states
+            for state in &block_data.states {
+                let props: Vec<(&str, &str)> = state
+                    .properties
+                    .iter()
+                    .map(|(k, v)| (k.as_str(), v.as_str()))
+                    .collect();
+
+                let Some(our_state_id) = registry.state_id_from_properties(&key, &props) else {
+                    errors.push(format!(
+                        "{}: failed to get state for properties {:?}",
+                        block_name, props
+                    ));
+                    continue;
+                };
+
+                if our_state_id.0 != state.id {
+                    errors.push(format!(
+                        "{}: state mismatch for {:?} - expected {}, got {}",
+                        block_name, props, state.id, our_state_id.0
+                    ));
+                }
+            }
+        }
+
+        if !errors.is_empty() {
+            // Print first 20 errors for readability
+            let display_errors: String = errors
+                .iter()
+                .take(20)
+                .cloned()
+                .collect::<Vec<_>>()
+                .join("\n");
+            panic!(
+                "Found {} state ID mismatches:\n{}{}",
+                errors.len(),
+                display_errors,
+                if errors.len() > 20 {
+                    format!("\n... and {} more", errors.len() - 20)
+                } else {
+                    String::new()
+                }
+            );
+        }
+    }
 }

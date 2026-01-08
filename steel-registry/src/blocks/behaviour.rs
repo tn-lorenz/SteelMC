@@ -315,7 +315,13 @@ impl DefaultBlockBehaviour {
 impl BlockBehaviour for DefaultBlockBehaviour {
     fn get_state_for_placement(&self, _context: &BlockPlaceContext<'_>) -> Option<BlockStateId> {
         let test = self.block.default_state();
-        log::info!("{:?}, {:?}", REGISTRY.blocks.get_properties(test), test);
+        log::info!(
+            "{:?}, {:?}, {:?}, {:?}",
+            REGISTRY.blocks.get_properties(test),
+            test,
+            self.block.key,
+            REGISTRY.blocks.by_state_id(test)
+        );
         Some(self.block.default_state())
     }
 }

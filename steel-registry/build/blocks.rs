@@ -244,13 +244,13 @@ fn generate_default_state(block: &Block) -> TokenStream {
                     BlockStateProperties::#property_ident.index_of(#bool_val)
                 }
             } else if default_val.starts_with("int_") {
-                // Integer: "int_5"
+                // Integer: "int_5" - convert to internal index (value - min)
                 let int_val = default_val
                     .strip_prefix("int_")
                     .unwrap()
-                    .parse::<usize>()
+                    .parse::<u8>()
                     .unwrap();
-                quote! { #int_val }
+                quote! { BlockStateProperties::#property_ident.get_internal_index_const(&#int_val) }
             } else if default_val.starts_with("enum_") {
                 // Enum: "enum_Direction_Down" -> Direction::Down
                 let enum_part = default_val.strip_prefix("enum_").unwrap();

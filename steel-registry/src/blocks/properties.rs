@@ -314,35 +314,35 @@ impl Direction {
 #[derive(Clone, Debug)]
 #[derive_const(PartialEq)]
 pub enum FrontAndTop {
-    NorthUp,
-    EastUp,
-    SouthUp,
-    WestUp,
-    UpNorth,
+    DownEast,
+    DownNorth,
+    DownSouth,
+    DownWest,
     UpEast,
+    UpNorth,
     UpSouth,
     UpWest,
-    NorthEast,
-    NorthWest,
-    SouthEast,
-    SouthWest,
+    WestUp,
+    EastUp,
+    NorthUp,
+    SouthUp,
 }
 
 impl PropertyEnum for FrontAndTop {
     fn as_str(&self) -> &str {
         match self {
-            FrontAndTop::NorthUp => "north_up",
-            FrontAndTop::EastUp => "east_up",
-            FrontAndTop::SouthUp => "south_up",
-            FrontAndTop::WestUp => "west_up",
-            FrontAndTop::UpNorth => "up_north",
+            FrontAndTop::DownEast => "down_east",
+            FrontAndTop::DownNorth => "down_north",
+            FrontAndTop::DownSouth => "down_south",
+            FrontAndTop::DownWest => "down_west",
             FrontAndTop::UpEast => "up_east",
+            FrontAndTop::UpNorth => "up_north",
             FrontAndTop::UpSouth => "up_south",
             FrontAndTop::UpWest => "up_west",
-            FrontAndTop::NorthEast => "north_east",
-            FrontAndTop::NorthWest => "north_west",
-            FrontAndTop::SouthEast => "south_east",
-            FrontAndTop::SouthWest => "south_west",
+            FrontAndTop::WestUp => "west_up",
+            FrontAndTop::EastUp => "east_up",
+            FrontAndTop::NorthUp => "north_up",
+            FrontAndTop::SouthUp => "south_up",
         }
     }
 }
@@ -963,9 +963,9 @@ impl BlockStateProperties {
         "facing",
         &[
             Direction::North,
-            Direction::East,
             Direction::South,
             Direction::West,
+            Direction::East,
         ],
     );
     pub const FLOWER_AMOUNT: IntProperty = IntProperty::new("flower_amount", 1, 4);
@@ -975,18 +975,18 @@ impl BlockStateProperties {
     pub const ORIENTATION: EnumProperty<FrontAndTop> = EnumProperty::new(
         "orientation",
         &[
-            FrontAndTop::NorthUp,
-            FrontAndTop::EastUp,
-            FrontAndTop::SouthUp,
-            FrontAndTop::WestUp,
-            FrontAndTop::UpNorth,
+            FrontAndTop::DownEast,
+            FrontAndTop::DownNorth,
+            FrontAndTop::DownSouth,
+            FrontAndTop::DownWest,
             FrontAndTop::UpEast,
+            FrontAndTop::UpNorth,
             FrontAndTop::UpSouth,
             FrontAndTop::UpWest,
-            FrontAndTop::NorthEast,
-            FrontAndTop::NorthWest,
-            FrontAndTop::SouthEast,
-            FrontAndTop::SouthWest,
+            FrontAndTop::WestUp,
+            FrontAndTop::EastUp,
+            FrontAndTop::NorthUp,
+            FrontAndTop::SouthUp,
         ],
     );
     pub const ATTACH_FACE: EnumProperty<AttachFace> = EnumProperty::new(
@@ -1210,7 +1210,7 @@ impl BlockStateProperties {
         ],
     );
     pub const CREAKING_HEART_STATE: EnumProperty<CreakingHeartState> = EnumProperty::new(
-        "creaking",
+        "creaking_heart_state",
         &[
             CreakingHeartState::Uprooted,
             CreakingHeartState::Dormant,
