@@ -736,7 +736,7 @@ mod tests {
     #[test]
     #[cfg(feature = "minecraft-src")]
     fn test_all_block_state_ids_match_minecraft() {
-        use std::collections::HashMap;
+        use rustc_hash::FxHashMap as HashMap;
         use std::fs;
 
         #[derive(serde::Deserialize)]

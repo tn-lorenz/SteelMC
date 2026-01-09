@@ -546,8 +546,8 @@ mod tests {
             BlockPos(Vector3::new(0, 0, 0)),
             BlockPos(Vector3::new(100, 64, -100)),
             BlockPos(Vector3::new(-1000, -64, 1000)),
-            BlockPos(Vector3::new(33554431, 2047, 33554431)), // Max positive values
-            BlockPos(Vector3::new(-33554432, -2048, -33554432)), // Max negative values
+            BlockPos(Vector3::new(33_554_431, 2047, 33_554_431)), // Max positive values
+            BlockPos(Vector3::new(-33_554_432, -2048, -33_554_432)), // Max negative values
         ];
 
         for pos in positions {
@@ -555,8 +555,7 @@ mod tests {
             let decoded = BlockPos::from_i64(encoded);
             assert_eq!(
                 pos, decoded,
-                "Roundtrip failed for {:?}: encoded={}, decoded={:?}",
-                pos, encoded, decoded
+                "Roundtrip failed for {pos:?}: encoded={encoded}, decoded={decoded:?}"
             );
         }
     }
