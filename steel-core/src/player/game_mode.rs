@@ -78,23 +78,23 @@ pub fn use_item_on(
         // TODO: Check item cooldowns
         // if player.getCooldowns().isOnCooldown(item_stack.item) { return Pass }
 
-        let context = UseOnContext {
+        let original_count = item_stack.count;
+
+        let mut context = UseOnContext {
             player,
             hand,
             hit_result: hit_result.clone(),
             world,
-            item_stack: item_stack.clone(),
+            item_stack,
         };
 
-        let original_count = item_stack.count;
-
         // Get item behavior and call use_on
-        let item_behavior = REGISTRY.items.get_behavior(item_stack.item);
-        let result = item_behavior.use_on(&context);
+        let item_behavior = REGISTRY.items.get_behavior(context.item_stack.item);
+        let result = item_behavior.use_on(&mut context);
 
         // Restore count for creative mode (infinite materials)
-        if player.has_infinite_materials() && item_stack.count < original_count {
-            item_stack.count = original_count;
+        if player.has_infinite_materials() && context.item_stack.count < original_count {
+            context.item_stack.count = original_count;
         }
 
         return result;

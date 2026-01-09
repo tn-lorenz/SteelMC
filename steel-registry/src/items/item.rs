@@ -78,19 +78,19 @@ pub struct UseOnContext<'a> {
     pub hand: InteractionHand,
     pub hit_result: BlockHitResult,
     pub world: &'a dyn RegistryWorld,
-    pub item_stack: ItemStack,
+    pub item_stack: &'a mut ItemStack,
 }
 
 /// Trait defining item behavior (use, placement, etc.)
 pub trait ItemBehavior: Send + Sync {
-    fn use_on(&self, use_on_context: &UseOnContext) -> InteractionResult;
+    fn use_on(&self, context: &mut UseOnContext) -> InteractionResult;
 }
 
 /// Default item behavior - does nothing special
 pub struct DefaultItemBehavior;
 
 impl ItemBehavior for DefaultItemBehavior {
-    fn use_on(&self, _use_on_context: &UseOnContext) -> InteractionResult {
+    fn use_on(&self, _context: &mut UseOnContext) -> InteractionResult {
         InteractionResult::Pass
     }
 }
@@ -101,7 +101,7 @@ pub struct BlockItemBehavior {
 }
 
 impl ItemBehavior for BlockItemBehavior {
-    fn use_on(&self, context: &UseOnContext) -> InteractionResult {
+    fn use_on(&self, context: &mut UseOnContext) -> InteractionResult {
         let clicked_pos = context.hit_result.block_pos;
         let clicked_state = context.world.get_block_state(&clicked_pos);
 
@@ -160,6 +160,9 @@ impl ItemBehavior for BlockItemBehavior {
         {
             return InteractionResult::Fail;
         }
+
+        // Consume one item from the stack (like Java's itemStack.consume(1, player))
+        context.item_stack.shrink(1);
 
         // TODO: Play place sound
         // TODO: Call behavior.on_place()
