@@ -57,6 +57,7 @@ impl PlayerInventory {
     pub const SLOT_OFFHAND: usize = 40;
 
     /// Creates a new player inventory with empty slots.
+    #[must_use] 
     pub fn new(player: Weak<Player>) -> Self {
         Self {
             items: std::array::from_fn(|_| ItemStack::empty()),

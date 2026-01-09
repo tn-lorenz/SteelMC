@@ -707,10 +707,12 @@ impl Player {
             let mut menu = self.inventory_menu.lock();
             let slot_index = packet.slot_num as usize;
 
-            if let Some(slot) = menu.behavior().get_slot(slot_index) {
-                slot.set_item(item_stack.clone());
+            {
+                let mut guard = menu.behavior().lock_all_containers();
+                if let Some(slot) = menu.behavior().get_slot(slot_index) {
+                    slot.set_item(&mut guard, item_stack.clone());
+                }
             }
-
             menu.behavior_mut()
                 .set_remote_slot_known(slot_index, &item_stack);
             menu.behavior_mut().broadcast_changes(&self.connection);

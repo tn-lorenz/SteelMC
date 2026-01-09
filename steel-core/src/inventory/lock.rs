@@ -6,7 +6,7 @@
 
 use parking_lot::ArcMutexGuard;
 use parking_lot::RawMutex;
-use std::collections::HashMap;
+use rustc_hash::FxHashMap;
 use std::ops::{Deref, DerefMut};
 use std::sync::Arc;
 use steel_utils::locks::SyncMutex;
@@ -48,7 +48,7 @@ impl Deref for LockedContainer {
             LockedContainer::PlayerInventory(guard) => &**guard,
             LockedContainer::CraftingContainer(guard) => &**guard,
             LockedContainer::ResultContainer(guard) => &**guard,
-            LockedContainer::Other(guard) => (&**guard).as_ref(),
+            LockedContainer::Other(guard) => (**guard).as_ref(),
         }
     }
 }
@@ -59,7 +59,7 @@ impl DerefMut for LockedContainer {
             LockedContainer::PlayerInventory(guard) => &mut **guard,
             LockedContainer::CraftingContainer(guard) => &mut **guard,
             LockedContainer::ResultContainer(guard) => &mut **guard,
-            LockedContainer::Other(guard) => (&mut **guard).as_mut(),
+            LockedContainer::Other(guard) => (**guard).as_mut(),
         }
     }
 }
@@ -83,6 +83,7 @@ pub enum ContainerRef {
 
 impl ContainerRef {
     /// Returns a unique identifier for this container based on its Arc pointer address.
+    #[must_use]
     pub fn container_id(&self) -> ContainerId {
         match self {
             ContainerRef::PlayerInventory(arc) => ContainerId::from_arc(arc),
@@ -132,7 +133,7 @@ pub struct ContainerLockGuard {
     // Store locked guards in deterministic order
     guards: Vec<(ContainerId, LockedContainer)>,
     // For quick lookup
-    id_to_index: HashMap<ContainerId, usize>,
+    id_to_index: FxHashMap<ContainerId, usize>,
 }
 
 impl ContainerLockGuard {
@@ -141,6 +142,7 @@ impl ContainerLockGuard {
     /// Containers are sorted by their pointer address before locking to ensure
     /// a consistent lock order across all call sites, preventing deadlocks.
     /// Duplicate containers (same Arc) are automatically deduplicated.
+    #[must_use]
     pub fn lock_all(containers: &[&ContainerRef]) -> Self {
         // Collect container IDs and references, then sort
         let mut to_lock: Vec<_> = containers.iter().map(|c| (c.container_id(), *c)).collect();
@@ -175,6 +177,7 @@ impl ContainerLockGuard {
     ///
     /// This should only be called when you need to add more containers
     /// mid-operation. All existing references from `get()`/`get_mut()` are invalidated.
+    #[must_use]
     pub fn relock(self, containers: &[&ContainerRef]) -> Self {
         // Drop self, releasing all locks
         drop(self);
@@ -183,6 +186,7 @@ impl ContainerLockGuard {
     }
 
     /// Get immutable access to a locked container.
+    #[must_use]
     pub fn get(&self, id: ContainerId) -> Option<&dyn Container> {
         self.id_to_index
             .get(&id)
@@ -200,6 +204,7 @@ impl ContainerLockGuard {
     }
 
     /// Check if a container is locked.
+    #[must_use]
     pub fn contains(&self, id: ContainerId) -> bool {
         self.id_to_index.contains_key(&id)
     }
@@ -215,6 +220,6 @@ pub struct ContainerId(usize);
 impl ContainerId {
     /// Creates a container ID from an Arc's pointer address.
     pub fn from_arc<T: ?Sized>(arc: &Arc<T>) -> Self {
-        Self(Arc::as_ptr(arc) as *const () as usize)
+        Self(Arc::as_ptr(arc).cast::<()>() as usize)
     }
 }
