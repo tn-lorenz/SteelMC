@@ -1142,9 +1142,7 @@ pub trait Menu {
 
         // Get items from target slot (menu) and source (player inventory)
         let target_item = target_slot.with_item(std::clone::Clone::clone);
-        let source_item = inventory
-            .lock()
-            .with_item(inventory_slot, std::clone::Clone::clone);
+        let source_item = inventory.lock().get_item(inventory_slot).clone();
 
         if source_item.is_empty() && target_item.is_empty() {
             return;
@@ -1172,7 +1170,8 @@ pub trait Menu {
                     target_slot.set_by_player(to_place, &ItemStack::empty());
                     inventory
                         .lock()
-                        .with_item_mut(inventory_slot, |i| i.shrink(max_size));
+                        .get_item_mut(inventory_slot)
+                        .shrink(max_size);
                 } else {
                     // Move entire stack
                     inventory
@@ -1194,10 +1193,10 @@ pub trait Menu {
                         player.add_item_or_drop(remainder);
                     }
                     // Try to add target item to inventory, drop if can't fit
-                    {
-                        let mut inv = inventory.lock();
-                        inv.with_item_mut(inventory_slot, |i| i.shrink(max_size));
-                    }
+                    inventory
+                        .lock()
+                        .get_item_mut(inventory_slot)
+                        .shrink(max_size);
                     player.add_item_or_drop(target_item);
                 } else {
                     // Simple swap

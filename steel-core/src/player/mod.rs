@@ -25,6 +25,7 @@ use steel_utils::locks::SyncMutex;
 use steel_utils::types::GameType;
 
 use crate::config::STEEL_CONFIG;
+use crate::inventory::SyncPlayerInv;
 use crate::player::player_inventory::PlayerInventory;
 
 use steel_protocol::packets::{
@@ -43,11 +44,7 @@ use steel_utils::{ChunkPos, math::Vector3, text::TextComponent, translations};
 
 use crate::entity::LivingEntity;
 use crate::inventory::{
-    SyncContainer,
-    container::{Container, ContainerType},
-    equipment::{EntityEquipment, EquipmentSlot},
-    inventory_menu::InventoryMenu,
-    menu::Menu,
+    container::Container, equipment::EquipmentSlot, inventory_menu::InventoryMenu, menu::Menu,
     slot::Slot,
 };
 
@@ -111,12 +108,8 @@ pub struct Player {
     /// The player's current game mode (Survival, Creative, Adventure, Spectator)
     pub game_mode: AtomicCell<GameType>,
 
-    /// Entity equipment (armor, offhand, hands).
-    /// `MainHand` will delegate to inventory when inventory is implemented.
-    equipment: Arc<SyncMutex<EntityEquipment>>,
-
     /// The player's inventory container (shared with `inventory_menu`).
-    pub inventory: SyncContainer,
+    pub inventory: SyncPlayerInv,
 
     /// The player's inventory menu (always open, even when `container_id` is 0).
     inventory_menu: SyncMutex<InventoryMenu>,
@@ -140,12 +133,8 @@ impl Player {
         world: Arc<World>,
         player: &std::sync::Weak<Player>,
     ) -> Self {
-        let entity_equipment = Arc::new(SyncMutex::new(EntityEquipment::new()));
-
         // Create a single shared inventory container used by both the player and inventory menu
-        let inventory: SyncContainer = Arc::new(SyncMutex::new(ContainerType::PlayerInventory(
-            PlayerInventory::new(entity_equipment.clone(), player.clone()),
-        )));
+        let inventory = Arc::new(SyncMutex::new(PlayerInventory::new(player.clone())));
 
         Self {
             gameprofile,
@@ -168,7 +157,6 @@ impl Player {
             chat_session: SyncMutex::new(None),
             message_chain: SyncMutex::new(None),
             game_mode: AtomicCell::new(GameType::Survival),
-            equipment: entity_equipment.clone(),
             inventory: inventory.clone(),
             inventory_menu: SyncMutex::new(InventoryMenu::new(inventory)),
             ack_block_changes_up_to: AtomicI32::new(-1),
@@ -776,25 +764,19 @@ impl Player {
     /// Gets the item in the specified hand.
     #[must_use]
     pub fn get_item_in_hand(&self, hand: InteractionHand) -> ItemStack {
-        match &mut *self.inventory.lock() {
-            ContainerType::PlayerInventory(inv) => match hand {
-                InteractionHand::MainHand => inv.get_selected_item(),
-                InteractionHand::OffHand => inv.get_offhand_item(),
-            },
-            #[expect(unreachable_patterns)] //Remove when another menu is added
-            _ => unreachable!("Player inventory is always PlayerInventory"),
+        let inv = self.inventory.lock();
+        match hand {
+            InteractionHand::MainHand => inv.get_selected_item(),
+            InteractionHand::OffHand => inv.get_offhand_item(),
         }
     }
 
     /// Sets the item in the specified hand.
     pub fn set_item_in_hand(&self, hand: InteractionHand, item: ItemStack) {
-        match &mut *self.inventory.lock() {
-            ContainerType::PlayerInventory(inv) => match hand {
-                InteractionHand::MainHand => inv.set_selected_item(item),
-                InteractionHand::OffHand => inv.set_offhand_item(item),
-            },
-            #[expect(unreachable_patterns)] //Remove when another menu is added
-            _ => unreachable!("Player inventory is always PlayerInventory"),
+        let mut inv = self.inventory.lock();
+        match hand {
+            InteractionHand::MainHand => inv.set_selected_item(item),
+            InteractionHand::OffHand => inv.set_offhand_item(item),
         }
     }
 
@@ -941,11 +923,7 @@ impl Player {
 
     /// Sets selected slot
     pub fn handle_set_carried_item(&self, packet: SSetCarriedItem) {
-        match &mut *self.inventory.lock() {
-            ContainerType::PlayerInventory(inv) => inv.set_selected_slot(packet.slot as u8),
-            #[expect(unreachable_patterns)] //Remove when another menu is added
-            _ => unreachable!("Player inventory is always PlayerInventory"),
-        }
+        self.inventory.lock().set_selected_slot(packet.slot as u8);
     }
 
     /// Sends all inventory slots to the client (full sync).
@@ -1056,7 +1034,7 @@ impl LivingEntity for Player {
     }
 
     fn get_item_by_slot(&self, slot: EquipmentSlot) -> steel_registry::item_stack::ItemStack {
-        self.equipment.lock().get_cloned(slot)
+        self.inventory.lock().equipment().get_cloned(slot)
     }
 
     fn is_sprinting(&self) -> bool {

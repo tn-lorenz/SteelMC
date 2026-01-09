@@ -307,7 +307,7 @@ impl JavaConnection {
                             continue;
                         };
 
-                        if let Err(err) = self.network_writer.lock_async().await.write_packet(&encoded_packet).await
+                        if let Err(err) = self.network_writer.lock().await.write_packet(&encoded_packet).await
                         {
                             log::warn!("Failed to send packet to client {}: {err}", self.id);
                             self.close();

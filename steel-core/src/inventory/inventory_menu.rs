@@ -15,7 +15,7 @@ use steel_registry::item_stack::ItemStack;
 use steel_utils::locks::SyncMutex;
 
 use crate::inventory::{
-    SyncContainer,
+    SyncPlayerInv,
     container::Container,
     crafting::{CraftingContainer, ResultContainer},
     menu::{Menu, MenuBehavior},
@@ -73,7 +73,7 @@ impl InventoryMenu {
     /// - Slots 0-35: Main inventory (hotbar 0-8, main 9-35)
     /// - Slots 36-39: Armor (feet, legs, chest, head)
     /// - Slot 40: Offhand
-    pub fn new(inventory: SyncContainer) -> Self {
+    pub fn new(inventory: SyncPlayerInv) -> Self {
         let mut menu_slots = Vec::with_capacity(slots::TOTAL_SLOTS);
 
         // Create the crafting containers

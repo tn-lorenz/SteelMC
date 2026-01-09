@@ -7,7 +7,7 @@ use steel_registry::data_components::vanilla_components::EquippableSlot;
 use steel_registry::item_stack::ItemStack;
 use steel_utils::locks::SyncMutex;
 
-use crate::inventory::SyncContainer;
+use crate::inventory::SyncPlayerInv;
 use crate::inventory::container::Container;
 use crate::inventory::crafting::{CraftingContainer, ResultContainer};
 use crate::inventory::recipe_manager;
@@ -169,24 +169,24 @@ pub trait Slot {
 
 /// A normal slot that references a container and index.
 pub struct NormalSlot {
-    container: SyncContainer,
+    container: SyncPlayerInv,
     index: usize,
 }
 
 impl NormalSlot {
     /// Creates a new normal slot.
-    pub fn new(container: SyncContainer, index: usize) -> Self {
+    pub fn new(container: SyncPlayerInv, index: usize) -> Self {
         Self { container, index }
     }
 }
 
 impl Slot for NormalSlot {
     fn with_item<R>(&self, f: impl FnOnce(&ItemStack) -> R) -> R {
-        self.container.lock().with_item(self.index, f)
+        f(self.container.lock().get_item(self.index))
     }
 
     fn with_item_mut<R>(&self, f: impl FnOnce(&mut ItemStack) -> R) -> R {
-        self.container.lock().with_item_mut(self.index, f)
+        f(self.container.lock().get_item_mut(self.index))
     }
 
     fn set_item(&self, stack: ItemStack) {
@@ -206,7 +206,7 @@ impl Slot for NormalSlot {
 ///
 /// Based on Java's `ArmorSlot` class.
 pub struct ArmorSlot {
-    container: SyncContainer,
+    container: SyncPlayerInv,
     index: usize,
     /// The equipment slot this armor slot accepts.
     slot: EquippableSlot,
@@ -214,7 +214,7 @@ pub struct ArmorSlot {
 
 impl ArmorSlot {
     /// Creates a new armor slot.
-    pub fn new(container: SyncContainer, index: usize, slot: EquippableSlot) -> Self {
+    pub fn new(container: SyncPlayerInv, index: usize, slot: EquippableSlot) -> Self {
         Self {
             container,
             index,
@@ -231,11 +231,11 @@ impl ArmorSlot {
 
 impl Slot for ArmorSlot {
     fn with_item<R>(&self, f: impl FnOnce(&ItemStack) -> R) -> R {
-        self.container.lock().with_item(self.index, f)
+        f(self.container.lock().get_item(self.index))
     }
 
     fn with_item_mut<R>(&self, f: impl FnOnce(&mut ItemStack) -> R) -> R {
-        self.container.lock().with_item_mut(self.index, f)
+        f(self.container.lock().get_item_mut(self.index))
     }
 
     fn set_item(&self, stack: ItemStack) {
@@ -307,11 +307,11 @@ impl CraftingGridSlot {
 
 impl Slot for CraftingGridSlot {
     fn with_item<R>(&self, f: impl FnOnce(&ItemStack) -> R) -> R {
-        self.container.lock().with_item(self.index, f)
+        f(self.container.lock().get_item(self.index))
     }
 
     fn with_item_mut<R>(&self, f: impl FnOnce(&mut ItemStack) -> R) -> R {
-        self.container.lock().with_item_mut(self.index, f)
+        f(self.container.lock().get_item_mut(self.index))
     }
 
     fn set_item(&self, stack: ItemStack) {
@@ -362,11 +362,11 @@ impl CraftingResultSlot {
 
 impl Slot for CraftingResultSlot {
     fn with_item<R>(&self, f: impl FnOnce(&ItemStack) -> R) -> R {
-        self.result_container.lock().with_item(0, f)
+        f(self.result_container.lock().get_item(0))
     }
 
     fn with_item_mut<R>(&self, f: impl FnOnce(&mut ItemStack) -> R) -> R {
-        self.result_container.lock().with_item_mut(0, f)
+        f(self.result_container.lock().get_item_mut(0))
     }
 
     fn set_item(&self, stack: ItemStack) {
@@ -438,7 +438,8 @@ impl Slot for CraftingResultSlot {
                     };
 
                     // Consume one item from the grid slot
-                    crafting.with_item_mut(grid_slot, |item| {
+                    {
+                        let item = crafting.get_item_mut(grid_slot);
                         if !item.is_empty() {
                             if item.count() > 1 {
                                 item.set_count(item.count() - 1);
@@ -446,11 +447,11 @@ impl Slot for CraftingResultSlot {
                                 *item = ItemStack::empty();
                             }
                         }
-                    });
+                    }
 
                     // Handle remainder placement
                     if !replacement.is_empty() {
-                        let current_item = crafting.with_item(grid_slot, std::clone::Clone::clone);
+                        let current_item = crafting.get_item(grid_slot).clone();
 
                         if current_item.is_empty() {
                             // Slot is now empty, place remainder there
@@ -461,9 +462,7 @@ impl Slot for CraftingResultSlot {
                         ) {
                             // Same item type, try to stack
                             let new_count = current_item.count() + replacement.count();
-                            crafting.with_item_mut(grid_slot, |item| {
-                                item.set_count(new_count);
-                            });
+                            crafting.get_item_mut(grid_slot).set_count(new_count);
                         } else {
                             // Different item type - need to return to player inventory
                             remainder_overflow.push(replacement);
@@ -475,23 +474,22 @@ impl Slot for CraftingResultSlot {
             // No recipe found (shouldn't happen normally, but handle gracefully)
             // Fall back to consuming all non-empty slots
             for i in 0..crafting.get_container_size() {
-                crafting.with_item_mut(i, |item| {
-                    if !item.is_empty() {
-                        let remainder = item.item().get_crafting_remainder();
-                        if item.count() > 1 {
-                            item.set_count(item.count() - 1);
+                let item = crafting.get_item_mut(i);
+                if !item.is_empty() {
+                    let remainder = item.item().get_crafting_remainder();
+                    if item.count() > 1 {
+                        item.set_count(item.count() - 1);
+                    } else {
+                        *item = ItemStack::empty();
+                    }
+                    if !remainder.is_empty() {
+                        if item.is_empty() {
+                            *item = remainder;
                         } else {
-                            *item = ItemStack::empty();
-                        }
-                        if !remainder.is_empty() {
-                            if item.is_empty() {
-                                *item = remainder;
-                            } else {
-                                remainder_overflow.push(remainder);
-                            }
+                            remainder_overflow.push(remainder);
                         }
                     }
-                });
+                }
             }
         }
 

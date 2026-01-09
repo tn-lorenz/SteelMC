@@ -313,7 +313,7 @@ impl RegionManager {
         let (local_x, local_z) = RegionPos::local_chunk_pos(pos.0.x, pos.0.y);
         let index = RegionHeader::chunk_index(local_x, local_z);
 
-        let mut regions = self.regions.write_async().await;
+        let mut regions = self.regions.write().await;
 
         // Track if we opened the region (so we can close it after)
         let we_opened_region = !regions.contains_key(&region_pos);
@@ -416,7 +416,7 @@ impl RegionManager {
         let (local_x, local_z) = RegionPos::local_chunk_pos(pos.0.x, pos.0.y);
         let index = RegionHeader::chunk_index(local_x, local_z);
 
-        let mut regions = self.regions.write_async().await;
+        let mut regions = self.regions.write().await;
 
         // Track if we just opened this region
         let was_already_open = regions.contains_key(&region_pos);
@@ -476,7 +476,7 @@ impl RegionManager {
     pub async fn release_chunk(&self, pos: ChunkPos) -> io::Result<()> {
         let region_pos = RegionPos::from_chunk(pos.0.x, pos.0.y);
 
-        let mut regions = self.regions.write_async().await;
+        let mut regions = self.regions.write().await;
 
         let should_close = if let Some(handle) = regions.get_mut(&region_pos) {
             handle.loaded_chunk_count = handle.loaded_chunk_count.saturating_sub(1);
@@ -501,7 +501,7 @@ impl RegionManager {
         let (local_x, local_z) = RegionPos::local_chunk_pos(pos.0.x, pos.0.y);
         let index = RegionHeader::chunk_index(local_x, local_z);
 
-        let regions = self.regions.read_async().await;
+        let regions = self.regions.write().await;
 
         // Check cached header first
         if let Some(handle) = regions.get(&region_pos) {
@@ -533,7 +533,7 @@ impl RegionManager {
 
     /// Flushes all dirty headers to disk.
     pub async fn flush_all(&self) -> io::Result<()> {
-        let mut regions = self.regions.write_async().await;
+        let mut regions = self.regions.write().await;
 
         for handle in regions.values_mut() {
             if handle.header_dirty {
@@ -550,7 +550,7 @@ impl RegionManager {
     /// This should be called during graceful shutdown after all chunks have been saved.
     /// It ensures all data is persisted and file handles are properly closed.
     pub async fn close_all(&self) -> io::Result<()> {
-        let mut regions = self.regions.write_async().await;
+        let mut regions = self.regions.write().await;
 
         for (_, mut handle) in regions.drain() {
             if handle.header_dirty {

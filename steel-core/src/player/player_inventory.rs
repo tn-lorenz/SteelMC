@@ -1,9 +1,8 @@
 //! Player inventory management.
 
-use std::sync::{Arc, Weak};
+use std::sync::Weak;
 
 use steel_registry::item_stack::ItemStack;
-use steel_utils::locks::SyncMutex;
 
 use crate::{
     inventory::{
@@ -39,7 +38,7 @@ pub struct PlayerInventory {
     /// The 36 main inventory slots (0-8 hotbar, 9-35 main).
     items: [ItemStack; Self::INVENTORY_SIZE],
     /// Entity equipment (armor, hands).
-    equipment: Arc<SyncMutex<EntityEquipment>>,
+    equipment: EntityEquipment,
     /// Weak reference to the player.
     #[allow(dead_code)]
     player: Weak<Player>,
@@ -58,14 +57,25 @@ impl PlayerInventory {
     pub const SLOT_OFFHAND: usize = 40;
 
     /// Creates a new player inventory with empty slots.
-    pub fn new(equipment: Arc<SyncMutex<EntityEquipment>>, player: Weak<Player>) -> Self {
+    pub fn new(player: Weak<Player>) -> Self {
         Self {
             items: std::array::from_fn(|_| ItemStack::empty()),
-            equipment,
+            equipment: EntityEquipment::new(),
             player,
             selected: 0,
             times_changed: 0,
         }
+    }
+
+    /// Returns a reference to the entity equipment.
+    #[must_use]
+    pub fn equipment(&self) -> &EntityEquipment {
+        &self.equipment
+    }
+
+    /// Returns a mutable reference to the entity equipment.
+    pub fn equipment_mut(&mut self) -> &mut EntityEquipment {
+        &mut self.equipment
     }
 
     /// Returns true if the given slot index is a hotbar slot (0-8).
@@ -113,12 +123,12 @@ impl PlayerInventory {
     /// Returns a clone of the offhand item.
     #[must_use]
     pub fn get_offhand_item(&self) -> ItemStack {
-        self.equipment.lock().get_cloned(EquipmentSlot::OffHand)
+        self.equipment.get_cloned(EquipmentSlot::OffHand)
     }
 
     /// Sets the offhand item.
     pub fn set_offhand_item(&mut self, item: ItemStack) {
-        self.equipment.lock().set(EquipmentSlot::OffHand, item);
+        self.equipment.set(EquipmentSlot::OffHand, item);
         self.set_changed();
     }
 
@@ -153,33 +163,35 @@ impl PlayerInventory {
     }
 }
 
+/// Static empty item stack for returning references to invalid slots.
+static EMPTY_ITEM: std::sync::LazyLock<ItemStack> = std::sync::LazyLock::new(ItemStack::empty);
+
 impl Container for PlayerInventory {
     fn get_container_size(&self) -> usize {
         // 36 main slots + 7 equipment slots (feet, legs, chest, head, offhand, body, saddle)
         Self::INVENTORY_SIZE + 7
     }
 
-    fn with_item<R>(&self, slot: usize, f: impl FnOnce(&ItemStack) -> R) -> R {
+    fn get_item(&self, slot: usize) -> &ItemStack {
         if slot < Self::INVENTORY_SIZE {
-            f(&self.items[slot])
+            &self.items[slot]
         } else if let Some(eq_slot) = slot_to_equipment(slot) {
-            let equipment = self.equipment.lock();
-            f(equipment.get_ref(eq_slot))
+            self.equipment.get_ref(eq_slot)
         } else {
-            f(&ItemStack::empty())
+            &EMPTY_ITEM
         }
     }
 
-    fn with_item_mut<R>(&mut self, slot: usize, f: impl FnOnce(&mut ItemStack) -> R) -> R {
+    fn get_item_mut(&mut self, slot: usize) -> &mut ItemStack {
         if slot < Self::INVENTORY_SIZE {
-            f(&mut self.items[slot])
+            &mut self.items[slot]
         } else if let Some(eq_slot) = slot_to_equipment(slot) {
-            let mut equipment = self.equipment.lock();
-            f(equipment.get_mut(eq_slot))
+            self.equipment.get_mut(eq_slot)
         } else {
-            // Invalid slot, provide a temporary empty stack
-            let mut empty = ItemStack::empty();
-            f(&mut empty)
+            // Invalid slot - this is a bug, but we need to return something.
+            // Return the first item slot as a fallback (will be logged in debug builds).
+            debug_assert!(false, "Invalid slot index: {slot}");
+            &mut self.items[0]
         }
     }
 
@@ -187,7 +199,7 @@ impl Container for PlayerInventory {
         if slot < Self::INVENTORY_SIZE {
             self.items[slot] = stack;
         } else if let Some(eq_slot) = slot_to_equipment(slot) {
-            self.equipment.lock().set(eq_slot, stack);
+            self.equipment.set(eq_slot, stack);
         }
         self.set_changed();
     }
@@ -199,9 +211,8 @@ impl Container for PlayerInventory {
             }
         }
 
-        let equipment = self.equipment.lock();
         for slot in EquipmentSlot::ALL {
-            if !equipment.get_ref(slot).is_empty() {
+            if !self.equipment.get_ref(slot).is_empty() {
                 return false;
             }
         }
@@ -217,7 +228,7 @@ impl Container for PlayerInventory {
         for item in &mut self.items {
             *item = ItemStack::empty();
         }
-        self.equipment.lock().clear();
+        self.equipment.clear();
         self.set_changed();
     }
 }
