@@ -242,7 +242,7 @@ impl MenuBehavior {
     }
 
     /// Collects all unique container references from the slots.
-    #[must_use] 
+    #[must_use]
     pub fn collect_container_refs(&self) -> Vec<ContainerRef> {
         let mut refs = Vec::new();
         for slot in &self.slots {
@@ -257,7 +257,7 @@ impl MenuBehavior {
     }
 
     /// Locks all containers referenced by slots in this menu.
-    #[must_use] 
+    #[must_use]
     pub fn lock_all_containers(&self) -> ContainerLockGuard {
         let refs = self.collect_container_refs();
         let ref_refs: Vec<&ContainerRef> = refs.iter().collect();
@@ -855,7 +855,7 @@ impl MenuBehavior {
             if let Some(taken) = slot.try_remove(&mut guard, amount, i32::MAX) {
                 if let Some(remainder) = slot.on_take(&mut guard, &taken, player) {
                     // There's a remainder from crafting - add to player inventory or drop
-                    player.add_item_or_drop(remainder);
+                    player.add_item_or_drop_with_guard(&mut guard, remainder);
                 }
                 self.carried = taken;
             }
@@ -906,7 +906,7 @@ impl MenuBehavior {
                         let taken = slot.remove(&mut guard, take_amount);
                         // Handle any remainder (regular slots don't produce remainders, but be safe)
                         if let Some(remainder) = slot.on_take(&mut guard, &taken, player) {
-                            player.add_item_or_drop(remainder);
+                            player.add_item_or_drop_with_guard(&mut guard, remainder);
                         }
                         let mut new_carried = carried;
                         new_carried.grow(taken.count);
@@ -1182,7 +1182,8 @@ pub trait Menu {
         // Get items from target slot (menu) and source (player inventory via guard)
         let target_item = target_slot.get_item(&guard).clone();
         let source_item = guard
-            .get(player_inv_id).map_or_else(ItemStack::empty, |inv| inv.get_item(inventory_slot).clone());
+            .get(player_inv_id)
+            .map_or_else(ItemStack::empty, |inv| inv.get_item(inventory_slot).clone());
 
         if source_item.is_empty() && target_item.is_empty() {
             return;
@@ -1196,7 +1197,7 @@ pub trait Menu {
                 }
                 target_slot.set_by_player(&mut guard, ItemStack::empty(), &target_item);
                 if let Some(remainder) = target_slot.on_take(&mut guard, &target_item, player) {
-                    player.add_item_or_drop(remainder);
+                    player.add_item_or_drop_with_guard(&mut guard, remainder);
                 }
             }
         } else if target_item.is_empty() {
@@ -1229,13 +1230,13 @@ pub trait Menu {
                     to_place.set_count(max_size);
                     target_slot.set_by_player(&mut guard, to_place, &target_item);
                     if let Some(remainder) = target_slot.on_take(&mut guard, &target_item, player) {
-                        player.add_item_or_drop(remainder);
+                        player.add_item_or_drop_with_guard(&mut guard, remainder);
                     }
                     // Try to add target item to inventory, drop if can't fit
                     if let Some(inv) = guard.get_mut(player_inv_id) {
                         inv.get_item_mut(inventory_slot).shrink(max_size);
                     }
-                    player.add_item_or_drop(target_item);
+                    player.add_item_or_drop_with_guard(&mut guard, target_item);
                 } else {
                     // Simple swap
                     if let Some(inv) = guard.get_mut(player_inv_id) {
@@ -1243,7 +1244,7 @@ pub trait Menu {
                     }
                     target_slot.set_by_player(&mut guard, source_item, &target_item);
                     if let Some(remainder) = target_slot.on_take(&mut guard, &target_item, player) {
-                        player.add_item_or_drop(remainder);
+                        player.add_item_or_drop_with_guard(&mut guard, remainder);
                     }
                 }
             }

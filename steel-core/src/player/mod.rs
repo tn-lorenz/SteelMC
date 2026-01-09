@@ -44,7 +44,11 @@ use steel_utils::{ChunkPos, math::Vector3, text::TextComponent, translations};
 
 use crate::entity::LivingEntity;
 use crate::inventory::{
-    container::Container, equipment::EquipmentSlot, inventory_menu::InventoryMenu, menu::Menu,
+    container::Container,
+    equipment::EquipmentSlot,
+    inventory_menu::InventoryMenu,
+    lock::{ContainerId, ContainerLockGuard},
+    menu::Menu,
     slot::Slot,
 };
 
@@ -989,6 +993,32 @@ impl Player {
         let added = self.inventory.lock().add(&mut item);
         if !added || !item.is_empty() {
             // Couldn't fit everything, drop the rest
+            self.drop_item(item, false);
+        }
+    }
+
+    /// Tries to add an item to the player's inventory using an existing lock guard,
+    /// dropping it if it doesn't fit.
+    ///
+    /// Use this variant when you already hold a `ContainerLockGuard` that includes
+    /// the player's inventory to avoid deadlocks.
+    pub fn add_item_or_drop_with_guard(
+        &self,
+        guard: &mut ContainerLockGuard,
+        mut item: steel_registry::item_stack::ItemStack,
+    ) {
+        if item.is_empty() {
+            return;
+        }
+
+        let inv_id = ContainerId::from_arc(&self.inventory);
+        if let Some(inv) = guard.get_mut(inv_id) {
+            let added = inv.add(&mut item);
+            if !added || !item.is_empty() {
+                self.drop_item(item, false);
+            }
+        } else {
+            // Inventory not in guard - this shouldn't happen but drop the item to be safe
             self.drop_item(item, false);
         }
     }

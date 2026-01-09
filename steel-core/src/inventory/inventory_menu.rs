@@ -166,13 +166,13 @@ impl InventoryMenu {
     }
 
     /// Returns a `ContainerRef` for the crafting container.
-    #[must_use] 
+    #[must_use]
     pub fn crafting_container_ref(&self) -> ContainerRef {
         ContainerRef::CraftingContainer(Arc::clone(&self.crafting_container))
     }
 
     /// Returns a `ContainerRef` for the result container.
-    #[must_use] 
+    #[must_use]
     pub fn result_container_ref(&self) -> ContainerRef {
         ContainerRef::ResultContainer(Arc::clone(&self.result_container))
     }
@@ -378,7 +378,7 @@ impl Menu for InventoryMenu {
                 self.behavior.slots[slot_index].on_take(guard, &clicked, player)
             {
                 // Try to place crafting remainders (e.g., empty buckets) back in inventory
-                player.add_item_or_drop(remainder);
+                player.add_item_or_drop_with_guard(guard, remainder);
             }
 
             // Java: if (slotIndex == 0) { player.drop(stack, false); }

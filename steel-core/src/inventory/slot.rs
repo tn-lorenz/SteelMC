@@ -168,7 +168,7 @@ pub trait Slot {
         if let Some(taken) = self.try_remove(guard, amount, max_amount) {
             if let Some(remainder) = self.on_take(guard, &taken, player) {
                 // Try to add remainder to player inventory, or drop it
-                player.add_item_or_drop(remainder);
+                player.add_item_or_drop_with_guard(guard, remainder);
             }
             taken
         } else {
