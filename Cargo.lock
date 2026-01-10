@@ -2390,6 +2390,7 @@ dependencies = [
  "log",
  "proc-macro2",
  "quote",
+ "rand 0.10.0-rc.6",
  "rustc-hash",
  "serde",
  "serde_json",

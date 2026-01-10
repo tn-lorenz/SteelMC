@@ -28,6 +28,7 @@ use crate::{
     instrument::InstrumentRegistry,
     items::ItemRegistry,
     jukebox_song::JukeboxSongRegistry,
+    loot_table::LootTableRegistry,
     menu_type::MenuTypeRegistry,
     painting_variant::PaintingVariantRegistry,
     pig_variant::PigVariantRegistry,
@@ -57,6 +58,7 @@ pub mod instrument;
 pub mod item_stack;
 pub mod items;
 pub mod jukebox_song;
+pub mod loot_table;
 pub mod menu_type;
 pub mod painting_variant;
 pub mod pig_variant;
@@ -213,6 +215,11 @@ pub mod vanilla_entity_data_serializers;
 
 #[allow(warnings)]
 #[rustfmt::skip]
+#[path = "generated/vanilla_loot_tables.rs"]
+pub mod vanilla_loot_tables;
+
+#[allow(warnings)]
+#[rustfmt::skip]
 #[path = "generated/vanilla_packets.rs"]
 pub mod packets;
 
@@ -267,6 +274,7 @@ pub const MENU_TYPE_REGISTRY: Identifier = Identifier::vanilla_static("menu");
 pub const ZOMBIE_NAUTILUS_VARIANT_REGISTRY: Identifier =
     Identifier::vanilla_static("zombie_nautilus_variant");
 pub const TIMELINE_REGISTRY: Identifier = Identifier::vanilla_static("timeline");
+pub const LOOT_TABLE_REGISTRY: Identifier = Identifier::vanilla_static("loot_table");
 
 pub struct Registry {
     pub blocks: BlockRegistry,
@@ -295,6 +303,7 @@ pub struct Registry {
     pub timelines: TimelineRegistry,
     pub recipes: RecipeRegistry,
     pub entity_types: EntityTypeRegistry,
+    pub loot_tables: LootTableRegistry,
 }
 
 impl Debug for Registry {
@@ -397,6 +406,10 @@ impl Registry {
         let mut entity_type_registry = EntityTypeRegistry::new();
         vanilla_entities::register_entity_types(&mut entity_type_registry);
 
+        // Loot table registry
+        let mut loot_table_registry = LootTableRegistry::new();
+        vanilla_loot_tables::register_loot_tables(&mut loot_table_registry);
+
         Self {
             blocks: block_registry,
             data_components: data_component_registry,
@@ -424,6 +437,7 @@ impl Registry {
             timelines: timeline_registry,
             recipes: recipe_registry,
             entity_types: entity_type_registry,
+            loot_tables: loot_table_registry,
         }
     }
 
@@ -454,6 +468,7 @@ impl Registry {
         self.timelines.freeze();
         self.recipes.freeze();
         self.entity_types.freeze();
+        self.loot_tables.freeze();
     }
 }
 
