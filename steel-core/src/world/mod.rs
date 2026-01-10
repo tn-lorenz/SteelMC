@@ -1,13 +1,17 @@
 //! This module contains the `World` struct, which represents a world.
-use std::sync::{Arc, Weak};
-use std::time::Duration;
+use std::{
+    io,
+    sync::{Arc, Weak},
+    time::Duration,
+};
 
 use scc::HashMap;
+use steel_protocol::packet_traits::ClientPacket;
 use steel_protocol::packets::game::{CPlayerChat, CSystemChat};
 use steel_registry::vanilla_blocks;
 use steel_registry::{REGISTRY, compat_traits::RegistryWorld, dimension_type::DimensionTypeRef};
 use steel_utils::{BlockPos, BlockStateId, ChunkPos, SectionPos, types::UpdateFlags};
-use tokio::runtime::Runtime;
+use tokio::{runtime::Runtime, time::Instant};
 use uuid::Uuid;
 
 use crate::{
@@ -16,7 +20,10 @@ use crate::{
     player::{LastSeen, Player},
 };
 
+mod player_area_map;
 mod world_entities;
+
+pub use player_area_map::PlayerAreaMap;
 
 /// A struct that represents a world.
 pub struct World {
@@ -24,6 +31,8 @@ pub struct World {
     pub chunk_map: Arc<ChunkMap>,
     /// A map of all the players in the world.
     pub players: HashMap<Uuid, Arc<Player>>,
+    /// Spatial index for player proximity queries.
+    pub player_area_map: PlayerAreaMap,
     /// The dimension of the world.
     pub dimension: DimensionTypeRef,
 }
@@ -39,6 +48,7 @@ impl World {
         Arc::new_cyclic(|weak_self: &Weak<World>| Self {
             chunk_map: Arc::new(ChunkMap::new(chunk_runtime, weak_self.clone(), &dimension)),
             players: HashMap::new(),
+            player_area_map: PlayerAreaMap::new(),
             dimension,
         })
     }
@@ -122,6 +132,9 @@ impl World {
             return false;
         };
 
+        // Record the block change for broadcasting to clients
+        self.chunk_map.block_changed(&pos);
+
         //TODO: Neighbor updates and stuff like that
 
         true
@@ -140,7 +153,7 @@ impl World {
         self.chunk_map.tick_b(tick_count);
 
         // Tick players
-        let start = tokio::time::Instant::now();
+        let start = Instant::now();
         self.players.iter_sync(|_uuid, player| {
             player.tick();
 
@@ -248,11 +261,30 @@ impl World {
         });
     }
 
+    /// Broadcasts a packet to all players tracking the given chunk.
+    /// TODO: Look into sending `EncodedPacket` instead
+    pub fn broadcast_to_nearby<P: ClientPacket + Clone>(
+        &self,
+        chunk: ChunkPos,
+        packet: P,
+        exclude: Option<Uuid>,
+    ) {
+        let tracking_players = self.player_area_map.get_tracking_players(chunk);
+        for uuid in tracking_players {
+            if Some(uuid) == exclude {
+                continue;
+            }
+            if let Some(player) = self.players.read_sync(&uuid, |_, p| p.clone()) {
+                player.connection.send_packet(packet.clone());
+            }
+        }
+    }
+
     /// Saves all dirty chunks in this world to disk.
     ///
     /// This should be called during graceful shutdown.
     /// Returns the number of chunks saved.
-    pub async fn save_all_chunks(&self) -> std::io::Result<usize> {
+    pub async fn save_all_chunks(&self) -> io::Result<usize> {
         self.chunk_map.save_all_chunks().await
     }
 }

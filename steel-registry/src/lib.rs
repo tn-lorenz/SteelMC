@@ -23,6 +23,7 @@ use crate::{
     data_components::{DataComponentRegistry, vanilla_components},
     dialog::DialogRegistry,
     dimension_type::DimensionTypeRegistry,
+    entity_types::EntityTypeRegistry,
     frog_variant::FrogVariantRegistry,
     instrument::InstrumentRegistry,
     items::ItemRegistry,
@@ -50,6 +51,7 @@ pub mod damage_type;
 pub mod data_components;
 pub mod dialog;
 pub mod dimension_type;
+pub mod entity_types;
 pub mod frog_variant;
 pub mod instrument;
 pub mod item_stack;
@@ -201,6 +203,16 @@ pub mod vanilla_recipes;
 
 #[allow(warnings)]
 #[rustfmt::skip]
+#[path = "generated/vanilla_entities.rs"]
+pub mod vanilla_entities;
+
+#[allow(warnings)]
+#[rustfmt::skip]
+#[path = "generated/vanilla_entity_data_serializers.rs"]
+pub mod vanilla_entity_data_serializers;
+
+#[allow(warnings)]
+#[rustfmt::skip]
 #[path = "generated/vanilla_packets.rs"]
 pub mod packets;
 
@@ -282,6 +294,7 @@ pub struct Registry {
     pub zombie_nautilus_variants: ZombieNautilusVariantRegistry,
     pub timelines: TimelineRegistry,
     pub recipes: RecipeRegistry,
+    pub entity_types: EntityTypeRegistry,
 }
 
 impl Debug for Registry {
@@ -380,6 +393,10 @@ impl Registry {
         let mut recipe_registry = RecipeRegistry::new();
         vanilla_recipes::register_recipes(&mut recipe_registry);
 
+        // Entity type registry
+        let mut entity_type_registry = EntityTypeRegistry::new();
+        vanilla_entities::register_entity_types(&mut entity_type_registry);
+
         Self {
             blocks: block_registry,
             data_components: data_component_registry,
@@ -406,6 +423,7 @@ impl Registry {
             zombie_nautilus_variants: zombie_nautilus_variant_registry,
             timelines: timeline_registry,
             recipes: recipe_registry,
+            entity_types: entity_type_registry,
         }
     }
 
@@ -435,6 +453,7 @@ impl Registry {
         self.zombie_nautilus_variants.freeze();
         self.timelines.freeze();
         self.recipes.freeze();
+        self.entity_types.freeze();
     }
 }
 

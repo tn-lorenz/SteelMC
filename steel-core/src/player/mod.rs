@@ -10,9 +10,13 @@ pub mod player_inventory;
 pub mod profile_key;
 mod signature_cache;
 
-use std::sync::Arc;
-use std::sync::atomic::{AtomicBool, AtomicI32, Ordering};
-use std::time::{Duration, SystemTime, UNIX_EPOCH};
+use std::{
+    sync::{
+        Arc, Weak,
+        atomic::{AtomicBool, AtomicI32, Ordering},
+    },
+    time::{Duration, SystemTime, UNIX_EPOCH},
+};
 
 use crossbeam::atomic::AtomicCell;
 pub use game_profile::GameProfile;
@@ -20,7 +24,9 @@ use message_chain::SignedMessageChain;
 use message_validator::LastSeenMessagesValidator;
 use profile_key::RemoteChatSession;
 pub use signature_cache::{LastSeen, MessageCache};
-use steel_protocol::packets::game::{SSetCarriedItem, SUseItem, SUseItemOn};
+use steel_protocol::packets::game::{
+    AnimateAction, CAnimate, SSetCarriedItem, SUseItem, SUseItemOn,
+};
 use steel_utils::locks::SyncMutex;
 use steel_utils::types::GameType;
 
@@ -28,15 +34,21 @@ use crate::config::STEEL_CONFIG;
 use crate::inventory::SyncPlayerInv;
 use crate::player::player_inventory::PlayerInventory;
 
+use steel_crypto::{SignatureValidator, public_key_from_bytes, signature::NoValidation};
 use steel_protocol::packets::{
     common::SCustomPayload,
     game::{
-        CBlockChangedAck, CBlockUpdate, CPlayerChat, FilterType, PreviousMessage, SChat, SChatAck,
-        SChatSessionUpdate, SContainerButtonClick, SContainerClick, SContainerClose,
-        SContainerSlotStateChanged, SMovePlayer, SPlayerInput, SSetCreativeModeSlot,
+        CBlockChangedAck, CBlockUpdate, CGameEvent, CMoveEntityPosRot, CMoveEntityRot, CPlayerChat,
+        CPlayerInfoUpdate, CRotateHead, ChatTypeBound, FilterType, GameEventType, PreviousMessage,
+        SChat, SChatAck, SChatSessionUpdate, SContainerButtonClick, SContainerClick,
+        SContainerClose, SContainerSlotStateChanged, SMovePlayer, SPlayerInput,
+        SSetCreativeModeSlot, calc_delta, to_angle_byte,
     },
 };
-use steel_registry::blocks::properties::Direction;
+use steel_registry::{
+    blocks::properties::Direction, compat_traits::RegistryPlayer, item_stack::ItemStack,
+    items::item::InteractionResult,
+};
 use steel_utils::BlockPos;
 use steel_utils::types::InteractionHand;
 use steel_utils::{ChunkPos, math::Vector3, text::TextComponent, translations};
@@ -67,11 +79,20 @@ pub struct Player {
     /// The world the player is in.
     pub world: Arc<World>,
 
+    /// The entity ID assigned to this player.
+    pub entity_id: i32,
+
     /// Whether the player has finished loading the client.
     pub client_loaded: AtomicBool,
 
     /// The player's position.
     pub position: SyncMutex<Vector3<f64>>,
+    /// The player's rotation (yaw, pitch).
+    pub rotation: AtomicCell<(f32, f32)>,
+    /// The previous position for delta movement calculations.
+    prev_position: SyncMutex<Vector3<f64>>,
+    /// The previous rotation for movement broadcasts.
+    prev_rotation: AtomicCell<(f32, f32)>,
 
     // LivingEntity fields
     /// The player's health (synced with client via entity data).
@@ -133,7 +154,8 @@ impl Player {
         gameprofile: GameProfile,
         connection: Arc<JavaConnection>,
         world: Arc<World>,
-        player: &std::sync::Weak<Player>,
+        entity_id: i32,
+        player: &Weak<Player>,
     ) -> Self {
         // Create a single shared inventory container used by both the player and inventory menu
         let inventory = Arc::new(SyncMutex::new(PlayerInventory::new(player.clone())));
@@ -143,8 +165,12 @@ impl Player {
             connection,
 
             world,
+            entity_id,
             client_loaded: AtomicBool::new(false),
             position: SyncMutex::new(Vector3::default()),
+            rotation: AtomicCell::new((0.0, 0.0)),
+            prev_position: SyncMutex::new(Vector3::default()),
+            prev_rotation: AtomicCell::new((0.0, 0.0)),
             health: AtomicCell::new(20.0), // Default max health
             absorption_amount: AtomicCell::new(0.0),
             speed: AtomicCell::new(0.1), // Default walking speed
@@ -282,9 +308,8 @@ impl Player {
         let updater = message_chain::MessageSignatureUpdater::new(&link, &body);
         let validator = session.profile_public_key.create_signature_validator();
 
-        let is_valid =
-            steel_crypto::signature::SignatureValidator::validate(&validator, &updater, signature)
-                .map_err(|e| format!("Signature validation error: {e}"))?;
+        let is_valid = SignatureValidator::validate(&validator, &updater, signature)
+            .map_err(|e| format!("Signature validation error: {e}"))?;
 
         if is_valid {
             Ok((link, body.last_seen.clone()))
@@ -341,9 +366,7 @@ impl Player {
             None
         };
 
-        let sender_index = player
-            .messages_sent
-            .fetch_add(1, std::sync::atomic::Ordering::SeqCst);
+        let sender_index = player.messages_sent.fetch_add(1, Ordering::SeqCst);
 
         let chat_packet = CPlayerChat::new(
             0,
@@ -356,7 +379,7 @@ impl Player {
             Box::new([]),
             Some(TextComponent::new().text(chat_message.clone())),
             FilterType::PassThrough,
-            steel_protocol::packets::game::ChatTypeBound {
+            ChatTypeBound {
                 //TODO: Use the registry to derive this instead of hardcoding it
                 registry_id: 0,
                 sender_name: TextComponent::new().text(player.gameprofile.name.clone()),
@@ -430,11 +453,73 @@ impl Player {
             return;
         }
 
-        if !self.update_awaiting_teleport()
-            && self.client_loaded.load(Ordering::Relaxed)
-            && packet.has_pos
-        {
+        if self.update_awaiting_teleport() || !self.client_loaded.load(Ordering::Relaxed) {
+            return;
+        }
+
+        let prev_pos = *self.prev_position.lock();
+        let prev_rot = self.prev_rotation.load();
+
+        // Update current state
+        if packet.has_pos {
             *self.position.lock() = packet.position;
+        }
+        if packet.has_rot {
+            self.rotation.store((packet.y_rot, packet.x_rot));
+        }
+
+        // Broadcast movement to other players
+        let pos = if packet.has_pos {
+            packet.position
+        } else {
+            prev_pos
+        };
+        let (yaw, pitch) = if packet.has_rot {
+            (packet.y_rot, packet.x_rot)
+        } else {
+            prev_rot
+        };
+
+        if packet.has_pos || packet.has_rot {
+            let new_chunk = ChunkPos::new((pos.x as i32) >> 4, (pos.z as i32) >> 4);
+
+            // Note: player_area_map is updated in chunk_map.update_player_status
+            // which is called every tick and computes view diffs efficiently
+
+            if packet.has_pos {
+                let move_packet = CMoveEntityPosRot {
+                    entity_id: self.entity_id,
+                    dx: calc_delta(pos.x, prev_pos.x),
+                    dy: calc_delta(pos.y, prev_pos.y),
+                    dz: calc_delta(pos.z, prev_pos.z),
+                    y_rot: to_angle_byte(yaw),
+                    x_rot: to_angle_byte(pitch),
+                    on_ground: packet.on_ground,
+                };
+                self.world
+                    .broadcast_to_nearby(new_chunk, move_packet, Some(self.gameprofile.id));
+            } else {
+                let rot_packet = CMoveEntityRot {
+                    entity_id: self.entity_id,
+                    y_rot: to_angle_byte(yaw),
+                    x_rot: to_angle_byte(pitch),
+                    on_ground: packet.on_ground,
+                };
+                self.world
+                    .broadcast_to_nearby(new_chunk, rot_packet, Some(self.gameprofile.id));
+            }
+
+            if packet.has_rot {
+                let head_packet = CRotateHead {
+                    entity_id: self.entity_id,
+                    head_y_rot: to_angle_byte(yaw),
+                };
+                self.world
+                    .broadcast_to_nearby(new_chunk, head_packet, Some(self.gameprofile.id));
+            }
+
+            *self.prev_position.lock() = pos;
+            self.prev_rotation.store((yaw, pitch));
         }
     }
 
@@ -470,10 +555,8 @@ impl Player {
         );
 
         // Broadcast the chat session to all players so they can verify this player's signatures
-        let update_packet = steel_protocol::packets::game::CPlayerInfoUpdate::update_chat_session(
-            self.gameprofile.id,
-            protocol_data,
-        );
+        let update_packet =
+            CPlayerInfoUpdate::update_chat_session(self.gameprofile.id, protocol_data);
 
         self.world.players.iter_sync(|_, player| {
             player.connection.send_packet(update_packet.clone());
@@ -501,7 +584,7 @@ impl Player {
         let expires_at = UNIX_EPOCH + Duration::from_millis(packet.expires_at as u64);
 
         // Decode the public key
-        let public_key = match steel_crypto::public_key_from_bytes(&packet.public_key) {
+        let public_key = match public_key_from_bytes(&packet.public_key) {
             Ok(key) => key,
             Err(err) => {
                 log::warn!(
@@ -524,8 +607,7 @@ impl Player {
         let profile_key_data =
             profile_key::ProfilePublicKeyData::new(expires_at, public_key, packet.key_signature);
 
-        let validator = Box::new(steel_crypto::signature::NoValidation)
-            as Box<dyn steel_crypto::SignatureValidator>;
+        let validator = Box::new(NoValidation) as Box<dyn SignatureValidator>;
 
         let session_data = profile_key::RemoteChatSessionData {
             session_id: packet.session_id,
@@ -563,9 +645,7 @@ impl Player {
     /// Sets the player's game mode and notifies the client.
     ///
     /// Returns `true` if the game mode was changed, `false` if the player was already in the requested game mode.
-    pub fn set_game_mode(&self, gamemode: steel_utils::types::GameType) -> bool {
-        use steel_protocol::packets::game::{CGameEvent, GameEventType};
-
+    pub fn set_game_mode(&self, gamemode: GameType) -> bool {
         let current_gamemode = self.game_mode.load();
         if current_gamemode == gamemode {
             return false;
@@ -793,9 +873,21 @@ impl Player {
         });
     }
 
-    /// Triggers arm swing animation. Currently a noop.
-    pub fn swing(&self, _hand: InteractionHand, _update_self: bool) {
-        // TODO: Send CAnimateEntity packet to nearby players
+    /// Triggers arm swing animation and broadcasts it to nearby players.
+    pub fn swing(&self, hand: InteractionHand, update_self: bool) {
+        let action = match hand {
+            InteractionHand::MainHand => AnimateAction::SwingMainHand,
+            InteractionHand::OffHand => AnimateAction::SwingOffHand,
+        };
+        let packet = CAnimate::new(self.entity_id, action);
+
+        let chunk = *self.last_chunk_pos.lock();
+        let exclude = if update_self {
+            None
+        } else {
+            Some(self.gameprofile.id)
+        };
+        self.world.broadcast_to_nearby(chunk, packet, exclude);
     }
 
     /// Handles a player input packet (movement keys, sneaking, sprinting).
@@ -869,7 +961,7 @@ impl Player {
         let result = game_mode::use_item_on(self, &self.world, packet.hand, &packet.block_hit);
 
         // 9. Handle result
-        if let steel_registry::items::item::InteractionResult::Success = result {
+        if let InteractionResult::Success = result {
             // TODO: Trigger arm swing animation if needed
             self.swing(packet.hand, true);
         }
@@ -923,7 +1015,7 @@ impl Player {
     ///
     /// - `throw_randomly`: If true, the item is thrown in a random direction (like pressing Q).
     ///   If false, it's thrown in the direction the player is facing.
-    pub fn drop_item(&self, item: steel_registry::item_stack::ItemStack, throw_randomly: bool) {
+    pub fn drop_item(&self, item: ItemStack, throw_randomly: bool) {
         if item.is_empty() {
             return;
         }
@@ -951,7 +1043,7 @@ impl Player {
     /// Tries to add an item to the player's inventory, dropping it if it doesn't fit.
     ///
     /// Based on Java's `Inventory.placeItemBackInInventory`.
-    pub fn add_item_or_drop(&self, mut item: steel_registry::item_stack::ItemStack) {
+    pub fn add_item_or_drop(&self, mut item: ItemStack) {
         if item.is_empty() {
             return;
         }
@@ -969,11 +1061,7 @@ impl Player {
     ///
     /// Use this variant when you already hold a `ContainerLockGuard` that includes
     /// the player's inventory to avoid deadlocks.
-    pub fn add_item_or_drop_with_guard(
-        &self,
-        guard: &mut ContainerLockGuard,
-        mut item: steel_registry::item_stack::ItemStack,
-    ) {
+    pub fn add_item_or_drop_with_guard(&self, guard: &mut ContainerLockGuard, mut item: ItemStack) {
         if item.is_empty() {
             return;
         }
@@ -994,7 +1082,7 @@ impl Player {
     pub fn cleanup(&self) {}
 }
 
-impl steel_registry::compat_traits::RegistryPlayer for Player {}
+impl RegistryPlayer for Player {}
 
 impl LivingEntity for Player {
     fn get_health(&self) -> f32 {
