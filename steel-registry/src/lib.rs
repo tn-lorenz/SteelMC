@@ -231,6 +231,11 @@ impl RegistryLock {
     pub fn init(&self, value: Registry) -> Result<(), Registry> {
         self.0.set(value)
     }
+
+    #[cfg(test)]
+    pub(crate) fn get_or_init(&self, f: impl FnOnce() -> Registry) -> &Registry {
+        self.0.get_or_init(f)
+    }
 }
 
 impl Deref for RegistryLock {
@@ -317,128 +322,51 @@ impl Debug for Registry {
 impl Registry {
     #[must_use]
     pub fn new_vanilla() -> Self {
-        let mut block_registry = BlockRegistry::new();
-        vanilla_blocks::register_blocks(&mut block_registry);
-        vanilla_block_tags::register_block_tags(&mut block_registry);
-        vanilla_blocks::assign_block_behaviors(&mut block_registry);
-        blocks::vanilla_block_behaviors::assign_custom_block_behaviors(&mut block_registry);
+        let mut registry = Self::new_empty();
 
-        let mut data_component_registry = DataComponentRegistry::new();
-        vanilla_components::register_vanilla_data_components(&mut data_component_registry);
+        vanilla_blocks::register_blocks(&mut registry.blocks);
+        vanilla_block_tags::register_block_tags(&mut registry.blocks);
+        vanilla_blocks::assign_block_behaviors(&mut registry.blocks);
+        blocks::vanilla_block_behaviors::assign_custom_block_behaviors(&mut registry.blocks);
 
-        let mut item_registry = ItemRegistry::new();
-        vanilla_items::register_items(&mut item_registry);
-        vanilla_items::assign_item_behaviors(&mut item_registry);
-        items::vanilla_item_behaviors::assign_custom_item_behaviors(&mut item_registry);
-        vanilla_item_tags::register_item_tags(&mut item_registry);
+        vanilla_components::register_vanilla_data_components(&mut registry.data_components);
 
-        let mut biome_registry = BiomeRegistry::new();
-        vanilla_biomes::register_biomes(&mut biome_registry);
+        vanilla_items::register_items(&mut registry.items);
+        vanilla_items::assign_item_behaviors(&mut registry.items);
+        items::vanilla_item_behaviors::assign_custom_item_behaviors(&mut registry.items);
+        vanilla_item_tags::register_item_tags(&mut registry.items);
 
-        let mut chat_type_registry = ChatTypeRegistry::new();
-        vanilla_chat_types::register_chat_types(&mut chat_type_registry);
-
-        let mut trim_pattern_registry = TrimPatternRegistry::new();
-        vanilla_trim_patterns::register_trim_patterns(&mut trim_pattern_registry);
-
-        let mut trim_material_registry = TrimMaterialRegistry::new();
-        vanilla_trim_materials::register_trim_materials(&mut trim_material_registry);
-
-        let mut wolf_variant_registry = WolfVariantRegistry::new();
-        vanilla_wolf_variants::register_wolf_variants(&mut wolf_variant_registry);
-
-        let mut wolf_sound_variant_registry = WolfSoundVariantRegistry::new();
-        vanilla_wolf_sound_variants::register_wolf_sound_variants(&mut wolf_sound_variant_registry);
-
-        let mut pig_variant_registry = PigVariantRegistry::new();
-        vanilla_pig_variants::register_pig_variants(&mut pig_variant_registry);
-
-        let mut frog_variant_registry = FrogVariantRegistry::new();
-        vanilla_frog_variants::register_frog_variants(&mut frog_variant_registry);
-
-        let mut cat_variant_registry = CatVariantRegistry::new();
-        vanilla_cat_variants::register_cat_variants(&mut cat_variant_registry);
-
-        let mut cow_variant_registry = CowVariantRegistry::new();
-        vanilla_cow_variants::register_cow_variants(&mut cow_variant_registry);
-
-        let mut chicken_variant_registry = ChickenVariantRegistry::new();
-        vanilla_chicken_variants::register_chicken_variants(&mut chicken_variant_registry);
-
-        let mut painting_variant_registry = PaintingVariantRegistry::new();
-        vanilla_painting_variants::register_painting_variants(&mut painting_variant_registry);
-
-        let mut dimension_type_registry = DimensionTypeRegistry::new();
-        vanilla_dimension_types::register_dimension_types(&mut dimension_type_registry);
-
-        let mut damage_type_registry = DamageTypeRegistry::new();
-        vanilla_damage_types::register_damage_types(&mut damage_type_registry);
-
-        let mut banner_pattern_registry = BannerPatternRegistry::new();
-        vanilla_banner_patterns::register_banner_patterns(&mut banner_pattern_registry);
-
-        let mut jukebox_song_registry = JukeboxSongRegistry::new();
-        vanilla_jukebox_songs::register_jukebox_songs(&mut jukebox_song_registry);
-
-        let mut instrument_registry = InstrumentRegistry::new();
-        vanilla_instruments::register_instruments(&mut instrument_registry);
-
-        let mut dialog_registry = DialogRegistry::new();
-        vanilla_dialogs::register_dialogs(&mut dialog_registry);
-
-        let mut menu_type_registry = MenuTypeRegistry::new();
-        vanilla_menu_types::register_menu_types(&mut menu_type_registry);
-
-        let mut zombie_nautilus_variant_registry = ZombieNautilusVariantRegistry::new();
-        vanilla_zombie_nautilus_variants::register_zombie_nautilus_variants(
-            &mut zombie_nautilus_variant_registry,
+        vanilla_biomes::register_biomes(&mut registry.biomes);
+        vanilla_chat_types::register_chat_types(&mut registry.chat_types);
+        vanilla_trim_patterns::register_trim_patterns(&mut registry.trim_patterns);
+        vanilla_trim_materials::register_trim_materials(&mut registry.trim_materials);
+        vanilla_wolf_variants::register_wolf_variants(&mut registry.wolf_variants);
+        vanilla_wolf_sound_variants::register_wolf_sound_variants(
+            &mut registry.wolf_sound_variants,
         );
+        vanilla_pig_variants::register_pig_variants(&mut registry.pig_variants);
+        vanilla_frog_variants::register_frog_variants(&mut registry.frog_variants);
+        vanilla_cat_variants::register_cat_variants(&mut registry.cat_variants);
+        vanilla_cow_variants::register_cow_variants(&mut registry.cow_variants);
+        vanilla_chicken_variants::register_chicken_variants(&mut registry.chicken_variants);
+        vanilla_painting_variants::register_painting_variants(&mut registry.painting_variants);
+        vanilla_dimension_types::register_dimension_types(&mut registry.dimension_types);
+        vanilla_damage_types::register_damage_types(&mut registry.damage_types);
+        vanilla_banner_patterns::register_banner_patterns(&mut registry.banner_patterns);
+        vanilla_jukebox_songs::register_jukebox_songs(&mut registry.jukebox_songs);
+        vanilla_instruments::register_instruments(&mut registry.instruments);
+        vanilla_dialogs::register_dialogs(&mut registry.dialogs);
+        vanilla_menu_types::register_menu_types(&mut registry.menu_types);
+        vanilla_zombie_nautilus_variants::register_zombie_nautilus_variants(
+            &mut registry.zombie_nautilus_variants,
+        );
+        vanilla_timelines::register_timelines(&mut registry.timelines);
+        vanilla_timeline_tags::register_timeline_tags(&mut registry.timelines);
+        vanilla_recipes::register_recipes(&mut registry.recipes);
+        vanilla_entities::register_entity_types(&mut registry.entity_types);
+        vanilla_loot_tables::register_loot_tables(&mut registry.loot_tables);
 
-        let mut timeline_registry = TimelineRegistry::new();
-        vanilla_timelines::register_timelines(&mut timeline_registry);
-        vanilla_timeline_tags::register_timeline_tags(&mut timeline_registry);
-
-        // Recipe registry
-        let mut recipe_registry = RecipeRegistry::new();
-        vanilla_recipes::register_recipes(&mut recipe_registry);
-
-        // Entity type registry
-        let mut entity_type_registry = EntityTypeRegistry::new();
-        vanilla_entities::register_entity_types(&mut entity_type_registry);
-
-        // Loot table registry
-        let mut loot_table_registry = LootTableRegistry::new();
-        vanilla_loot_tables::register_loot_tables(&mut loot_table_registry);
-
-        Self {
-            blocks: block_registry,
-            data_components: data_component_registry,
-            items: item_registry,
-            biomes: biome_registry,
-            chat_types: chat_type_registry,
-            trim_patterns: trim_pattern_registry,
-            trim_materials: trim_material_registry,
-            wolf_variants: wolf_variant_registry,
-            wolf_sound_variants: wolf_sound_variant_registry,
-            pig_variants: pig_variant_registry,
-            frog_variants: frog_variant_registry,
-            cat_variants: cat_variant_registry,
-            cow_variants: cow_variant_registry,
-            chicken_variants: chicken_variant_registry,
-            painting_variants: painting_variant_registry,
-            dimension_types: dimension_type_registry,
-            damage_types: damage_type_registry,
-            banner_patterns: banner_pattern_registry,
-            jukebox_songs: jukebox_song_registry,
-            instruments: instrument_registry,
-            dialogs: dialog_registry,
-            menu_types: menu_type_registry,
-            zombie_nautilus_variants: zombie_nautilus_variant_registry,
-            timelines: timeline_registry,
-            recipes: recipe_registry,
-            entity_types: entity_type_registry,
-            loot_tables: loot_table_registry,
-        }
+        registry
     }
 
     pub fn freeze(&mut self) {
@@ -470,13 +398,48 @@ impl Registry {
         self.entity_types.freeze();
         self.loot_tables.freeze();
     }
+
+    #[must_use]
+    pub fn new_empty() -> Self {
+        Self {
+            blocks: BlockRegistry::new(),
+            data_components: DataComponentRegistry::new(),
+            items: ItemRegistry::new(),
+            biomes: BiomeRegistry::new(),
+            chat_types: ChatTypeRegistry::new(),
+            trim_patterns: TrimPatternRegistry::new(),
+            trim_materials: TrimMaterialRegistry::new(),
+            wolf_variants: WolfVariantRegistry::new(),
+            wolf_sound_variants: WolfSoundVariantRegistry::new(),
+            pig_variants: PigVariantRegistry::new(),
+            frog_variants: FrogVariantRegistry::new(),
+            cat_variants: CatVariantRegistry::new(),
+            cow_variants: CowVariantRegistry::new(),
+            chicken_variants: ChickenVariantRegistry::new(),
+            painting_variants: PaintingVariantRegistry::new(),
+            dimension_types: DimensionTypeRegistry::new(),
+            damage_types: DamageTypeRegistry::new(),
+            banner_patterns: BannerPatternRegistry::new(),
+            jukebox_songs: JukeboxSongRegistry::new(),
+            instruments: InstrumentRegistry::new(),
+            dialogs: DialogRegistry::new(),
+            menu_types: MenuTypeRegistry::new(),
+            zombie_nautilus_variants: ZombieNautilusVariantRegistry::new(),
+            timelines: TimelineRegistry::new(),
+            recipes: RecipeRegistry::new(),
+            entity_types: EntityTypeRegistry::new(),
+            loot_tables: LootTableRegistry::new(),
+        }
+    }
 }
 
 pub trait BlockStateExt {
     fn get_block(&self) -> BlockRef;
     fn is_air(&self) -> bool;
     fn has_block_entity(&self) -> bool;
+    fn get_value<T, P: Property<T>>(&self, property: &P) -> T;
     fn set_value<T, P: Property<T>>(&self, property: &P, value: T) -> BlockStateId;
+    fn get_property_str(&self, name: &str) -> Option<String>;
 }
 
 impl BlockStateExt for BlockStateId {
@@ -496,7 +459,20 @@ impl BlockStateExt for BlockStateId {
         false
     }
 
+    fn get_value<T, P: Property<T>>(&self, property: &P) -> T {
+        REGISTRY.blocks.get_property(*self, property)
+    }
+
     fn set_value<T, P: Property<T>>(&self, property: &P, value: T) -> BlockStateId {
         REGISTRY.blocks.set_property(*self, property, value)
+    }
+
+    fn get_property_str(&self, name: &str) -> Option<String> {
+        REGISTRY
+            .blocks
+            .get_properties(*self)
+            .into_iter()
+            .find(|(n, _)| *n == name)
+            .map(|(_, v)| v.to_string())
     }
 }

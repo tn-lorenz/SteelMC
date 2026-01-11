@@ -261,7 +261,6 @@ fn generate_default_state(block: &Block) -> TokenStream {
                     let enum_type = parts[0];
                     let variant_name = parts[1..].join("_");
 
-                    println!("enum_type: {}, variant_name: {}", enum_type, variant_name);
                     let enum_type_ident = Ident::new(enum_type, Span::call_site());
                     let variant_ident =
                         Ident::new(&variant_name.to_upper_camel_case(), Span::call_site());
