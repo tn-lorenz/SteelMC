@@ -63,18 +63,46 @@ fn generate_tool_component(value: &Value) -> TokenStream {
     }
 }
 
+/// Parses a block or tag reference string into an Identifier TokenStream.
+/// For tags like "#minecraft:mineable/pickaxe", creates Identifier { namespace: "#minecraft", path: "mineable/pickaxe" }
+/// For blocks like "minecraft:stone", creates Identifier { namespace: "minecraft", path: "stone" }
+fn parse_block_or_tag(s: &str) -> TokenStream {
+    let (is_tag, rest) = if let Some(stripped) = s.strip_prefix('#') {
+        (true, stripped)
+    } else {
+        (false, s)
+    };
+
+    // Split namespace:path
+    let parts: Vec<&str> = rest.splitn(2, ':').collect();
+    let (namespace, path) = if parts.len() == 2 {
+        (parts[0], parts[1])
+    } else {
+        // Default to minecraft namespace
+        ("minecraft", rest)
+    };
+
+    if is_tag {
+        // Prefix namespace with # for tags
+        let tag_namespace = format!("#{namespace}");
+        quote! { Identifier::new(#tag_namespace, #path) }
+    } else {
+        quote! { Identifier::new(#namespace, #path) }
+    }
+}
+
 /// Generates the TokenStream for a single ToolRule from JSON data.
 fn generate_tool_rule(rule: &Value) -> TokenStream {
     // Parse blocks - can be a string (single block or tag), or an array of strings
     let blocks_value = rule.get("blocks");
     let blocks_tokens: Vec<TokenStream> = match blocks_value {
         Some(Value::String(s)) => {
-            vec![quote! { Identifier::vanilla_static(#s) }]
+            vec![parse_block_or_tag(s)]
         }
         Some(Value::Array(arr)) => arr
             .iter()
             .filter_map(|v| v.as_str())
-            .map(|s| quote! { Identifier::vanilla_static(#s) })
+            .map(parse_block_or_tag)
             .collect(),
         _ => vec![],
     };

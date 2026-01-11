@@ -411,6 +411,18 @@ impl Identifier {
     /// The vanilla namespace.
     pub const VANILLA_NAMESPACE: &'static str = "minecraft";
 
+    /// Creates a new `Identifier` with the given namespace and path.
+    #[must_use]
+    pub fn new(
+        namespace: impl Into<Cow<'static, str>>,
+        path: impl Into<Cow<'static, str>>,
+    ) -> Self {
+        Identifier {
+            namespace: namespace.into(),
+            path: path.into(),
+        }
+    }
+
     /// Creates a new `Identifier` with the vanilla namespace.
     #[must_use]
     pub fn vanilla(path: String) -> Self {
