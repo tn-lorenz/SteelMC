@@ -84,7 +84,12 @@ impl BlockBreakingManager {
             let state = world.get_block_state(&self.destroy_pos);
             if is_air(state) {
                 // Block was broken by something else
-                world.broadcast_block_destruction(player.entity_id, self.destroy_pos, -1);
+                world.broadcast_block_destruction(
+                    player.entity_id,
+                    self.destroy_pos,
+                    -1,
+                    player.gameprofile.id,
+                );
                 self.last_sent_state = -1;
                 self.is_destroying_block = false;
             } else {
@@ -109,12 +114,12 @@ impl BlockBreakingManager {
         destroy_start_tick: u64,
     ) -> f32 {
         let ticks_spent = self.game_ticks.saturating_sub(destroy_start_tick);
-        let destroy_speed = get_destroy_progress(player, world, block_state, &pos);
+        let destroy_speed = get_destroy_progress(player, block_state);
         let progress = destroy_speed * (ticks_spent + 1) as f32;
         let state = (progress * 10.0) as i32;
 
         if state != self.last_sent_state {
-            world.broadcast_block_destruction(player.entity_id, pos, state);
+            world.broadcast_block_destruction(player.entity_id, pos, state, player.gameprofile.id);
             self.last_sent_state = state;
         }
 
@@ -122,6 +127,9 @@ impl BlockBreakingManager {
     }
 
     /// Handles a block break action from the client.
+    ///
+    /// Note: The caller (packet handler) is responsible for calling `ack_block_changes_up_to`
+    /// after this method returns, matching vanilla behavior.
     #[allow(clippy::too_many_lines)]
     pub fn handle_block_break_action(
         &mut self,
@@ -130,7 +138,6 @@ impl BlockBreakingManager {
         pos: BlockPos,
         action: BlockBreakAction,
         _direction: Direction,
-        sequence: i32,
     ) {
         // Validate interaction range
         if !player.is_within_block_interaction_range(&pos) {
@@ -139,7 +146,10 @@ impl BlockBreakingManager {
 
         // Validate Y coordinate
         if pos.y() >= world.max_build_height() {
-            player.ack_block_changes_up_to(sequence);
+            player.connection.send_packet(CBlockUpdate {
+                pos,
+                block_state: world.get_block_state(&pos),
+            });
             return;
         }
 
@@ -147,13 +157,16 @@ impl BlockBreakingManager {
             BlockBreakAction::Start => {
                 // Check may_interact permission
                 if !world.may_interact(player, &pos) {
-                    player.ack_block_changes_up_to(sequence);
+                    player.connection.send_packet(CBlockUpdate {
+                        pos,
+                        block_state: world.get_block_state(&pos),
+                    });
                     return;
                 }
 
                 // Creative mode: instant break
                 if player.game_mode.load() == GameType::Creative {
-                    self.destroy_and_ack(player, world, pos, sequence);
+                    self.destroy_and_ack(player, world, pos);
                     return;
                 }
 
@@ -166,31 +179,33 @@ impl BlockBreakingManager {
                 if !is_air(block_state) {
                     // TODO: Call EnchantmentHelper.onHitBlock and blockState.attack
 
-                    let progress = get_destroy_progress(player, world, block_state, &pos);
+                    let progress = get_destroy_progress(player, block_state);
 
                     if progress >= 1.0 {
                         // Insta-mine
-                        self.destroy_and_ack(player, world, pos, sequence);
+                        self.destroy_and_ack(player, world, pos);
                     } else {
                         // Start breaking
                         if self.is_destroying_block {
-                            // Cancel previous break
-                            world.broadcast_block_destruction(
-                                player.entity_id,
-                                self.destroy_pos,
-                                -1,
-                            );
+                            // Send block update for the old position to cancel client prediction
+                            player.connection.send_packet(CBlockUpdate {
+                                pos: self.destroy_pos,
+                                block_state: world.get_block_state(&self.destroy_pos),
+                            });
                         }
 
                         self.is_destroying_block = true;
                         self.destroy_pos = pos;
                         let state = (progress * 10.0) as i32;
-                        world.broadcast_block_destruction(player.entity_id, pos, state);
+                        world.broadcast_block_destruction(
+                            player.entity_id,
+                            pos,
+                            state,
+                            player.gameprofile.id,
+                        );
                         self.last_sent_state = state;
                     }
                 }
-
-                player.ack_block_changes_up_to(sequence);
             }
 
             BlockBreakAction::Stop => {
@@ -199,14 +214,19 @@ impl BlockBreakingManager {
                     let block_state = world.get_block_state(&pos);
 
                     if !is_air(block_state) {
-                        let destroy_speed = get_destroy_progress(player, world, block_state, &pos);
+                        let destroy_speed = get_destroy_progress(player, block_state);
                         let progress = destroy_speed * (ticks_spent + 1) as f32;
 
                         if progress >= 0.7 {
                             // Complete the break
                             self.is_destroying_block = false;
-                            world.broadcast_block_destruction(player.entity_id, pos, -1);
-                            self.destroy_and_ack(player, world, pos, sequence);
+                            world.broadcast_block_destruction(
+                                player.entity_id,
+                                pos,
+                                -1,
+                                player.gameprofile.id,
+                            );
+                            self.destroy_and_ack(player, world, pos);
                             return;
                         }
 
@@ -219,8 +239,6 @@ impl BlockBreakingManager {
                         }
                     }
                 }
-
-                player.ack_block_changes_up_to(sequence);
             }
 
             BlockBreakAction::Abort => {
@@ -232,26 +250,27 @@ impl BlockBreakingManager {
                         self.destroy_pos,
                         pos
                     );
-                    world.broadcast_block_destruction(player.entity_id, self.destroy_pos, -1);
+                    world.broadcast_block_destruction(
+                        player.entity_id,
+                        self.destroy_pos,
+                        -1,
+                        player.gameprofile.id,
+                    );
                 }
 
-                world.broadcast_block_destruction(player.entity_id, pos, -1);
-                player.ack_block_changes_up_to(sequence);
+                world.broadcast_block_destruction(player.entity_id, pos, -1, player.gameprofile.id);
             }
         }
     }
 
-    /// Destroys a block and acknowledges the sequence.
-    fn destroy_and_ack(&mut self, player: &Player, world: &World, pos: BlockPos, sequence: i32) {
-        if self.destroy_block(player, world, pos) {
-            player.ack_block_changes_up_to(sequence);
-        } else {
+    /// Destroys a block and sends appropriate response.
+    fn destroy_and_ack(&mut self, player: &Player, world: &World, pos: BlockPos) {
+        if !self.destroy_block(player, world, pos) {
             // Send block update to resync client
             player.connection.send_packet(CBlockUpdate {
                 pos,
                 block_state: world.get_block_state(&pos),
             });
-            player.ack_block_changes_up_to(sequence);
         }
     }
 
@@ -332,15 +351,10 @@ fn requires_correct_tool(state: BlockStateId) -> bool {
 /// Gets the destroy progress per tick for a block.
 ///
 /// This is based on the vanilla formula:
-/// `1.0 / (destroy_time * 30.0)` for survival without the correct tool
+/// `1.0 / (destroy_time * 30.0)` for survival with correct tool
 /// `1.0 / (destroy_time * 100.0)` for survival with wrong tool
 /// Instant break for creative mode.
-fn get_destroy_progress(
-    player: &Player,
-    _world: &World,
-    block_state: BlockStateId,
-    _pos: &BlockPos,
-) -> f32 {
+fn get_destroy_progress(player: &Player, block_state: BlockStateId) -> f32 {
     let Some(block) = REGISTRY.blocks.by_state_id(block_state) else {
         return 0.0;
     };

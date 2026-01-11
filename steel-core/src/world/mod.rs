@@ -288,14 +288,24 @@ impl World {
         self.chunk_map.save_all_chunks().await
     }
 
-    /// Broadcasts block destruction progress to all players tracking the chunk.
+    /// Broadcasts block destruction progress to nearby players.
+    ///
+    /// Note: The packet is NOT sent to the player doing the breaking (matching vanilla).
+    /// The breaking player sees progress through client-side prediction.
     ///
     /// # Arguments
     /// * `entity_id` - The entity ID of the player breaking the block
     /// * `pos` - The position of the block being broken
     /// * `progress` - The destruction progress (0-9), or -1 to clear
+    /// * `exclude` - UUID of the player to exclude (the one breaking the block)
     #[allow(clippy::cast_sign_loss)]
-    pub fn broadcast_block_destruction(&self, entity_id: i32, pos: BlockPos, progress: i32) {
+    pub fn broadcast_block_destruction(
+        &self,
+        entity_id: i32,
+        pos: BlockPos,
+        progress: i32,
+        exclude: Uuid,
+    ) {
         let chunk = ChunkPos::new(
             SectionPos::block_to_section_coord(pos.x()),
             SectionPos::block_to_section_coord(pos.z()),
@@ -305,7 +315,7 @@ impl World {
             pos,
             progress: progress.clamp(-1, 9) as u8,
         };
-        self.broadcast_to_nearby(chunk, packet, None);
+        self.broadcast_to_nearby(chunk, packet, Some(exclude));
     }
 }
 

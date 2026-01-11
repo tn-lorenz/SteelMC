@@ -202,6 +202,9 @@ impl Player {
     /// Ticks the player.
     #[allow(clippy::cast_possible_truncation)]
     pub fn tick(&self) {
+        // Send pending block change acks (batched, once per tick like vanilla)
+        self.tick_ack_block_changes();
+
         if !self.client_loaded.load(Ordering::Relaxed) {
             //return;
         }
@@ -822,11 +825,21 @@ impl Player {
     }
 
     /// Acknowledges block changes up to the given sequence number.
+    ///
+    /// The ack is batched and sent once per tick (in `tick_ack_block_changes`),
+    /// matching vanilla behavior.
     pub fn ack_block_changes_up_to(&self, sequence: i32) {
         let current = self.ack_block_changes_up_to.load(Ordering::Relaxed);
         if sequence > current {
             self.ack_block_changes_up_to
                 .store(sequence, Ordering::Relaxed);
+        }
+    }
+
+    /// Sends pending block change ack if any. Called once per tick.
+    fn tick_ack_block_changes(&self) {
+        let sequence = self.ack_block_changes_up_to.swap(-1, Ordering::Relaxed);
+        if sequence > -1 {
             self.connection.send_packet(CBlockChangedAck { sequence });
         }
     }
@@ -994,8 +1007,9 @@ impl Player {
                     packet.pos,
                     BlockBreakAction::Start,
                     packet.direction,
-                    packet.sequence,
                 );
+                // Ack after handler returns, matching vanilla
+                self.ack_block_changes_up_to(packet.sequence);
             }
             PlayerAction::StopDestroyBlock => {
                 self.block_breaking.lock().handle_block_break_action(
@@ -1004,8 +1018,9 @@ impl Player {
                     packet.pos,
                     BlockBreakAction::Stop,
                     packet.direction,
-                    packet.sequence,
                 );
+                // Ack after handler returns, matching vanilla
+                self.ack_block_changes_up_to(packet.sequence);
             }
             PlayerAction::AbortDestroyBlock => {
                 self.block_breaking.lock().handle_block_break_action(
@@ -1014,8 +1029,9 @@ impl Player {
                     packet.pos,
                     BlockBreakAction::Abort,
                     packet.direction,
-                    packet.sequence,
                 );
+                // Ack after handler returns, matching vanilla
+                self.ack_block_changes_up_to(packet.sequence);
             }
             PlayerAction::DropAllItems => {
                 // TODO: Implement drop all items (Q + Ctrl)
