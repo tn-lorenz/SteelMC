@@ -7,7 +7,7 @@ use std::{
 
 use scc::HashMap;
 use steel_protocol::packet_traits::ClientPacket;
-use steel_protocol::packets::game::{CPlayerChat, CSystemChat};
+use steel_protocol::packets::game::{CBlockDestruction, CPlayerChat, CSystemChat};
 use steel_registry::vanilla_blocks;
 use steel_registry::{REGISTRY, compat_traits::RegistryWorld, dimension_type::DimensionTypeRef};
 use steel_utils::{BlockPos, BlockStateId, ChunkPos, SectionPos, types::UpdateFlags};
@@ -286,6 +286,26 @@ impl World {
     /// Returns the number of chunks saved.
     pub async fn save_all_chunks(&self) -> io::Result<usize> {
         self.chunk_map.save_all_chunks().await
+    }
+
+    /// Broadcasts block destruction progress to all players tracking the chunk.
+    ///
+    /// # Arguments
+    /// * `entity_id` - The entity ID of the player breaking the block
+    /// * `pos` - The position of the block being broken
+    /// * `progress` - The destruction progress (0-9), or -1 to clear
+    #[allow(clippy::cast_sign_loss)]
+    pub fn broadcast_block_destruction(&self, entity_id: i32, pos: BlockPos, progress: i32) {
+        let chunk = ChunkPos::new(
+            SectionPos::block_to_section_coord(pos.x()),
+            SectionPos::block_to_section_coord(pos.z()),
+        );
+        let packet = CBlockDestruction {
+            id: entity_id,
+            pos,
+            progress: progress.clamp(-1, 9) as u8,
+        };
+        self.broadcast_to_nearby(chunk, packet, None);
     }
 }
 

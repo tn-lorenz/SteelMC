@@ -101,6 +101,7 @@ pub use s_container_click::{ClickType, HashedPatchMap, HashedStack, SContainerCl
 pub use s_container_close::SContainerClose;
 pub use s_container_slot_state_changed::SContainerSlotStateChanged;
 pub use s_move_player::{SMovePlayer, SMovePlayerPos, SMovePlayerPosRot, SMovePlayerRot};
+pub use s_player_action::{PlayerAction, SPlayerAction};
 pub use s_player_input::SPlayerInput;
 pub use s_player_load::SPlayerLoad;
 pub use s_set_carried_item::SSetCarriedItem;

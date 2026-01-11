@@ -1,4 +1,5 @@
 //! This module contains all things player-related.
+pub mod block_breaking;
 pub mod chunk_sender;
 mod game_mode;
 mod game_profile;
@@ -18,6 +19,7 @@ use std::{
     time::{Duration, SystemTime, UNIX_EPOCH},
 };
 
+use block_breaking::BlockBreakingManager;
 use crossbeam::atomic::AtomicCell;
 pub use game_profile::GameProfile;
 use message_chain::SignedMessageChain;
@@ -25,7 +27,7 @@ use message_validator::LastSeenMessagesValidator;
 use profile_key::RemoteChatSession;
 pub use signature_cache::{LastSeen, MessageCache};
 use steel_protocol::packets::game::{
-    AnimateAction, CAnimate, SSetCarriedItem, SUseItem, SUseItemOn,
+    AnimateAction, CAnimate, PlayerAction, SPlayerAction, SSetCarriedItem, SUseItem, SUseItemOn,
 };
 use steel_utils::locks::SyncMutex;
 use steel_utils::types::GameType;
@@ -146,6 +148,9 @@ pub struct Player {
     /// Position we're waiting for the client to confirm via teleport ack.
     /// If Some, we should reject interaction packets until confirmed.
     awaiting_position_from_client: SyncMutex<Option<Vector3<f64>>>,
+
+    /// Block breaking state machine.
+    pub block_breaking: SyncMutex<BlockBreakingManager>,
 }
 
 impl Player {
@@ -190,6 +195,7 @@ impl Player {
             ack_block_changes_up_to: AtomicI32::new(-1),
             shift_key_down: AtomicBool::new(false),
             awaiting_position_from_client: SyncMutex::new(None),
+            block_breaking: SyncMutex::new(BlockBreakingManager::new()),
         }
     }
 
@@ -215,6 +221,9 @@ impl Player {
 
         // Broadcast inventory changes to client
         self.broadcast_inventory_changes();
+
+        // Tick block breaking
+        self.block_breaking.lock().tick(self, &self.world);
 
         self.connection.tick();
 
@@ -971,6 +980,64 @@ impl Player {
 
         // 11. Broadcast inventory changes
         self.broadcast_inventory_changes();
+    }
+
+    /// Handles a player action packet (block breaking, item dropping, etc.).
+    pub fn handle_player_action(&self, packet: SPlayerAction) {
+        use block_breaking::BlockBreakAction;
+
+        match packet.action {
+            PlayerAction::StartDestroyBlock => {
+                self.block_breaking.lock().handle_block_break_action(
+                    self,
+                    &self.world,
+                    packet.pos,
+                    BlockBreakAction::Start,
+                    packet.direction,
+                    packet.sequence,
+                );
+            }
+            PlayerAction::StopDestroyBlock => {
+                self.block_breaking.lock().handle_block_break_action(
+                    self,
+                    &self.world,
+                    packet.pos,
+                    BlockBreakAction::Stop,
+                    packet.direction,
+                    packet.sequence,
+                );
+            }
+            PlayerAction::AbortDestroyBlock => {
+                self.block_breaking.lock().handle_block_break_action(
+                    self,
+                    &self.world,
+                    packet.pos,
+                    BlockBreakAction::Abort,
+                    packet.direction,
+                    packet.sequence,
+                );
+            }
+            PlayerAction::DropAllItems => {
+                // TODO: Implement drop all items (Q + Ctrl)
+                log::debug!("Player {} wants to drop all items", self.gameprofile.name);
+            }
+            PlayerAction::DropItem => {
+                // TODO: Implement drop single item (Q)
+                log::debug!("Player {} wants to drop an item", self.gameprofile.name);
+            }
+            PlayerAction::ReleaseUseItem => {
+                // TODO: Implement release use item (releasing bow, etc.)
+                log::debug!("Player {} released use item", self.gameprofile.name);
+            }
+            PlayerAction::SwapItemWithOffhand => {
+                // TODO: Implement swap item with offhand (F key)
+                log::debug!("Player {} wants to swap items", self.gameprofile.name);
+            }
+            PlayerAction::Stab => {
+                // Stab action for new combat system
+                log::debug!("Player {} performed stab action", self.gameprofile.name);
+            }
+        }
     }
 
     /// Handles the use of an item.
