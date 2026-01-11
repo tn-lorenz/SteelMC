@@ -30,6 +30,79 @@ fn get_component_ident(name: &str) -> Option<Ident> {
     Some(Ident::new(&shouty_name, Span::call_site()))
 }
 
+/// Generates the TokenStream for a Tool component from JSON data.
+fn generate_tool_component(value: &Value) -> TokenStream {
+    let rules = value
+        .get("rules")
+        .and_then(|r| r.as_array())
+        .map(|rules_arr| rules_arr.iter().map(generate_tool_rule).collect::<Vec<_>>())
+        .unwrap_or_default();
+
+    let default_mining_speed = value
+        .get("default_mining_speed")
+        .and_then(|v| v.as_f64())
+        .unwrap_or(1.0) as f32;
+
+    let damage_per_block = value
+        .get("damage_per_block")
+        .and_then(|v| v.as_i64())
+        .unwrap_or(1) as i32;
+
+    let can_destroy_blocks_in_creative = value
+        .get("can_destroy_blocks_in_creative")
+        .and_then(|v| v.as_bool())
+        .unwrap_or(true);
+
+    quote! {
+        vanilla_components::Tool {
+            rules: vec![#(#rules),*],
+            default_mining_speed: #default_mining_speed,
+            damage_per_block: #damage_per_block,
+            can_destroy_blocks_in_creative: #can_destroy_blocks_in_creative,
+        }
+    }
+}
+
+/// Generates the TokenStream for a single ToolRule from JSON data.
+fn generate_tool_rule(rule: &Value) -> TokenStream {
+    // Parse blocks - can be a string (single block or tag), or an array of strings
+    let blocks_value = rule.get("blocks");
+    let blocks_tokens: Vec<TokenStream> = match blocks_value {
+        Some(Value::String(s)) => {
+            vec![quote! { Identifier::vanilla_static(#s) }]
+        }
+        Some(Value::Array(arr)) => arr
+            .iter()
+            .filter_map(|v| v.as_str())
+            .map(|s| quote! { Identifier::vanilla_static(#s) })
+            .collect(),
+        _ => vec![],
+    };
+
+    // Parse optional speed
+    let speed_token = match rule.get("speed").and_then(|v| v.as_f64()) {
+        Some(speed) => {
+            let speed = speed as f32;
+            quote! { Some(#speed) }
+        }
+        None => quote! { None },
+    };
+
+    // Parse optional correct_for_drops
+    let correct_for_drops_token = match rule.get("correct_for_drops").and_then(|v| v.as_bool()) {
+        Some(correct) => quote! { Some(#correct) },
+        None => quote! { None },
+    };
+
+    quote! {
+        vanilla_components::ToolRule {
+            blocks: vec![#(#blocks_tokens),*],
+            speed: #speed_token,
+            correct_for_drops: #correct_for_drops_token,
+        }
+    }
+}
+
 /// Returns the crafting remainder item key for a given item, if any.
 /// Based on vanilla Minecraft's Item.Properties.craftRemainder() calls.
 fn get_craft_remainder(item_name: &str) -> Option<&'static str> {
@@ -114,6 +187,11 @@ fn generate_builder_calls(item: &Item) -> Vec<TokenStream> {
                         quote! { .builder_set(vanilla_components::EQUIPPABLE, Some(vanilla_components::Equippable { slot: #slot_variant })) },
                     );
                 }
+            }
+            "minecraft:tool" => {
+                let tool_token = generate_tool_component(value);
+                builder_calls
+                    .push(quote! { .builder_set(vanilla_components::TOOL, Some(#tool_token)) });
             }
             _ => {
                 // TODO: Implement more

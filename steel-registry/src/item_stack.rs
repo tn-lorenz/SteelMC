@@ -12,9 +12,10 @@ use crate::{
     REGISTRY,
     data_components::{
         ComponentPatchEntry, ComponentValue, DataComponentMap, DataComponentPatch,
-        component_try_into,
+        DataComponentType,
         vanilla_components::{
-            DAMAGE, EQUIPPABLE, Equippable, EquippableSlot, MAX_DAMAGE, MAX_STACK_SIZE, UNBREAKABLE,
+            DAMAGE, EQUIPPABLE, Equippable, EquippableSlot, MAX_DAMAGE, MAX_STACK_SIZE, TOOL, Tool,
+            UNBREAKABLE,
         },
     },
     items::ItemRef,
@@ -29,7 +30,7 @@ pub struct ItemStack {
     /// The number of items in this stack.
     pub count: i32,
     /// Modifications to the prototype components.
-    pub patch: DataComponentPatch,
+    patch: DataComponentPatch,
 }
 
 impl Default for ItemStack {
@@ -66,7 +67,7 @@ impl ItemStack {
     }
 
     #[must_use]
-    pub fn prototype(&self) -> &'static DataComponentMap {
+    fn prototype(&self) -> &'static DataComponentMap {
         &self.item.components
     }
 
@@ -113,9 +114,7 @@ impl ItemStack {
     /// Returns true if this item can take damage.
     #[must_use]
     pub fn is_damageable_item(&self) -> bool {
-        self.has_component(&MAX_DAMAGE.key)
-            && !self.has_component(&UNBREAKABLE.key)
-            && self.has_component(&DAMAGE.key)
+        self.has(MAX_DAMAGE) && !self.has(UNBREAKABLE) && self.has(DAMAGE)
     }
 
     /// Returns true if this item has taken damage.
@@ -127,21 +126,25 @@ impl ItemStack {
     /// Gets the current damage value of this item.
     #[must_use]
     pub fn get_damage_value(&self) -> i32 {
-        self.get_effective_value_raw(&DAMAGE.key)
-            .map_or(0, |v| component_try_into(v, DAMAGE).copied().unwrap_or(0))
+        self.get(DAMAGE)
+            .copied()
+            .unwrap_or(0)
             .clamp(0, self.get_max_damage())
     }
 
     /// Gets the maximum damage this item can take before breaking.
     #[must_use]
     pub fn get_max_damage(&self) -> i32 {
-        self.get_effective_value_raw(&MAX_DAMAGE.key)
-            .map_or(0, |v| {
-                component_try_into(v, MAX_DAMAGE).copied().unwrap_or(0)
-            })
+        self.get(MAX_DAMAGE).copied().unwrap_or(0)
     }
 
-    /// Returns true if this item has the specified component.
+    /// Returns true if this item has the specified component (by type).
+    #[must_use]
+    pub fn has<T: 'static>(&self, component: DataComponentType<T>) -> bool {
+        self.has_component(&component.key)
+    }
+
+    /// Returns true if this item has the specified component (by key).
     #[must_use]
     pub fn has_component(&self, key: &Identifier) -> bool {
         match self.patch.get_entry(key) {
@@ -179,17 +182,13 @@ impl ItemStack {
     }
 
     pub fn max_stack_size(&self) -> i32 {
-        self.get_effective_value_raw(&MAX_STACK_SIZE.key)
-            .map_or(64, |v| {
-                component_try_into(v, MAX_STACK_SIZE).copied().unwrap_or(64)
-            })
+        self.get(MAX_STACK_SIZE).copied().unwrap_or(64)
     }
 
     /// Returns the equippable component if this item has one.
     #[must_use]
     pub fn get_equippable(&self) -> Option<&Equippable> {
-        self.get_effective_value_raw(&EQUIPPABLE.key)
-            .and_then(|v| component_try_into(v, EQUIPPABLE))
+        self.get(EQUIPPABLE)
     }
 
     /// Returns the equipment slot this item can be equipped to, if any.
@@ -212,6 +211,82 @@ impl ItemStack {
         }
     }
 
+    /// Gets the effective value of a component, considering the patch and prototype.
+    /// Returns `None` if the component is not present or has been removed.
+    #[must_use]
+    pub fn get<T: 'static>(&self, component: DataComponentType<T>) -> Option<&T> {
+        self.get_effective_value_raw(&component.key)
+            .and_then(|v| v.as_any().downcast_ref::<T>())
+    }
+
+    /// Gets the effective value of a component, or returns the default value if not present.
+    #[must_use]
+    pub fn get_or_default<T: 'static + Clone>(
+        &self,
+        component: DataComponentType<T>,
+        default: T,
+    ) -> T {
+        self.get(component).cloned().unwrap_or(default)
+    }
+
+    /// Sets a component value in this item's patch, overriding the prototype.
+    pub fn set<T: 'static + ComponentValue>(&mut self, component: DataComponentType<T>, value: T) {
+        self.patch.set(component, value);
+    }
+
+    /// Removes a component from this item (marks it as removed in the patch).
+    /// This will hide the component even if it exists in the prototype.
+    pub fn remove<T: 'static>(&mut self, component: DataComponentType<T>) {
+        self.patch.remove(component);
+    }
+
+    /// Clears any patch entry for this component (neither set nor removed).
+    /// The prototype value will be visible again.
+    pub fn clear<T: 'static>(&mut self, component: DataComponentType<T>) {
+        self.patch.clear(component);
+    }
+
+    /// Gets the Tool component if present.
+    #[must_use]
+    pub fn get_tool(&self) -> Option<&Tool> {
+        self.get(TOOL)
+    }
+
+    /// Returns the mining speed for the given block state ID.
+    /// If no Tool component is present, returns 1.0 (hand speed).
+    #[must_use]
+    pub fn get_destroy_speed(&self, block_state_id: steel_utils::BlockStateId) -> f32 {
+        self.get_tool()
+            .map(|tool| tool.get_mining_speed(block_state_id))
+            .unwrap_or(1.0)
+    }
+
+    /// Returns true if this tool is correct for getting drops from the block.
+    #[must_use]
+    pub fn is_correct_tool_for_drops(&self, block_state_id: steel_utils::BlockStateId) -> bool {
+        self.get_tool()
+            .map(|tool| tool.is_correct_for_drops(block_state_id))
+            .unwrap_or(false)
+    }
+
+    /// Returns the damage per block for this tool (how much durability is consumed per block mined).
+    /// Returns 0 if no Tool component is present.
+    #[must_use]
+    pub fn get_tool_damage_per_block(&self) -> i32 {
+        self.get_tool()
+            .map(|tool| tool.damage_per_block)
+            .unwrap_or(0)
+    }
+
+    /// Returns true if this tool can destroy blocks in creative mode.
+    /// Returns true if no Tool component is present (default behavior).
+    #[must_use]
+    pub fn can_destroy_blocks_in_creative(&self) -> bool {
+        self.get_tool()
+            .map(|tool| tool.can_destroy_blocks_in_creative)
+            .unwrap_or(true)
+    }
+
     /// Gets the level of an enchantment on this item by identifier.
     /// Returns 0 if the enchantment is not present.
     #[must_use]
@@ -229,10 +304,6 @@ impl ItemStack {
         // For now, return 0 (no enchantment)
         0
     }
-
-    // =========================================================================
-    // Loot function stub methods - to be implemented when systems are ready
-    // =========================================================================
 
     /// Sets the damage/durability as a fraction (0.0 = broken, 1.0 = full).
     /// If `add` is true, adds to current damage instead of setting.
@@ -379,10 +450,6 @@ impl ItemStack {
         // For each enchantment, get the level from NumberProvider
         // If add is true, add to existing levels; otherwise replace
     }
-
-    // =========================================================================
-    // Additional loot function stubs for vanilla compatibility
-    // =========================================================================
 
     /// Changes the item type entirely.
     pub fn set_item(&mut self, new_item: &Identifier) {

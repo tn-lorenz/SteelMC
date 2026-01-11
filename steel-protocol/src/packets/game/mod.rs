@@ -41,6 +41,7 @@ mod s_container_click;
 mod s_container_close;
 mod s_container_slot_state_changed;
 mod s_move_player;
+mod s_player_action;
 mod s_player_input;
 mod s_player_load;
 mod s_set_carried_item;
