@@ -1,7 +1,7 @@
 use rustc_hash::FxHashMap;
 use steel_utils::{BlockStateId, Identifier};
 
-use crate::{BlockStateExt, REGISTRY, RegistryExt, item_stack::ItemStack};
+use crate::{REGISTRY, RegistryExt, blocks::block_state_ext::BlockStateExt, item_stack::ItemStack};
 
 // =============================================================================
 // Strongly-typed enums for string values

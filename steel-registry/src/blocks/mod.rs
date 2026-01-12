@@ -1,8 +1,8 @@
 pub mod behaviour;
+pub mod block_state_ext;
 pub mod properties;
 pub mod shapes;
 pub mod vanilla_behaviours;
-pub mod vanilla_block_behaviors;
 
 use rustc_hash::FxHashMap;
 

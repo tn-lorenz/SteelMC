@@ -186,3 +186,210 @@ impl BlockShapes {
     /// Empty shapes (no collision, no outline).
     pub const EMPTY: BlockShapes = BlockShapes::new(&[], &[]);
 }
+
+use super::properties::Direction;
+
+/// Support type for `is_face_sturdy` checks.
+///
+/// Determines what kind of support a block face provides for other blocks.
+/// Used by fences, walls, torches, etc. to decide if they can connect/attach.
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+pub enum SupportType {
+    /// Full face support - the entire face must be solid.
+    /// Used by most blocks that need a solid surface.
+    Full,
+    /// Center support - only the center of the face needs to be solid.
+    /// Used by things like hanging signs that only need a small attachment point.
+    Center,
+    /// Rigid support - most of the face must be solid, but allows small gaps.
+    /// Used by bells and similar blocks.
+    Rigid,
+}
+
+/// Center support shape: a 4x4 pixel column in the center (2-14 in pixel coords = 0.125-0.875).
+const CENTER_SUPPORT_MIN: f32 = 0.125; // 2/16
+const CENTER_SUPPORT_MAX: f32 = 0.875; // 14/16
+
+/// Rigid support requires coverage except for a 2-pixel border.
+const RIGID_BORDER: f32 = 0.125; // 2/16
+
+/// Checks if a shape fully covers a face (for `SupportType::Full`).
+///
+/// Returns true if the 2D projection of the shape on the given face
+/// completely covers the 1x1 face area.
+#[must_use]
+pub fn is_face_full(shape: VoxelShape, direction: Direction) -> bool {
+    if shape.is_empty() {
+        return false;
+    }
+
+    // For a face to be "full", the shape's projection onto that face must cover 0.0-1.0
+    // on both axes perpendicular to the direction.
+    match direction {
+        Direction::Down => covers_face_xy(shape, |aabb| aabb.min_y <= 0.0),
+        Direction::Up => covers_face_xy(shape, |aabb| aabb.max_y >= 1.0),
+        Direction::North => covers_face_xy_for_z(shape, |aabb| aabb.min_z <= 0.0),
+        Direction::South => covers_face_xy_for_z(shape, |aabb| aabb.max_z >= 1.0),
+        Direction::West => covers_face_yz(shape, |aabb| aabb.min_x <= 0.0),
+        Direction::East => covers_face_yz(shape, |aabb| aabb.max_x >= 1.0),
+    }
+}
+
+/// Checks if a shape provides center support on a face.
+///
+/// The center area is a 12x12 pixel region (0.125 to 0.875 on each axis).
+#[must_use]
+pub fn is_face_center_supported(shape: VoxelShape, direction: Direction) -> bool {
+    if shape.is_empty() {
+        return false;
+    }
+
+    // Check if any AABB in the shape covers the center region on the given face
+    match direction {
+        Direction::Down => shape.iter().any(|aabb| {
+            aabb.min_y <= 0.0
+                && aabb.min_x <= CENTER_SUPPORT_MIN
+                && aabb.max_x >= CENTER_SUPPORT_MAX
+                && aabb.min_z <= CENTER_SUPPORT_MIN
+                && aabb.max_z >= CENTER_SUPPORT_MAX
+        }),
+        Direction::Up => shape.iter().any(|aabb| {
+            aabb.max_y >= 1.0
+                && aabb.min_x <= CENTER_SUPPORT_MIN
+                && aabb.max_x >= CENTER_SUPPORT_MAX
+                && aabb.min_z <= CENTER_SUPPORT_MIN
+                && aabb.max_z >= CENTER_SUPPORT_MAX
+        }),
+        Direction::North => shape.iter().any(|aabb| {
+            aabb.min_z <= 0.0
+                && aabb.min_x <= CENTER_SUPPORT_MIN
+                && aabb.max_x >= CENTER_SUPPORT_MAX
+                && aabb.min_y <= CENTER_SUPPORT_MIN
+                && aabb.max_y >= CENTER_SUPPORT_MAX
+        }),
+        Direction::South => shape.iter().any(|aabb| {
+            aabb.max_z >= 1.0
+                && aabb.min_x <= CENTER_SUPPORT_MIN
+                && aabb.max_x >= CENTER_SUPPORT_MAX
+                && aabb.min_y <= CENTER_SUPPORT_MIN
+                && aabb.max_y >= CENTER_SUPPORT_MAX
+        }),
+        Direction::West => shape.iter().any(|aabb| {
+            aabb.min_x <= 0.0
+                && aabb.min_y <= CENTER_SUPPORT_MIN
+                && aabb.max_y >= CENTER_SUPPORT_MAX
+                && aabb.min_z <= CENTER_SUPPORT_MIN
+                && aabb.max_z >= CENTER_SUPPORT_MAX
+        }),
+        Direction::East => shape.iter().any(|aabb| {
+            aabb.max_x >= 1.0
+                && aabb.min_y <= CENTER_SUPPORT_MIN
+                && aabb.max_y >= CENTER_SUPPORT_MAX
+                && aabb.min_z <= CENTER_SUPPORT_MIN
+                && aabb.max_z >= CENTER_SUPPORT_MAX
+        }),
+    }
+}
+
+/// Checks if a shape provides rigid support on a face.
+///
+/// Rigid support requires coverage of most of the face except a small border.
+#[must_use]
+pub fn is_face_rigid_supported(shape: VoxelShape, direction: Direction) -> bool {
+    if shape.is_empty() {
+        return false;
+    }
+
+    // For rigid support, we need the shape to cover from RIGID_BORDER to 1-RIGID_BORDER
+    let min_bound = RIGID_BORDER;
+    let max_bound = 1.0 - RIGID_BORDER;
+
+    match direction {
+        Direction::Down => shape.iter().any(|aabb| {
+            aabb.min_y <= 0.0
+                && aabb.min_x <= min_bound
+                && aabb.max_x >= max_bound
+                && aabb.min_z <= min_bound
+                && aabb.max_z >= max_bound
+        }),
+        Direction::Up => shape.iter().any(|aabb| {
+            aabb.max_y >= 1.0
+                && aabb.min_x <= min_bound
+                && aabb.max_x >= max_bound
+                && aabb.min_z <= min_bound
+                && aabb.max_z >= max_bound
+        }),
+        Direction::North => shape.iter().any(|aabb| {
+            aabb.min_z <= 0.0
+                && aabb.min_x <= min_bound
+                && aabb.max_x >= max_bound
+                && aabb.min_y <= min_bound
+                && aabb.max_y >= max_bound
+        }),
+        Direction::South => shape.iter().any(|aabb| {
+            aabb.max_z >= 1.0
+                && aabb.min_x <= min_bound
+                && aabb.max_x >= max_bound
+                && aabb.min_y <= min_bound
+                && aabb.max_y >= max_bound
+        }),
+        Direction::West => shape.iter().any(|aabb| {
+            aabb.min_x <= 0.0
+                && aabb.min_y <= min_bound
+                && aabb.max_y >= max_bound
+                && aabb.min_z <= min_bound
+                && aabb.max_z >= max_bound
+        }),
+        Direction::East => shape.iter().any(|aabb| {
+            aabb.max_x >= 1.0
+                && aabb.min_y <= min_bound
+                && aabb.max_y >= max_bound
+                && aabb.min_z <= min_bound
+                && aabb.max_z >= max_bound
+        }),
+    }
+}
+
+/// Checks if a shape is sturdy on a face for the given support type.
+#[must_use]
+pub fn is_face_sturdy(shape: VoxelShape, direction: Direction, support_type: SupportType) -> bool {
+    match support_type {
+        SupportType::Full => is_face_full(shape, direction),
+        SupportType::Center => is_face_center_supported(shape, direction),
+        SupportType::Rigid => is_face_rigid_supported(shape, direction),
+    }
+}
+
+// Helper: checks if shape covers full X-Y face (for Up/Down directions)
+fn covers_face_xy(shape: VoxelShape, face_check: impl Fn(&AABB) -> bool) -> bool {
+    // Simple check: if there's a single AABB that covers 0-1 on X and Z and touches the face
+    shape.iter().any(|aabb| {
+        face_check(aabb)
+            && aabb.min_x <= 0.0
+            && aabb.max_x >= 1.0
+            && aabb.min_z <= 0.0
+            && aabb.max_z >= 1.0
+    })
+}
+
+// Helper: checks if shape covers full X-Y face (for North/South directions)
+fn covers_face_xy_for_z(shape: VoxelShape, face_check: impl Fn(&AABB) -> bool) -> bool {
+    shape.iter().any(|aabb| {
+        face_check(aabb)
+            && aabb.min_x <= 0.0
+            && aabb.max_x >= 1.0
+            && aabb.min_y <= 0.0
+            && aabb.max_y >= 1.0
+    })
+}
+
+// Helper: checks if shape covers full Y-Z face (for East/West directions)
+fn covers_face_yz(shape: VoxelShape, face_check: impl Fn(&AABB) -> bool) -> bool {
+    shape.iter().any(|aabb| {
+        face_check(aabb)
+            && aabb.min_y <= 0.0
+            && aabb.max_y >= 1.0
+            && aabb.min_z <= 0.0
+            && aabb.max_z >= 1.0
+    })
+}

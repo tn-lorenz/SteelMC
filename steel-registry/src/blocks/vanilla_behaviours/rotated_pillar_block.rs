@@ -1,7 +1,7 @@
 use steel_utils::{BlockStateId, math::Axis};
 
 use crate::{
-    BlockStateExt,
+    blocks::block_state_ext::BlockStateExt,
     blocks::{
         BlockRef,
         behaviour::BlockBehaviour,

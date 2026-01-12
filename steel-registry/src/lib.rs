@@ -9,12 +9,12 @@
 
 use std::{fmt::Debug, ops::Deref, sync::OnceLock};
 
-use steel_utils::{BlockStateId, Identifier};
+use steel_utils::Identifier;
 
 use crate::{
     banner_pattern::BannerPatternRegistry,
     biome::BiomeRegistry,
-    blocks::{BlockRef, BlockRegistry, properties::Property},
+    blocks::BlockRegistry,
     cat_variant::CatVariantRegistry,
     chat_type::ChatTypeRegistry,
     chicken_variant::ChickenVariantRegistry,
@@ -327,7 +327,7 @@ impl Registry {
         vanilla_blocks::register_blocks(&mut registry.blocks);
         vanilla_block_tags::register_block_tags(&mut registry.blocks);
         vanilla_blocks::assign_block_behaviors(&mut registry.blocks);
-        blocks::vanilla_block_behaviors::assign_custom_block_behaviors(&mut registry.blocks);
+        blocks::vanilla_behaviours::assign_custom_block_behaviors(&mut registry.blocks);
 
         vanilla_components::register_vanilla_data_components(&mut registry.data_components);
 
@@ -430,59 +430,5 @@ impl Registry {
             entity_types: EntityTypeRegistry::new(),
             loot_tables: LootTableRegistry::new(),
         }
-    }
-}
-
-pub trait BlockStateExt {
-    fn get_block(&self) -> BlockRef;
-    fn is_air(&self) -> bool;
-    fn has_block_entity(&self) -> bool;
-    fn get_value<T, P: Property<T>>(&self, property: &P) -> T;
-    fn set_value<T, P: Property<T>>(&self, property: &P, value: T) -> BlockStateId;
-    fn get_property_str(&self, name: &str) -> Option<String>;
-    fn get_collision_shape(&self) -> &'static [blocks::shapes::AABB];
-    fn get_outline_shape(&self) -> &'static [blocks::shapes::AABB];
-}
-
-impl BlockStateExt for BlockStateId {
-    fn get_block(&self) -> BlockRef {
-        REGISTRY
-            .blocks
-            .by_state_id(*self)
-            .expect("Expected a valid state id")
-    }
-
-    fn is_air(&self) -> bool {
-        self.get_block().config.is_air
-    }
-
-    fn has_block_entity(&self) -> bool {
-        // TODO: Implement when block entities are added
-        false
-    }
-
-    fn get_value<T, P: Property<T>>(&self, property: &P) -> T {
-        REGISTRY.blocks.get_property(*self, property)
-    }
-
-    fn set_value<T, P: Property<T>>(&self, property: &P, value: T) -> BlockStateId {
-        REGISTRY.blocks.set_property(*self, property, value)
-    }
-
-    fn get_property_str(&self, name: &str) -> Option<String> {
-        REGISTRY
-            .blocks
-            .get_properties(*self)
-            .into_iter()
-            .find(|(n, _)| *n == name)
-            .map(|(_, v)| v.to_string())
-    }
-
-    fn get_collision_shape(&self) -> &'static [blocks::shapes::AABB] {
-        REGISTRY.blocks.get_collision_shape(*self)
-    }
-
-    fn get_outline_shape(&self) -> &'static [blocks::shapes::AABB] {
-        REGISTRY.blocks.get_outline_shape(*self)
     }
 }

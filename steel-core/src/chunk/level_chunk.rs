@@ -11,7 +11,7 @@ use std::{
 use steel_protocol::packets::game::{
     ChunkPacketData, HeightmapType as ProtocolHeightmapType, Heightmaps, LightUpdatePacketData,
 };
-use steel_registry::{BlockStateExt, REGISTRY, vanilla_blocks};
+use steel_registry::{REGISTRY, blocks::block_state_ext::BlockStateExt, vanilla_blocks};
 use steel_utils::{
     BlockPos, BlockStateId, ChunkPos, codec::BitSet, locks::SyncRwLock, types::UpdateFlags,
 };
