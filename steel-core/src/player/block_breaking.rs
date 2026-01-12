@@ -84,12 +84,7 @@ impl BlockBreakingManager {
             let state = world.get_block_state(&self.destroy_pos);
             if is_air(state) {
                 // Block was broken by something else
-                world.broadcast_block_destruction(
-                    player.entity_id,
-                    self.destroy_pos,
-                    -1,
-                    player.gameprofile.id,
-                );
+                world.broadcast_block_destruction(player.entity_id, self.destroy_pos, -1);
                 self.last_sent_state = -1;
                 self.is_destroying_block = false;
             } else {
@@ -119,7 +114,7 @@ impl BlockBreakingManager {
         let state = (progress * 10.0) as i32;
 
         if state != self.last_sent_state {
-            world.broadcast_block_destruction(player.entity_id, pos, state, player.gameprofile.id);
+            world.broadcast_block_destruction(player.entity_id, pos, state);
             self.last_sent_state = state;
         }
 
@@ -197,12 +192,7 @@ impl BlockBreakingManager {
                         self.is_destroying_block = true;
                         self.destroy_pos = pos;
                         let state = (progress * 10.0) as i32;
-                        world.broadcast_block_destruction(
-                            player.entity_id,
-                            pos,
-                            state,
-                            player.gameprofile.id,
-                        );
+                        world.broadcast_block_destruction(player.entity_id, pos, state);
                         self.last_sent_state = state;
                     }
                 }
@@ -220,12 +210,7 @@ impl BlockBreakingManager {
                         if progress >= 0.7 {
                             // Complete the break
                             self.is_destroying_block = false;
-                            world.broadcast_block_destruction(
-                                player.entity_id,
-                                pos,
-                                -1,
-                                player.gameprofile.id,
-                            );
+                            world.broadcast_block_destruction(player.entity_id, pos, -1);
                             self.destroy_and_ack(player, world, pos);
                             return;
                         }
@@ -250,15 +235,10 @@ impl BlockBreakingManager {
                         self.destroy_pos,
                         pos
                     );
-                    world.broadcast_block_destruction(
-                        player.entity_id,
-                        self.destroy_pos,
-                        -1,
-                        player.gameprofile.id,
-                    );
+                    world.broadcast_block_destruction(player.entity_id, self.destroy_pos, -1);
                 }
 
-                world.broadcast_block_destruction(player.entity_id, pos, -1, player.gameprofile.id);
+                world.broadcast_block_destruction(player.entity_id, pos, -1);
             }
         }
     }

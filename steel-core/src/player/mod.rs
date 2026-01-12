@@ -509,7 +509,7 @@ impl Player {
                     on_ground: packet.on_ground,
                 };
                 self.world
-                    .broadcast_to_nearby(new_chunk, move_packet, Some(self.gameprofile.id));
+                    .broadcast_to_nearby(new_chunk, move_packet, Some(self.entity_id));
             } else {
                 let rot_packet = CMoveEntityRot {
                     entity_id: self.entity_id,
@@ -518,7 +518,7 @@ impl Player {
                     on_ground: packet.on_ground,
                 };
                 self.world
-                    .broadcast_to_nearby(new_chunk, rot_packet, Some(self.gameprofile.id));
+                    .broadcast_to_nearby(new_chunk, rot_packet, Some(self.entity_id));
             }
 
             if packet.has_rot {
@@ -527,7 +527,7 @@ impl Player {
                     head_y_rot: to_angle_byte(yaw),
                 };
                 self.world
-                    .broadcast_to_nearby(new_chunk, head_packet, Some(self.gameprofile.id));
+                    .broadcast_to_nearby(new_chunk, head_packet, Some(self.entity_id));
             }
 
             *self.prev_position.lock() = pos;
@@ -570,7 +570,7 @@ impl Player {
         let update_packet =
             CPlayerInfoUpdate::update_chat_session(self.gameprofile.id, protocol_data);
 
-        self.world.players.iter_sync(|_, player| {
+        self.world.players.iter_players(|_, player| {
             player.connection.send_packet(update_packet.clone());
             true
         });
@@ -907,7 +907,7 @@ impl Player {
         let exclude = if update_self {
             None
         } else {
-            Some(self.gameprofile.id)
+            Some(self.entity_id)
         };
         self.world.broadcast_to_nearby(chunk, packet, exclude);
     }

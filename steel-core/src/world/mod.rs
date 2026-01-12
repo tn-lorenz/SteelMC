@@ -5,14 +5,12 @@ use std::{
     time::Duration,
 };
 
-use scc::HashMap;
 use steel_protocol::packet_traits::ClientPacket;
 use steel_protocol::packets::game::{CBlockDestruction, CPlayerChat, CSystemChat};
 use steel_registry::vanilla_blocks;
 use steel_registry::{REGISTRY, compat_traits::RegistryWorld, dimension_type::DimensionTypeRef};
 use steel_utils::{BlockPos, BlockStateId, ChunkPos, SectionPos, types::UpdateFlags};
 use tokio::{runtime::Runtime, time::Instant};
-use uuid::Uuid;
 
 use crate::{
     ChunkMap,
@@ -21,16 +19,18 @@ use crate::{
 };
 
 mod player_area_map;
+mod player_map;
 mod world_entities;
 
 pub use player_area_map::PlayerAreaMap;
+pub use player_map::PlayerMap;
 
 /// A struct that represents a world.
 pub struct World {
     /// The chunk map of the world.
     pub chunk_map: Arc<ChunkMap>,
-    /// A map of all the players in the world.
-    pub players: HashMap<Uuid, Arc<Player>>,
+    /// All players in the world with dual indexing by UUID and entity ID.
+    pub players: PlayerMap,
     /// Spatial index for player proximity queries.
     pub player_area_map: PlayerAreaMap,
     /// The dimension of the world.
@@ -47,7 +47,7 @@ impl World {
     pub fn new(chunk_runtime: Arc<Runtime>, dimension: DimensionTypeRef) -> Arc<Self> {
         Arc::new_cyclic(|weak_self: &Weak<World>| Self {
             chunk_map: Arc::new(ChunkMap::new(chunk_runtime, weak_self.clone(), &dimension)),
-            players: HashMap::new(),
+            players: PlayerMap::new(),
             player_area_map: PlayerAreaMap::new(),
             dimension,
         })
@@ -154,7 +154,7 @@ impl World {
 
         // Tick players
         let start = Instant::now();
-        self.players.iter_sync(|_uuid, player| {
+        self.players.iter_players(|_uuid, player| {
             player.tick();
 
             true
@@ -182,7 +182,7 @@ impl World {
             message_signature.is_some()
         );
 
-        self.players.iter_sync(|_, recipient| {
+        self.players.iter_players(|_, recipient| {
             let messages_received = recipient.get_and_increment_messages_received();
             packet.global_index = messages_received;
 
@@ -237,7 +237,7 @@ impl World {
 
     /// Broadcasts a system chat message to all players.
     pub fn broadcast_system_chat(&self, packet: CSystemChat) {
-        self.players.iter_sync(|_, player| {
+        self.players.iter_players(|_, player| {
             player.connection.send_packet(packet.clone());
             true
         });
@@ -252,7 +252,7 @@ impl World {
     ) {
         log::info!("<{sender_name}> {message}");
 
-        self.players.iter_sync(|_, recipient| {
+        self.players.iter_players(|_, recipient| {
             let messages_received = recipient.get_and_increment_messages_received();
             packet.global_index = messages_received;
 
@@ -267,14 +267,14 @@ impl World {
         &self,
         chunk: ChunkPos,
         packet: P,
-        exclude: Option<Uuid>,
+        exclude: Option<i32>,
     ) {
         let tracking_players = self.player_area_map.get_tracking_players(chunk);
-        for uuid in tracking_players {
-            if Some(uuid) == exclude {
+        for entity_id in tracking_players {
+            if Some(entity_id) == exclude {
                 continue;
             }
-            if let Some(player) = self.players.read_sync(&uuid, |_, p| p.clone()) {
+            if let Some(player) = self.players.get_by_entity_id(entity_id) {
                 player.connection.send_packet(packet.clone());
             }
         }
@@ -297,15 +297,8 @@ impl World {
     /// * `entity_id` - The entity ID of the player breaking the block
     /// * `pos` - The position of the block being broken
     /// * `progress` - The destruction progress (0-9), or -1 to clear
-    /// * `exclude` - UUID of the player to exclude (the one breaking the block)
     #[allow(clippy::cast_sign_loss)]
-    pub fn broadcast_block_destruction(
-        &self,
-        entity_id: i32,
-        pos: BlockPos,
-        progress: i32,
-        exclude: Uuid,
-    ) {
+    pub fn broadcast_block_destruction(&self, entity_id: i32, pos: BlockPos, progress: i32) {
         let chunk = ChunkPos::new(
             SectionPos::block_to_section_coord(pos.x()),
             SectionPos::block_to_section_coord(pos.z()),
@@ -315,7 +308,7 @@ impl World {
             pos,
             progress: progress.clamp(-1, 9) as u8,
         };
-        self.broadcast_to_nearby(chunk, packet, Some(exclude));
+        self.broadcast_to_nearby(chunk, packet, Some(entity_id));
     }
 }
 

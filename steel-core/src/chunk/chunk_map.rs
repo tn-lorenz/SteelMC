@@ -168,8 +168,8 @@ impl ChunkMap {
                         block_state,
                     };
 
-                    for uuid in &tracking_players {
-                        if let Some(player) = world.players.read_sync(uuid, |_, p| p.clone()) {
+                    for entity_id in &tracking_players {
+                        if let Some(player) = world.players.get_by_entity_id(*entity_id) {
                             player.connection.send_packet(update_packet.clone());
                         }
                     }
@@ -192,8 +192,8 @@ impl ChunkMap {
                         changes,
                     };
 
-                    for uuid in &tracking_players {
-                        if let Some(player) = world.players.read_sync(uuid, |_, p| p.clone()) {
+                    for entity_id in &tracking_players {
+                        if let Some(player) = world.players.get_by_entity_id(*entity_id) {
                             player.connection.send_packet(packet.clone());
                         }
                     }
@@ -492,7 +492,7 @@ impl ChunkMap {
 
                 // Update the player area map with the diff
                 world.player_area_map.on_player_view_change(
-                    player.gameprofile.id,
+                    player.entity_id,
                     &added_chunks,
                     &removed_chunks,
                 );
