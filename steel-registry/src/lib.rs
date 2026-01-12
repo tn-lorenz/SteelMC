@@ -440,6 +440,8 @@ pub trait BlockStateExt {
     fn get_value<T, P: Property<T>>(&self, property: &P) -> T;
     fn set_value<T, P: Property<T>>(&self, property: &P, value: T) -> BlockStateId;
     fn get_property_str(&self, name: &str) -> Option<String>;
+    fn get_collision_shape(&self) -> &'static [blocks::shapes::AABB];
+    fn get_outline_shape(&self) -> &'static [blocks::shapes::AABB];
 }
 
 impl BlockStateExt for BlockStateId {
@@ -474,5 +476,13 @@ impl BlockStateExt for BlockStateId {
             .into_iter()
             .find(|(n, _)| *n == name)
             .map(|(_, v)| v.to_string())
+    }
+
+    fn get_collision_shape(&self) -> &'static [blocks::shapes::AABB] {
+        REGISTRY.blocks.get_collision_shape(*self)
+    }
+
+    fn get_outline_shape(&self) -> &'static [blocks::shapes::AABB] {
+        REGISTRY.blocks.get_outline_shape(*self)
     }
 }

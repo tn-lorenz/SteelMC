@@ -4,6 +4,8 @@
 use core::panic;
 use std::{borrow::Cow, fs};
 
+use rustc_hash::FxHashMap;
+
 use heck::{ToShoutySnakeCase, ToUpperCamelCase};
 use proc_macro2::{Ident, Span, TokenStream};
 use quote::quote;
@@ -59,15 +61,15 @@ impl BlockConfig {
 }
 
 #[derive(Deserialize, Clone, Debug)]
-pub struct CollisionOverwrite {
+pub struct ShapeOverwrite {
     pub offset: u16,
-    pub collision_shapes: Vec<u16>,
+    pub shapes: Vec<u16>,
 }
 
 #[derive(Deserialize, Clone, Debug)]
-pub struct Collision {
+pub struct ShapeData {
     pub default: Vec<u16>,
-    pub overwrites: Vec<CollisionOverwrite>,
+    pub overwrites: Vec<ShapeOverwrite>,
 }
 
 #[derive(Deserialize, Clone, Debug)]
@@ -79,7 +81,8 @@ pub struct Block {
     // example bool_true, int_5, enum_Direction_Down
     pub default_properties: Vec<String>,
     pub behavior_properties: BlockConfig,
-    pub collisions: Collision,
+    pub collision_shapes: ShapeData,
+    pub outline_shapes: ShapeData,
 }
 
 #[derive(Deserialize, Clone, Debug)]
@@ -288,17 +291,254 @@ fn generate_default_state(block: &Block) -> TokenStream {
     }
 }
 
+/// VoxelShape pool that deduplicates shape combinations.
+/// Maps AABB index combinations to a ShapeId.
+struct VoxelShapePool {
+    // Maps sorted AABB indices to ShapeId
+    shapes: FxHashMap<Vec<u16>, u16>,
+    // Ordered list of shapes for generation
+    shape_list: Vec<Vec<u16>>,
+}
+
+impl VoxelShapePool {
+    fn new() -> Self {
+        let mut pool = Self {
+            shapes: FxHashMap::default(),
+            shape_list: Vec::new(),
+        };
+        // Reserve ID 0 for empty shape, ID 1 for full block
+        pool.get_or_insert(vec![]); // EMPTY = 0
+        pool.get_or_insert(vec![u16::MAX]); // FULL_BLOCK = 1 (special marker)
+        pool
+    }
+
+    fn get_or_insert(&mut self, aabb_indices: Vec<u16>) -> u16 {
+        if let Some(&id) = self.shapes.get(&aabb_indices) {
+            return id;
+        }
+        let id = self.shape_list.len() as u16;
+        self.shapes.insert(aabb_indices.clone(), id);
+        self.shape_list.push(aabb_indices);
+        id
+    }
+}
+
+/// Generates a match arm for shape overwrites.
+/// Groups offsets with the same shape ID together.
+fn generate_shape_match(
+    shape_data: &ShapeData,
+    voxel_pool: &mut VoxelShapePool,
+) -> (u16, Vec<(Vec<u16>, u16)>) {
+    // Get default shape ID
+    let default_id = voxel_pool.get_or_insert(shape_data.default.clone());
+
+    // Group overwrites by their shape (to combine offsets with | patterns)
+    let mut shape_to_offsets: FxHashMap<Vec<u16>, Vec<u16>> = FxHashMap::default();
+    for overwrite in &shape_data.overwrites {
+        shape_to_offsets
+            .entry(overwrite.shapes.clone())
+            .or_default()
+            .push(overwrite.offset);
+    }
+
+    // Convert to (offsets, shape_id) pairs
+    let mut arms: Vec<(Vec<u16>, u16)> = shape_to_offsets
+        .into_iter()
+        .map(|(shapes, mut offsets)| {
+            offsets.sort();
+            let shape_id = voxel_pool.get_or_insert(shapes);
+            (offsets, shape_id)
+        })
+        .collect();
+
+    // Sort by first offset for consistent output
+    arms.sort_by_key(|(offsets, _)| offsets.first().copied().unwrap_or(0));
+
+    (default_id, arms)
+}
+
 pub(crate) fn build() -> TokenStream {
     println!("cargo:rerun-if-changed=build_assets/blocks.json");
     let block_assets: BlockAssets =
         serde_json::from_str(&fs::read_to_string("build_assets/blocks.json").unwrap()).unwrap();
 
-    let mut stream = TokenStream::new();
-
     // Create default properties for comparison
     let default_props = BlockConfig::new();
 
+    // VoxelShape pool for deduplication
+    let mut voxel_pool = VoxelShapePool::new();
+
+    // Collect per-block shape match data
+    struct BlockShapeInfo {
+        name: String,
+        collision_default: u16,
+        collision_arms: Vec<(Vec<u16>, u16)>,
+        outline_default: u16,
+        outline_arms: Vec<(Vec<u16>, u16)>,
+    }
+    let mut block_shape_infos: Vec<BlockShapeInfo> = Vec::new();
+
+    // First pass: collect shape data for all blocks
     for block in &block_assets.blocks {
+        let (collision_default, collision_arms) =
+            generate_shape_match(&block.collision_shapes, &mut voxel_pool);
+        let (outline_default, outline_arms) =
+            generate_shape_match(&block.outline_shapes, &mut voxel_pool);
+
+        block_shape_infos.push(BlockShapeInfo {
+            name: block.name.clone(),
+            collision_default,
+            collision_arms,
+            outline_default,
+            outline_arms,
+        });
+    }
+
+    // Generate AABB constants
+    let aabb_consts: Vec<TokenStream> = block_assets
+        .shapes
+        .iter()
+        .enumerate()
+        .map(|(i, shape)| {
+            let name = Ident::new(&format!("AABB_{}", i), Span::call_site());
+            let min_x = shape.min[0];
+            let min_y = shape.min[1];
+            let min_z = shape.min[2];
+            let max_x = shape.max[0];
+            let max_y = shape.max[1];
+            let max_z = shape.max[2];
+            quote! {
+                const #name: AABB = AABB::new(#min_x, #min_y, #min_z, #max_x, #max_y, #max_z);
+            }
+        })
+        .collect();
+
+    // Generate VoxelShape constants (deduplicated)
+    let voxel_shape_consts: Vec<TokenStream> = voxel_pool
+        .shape_list
+        .iter()
+        .enumerate()
+        .map(|(id, aabb_indices)| {
+            let name = Ident::new(&format!("VSHAPE_{}", id), Span::call_site());
+            if aabb_indices.is_empty() {
+                quote! {
+                    static #name: &[AABB] = &[];
+                }
+            } else if aabb_indices.len() == 1 && aabb_indices[0] == u16::MAX {
+                quote! {
+                    static #name: &[AABB] = &[AABB::FULL_BLOCK];
+                }
+            } else {
+                let aabb_refs: Vec<TokenStream> = aabb_indices
+                    .iter()
+                    .map(|&idx| {
+                        let aabb_name = Ident::new(&format!("AABB_{}", idx), Span::call_site());
+                        quote! { #aabb_name }
+                    })
+                    .collect();
+                quote! {
+                    static #name: &[AABB] = &[#(#aabb_refs),*];
+                }
+            }
+        })
+        .collect();
+
+    // Generate per-block shape functions
+    let mut block_shape_fns = TokenStream::new();
+
+    for info in &block_shape_infos {
+        let fn_name_collision = Ident::new(&format!("{}_collision", info.name), Span::call_site());
+        let fn_name_outline = Ident::new(&format!("{}_outline", info.name), Span::call_site());
+
+        // Generate collision function
+        let collision_default_shape = Ident::new(
+            &format!("VSHAPE_{}", info.collision_default),
+            Span::call_site(),
+        );
+
+        if info.collision_arms.is_empty() {
+            block_shape_fns.extend(quote! {
+                #[inline]
+                const fn #fn_name_collision(_offset: u16) -> &'static [AABB] {
+                    #collision_default_shape
+                }
+            });
+        } else {
+            let arms: Vec<TokenStream> = info
+                .collision_arms
+                .iter()
+                .map(|(offsets, shape_id)| {
+                    let shape_name = Ident::new(&format!("VSHAPE_{}", shape_id), Span::call_site());
+                    let patterns: Vec<TokenStream> = offsets
+                        .iter()
+                        .map(|&o| {
+                            quote! { #o }
+                        })
+                        .collect();
+                    quote! {
+                        #(#patterns)|* => #shape_name,
+                    }
+                })
+                .collect();
+
+            block_shape_fns.extend(quote! {
+                #[inline]
+                fn #fn_name_collision(offset: u16) -> &'static [AABB] {
+                    match offset {
+                        #(#arms)*
+                        _ => #collision_default_shape,
+                    }
+                }
+            });
+        }
+
+        // Generate outline function
+        let outline_default_shape = Ident::new(
+            &format!("VSHAPE_{}", info.outline_default),
+            Span::call_site(),
+        );
+
+        if info.outline_arms.is_empty() {
+            block_shape_fns.extend(quote! {
+                #[inline]
+                const fn #fn_name_outline(_offset: u16) -> &'static [AABB] {
+                    #outline_default_shape
+                }
+            });
+        } else {
+            let arms: Vec<TokenStream> = info
+                .outline_arms
+                .iter()
+                .map(|(offsets, shape_id)| {
+                    let shape_name = Ident::new(&format!("VSHAPE_{}", shape_id), Span::call_site());
+                    let patterns: Vec<TokenStream> = offsets
+                        .iter()
+                        .map(|&o| {
+                            quote! { #o }
+                        })
+                        .collect();
+                    quote! {
+                        #(#patterns)|* => #shape_name,
+                    }
+                })
+                .collect();
+
+            block_shape_fns.extend(quote! {
+                #[inline]
+                fn #fn_name_outline(offset: u16) -> &'static [AABB] {
+                    match offset {
+                        #(#arms)*
+                        _ => #outline_default_shape,
+                    }
+                }
+            });
+        }
+    }
+
+    // Generate block constants with shape functions
+    let mut stream = TokenStream::new();
+
+    for (block, info) in block_assets.blocks.iter().zip(block_shape_infos.iter()) {
         let block_name = Ident::new(&block.name.to_shouty_snake_case(), Span::call_site());
         let block_name_str = block.name.clone();
         let properties = block
@@ -318,6 +558,10 @@ pub(crate) fn build() -> TokenStream {
         // Generate default state if block has properties
         let default_state = generate_default_state(block);
 
+        // Shape function references
+        let fn_name_collision = Ident::new(&format!("{}_collision", info.name), Span::call_site());
+        let fn_name_outline = Ident::new(&format!("{}_outline", info.name), Span::call_site());
+
         stream.extend(quote! {
             pub const #block_name: &Block = &Block::new(
                 Identifier::vanilla_static(#block_name_str),
@@ -325,7 +569,7 @@ pub(crate) fn build() -> TokenStream {
                 &[
                     #(#properties),*
                 ],
-            )#default_state;
+            ).with_shapes(#fn_name_collision, #fn_name_outline)#default_state;
         });
     }
 
@@ -356,10 +600,21 @@ pub(crate) fn build() -> TokenStream {
     quote! {
         use crate::{
             blocks::{behaviour::{BlockConfig, PushReaction, DefaultBlockBehaviour}, Block, offset, BlockRegistry},
-            blocks::properties::{self, BlockStateProperties, NoteBlockInstrument}
+            blocks::properties::{self, BlockStateProperties, NoteBlockInstrument},
+            blocks::shapes::AABB,
         };
         use steel_utils::Identifier;
 
+        // AABB primitives
+        #(#aabb_consts)*
+
+        // Deduplicated VoxelShapes
+        #(#voxel_shape_consts)*
+
+        // Per-block shape functions
+        #block_shape_fns
+
+        // Block constants
         #stream
 
         pub fn register_blocks(registry: &mut BlockRegistry) {

@@ -1,5 +1,6 @@
 pub mod behaviour;
 pub mod properties;
+pub mod shapes;
 pub mod vanilla_behaviours;
 pub mod vanilla_block_behaviors;
 
@@ -9,12 +10,34 @@ use crate::RegistryExt;
 use crate::blocks::behaviour::{BlockBehaviour, BlockConfig};
 use crate::blocks::properties::{DynProperty, Property};
 
-#[derive(Debug)]
+/// Function type for shape lookups. Takes a state offset and returns the shape.
+pub type ShapeFn = fn(u16) -> &'static [shapes::AABB];
+
 pub struct Block {
     pub key: Identifier,
     pub config: BlockConfig,
     pub properties: &'static [&'static dyn DynProperty],
     pub default_state_offset: u16,
+    /// Function to get collision shape for a state offset
+    pub collision_shape: ShapeFn,
+    /// Function to get outline shape for a state offset
+    pub outline_shape: ShapeFn,
+}
+
+impl std::fmt::Debug for Block {
+    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        f.debug_struct("Block")
+            .field("key", &self.key)
+            .field("config", &self.config)
+            .field("properties", &self.properties)
+            .field("default_state_offset", &self.default_state_offset)
+            .finish_non_exhaustive()
+    }
+}
+
+/// Default shape function that returns a full block.
+const fn full_block_shape(_offset: u16) -> &'static [shapes::AABB] {
+    &[shapes::AABB::FULL_BLOCK]
 }
 
 impl Block {
@@ -28,7 +51,28 @@ impl Block {
             config,
             properties,
             default_state_offset: 0,
+            collision_shape: full_block_shape,
+            outline_shape: full_block_shape,
         }
+    }
+
+    /// Sets the shape functions for this block.
+    pub const fn with_shapes(mut self, collision: ShapeFn, outline: ShapeFn) -> Self {
+        self.collision_shape = collision;
+        self.outline_shape = outline;
+        self
+    }
+
+    /// Gets the collision shape for a given state offset.
+    #[inline]
+    pub fn get_collision_shape(&self, offset: u16) -> &'static [shapes::AABB] {
+        (self.collision_shape)(offset)
+    }
+
+    /// Gets the outline shape for a given state offset.
+    #[inline]
+    pub fn get_outline_shape(&self, offset: u16) -> &'static [shapes::AABB] {
+        (self.outline_shape)(offset)
     }
 
     /// Sets the default state offset for this block.
@@ -463,6 +507,59 @@ impl BlockRegistry {
 impl RegistryExt for BlockRegistry {
     fn freeze(&mut self) {
         self.allows_registering = false;
+    }
+}
+
+// Shape lookup methods
+impl BlockRegistry {
+    /// Gets the collision shape for a block state.
+    ///
+    /// Returns a slice of AABBs that make up the collision shape.
+    /// For simple blocks this is typically a single full-block AABB.
+    /// For complex blocks like fences, this may be multiple AABBs.
+    #[must_use]
+    pub fn get_collision_shape(&self, state_id: BlockStateId) -> &'static [shapes::AABB] {
+        let block = self.state_to_block_lookup.get(state_id.0 as usize).copied();
+        let Some(block) = block else {
+            return &[shapes::AABB::FULL_BLOCK];
+        };
+        let block_id = self
+            .state_to_block_id
+            .get(state_id.0 as usize)
+            .copied()
+            .unwrap_or(0);
+        let base_state = self.block_to_base_state.get(block_id).copied().unwrap_or(0);
+        let offset = state_id.0.saturating_sub(base_state);
+        block.get_collision_shape(offset)
+    }
+
+    /// Gets the outline shape for a block state.
+    ///
+    /// This is the shape shown when the player targets the block.
+    /// Often the same as collision shape, but can differ (e.g., fences).
+    #[must_use]
+    pub fn get_outline_shape(&self, state_id: BlockStateId) -> &'static [shapes::AABB] {
+        let block = self.state_to_block_lookup.get(state_id.0 as usize).copied();
+        let Some(block) = block else {
+            return &[shapes::AABB::FULL_BLOCK];
+        };
+        let block_id = self
+            .state_to_block_id
+            .get(state_id.0 as usize)
+            .copied()
+            .unwrap_or(0);
+        let base_state = self.block_to_base_state.get(block_id).copied().unwrap_or(0);
+        let offset = state_id.0.saturating_sub(base_state);
+        block.get_outline_shape(offset)
+    }
+
+    /// Gets both collision and outline shapes for a block state.
+    #[must_use]
+    pub fn get_shapes(&self, state_id: BlockStateId) -> shapes::BlockShapes {
+        shapes::BlockShapes::new(
+            self.get_collision_shape(state_id),
+            self.get_outline_shape(state_id),
+        )
     }
 }
 
