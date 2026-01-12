@@ -7,6 +7,9 @@ use std::{
 
 use steel_protocol::packet_traits::ClientPacket;
 use steel_protocol::packets::game::{CBlockDestruction, CPlayerChat, CSystemChat};
+use steel_registry::blocks::BlockRef;
+use steel_registry::blocks::block_state_ext::BlockStateExt;
+use steel_registry::blocks::properties::Direction;
 use steel_registry::vanilla_blocks;
 use steel_registry::{REGISTRY, compat_traits::RegistryWorld, dimension_type::DimensionTypeRef};
 use steel_utils::{BlockPos, BlockStateId, ChunkPos, SectionPos, types::UpdateFlags};
@@ -119,7 +122,28 @@ impl World {
     /// Sets a block at the given position.
     ///
     /// Returns `true` if the block was successfully set, `false` otherwise.
+    /// Uses the default update limit of 512 (matching vanilla).
     pub fn set_block(&self, pos: BlockPos, block_state: BlockStateId, flags: UpdateFlags) -> bool {
+        self.set_block_with_limit(pos, block_state, flags, 512)
+    }
+
+    /// Sets a block at the given position with a custom update limit.
+    ///
+    /// The update limit prevents infinite recursion when shape updates trigger
+    /// further block changes. Each recursive call decrements the limit.
+    ///
+    /// Returns `true` if the block was successfully set, `false` otherwise.
+    pub fn set_block_with_limit(
+        &self,
+        pos: BlockPos,
+        block_state: BlockStateId,
+        flags: UpdateFlags,
+        update_limit: i32,
+    ) -> bool {
+        if update_limit <= 0 {
+            return false;
+        }
+
         if !self.is_in_valid_bounds(&pos) {
             return false;
         }
@@ -128,16 +152,129 @@ impl World {
             return false;
         };
 
-        let Some(_old_state) = chunk.set_block_state(pos, block_state, flags) else {
+        let Some(old_state) = chunk.set_block_state(pos, block_state, flags) else {
             return false;
         };
 
         // Record the block change for broadcasting to clients
+        log::debug!(
+            "Block changed at {:?}: {:?} -> {:?}",
+            pos,
+            old_state,
+            block_state
+        );
         self.chunk_map.block_changed(&pos);
 
-        //TODO: Neighbor updates and stuff like that
+        // Neighbor updates (when UPDATE_NEIGHBORS is set)
+        if flags.contains(UpdateFlags::UPDATE_NEIGHBORS) {
+            self.update_neighbors_at(&pos, old_state.get_block());
+            // TODO: if block has analog output signal, update comparator neighbors
+            // via updateNeighbourForOutputSignal
+        }
+
+        // Shape updates (unless UPDATE_KNOWN_SHAPE is set)
+        if !flags.contains(UpdateFlags::UPDATE_KNOWN_SHAPE) && update_limit > 0 {
+            // Clear UPDATE_NEIGHBORS and UPDATE_SUPPRESS_DROPS for propagation
+            let neighbor_flags =
+                flags & !(UpdateFlags::UPDATE_NEIGHBORS | UpdateFlags::UPDATE_SUPPRESS_DROPS);
+
+            // Notify all 6 neighbors about our shape change
+            for direction in Direction::UPDATE_SHAPE_ORDER {
+                let (dx, dy, dz) = direction.offset();
+                let neighbor_pos = pos.offset(dx, dy, dz);
+
+                // Tell the neighbor that we (at pos) changed
+                self.neighbor_shape_changed(
+                    direction.opposite(), // Direction from us to neighbor
+                    neighbor_pos,         // Neighbor's position
+                    pos,                  // Our position (the one that changed)
+                    block_state,          // Our new state
+                    neighbor_flags,
+                    update_limit - 1,
+                );
+            }
+        }
 
         true
+    }
+
+    /// Order in which neighbors are updated (matches vanilla's `NeighborUpdater.UPDATE_ORDER`).
+    const NEIGHBOR_UPDATE_ORDER: [Direction; 6] = [
+        Direction::West,
+        Direction::East,
+        Direction::Down,
+        Direction::Up,
+        Direction::North,
+        Direction::South,
+    ];
+
+    /// Updates all neighbors of the given position about a block change.
+    ///
+    /// This is the Rust equivalent of vanilla's `Level.updateNeighborsAt()`.
+    fn update_neighbors_at(&self, pos: &BlockPos, source_block: BlockRef) {
+        for direction in Self::NEIGHBOR_UPDATE_ORDER {
+            let (dx, dy, dz) = direction.offset();
+            let neighbor_pos = pos.offset(dx, dy, dz);
+            self.neighbor_changed(neighbor_pos, source_block, false);
+        }
+    }
+
+    /// Called when a neighbor's shape changes, to update this block's state.
+    ///
+    /// This is the Rust equivalent of vanilla's `NeighborUpdater.executeShapeUpdate()`.
+    fn neighbor_shape_changed(
+        &self,
+        direction: Direction,
+        pos: BlockPos,
+        neighbor_pos: BlockPos,
+        neighbor_state: BlockStateId,
+        flags: UpdateFlags,
+        update_limit: i32,
+    ) {
+        if !self.is_in_valid_bounds(&pos) {
+            return;
+        }
+
+        let current_state = self.get_block_state(&pos);
+
+        // TODO: Skip redstone wire if UPDATE_SKIP_SHAPE_UPDATE_ON_WIRE is set
+        // if flags.contains(UpdateFlags::UPDATE_SKIP_SHAPE_UPDATE_ON_WIRE)
+        //     && current_state.is_redstone_wire() { return; }
+
+        let behavior = REGISTRY.blocks.get_behavior(current_state.get_block());
+        let new_state = behavior.update_shape(
+            current_state,
+            self,
+            pos,
+            direction,
+            neighbor_pos,
+            neighbor_state,
+        );
+
+        if new_state != current_state {
+            log::debug!(
+                "Shape update at {:?}: {:?} -> {:?} (neighbor {:?} changed)",
+                pos,
+                current_state,
+                new_state,
+                neighbor_pos
+            );
+            // Use set_block_with_limit to prevent infinite recursion
+            self.set_block_with_limit(pos, new_state, flags, update_limit);
+        }
+    }
+
+    /// Notifies a block that one of its neighbors changed.
+    ///
+    /// This is the Rust equivalent of vanilla's `Level.neighborChanged()`.
+    fn neighbor_changed(&self, pos: BlockPos, source_block: BlockRef, moved_by_piston: bool) {
+        if !self.is_in_valid_bounds(&pos) {
+            return;
+        }
+
+        let state = self.get_block_state(&pos);
+        let behavior = REGISTRY.blocks.get_behavior(state.get_block());
+        behavior.handle_neighbor_changed(state, self, pos, source_block, moved_by_piston);
     }
 
     fn get_chunk_at(&self, pos: &BlockPos) -> Option<Arc<ChunkAccess>> {
@@ -323,5 +460,29 @@ impl RegistryWorld for World {
 
     fn is_in_valid_bounds(&self, block_pos: &BlockPos) -> bool {
         Self::is_in_valid_bounds(self, block_pos)
+    }
+
+    fn neighbor_shape_changed(
+        &self,
+        direction: Direction,
+        pos: BlockPos,
+        neighbor_pos: BlockPos,
+        neighbor_state: BlockStateId,
+        flags: UpdateFlags,
+        update_limit: i32,
+    ) {
+        Self::neighbor_shape_changed(
+            self,
+            direction,
+            pos,
+            neighbor_pos,
+            neighbor_state,
+            flags,
+            update_limit,
+        );
+    }
+
+    fn neighbor_changed(&self, pos: BlockPos, source_block: BlockRef, moved_by_piston: bool) {
+        Self::neighbor_changed(self, pos, source_block, moved_by_piston);
     }
 }

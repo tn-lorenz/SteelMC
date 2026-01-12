@@ -154,9 +154,10 @@ impl ItemBehavior for BlockItemBehavior {
         };
 
         // Place the block
+        // Use UPDATE_ALL_IMMEDIATE (neighbors + clients + immediate) to match vanilla BlockItem behavior
         if !context
             .world
-            .set_block(place_pos, new_state, UpdateFlags::all())
+            .set_block(place_pos, new_state, UpdateFlags::UPDATE_ALL_IMMEDIATE)
         {
             return InteractionResult::Fail;
         }

@@ -163,6 +163,13 @@ impl ChunkMap {
                     let block_pos = section_pos.relative_to_block_pos(packed);
                     let block_state = world.get_block_state(&block_pos);
 
+                    log::debug!(
+                        "Broadcasting single block update at {:?} state={:?} to {} players",
+                        block_pos,
+                        block_state,
+                        tracking_players.len()
+                    );
+
                     let update_packet = CBlockUpdate {
                         pos: block_pos,
                         block_state,
@@ -186,6 +193,13 @@ impl ChunkMap {
                             }
                         })
                         .collect();
+
+                    log::debug!(
+                        "Broadcasting {} block updates in section {:?} to {} players",
+                        changes.len(),
+                        section_pos,
+                        tracking_players.len()
+                    );
 
                     let packet = CSectionBlocksUpdate {
                         section_pos,

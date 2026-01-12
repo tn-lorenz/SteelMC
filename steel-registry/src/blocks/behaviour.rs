@@ -286,6 +286,30 @@ pub trait BlockBehaviour: Send + Sync {
     ) -> InteractionResult {
         InteractionResult::Pass
     }
+
+    /// Called when a neighboring block changes (not shape-related).
+    ///
+    /// This is the Rust equivalent of vanilla's `BlockState.handleNeighborChanged()`.
+    /// Used by redstone components, doors, and other blocks that react to neighbor changes.
+    ///
+    /// # Arguments
+    /// * `state` - The current block state
+    /// * `world` - The world
+    /// * `pos` - Position of this block
+    /// * `source_block` - The block type that changed
+    /// * `moved_by_piston` - Whether the change was caused by a piston
+    #[allow(unused_variables)]
+    fn handle_neighbor_changed(
+        &self,
+        state: BlockStateId,
+        world: &dyn RegistryWorld,
+        pos: BlockPos,
+        source_block: BlockRef,
+        moved_by_piston: bool,
+    ) {
+        // Default: no-op
+        // Override for redstone components, doors, etc.
+    }
 }
 
 /// A placeholder behavior that returns None for placement.
