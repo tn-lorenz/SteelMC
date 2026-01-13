@@ -62,6 +62,197 @@ impl AABB {
     pub fn depth(&self) -> f32 {
         self.max_z - self.min_z
     }
+
+    /// Returns a new AABB deflated (shrunk inward) by the given amount on all sides.
+    ///
+    /// This is used for collision detection to avoid floating-point edge cases.
+    /// Matches vanilla `AABB.deflate()`.
+    #[must_use]
+    pub fn deflate(&self, amount: f32) -> Self {
+        Self {
+            min_x: self.min_x + amount,
+            min_y: self.min_y + amount,
+            min_z: self.min_z + amount,
+            max_x: self.max_x - amount,
+            max_y: self.max_y - amount,
+            max_z: self.max_z - amount,
+        }
+    }
+
+    /// Returns a new AABB inflated (expanded outward) by the given amount on all sides.
+    ///
+    /// Matches vanilla `AABB.inflate()`.
+    #[must_use]
+    pub fn inflate(&self, amount: f32) -> Self {
+        Self {
+            min_x: self.min_x - amount,
+            min_y: self.min_y - amount,
+            min_z: self.min_z - amount,
+            max_x: self.max_x + amount,
+            max_y: self.max_y + amount,
+            max_z: self.max_z + amount,
+        }
+    }
+
+    /// Returns a new AABB moved by the given delta.
+    ///
+    /// Matches vanilla `AABB.move()`.
+    #[must_use]
+    pub fn translate(&self, dx: f32, dy: f32, dz: f32) -> Self {
+        Self {
+            min_x: self.min_x + dx,
+            min_y: self.min_y + dy,
+            min_z: self.min_z + dz,
+            max_x: self.max_x + dx,
+            max_y: self.max_y + dy,
+            max_z: self.max_z + dz,
+        }
+    }
+
+    /// Returns a new AABB positioned at the given block coordinates.
+    ///
+    /// Converts a block-local AABB (0-1 space) to world coordinates.
+    #[must_use]
+    pub fn at_block(&self, block_x: i32, block_y: i32, block_z: i32) -> Self {
+        let bx = block_x as f32;
+        let by = block_y as f32;
+        let bz = block_z as f32;
+        Self {
+            min_x: bx + self.min_x,
+            min_y: by + self.min_y,
+            min_z: bz + self.min_z,
+            max_x: bx + self.max_x,
+            max_y: by + self.max_y,
+            max_z: bz + self.max_z,
+        }
+    }
+
+    /// Checks if this AABB intersects with another AABB.
+    ///
+    /// Returns true if the two AABBs overlap in all three dimensions.
+    /// Matches vanilla `AABB.intersects()`.
+    #[must_use]
+    pub fn intersects(&self, other: &Self) -> bool {
+        self.max_x > other.min_x
+            && self.min_x < other.max_x
+            && self.max_y > other.min_y
+            && self.min_y < other.max_y
+            && self.max_z > other.min_z
+            && self.min_z < other.max_z
+    }
+
+    /// Checks if this AABB contains the given point.
+    #[must_use]
+    pub fn contains(&self, x: f32, y: f32, z: f32) -> bool {
+        x >= self.min_x
+            && x <= self.max_x
+            && y >= self.min_y
+            && y <= self.max_y
+            && z >= self.min_z
+            && z <= self.max_z
+    }
+}
+
+/// Double-precision Axis-Aligned Bounding Box used for entity collision.
+///
+/// Coordinates are in world space. Used for player and entity bounding boxes.
+#[derive(Debug, Clone, Copy, PartialEq)]
+pub struct AABBd {
+    pub min_x: f64,
+    pub min_y: f64,
+    pub min_z: f64,
+    pub max_x: f64,
+    pub max_y: f64,
+    pub max_z: f64,
+}
+
+impl AABBd {
+    /// Creates a new double-precision AABB from min and max coordinates.
+    #[must_use]
+    pub const fn new(
+        min_x: f64,
+        min_y: f64,
+        min_z: f64,
+        max_x: f64,
+        max_y: f64,
+        max_z: f64,
+    ) -> Self {
+        Self {
+            min_x,
+            min_y,
+            min_z,
+            max_x,
+            max_y,
+            max_z,
+        }
+    }
+
+    /// Creates an entity bounding box centered at the given position.
+    ///
+    /// The box extends `half_width` in X and Z directions,
+    /// and from `y` to `y + height` in the Y direction.
+    #[must_use]
+    pub fn entity_box(x: f64, y: f64, z: f64, half_width: f64, height: f64) -> Self {
+        Self {
+            min_x: x - half_width,
+            min_y: y,
+            min_z: z - half_width,
+            max_x: x + half_width,
+            max_y: y + height,
+            max_z: z + half_width,
+        }
+    }
+
+    /// Returns a new AABB deflated (shrunk inward) by the given amount on all sides.
+    ///
+    /// This is used for collision detection to avoid floating-point edge cases.
+    /// Matches vanilla's collision epsilon of 1.0E-5.
+    #[must_use]
+    pub fn deflate(&self, amount: f64) -> Self {
+        Self {
+            min_x: self.min_x + amount,
+            min_y: self.min_y + amount,
+            min_z: self.min_z + amount,
+            max_x: self.max_x - amount,
+            max_y: self.max_y - amount,
+            max_z: self.max_z - amount,
+        }
+    }
+
+    /// Returns a new AABB inflated (expanded outward) by the given amount on all sides.
+    #[must_use]
+    pub fn inflate(&self, amount: f64) -> Self {
+        Self {
+            min_x: self.min_x - amount,
+            min_y: self.min_y - amount,
+            min_z: self.min_z - amount,
+            max_x: self.max_x + amount,
+            max_y: self.max_y + amount,
+            max_z: self.max_z + amount,
+        }
+    }
+
+    /// Checks if this AABB intersects with another AABB.
+    #[must_use]
+    pub fn intersects(&self, other: &Self) -> bool {
+        self.max_x > other.min_x
+            && self.min_x < other.max_x
+            && self.max_y > other.min_y
+            && self.min_y < other.max_y
+            && self.max_z > other.min_z
+            && self.min_z < other.max_z
+    }
+
+    /// Checks if this AABB intersects with a single-precision block AABB.
+    #[must_use]
+    pub fn intersects_block_aabb(&self, other: &AABB) -> bool {
+        self.max_x > f64::from(other.min_x)
+            && self.min_x < f64::from(other.max_x)
+            && self.max_y > f64::from(other.min_y)
+            && self.min_y < f64::from(other.max_y)
+            && self.max_z > f64::from(other.min_z)
+            && self.min_z < f64::from(other.max_z)
+    }
 }
 
 /// A VoxelShape is a collection of AABBs that define the shape of a block.

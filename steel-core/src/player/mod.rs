@@ -28,10 +28,11 @@ use profile_key::RemoteChatSession;
 pub use signature_cache::{LastSeen, MessageCache};
 use steel_protocol::packets::game::CSetHeldSlot;
 use steel_protocol::packets::game::{
-    AnimateAction, CAnimate, PlayerAction, SPickItemFromBlock, SPlayerAction, SSetCarriedItem,
-    SUseItem, SUseItemOn,
+    AnimateAction, CAnimate, CPlayerPosition, PlayerAction, SAcceptTeleportation,
+    SPickItemFromBlock, SPlayerAction, SSetCarriedItem, SUseItem, SUseItemOn,
 };
 use steel_registry::blocks::block_state_ext::BlockStateExt;
+use steel_registry::blocks::shapes::AABBd;
 use steel_utils::locks::SyncMutex;
 use steel_utils::types::GameType;
 
@@ -152,6 +153,45 @@ pub struct Player {
     /// If Some, we should reject interaction packets until confirmed.
     awaiting_position_from_client: SyncMutex<Option<Vector3<f64>>>,
 
+    /// Incrementing teleport ID counter (wraps at `i32::MAX`).
+    awaiting_teleport_id: AtomicI32,
+
+    /// Tick count when last teleport was sent (for timeout/resend).
+    awaiting_teleport_time: AtomicI32,
+
+    /// Local tick counter (incremented each tick).
+    tick_count: AtomicI32,
+
+    /// Last known good position (for collision rollback).
+    last_good_position: SyncMutex<Vector3<f64>>,
+
+    /// Position at start of tick (for speed validation).
+    /// Matches vanilla `firstGoodX/Y/Z`.
+    first_good_position: SyncMutex<Vector3<f64>>,
+
+    /// Number of move packets received since connection started.
+    received_move_packet_count: AtomicI32,
+
+    /// Number of move packets at the last tick (for rate limiting).
+    known_move_packet_count: AtomicI32,
+
+    /// Player's current velocity (delta movement per tick).
+    /// Used for speed validation in movement checks.
+    delta_movement: SyncMutex<Vector3<f64>>,
+
+    /// Whether the player is currently sleeping in a bed.
+    sleeping: AtomicBool,
+
+    /// Whether the player is currently fall flying (elytra gliding).
+    fall_flying: AtomicBool,
+
+    /// Whether the player is on the ground.
+    on_ground: AtomicBool,
+
+    /// Tick when last impulse was applied (knockback, etc.).
+    /// Used for post-impulse grace period during movement validation.
+    last_impulse_tick: AtomicI32,
+
     /// Block breaking state machine.
     pub block_breaking: SyncMutex<BlockBreakingManager>,
 }
@@ -198,6 +238,18 @@ impl Player {
             ack_block_changes_up_to: AtomicI32::new(-1),
             shift_key_down: AtomicBool::new(false),
             awaiting_position_from_client: SyncMutex::new(None),
+            awaiting_teleport_id: AtomicI32::new(0),
+            awaiting_teleport_time: AtomicI32::new(0),
+            tick_count: AtomicI32::new(0),
+            last_good_position: SyncMutex::new(Vector3::default()),
+            first_good_position: SyncMutex::new(Vector3::default()),
+            received_move_packet_count: AtomicI32::new(0),
+            known_move_packet_count: AtomicI32::new(0),
+            delta_movement: SyncMutex::new(Vector3::default()),
+            sleeping: AtomicBool::new(false),
+            fall_flying: AtomicBool::new(false),
+            on_ground: AtomicBool::new(false),
+            last_impulse_tick: AtomicI32::new(0),
             block_breaking: SyncMutex::new(BlockBreakingManager::new()),
         }
     }
@@ -205,6 +257,18 @@ impl Player {
     /// Ticks the player.
     #[allow(clippy::cast_possible_truncation)]
     pub fn tick(&self) {
+        // Increment local tick counter
+        self.tick_count.fetch_add(1, Ordering::Relaxed);
+
+        // Reset first_good_position to current position at start of tick (vanilla: resetPosition)
+        *self.first_good_position.lock() = *self.position.lock();
+
+        // Sync packet counts for rate limiting (vanilla: knownMovePacketCount = receivedMovePacketCount)
+        self.known_move_packet_count.store(
+            self.received_move_packet_count.load(Ordering::Relaxed),
+            Ordering::Relaxed,
+        );
+
         // Send pending block change acks (batched, once per tick like vanilla)
         self.tick_ack_block_changes();
 
@@ -448,13 +512,198 @@ impl Player {
         false
     }
 
-    #[allow(clippy::unused_self)]
-    fn update_awaiting_teleport(&self) -> bool {
-        //TODO: Implement this
+    /// Player bounding box dimensions (standard player size).
+    const PLAYER_WIDTH: f64 = 0.6;
+    const PLAYER_HEIGHT: f64 = 1.8;
+
+    /// Small epsilon for AABB deflation (matches vanilla 1.0E-5F cast to f64).
+    const COLLISION_EPSILON: f64 = 1.0E-5;
+
+    /// Creates a player bounding box at the given position, deflated by the collision epsilon.
+    fn make_player_aabb(pos: Vector3<f64>) -> AABBd {
+        AABBd::entity_box(
+            pos.x,
+            pos.y,
+            pos.z,
+            Self::PLAYER_WIDTH / 2.0,
+            Self::PLAYER_HEIGHT,
+        )
+        .deflate(Self::COLLISION_EPSILON)
+    }
+
+    /// Checks if the player would collide with any NEW blocks when moving to the new position.
+    ///
+    /// This allows movement when already stuck in blocks (e.g., sand fell on player).
+    /// Only rejects movement if it would cause collision with blocks the player
+    /// wasn't already colliding with at the old position.
+    ///
+    /// Matches vanilla `ServerGamePacketListenerImpl.isEntityCollidingWithAnythingNew()`.
+    #[allow(clippy::cast_possible_truncation)]
+    fn is_colliding_with_new_blocks(&self, old_pos: Vector3<f64>, new_pos: Vector3<f64>) -> bool {
+        // Old and new player AABBs (slightly deflated like vanilla does)
+        let old_aabb = Self::make_player_aabb(old_pos);
+        let new_aabb = Self::make_player_aabb(new_pos);
+
+        // Calculate the block positions that the new AABB could intersect
+        let min_x = new_aabb.min_x.floor() as i32;
+        let max_x = new_aabb.max_x.ceil() as i32;
+        let min_y = new_aabb.min_y.floor() as i32;
+        let max_y = new_aabb.max_y.ceil() as i32;
+        let min_z = new_aabb.min_z.floor() as i32;
+        let max_z = new_aabb.max_z.ceil() as i32;
+
+        // Check each block position
+        for bx in min_x..max_x {
+            for by in min_y..max_y {
+                for bz in min_z..max_z {
+                    let block_pos = BlockPos::new(bx, by, bz);
+                    let block_state = self.world.get_block_state(&block_pos);
+                    let collision_shape = block_state.get_collision_shape();
+
+                    // Check each AABB in the collision shape
+                    for aabb in collision_shape {
+                        // Convert block-local AABB to world coordinates
+                        let world_aabb = aabb.at_block(bx, by, bz);
+
+                        // Check if new position collides with this shape
+                        if !new_aabb.intersects_block_aabb(&world_aabb) {
+                            continue;
+                        }
+
+                        // Check if old position also collided with this shape
+                        // If new position collides but old didn't, this is a NEW collision
+                        if !old_aabb.intersects_block_aabb(&world_aabb) {
+                            return true;
+                        }
+                    }
+                }
+            }
+        }
+
         false
     }
 
+    /// Checks if we're awaiting a teleport confirmation and handles timeout/resend.
+    ///
+    /// Returns `true` if awaiting teleport (movement should be rejected),
+    /// `false` if normal movement processing should continue.
+    fn update_awaiting_teleport(&self) -> bool {
+        let awaiting = self.awaiting_position_from_client.lock();
+        if let Some(pos) = *awaiting {
+            let current_tick = self.tick_count.load(Ordering::Relaxed);
+            let last_time = self.awaiting_teleport_time.load(Ordering::Relaxed);
+
+            // Resend teleport after 20 ticks (~1 second) timeout
+            if current_tick.wrapping_sub(last_time) > 20 {
+                self.awaiting_teleport_time
+                    .store(current_tick, Ordering::Relaxed);
+                drop(awaiting);
+
+                // Resend the teleport packet
+                let (yaw, pitch) = self.rotation.load();
+                let teleport_id = self.awaiting_teleport_id.load(Ordering::Relaxed);
+                self.connection.send_packet(CPlayerPosition::absolute(
+                    teleport_id,
+                    pos.x,
+                    pos.y,
+                    pos.z,
+                    yaw,
+                    pitch,
+                ));
+            }
+            return true; // Still awaiting, reject movement
+        }
+
+        self.awaiting_teleport_time
+            .store(self.tick_count.load(Ordering::Relaxed), Ordering::Relaxed);
+        false
+    }
+
+    /// Maximum movement speed threshold (meters per tick squared).
+    /// Vanilla uses 100.0 for normal movement, 300.0 for elytra flight.
+    const SPEED_THRESHOLD_NORMAL: f64 = 100.0;
+    const SPEED_THRESHOLD_FLYING: f64 = 300.0;
+
+    /// Movement error threshold - if player ends up more than this far from target, reject.
+    /// Matches vanilla's 0.0625 (1/16 of a block).
+    const MOVEMENT_ERROR_THRESHOLD: f64 = 0.0625;
+
+    /// Position clamping limits (matches vanilla).
+    const CLAMP_HORIZONTAL: f64 = 3.0E7;
+    const CLAMP_VERTICAL: f64 = 2.0E7;
+
+    /// Y-axis tolerance for movement error checks.
+    /// Vanilla ignores Y differences within this range after physics simulation.
+    const Y_TOLERANCE: f64 = 0.5;
+
+    /// Post-impulse grace period in ticks (vanilla uses ~10-20 ticks).
+    const IMPULSE_GRACE_TICKS: i32 = 20;
+
+    /// Clamps a horizontal coordinate to vanilla limits.
+    fn clamp_horizontal(value: f64) -> f64 {
+        value.clamp(-Self::CLAMP_HORIZONTAL, Self::CLAMP_HORIZONTAL)
+    }
+
+    /// Clamps a vertical coordinate to vanilla limits.
+    fn clamp_vertical(value: f64) -> f64 {
+        value.clamp(-Self::CLAMP_VERTICAL, Self::CLAMP_VERTICAL)
+    }
+
+    /// Returns true if the player is in post-impulse grace period.
+    fn is_in_post_impulse_grace_time(&self) -> bool {
+        let current_tick = self.tick_count.load(Ordering::Relaxed);
+        let last_impulse = self.last_impulse_tick.load(Ordering::Relaxed);
+        current_tick.wrapping_sub(last_impulse) < Self::IMPULSE_GRACE_TICKS
+    }
+
+    /// Marks that an impulse (knockback, etc.) was applied to the player.
+    pub fn apply_impulse(&self) {
+        self.last_impulse_tick
+            .store(self.tick_count.load(Ordering::Relaxed), Ordering::Relaxed);
+    }
+
+    /// Checks if player is currently in old collision (already stuck in blocks).
+    /// Used by vanilla to allow movement when already stuck.
+    fn is_in_collision_at(&self, pos: Vector3<f64>) -> bool {
+        let aabb = Self::make_player_aabb(pos);
+
+        let min_x = aabb.min_x.floor() as i32;
+        let max_x = aabb.max_x.ceil() as i32;
+        let min_y = aabb.min_y.floor() as i32;
+        let max_y = aabb.max_y.ceil() as i32;
+        let min_z = aabb.min_z.floor() as i32;
+        let max_z = aabb.max_z.ceil() as i32;
+
+        for bx in min_x..max_x {
+            for by in min_y..max_y {
+                for bz in min_z..max_z {
+                    let block_pos = BlockPos::new(bx, by, bz);
+                    let block_state = self.world.get_block_state(&block_pos);
+                    let collision_shape = block_state.get_collision_shape();
+
+                    for block_aabb in collision_shape {
+                        let world_aabb = block_aabb.at_block(bx, by, bz);
+                        if aabb.intersects_block_aabb(&world_aabb) {
+                            return true;
+                        }
+                    }
+                }
+            }
+        }
+
+        false
+    }
+
+    /// Returns the squared length of the player's current velocity.
+    fn get_delta_movement_length_sq(&self) -> f64 {
+        let dm = self.delta_movement.lock();
+        dm.x * dm.x + dm.y * dm.y + dm.z * dm.z
+    }
+
     /// Handles a move player packet.
+    ///
+    /// Matches vanilla `ServerGamePacketListenerImpl.handleMovePlayer()`.
+    #[allow(clippy::cast_lossless, clippy::too_many_lines, clippy::similar_names)]
     pub fn handle_move_player(&self, packet: SMovePlayer) {
         if Self::is_invalid_position(
             packet.get_x(0.0),
@@ -468,12 +717,156 @@ impl Player {
             return;
         }
 
-        if self.update_awaiting_teleport() || !self.client_loaded.load(Ordering::Relaxed) {
+        // Check awaiting teleport - if so, only update rotation (vanilla: absSnapRotationTo)
+        if self.update_awaiting_teleport() {
+            // While awaiting teleport, still allow rotation updates
+            if packet.has_rot {
+                self.rotation.store((packet.y_rot, packet.x_rot));
+            }
+            return;
+        }
+
+        if !self.client_loaded.load(Ordering::Relaxed) {
             return;
         }
 
         let prev_pos = *self.prev_position.lock();
         let prev_rot = self.prev_rotation.load();
+        let start_pos = *self.position.lock();
+        let game_mode = self.game_mode.load();
+        let is_spectator = game_mode == GameType::Spectator;
+        let is_creative = game_mode == GameType::Creative;
+        let is_sleeping = self.sleeping.load(Ordering::Relaxed);
+        let is_fall_flying = self.fall_flying.load(Ordering::Relaxed);
+        let was_on_ground = self.on_ground.load(Ordering::Relaxed);
+        // Skip movement checks when tick rate is frozen (vanilla: tickRateManager().runsNormally())
+        let tick_frozen = !self.world.tick_runs_normally();
+
+        // Handle position updates
+        if packet.has_pos {
+            // Clamp position to vanilla limits
+            let target_pos = Vector3::new(
+                Self::clamp_horizontal(packet.position.x),
+                Self::clamp_vertical(packet.position.y),
+                Self::clamp_horizontal(packet.position.z),
+            );
+            let first_good = *self.first_good_position.lock();
+            let last_good = *self.last_good_position.lock();
+
+            // Sleeping check - only allow small movements when sleeping
+            if is_sleeping {
+                let dx = target_pos.x - first_good.x;
+                let dy = target_pos.y - first_good.y;
+                let dz = target_pos.z - first_good.z;
+                let moved_dist_sq = dx * dx + dy * dy + dz * dz;
+
+                if moved_dist_sq > 1.0 {
+                    let (yaw, pitch) = self.rotation.load();
+                    self.teleport(start_pos.x, start_pos.y, start_pos.z, yaw, pitch);
+                    return;
+                }
+            } else {
+                // Increment received packet count
+                self.received_move_packet_count
+                    .fetch_add(1, Ordering::Relaxed);
+
+                // Calculate delta packets since last tick (for rate limiting)
+                let received = self.received_move_packet_count.load(Ordering::Relaxed);
+                let known = self.known_move_packet_count.load(Ordering::Relaxed);
+                let mut delta_packets = received - known;
+
+                // Cap delta packets to prevent abuse (vanilla caps at 5)
+                if delta_packets > 5 {
+                    delta_packets = 1;
+                }
+
+                // Speed check: distance from first_good position
+                let dx = target_pos.x - first_good.x;
+                let dy = target_pos.y - first_good.y;
+                let dz = target_pos.z - first_good.z;
+                let moved_dist_sq = dx * dx + dy * dy + dz * dz;
+
+                // Skip checks for spectators, creative mode, or when tick is frozen
+                let skip_checks = is_spectator || is_creative || tick_frozen;
+
+                // Speed check (configurable)
+                if !skip_checks && STEEL_CONFIG.checks.speed {
+                    let expected_dist_sq = self.get_delta_movement_length_sq();
+                    let threshold = if is_fall_flying {
+                        Self::SPEED_THRESHOLD_FLYING
+                    } else {
+                        Self::SPEED_THRESHOLD_NORMAL
+                    } * (delta_packets as f64);
+
+                    if moved_dist_sq - expected_dist_sq > threshold {
+                        // Player moved too fast - teleport back to current position
+                        let (yaw, pitch) = self.rotation.load();
+                        self.teleport(start_pos.x, start_pos.y, start_pos.z, yaw, pitch);
+                        return;
+                    }
+                }
+
+                // Calculate movement delta from last_good position
+                let move_dx = target_pos.x - last_good.x;
+                let mut move_dy = target_pos.y - last_good.y;
+                let move_dz = target_pos.z - last_good.z;
+
+                // Y-axis tolerance: ignore small Y discrepancies (vanilla behavior)
+                if move_dy > -Self::Y_TOLERANCE && move_dy < Self::Y_TOLERANCE {
+                    move_dy = 0.0;
+                }
+
+                // Movement error check (configurable)
+                // Vanilla checks if (moved_dist_sq > 0.0625) after physics simulation
+                // Since we don't have full physics, we check the squared distance directly
+                let movement_dist_sq = move_dx * move_dx + move_dy * move_dy + move_dz * move_dz;
+                let error_check_failed = STEEL_CONFIG.checks.movement_error
+                    && !self.is_in_post_impulse_grace_time()
+                    && movement_dist_sq > Self::MOVEMENT_ERROR_THRESHOLD;
+
+                // Collision check (configurable)
+                // Vanilla only runs collision check if error was detected AND player was
+                // already in collision at old position (to allow movement when stuck)
+                let collision_check_failed = STEEL_CONFIG.checks.collision
+                    && error_check_failed
+                    && self.is_in_collision_at(last_good)
+                    && self.is_colliding_with_new_blocks(last_good, target_pos);
+
+                // Also check collision without error if movement > 0 and not in old collision
+                let new_collision_without_error = STEEL_CONFIG.checks.collision
+                    && !error_check_failed
+                    && self.is_colliding_with_new_blocks(last_good, target_pos);
+
+                // Check for movement errors and collisions
+                let movement_failed = !skip_checks
+                    && ((error_check_failed && !self.is_in_collision_at(last_good))
+                        || collision_check_failed
+                        || new_collision_without_error);
+
+                if movement_failed {
+                    // Teleport back to start position
+                    let (yaw, pitch) = prev_rot;
+                    self.teleport(start_pos.x, start_pos.y, start_pos.z, yaw, pitch);
+                    return;
+                }
+
+                // Movement accepted - update last good position
+                *self.last_good_position.lock() = target_pos;
+
+                // Update velocity based on actual movement
+                *self.delta_movement.lock() = Vector3::new(move_dx, move_dy, move_dz);
+
+                // Jump detection (vanilla: jumpFromGround)
+                let moved_upwards = move_dy > 0.0;
+                if was_on_ground && !packet.on_ground && moved_upwards {
+                    // Player jumped - could trigger jump-related mechanics here
+                    // For now, this is a placeholder for future jump handling
+                }
+            }
+        }
+
+        // Update on_ground state from packet
+        self.on_ground.store(packet.on_ground, Ordering::Relaxed);
 
         // Update current state
         if packet.has_pos {
@@ -876,10 +1269,109 @@ impl Player {
         self.game_mode.load() == GameType::Creative
     }
 
+    /// Returns true if the player is currently sleeping.
+    #[must_use]
+    pub fn is_sleeping(&self) -> bool {
+        self.sleeping.load(Ordering::Relaxed)
+    }
+
+    /// Sets the player's sleeping state.
+    pub fn set_sleeping(&self, sleeping: bool) {
+        self.sleeping.store(sleeping, Ordering::Relaxed);
+    }
+
+    /// Returns true if the player is currently fall flying (elytra).
+    #[must_use]
+    pub fn is_fall_flying(&self) -> bool {
+        self.fall_flying.load(Ordering::Relaxed)
+    }
+
+    /// Sets the player's fall flying state.
+    pub fn set_fall_flying(&self, fall_flying: bool) {
+        self.fall_flying.store(fall_flying, Ordering::Relaxed);
+    }
+
+    /// Returns true if the player is on the ground.
+    #[must_use]
+    pub fn is_on_ground(&self) -> bool {
+        self.on_ground.load(Ordering::Relaxed)
+    }
+
+    /// Returns the player's current velocity.
+    #[must_use]
+    pub fn get_delta_movement(&self) -> Vector3<f64> {
+        *self.delta_movement.lock()
+    }
+
+    /// Sets the player's velocity.
+    pub fn set_delta_movement(&self, velocity: Vector3<f64>) {
+        *self.delta_movement.lock() = velocity;
+    }
+
     /// Returns true if we're waiting for a teleport confirmation.
     #[must_use]
     pub fn is_awaiting_teleport(&self) -> bool {
         self.awaiting_position_from_client.lock().is_some()
+    }
+
+    /// Teleports the player to a new position.
+    ///
+    /// Sends a `CPlayerPosition` packet and waits for client acknowledgment.
+    /// Until acknowledged, movement packets from the client will be rejected.
+    ///
+    /// Matches vanilla `ServerGamePacketListenerImpl.teleport()`.
+    pub fn teleport(&self, x: f64, y: f64, z: f64, yaw: f32, pitch: f32) {
+        let current_tick = self.tick_count.load(Ordering::Relaxed);
+        self.awaiting_teleport_time
+            .store(current_tick, Ordering::Relaxed);
+
+        // Pre-increment teleport ID, wrapping at i32::MAX (matches vanilla: ++awaitingTeleport)
+        let new_id = self
+            .awaiting_teleport_id
+            .fetch_update(Ordering::Relaxed, Ordering::Relaxed, |id| {
+                Some(if id == i32::MAX { 0 } else { id + 1 })
+            })
+            .map(|old| if old == i32::MAX { 0 } else { old + 1 })
+            .unwrap_or(1);
+
+        // Update player position (vanilla: player.teleportSetPosition)
+        *self.position.lock() = Vector3::new(x, y, z);
+        self.rotation.store((yaw, pitch));
+
+        // Store the position we're waiting for confirmation of
+        // (vanilla stores player.position() after teleportSetPosition)
+        *self.awaiting_position_from_client.lock() = Some(Vector3::new(x, y, z));
+
+        // Send the teleport packet with the new ID
+        self.connection
+            .send_packet(CPlayerPosition::absolute(new_id, x, y, z, yaw, pitch));
+    }
+
+    /// Handles a teleport acknowledgment from the client.
+    ///
+    /// Matches vanilla `ServerGamePacketListenerImpl.handleAcceptTeleportPacket()`.
+    pub fn handle_accept_teleportation(&self, packet: SAcceptTeleportation) {
+        let expected_id = self.awaiting_teleport_id.load(Ordering::Relaxed);
+
+        if packet.teleport_id == expected_id {
+            let mut awaiting = self.awaiting_position_from_client.lock();
+            if awaiting.is_none() {
+                // Client sent confirmation without server sending teleport
+                self.connection
+                    .disconnect(translations::MULTIPLAYER_DISCONNECT_INVALID_PLAYER_MOVEMENT.msg());
+                return;
+            }
+
+            // Snap player to awaited position (vanilla: player.absSnapTo)
+            if let Some(pos) = *awaiting {
+                *self.position.lock() = pos;
+                *self.last_good_position.lock() = pos;
+            }
+
+            // Clear awaiting state
+            *awaiting = None;
+        }
+        // If ID doesn't match, silently ignore (could be old/delayed packet)
     }
 
     /// Sends block update packets for a position and its neighbor.

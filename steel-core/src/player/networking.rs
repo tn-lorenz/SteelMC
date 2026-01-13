@@ -9,10 +9,11 @@ use steel_protocol::packet_traits::{ClientPacket, CompressionInfo, EncodedPacket
 use steel_protocol::packet_writer::TCPNetworkEncoder;
 use steel_protocol::packets::common::{CDisconnect, CKeepAlive, SCustomPayload, SKeepAlive};
 use steel_protocol::packets::game::{
-    SChat, SChatAck, SChatCommand, SChatSessionUpdate, SChunkBatchReceived, SClientTickEnd,
-    SContainerButtonClick, SContainerClick, SContainerClose, SContainerSlotStateChanged,
-    SMovePlayerPos, SMovePlayerPosRot, SMovePlayerRot, SPickItemFromBlock, SPlayerAction,
-    SPlayerInput, SPlayerLoad, SSetCarriedItem, SSetCreativeModeSlot, SSwing, SUseItem, SUseItemOn,
+    SAcceptTeleportation, SChat, SChatAck, SChatCommand, SChatSessionUpdate, SChunkBatchReceived,
+    SClientTickEnd, SContainerButtonClick, SContainerClick, SContainerClose,
+    SContainerSlotStateChanged, SMovePlayerPos, SMovePlayerPosRot, SMovePlayerRot,
+    SMovePlayerStatusOnly, SPickItemFromBlock, SPlayerAction, SPlayerInput, SPlayerLoad,
+    SSetCarriedItem, SSetCreativeModeSlot, SSwing, SUseItem, SUseItemOn,
 };
 use steel_protocol::utils::{ConnectionProtocol, EnqueuedPacket, PacketError, RawPacket};
 use steel_registry::packets::play;
@@ -182,6 +183,9 @@ impl JavaConnection {
         let data = &mut Cursor::new(packet.payload);
 
         match packet.id {
+            play::S_ACCEPT_TELEPORTATION => {
+                player.handle_accept_teleportation(SAcceptTeleportation::read_packet(data)?);
+            }
             play::C_CUSTOM_PAYLOAD => {
                 player.handle_custom_payload(SCustomPayload::read_packet(data)?);
             }
@@ -216,6 +220,9 @@ impl JavaConnection {
             }
             play::S_MOVE_PLAYER_ROT => {
                 player.handle_move_player(SMovePlayerRot::read_packet(data)?.into());
+            }
+            play::S_MOVE_PLAYER_STATUS_ONLY => {
+                player.handle_move_player(SMovePlayerStatusOnly::read_packet(data)?.into());
             }
             play::S_PLAYER_LOADED => {
                 let _ = SPlayerLoad::read_packet(data)?;

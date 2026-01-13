@@ -1,7 +1,10 @@
 //! This module contains the `World` struct, which represents a world.
 use std::{
     io,
-    sync::{Arc, Weak},
+    sync::{
+        Arc, Weak,
+        atomic::{AtomicBool, Ordering},
+    },
     time::Duration,
 };
 
@@ -38,6 +41,9 @@ pub struct World {
     pub player_area_map: PlayerAreaMap,
     /// The dimension of the world.
     pub dimension: DimensionTypeRef,
+    /// Whether the tick rate is running normally (not frozen/paused).
+    /// When false, movement validation checks are skipped.
+    tick_runs_normally: AtomicBool,
 }
 
 impl World {
@@ -53,6 +59,7 @@ impl World {
             players: PlayerMap::new(),
             player_area_map: PlayerAreaMap::new(),
             dimension,
+            tick_runs_normally: AtomicBool::new(true),
         })
     }
 
@@ -101,6 +108,23 @@ impl World {
     #[must_use]
     pub fn may_interact(&self, _player: &Player, pos: &BlockPos) -> bool {
         self.is_in_valid_bounds(pos)
+    }
+
+    /// Returns whether the tick rate is running normally.
+    ///
+    /// When false (frozen/paused), movement validation checks should be skipped.
+    /// Matches vanilla's `level.tickRateManager().runsNormally()`.
+    #[must_use]
+    pub fn tick_runs_normally(&self) -> bool {
+        self.tick_runs_normally.load(Ordering::Relaxed)
+    }
+
+    /// Sets whether the tick rate is running normally.
+    ///
+    /// Set to false to freeze/pause the world (e.g., via `/tick freeze` command).
+    pub fn set_tick_runs_normally(&self, runs_normally: bool) {
+        self.tick_runs_normally
+            .store(runs_normally, Ordering::Relaxed);
     }
 
     /// Gets the block state at the given position.
