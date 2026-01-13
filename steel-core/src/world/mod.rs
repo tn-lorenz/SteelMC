@@ -158,10 +158,7 @@ impl World {
 
         // Record the block change for broadcasting to clients
         log::debug!(
-            "Block changed at {:?}: {:?} -> {:?}",
-            pos,
-            old_state,
-            block_state
+            "Block changed at {pos:?}: {old_state:?} -> {block_state:?}"
         );
         self.chunk_map.block_changed(&pos);
 
@@ -253,11 +250,7 @@ impl World {
 
         if new_state != current_state {
             log::debug!(
-                "Shape update at {:?}: {:?} -> {:?} (neighbor {:?} changed)",
-                pos,
-                current_state,
-                new_state,
-                neighbor_pos
+                "Shape update at {pos:?}: {current_state:?} -> {new_state:?} (neighbor {neighbor_pos:?} changed)"
             );
             // Use set_block_with_limit to prevent infinite recursion
             self.set_block_with_limit(pos, new_state, flags, update_limit);

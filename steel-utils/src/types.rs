@@ -297,21 +297,23 @@ impl SectionPos {
     }
 
     /// Packs the section position into an i64.
+    /// Format: (x << 42) | (z << 20) | y
     #[must_use]
     pub fn as_i64(&self) -> i64 {
         let x = i64::from(self.0.x);
         let y = i64::from(self.0.y);
         let z = i64::from(self.0.z);
 
-        ((x & 0x3F_FFFF) << 42) | ((y & 0xF_FFFF) << 20) | (z & 0x3F_FFFF)
+        ((x & 0x3F_FFFF) << 42) | ((z & 0x3F_FFFF) << 20) | (y & 0xF_FFFF)
     }
 
     /// Unpacks a section position from an i64.
+    /// Format: (x << 42) | (z << 20) | y
     #[must_use]
     pub fn from_i64(value: i64) -> Self {
         let x = value >> 42;
-        let y = (value >> 20) & 0xF_FFFF;
-        let z = value & 0x3F_FFFF;
+        let z = (value >> 20) & 0x3F_FFFF;
+        let y = value & 0xF_FFFF;
 
         // Sign extend
         let x = (x << 42) >> 42;
