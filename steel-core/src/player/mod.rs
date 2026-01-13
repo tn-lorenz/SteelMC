@@ -26,9 +26,12 @@ use message_chain::SignedMessageChain;
 use message_validator::LastSeenMessagesValidator;
 use profile_key::RemoteChatSession;
 pub use signature_cache::{LastSeen, MessageCache};
+use steel_protocol::packets::game::CSetHeldSlot;
 use steel_protocol::packets::game::{
-    AnimateAction, CAnimate, PlayerAction, SPlayerAction, SSetCarriedItem, SUseItem, SUseItemOn,
+    AnimateAction, CAnimate, PlayerAction, SPickItemFromBlock, SPlayerAction, SSetCarriedItem,
+    SUseItem, SUseItemOn,
 };
+use steel_registry::blocks::block_state_ext::BlockStateExt;
 use steel_utils::locks::SyncMutex;
 use steel_utils::types::GameType;
 
@@ -48,7 +51,7 @@ use steel_protocol::packets::{
     },
 };
 use steel_registry::{
-    blocks::properties::Direction, compat_traits::RegistryPlayer, item_stack::ItemStack,
+    REGISTRY, blocks::properties::Direction, compat_traits::RegistryPlayer, item_stack::ItemStack,
     items::item::InteractionResult,
 };
 use steel_utils::BlockPos;
@@ -1067,6 +1070,74 @@ impl Player {
             packet.x_rot
         );
         // TODO: Implement use item handler
+    }
+
+    /// Handles the pick block action (middle click on a block).
+    pub fn handle_pick_item_from_block(&self, packet: SPickItemFromBlock) {
+        // Check if player is within interaction range (with 1.0 buffer like vanilla)
+        if !self.is_within_block_interaction_range(&packet.pos) {
+            return;
+        }
+
+        // Get block state at position
+        let state = self.world.get_block_state(&packet.pos);
+        if state.is_air() {
+            return;
+        }
+
+        // Get the block and its behavior
+        let block = state.get_block();
+        let behavior = REGISTRY.blocks.get_behavior(block);
+
+        // Only include data if player has infinite materials (creative mode)
+        let include_data = self.has_infinite_materials() && packet.include_data;
+
+        // Get clone item stack from behavior (handles blocks with different item keys)
+        let Some(item_stack) = behavior.get_clone_item_stack(block, state, include_data) else {
+            // No corresponding item for this block (e.g., fire, portal)
+            return;
+        };
+
+        if item_stack.is_empty() {
+            return;
+        }
+
+        // TODO: If include_data, add block entity NBT data to the item stack
+        // This requires block entity support which isn't implemented yet
+
+        let mut inventory = self.inventory.lock();
+
+        // Find existing slot with this item
+        let slot_with_item = inventory.find_slot_matching_item(&item_stack);
+
+        if slot_with_item != -1 {
+            // Item found in inventory
+            if PlayerInventory::is_hotbar_slot(slot_with_item as usize) {
+                // Already in hotbar, just switch to that slot
+                inventory.set_selected_slot(slot_with_item as u8);
+            } else {
+                // In main inventory, swap with current hotbar slot
+                inventory.pick_slot(slot_with_item);
+            }
+        } else if self.has_infinite_materials() {
+            // Creative mode: add item to inventory
+            inventory.add_and_pick_item(item_stack);
+        } else {
+            // Survival mode and item not in inventory - do nothing
+            return;
+        }
+
+        // Send updated held slot to client
+        self.connection.send_packet(CSetHeldSlot {
+            slot: i32::from(inventory.get_selected_slot()),
+        });
+
+        // Broadcast inventory changes
+        drop(inventory);
+        self.inventory_menu
+            .lock()
+            .behavior_mut()
+            .broadcast_changes(&self.connection);
     }
 
     /// Sets selected slot

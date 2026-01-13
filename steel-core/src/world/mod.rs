@@ -157,9 +157,7 @@ impl World {
         };
 
         // Record the block change for broadcasting to clients
-        log::debug!(
-            "Block changed at {pos:?}: {old_state:?} -> {block_state:?}"
-        );
+        log::debug!("Block changed at {pos:?}: {old_state:?} -> {block_state:?}");
         self.chunk_map.block_changed(&pos);
 
         // Neighbor updates (when UPDATE_NEIGHBORS is set)

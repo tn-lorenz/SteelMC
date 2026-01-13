@@ -41,6 +41,7 @@ mod s_container_click;
 mod s_container_close;
 mod s_container_slot_state_changed;
 mod s_move_player;
+mod s_pick_item_from_block;
 mod s_player_action;
 mod s_player_input;
 mod s_player_load;
@@ -101,6 +102,7 @@ pub use s_container_click::{ClickType, HashedPatchMap, HashedStack, SContainerCl
 pub use s_container_close::SContainerClose;
 pub use s_container_slot_state_changed::SContainerSlotStateChanged;
 pub use s_move_player::{SMovePlayer, SMovePlayerPos, SMovePlayerPosRot, SMovePlayerRot};
+pub use s_pick_item_from_block::SPickItemFromBlock;
 pub use s_player_action::{PlayerAction, SPlayerAction};
 pub use s_player_input::SPlayerInput;
 pub use s_player_load::SPlayerLoad;

@@ -310,6 +310,27 @@ pub trait BlockBehaviour: Send + Sync {
         // Default: no-op
         // Override for redstone components, doors, etc.
     }
+
+    /// Returns the item stack to give when a player picks this block (middle click).
+    ///
+    /// The default implementation looks up an item with the same key as the block.
+    /// Override this for blocks where the pick item differs from the block key
+    /// (e.g., crops → seeds, redstone wire → redstone dust, wall torch → torch).
+    ///
+    /// # Arguments
+    /// * `block` - The block being picked
+    /// * `_state` - The block state (some blocks vary pick item based on state)
+    /// * `_include_data` - Whether to include block entity data (creative + Ctrl)
+    #[allow(unused_variables)]
+    fn get_clone_item_stack(
+        &self,
+        block: BlockRef,
+        state: BlockStateId,
+        include_data: bool,
+    ) -> Option<ItemStack> {
+        // Default: look up item by block's key
+        REGISTRY.items.by_key(&block.key).map(ItemStack::new)
+    }
 }
 
 /// A placeholder behavior that returns None for placement.
