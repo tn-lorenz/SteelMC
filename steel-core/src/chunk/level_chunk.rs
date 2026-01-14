@@ -255,14 +255,14 @@ impl LevelChunk {
             if block_changed && (flags.contains(UpdateFlags::UPDATE_NEIGHBORS) || moved_by_piston) {
                 let block_behaviors = BLOCK_BEHAVIORS.get().expect("Behaviors not initialized");
                 let behavior = block_behaviors.get_behavior(old_block);
-                behavior.affect_neighbors_after_removal(old_state, &*level, pos, moved_by_piston);
+                behavior.affect_neighbors_after_removal(old_state, &level, pos, moved_by_piston);
             }
 
             // Call on_place for the new block
             if !flags.contains(UpdateFlags::UPDATE_SKIP_ON_PLACE) {
                 let block_behaviors = BLOCK_BEHAVIORS.get().expect("Behaviors not initialized");
                 let behavior = block_behaviors.get_behavior(new_block);
-                behavior.on_place(state, &*level, pos, old_state, moved_by_piston);
+                behavior.on_place(state, &level, pos, old_state, moved_by_piston);
             }
 
             // TODO: Block entity creation

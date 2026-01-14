@@ -31,21 +31,26 @@ fn generate_registrations<'a>(
 }
 
 pub fn build(blocks: &[BlockClass]) -> String {
+    let mut crafting_table_blocks = Vec::new();
     let mut fence_blocks = Vec::new();
     let mut rotated_pillar_blocks = Vec::new();
 
     for block in blocks {
         let const_ident = to_const_ident(&block.name);
         match block.class.as_str() {
+            "CraftingTableBlock" => crafting_table_blocks.push(const_ident),
             "FenceBlock" => fence_blocks.push(const_ident),
             "RotatedPillarBlock" => rotated_pillar_blocks.push(const_ident),
             _ => {}
         }
     }
 
+    let crafting_table_type = Ident::new("CraftingTableBlock", Span::call_site());
     let fence_type = Ident::new("FenceBlock", Span::call_site());
     let pillar_type = Ident::new("RotatedPillarBlock", Span::call_site());
 
+    let crafting_table_registrations =
+        generate_registrations(crafting_table_blocks.iter(), &crafting_table_type);
     let fence_registrations = generate_registrations(fence_blocks.iter(), &fence_type);
     let pillar_registrations = generate_registrations(rotated_pillar_blocks.iter(), &pillar_type);
 
@@ -54,9 +59,10 @@ pub fn build(blocks: &[BlockClass]) -> String {
 
         use steel_registry::vanilla_blocks;
         use crate::behavior::BlockBehaviorRegistry;
-        use crate::behavior::blocks::{FenceBlock, RotatedPillarBlock};
+        use crate::behavior::blocks::{CraftingTableBlock, FenceBlock, RotatedPillarBlock};
 
         pub fn register_block_behaviors(registry: &mut BlockBehaviorRegistry) {
+            #crafting_table_registrations
             #fence_registrations
             #pillar_registrations
         }

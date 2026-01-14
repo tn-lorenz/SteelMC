@@ -4,7 +4,6 @@
 //! the `useItemOn` method that handles block placement and block interactions.
 
 use steel_registry::REGISTRY;
-use steel_registry::vanilla_blocks;
 use steel_utils::types::{GameType, InteractionHand};
 
 use crate::behavior::{
@@ -71,21 +70,18 @@ pub fn use_item_on(
         if matches!(block_result, InteractionResult::TryEmptyHandInteraction)
             && hand == InteractionHand::MainHand
         {
-            // Handle special blocks that open menus
-            // This is done here in steel-core because menu management requires Player
-            if block.key == vanilla_blocks::CRAFTING_TABLE.key {
-                // Release the inventory lock before opening the menu
-                drop(inv);
-                player.open_crafting_menu(*pos);
-                // TODO: Award stat INTERACT_WITH_CRAFTING_TABLE
-                return InteractionResult::Success;
-            }
+            // Release the inventory lock before calling use_without_item
+            // since block behaviors may need to open menus
+            drop(inv);
 
             let empty_result = behavior.use_without_item(state, world, *pos, player, hit_result);
 
             if empty_result.consumes_action() {
                 return empty_result;
             }
+
+            // Re-acquire lock for item use below
+            inv = player.inventory.lock();
         }
     }
 
