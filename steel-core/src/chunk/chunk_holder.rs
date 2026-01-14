@@ -307,11 +307,15 @@ impl ChunkHolder {
                 {
                     self_clone.insert_chunk(chunk, status);
                 } else {
+                    // Clone holder before moving into rayon closure
+                    let holder_for_notify = self_clone.clone();
                     rayon_spawn(&thread_pool, move || {
                         task(context, step, &cache, self_clone)
                     })
                     .await
                     .expect("Should never fail creating an empty chunk");
+                    // Notify after rayon completes - this runs on tokio, not rayon
+                    holder_for_notify.notify_status(target_status);
                 }
                 Some(())
             } else {
@@ -429,8 +433,22 @@ impl ChunkHolder {
     }
 
     /// Inserts a chunk into the holder with a specific status.
+    /// This notifies watchers - use `insert_chunk_no_notify` + separate notification
+    /// if calling from a rayon thread to avoid contention.
     pub fn insert_chunk(&self, chunk: ChunkAccess, status: ChunkStatus) {
         self.data.store(Some(Arc::new(chunk)));
+        self.sender.send_replace(ChunkResult::Ok(status));
+    }
+
+    /// Inserts a chunk into the holder without notifying watchers.
+    /// The caller is responsible for notifying via the completion channel.
+    pub(crate) fn insert_chunk_no_notify(&self, chunk: ChunkAccess) {
+        self.data.store(Some(Arc::new(chunk)));
+    }
+
+    /// Notifies watchers that the chunk has reached a status.
+    /// Called by the drainer task after `insert_chunk_no_notify`.
+    pub(crate) fn notify_status(&self, status: ChunkStatus) {
         self.sender.send_replace(ChunkResult::Ok(status));
     }
 
