@@ -455,12 +455,13 @@ impl MenuBehavior {
         // Transfer state for matching slots
         for (slot_index, slot) in self.slots.iter().enumerate() {
             if let Some(key) = slot.container_key()
-                && let Some(&other_slot_index) = other_slots.get(&key) {
-                    // Transfer last_slots (the cached item state)
-                    self.last_slots[slot_index] = other.last_slots[other_slot_index].clone();
-                    // Transfer remote_slots (client's perception)
-                    self.remote_slots[slot_index] = other.remote_slots[other_slot_index].clone();
-                }
+                && let Some(&other_slot_index) = other_slots.get(&key)
+            {
+                // Transfer last_slots (the cached item state)
+                self.last_slots[slot_index] = other.last_slots[other_slot_index].clone();
+                // Transfer remote_slots (client's perception)
+                self.remote_slots[slot_index] = other.remote_slots[other_slot_index].clone();
+            }
         }
     }
 

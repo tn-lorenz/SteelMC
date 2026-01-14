@@ -7,7 +7,6 @@ use std::mem;
 use std::sync::atomic::{AtomicBool, AtomicU8, AtomicUsize, Ordering};
 use std::sync::{Arc, Weak};
 use steel_utils::{BlockPos, ChunkPos, SectionPos, locks::SyncMutex};
-use tokio::select;
 use tokio::sync::{oneshot, watch};
 
 use crate::chunk::chunk_generation_task::{NeighborReady, StaticCache2D};
@@ -57,8 +56,7 @@ pub struct ChunkHolder {
     /// The highest status that has started work.
     started_work: AtomicUsize,
     /// The highest status that generation is allowed to reach.
-    highest_allowed_status: watch::Receiver<u8>,
-    highest_allowed_status_sender: watch::Sender<u8>,
+    highest_allowed_status: AtomicU8,
     /// The minimum Y coordinate of the world.
     min_y: i32,
     /// The total height of the world.
@@ -90,9 +88,8 @@ impl ChunkHolder {
     #[must_use]
     pub fn new(pos: ChunkPos, ticket_level: u8, min_y: i32, height: i32) -> Self {
         let (sender, receiver) = watch::channel(ChunkResult::Unloaded);
-        let (highest_allowed_status_sender, highest_allowed_status_receiver) = watch::channel(
-            generation_status(Some(ticket_level)).map_or(STATUS_NONE, |s| s.get_index() as u8),
-        );
+        let highest_allowed_status =
+            generation_status(Some(ticket_level)).map_or(STATUS_NONE, |s| s.get_index() as u8);
 
         let section_count = (height / 16) as usize;
         let changed_blocks_per_section: Box<[SyncMutex<FxHashSet<i16>>]> = (0..section_count)
@@ -107,8 +104,7 @@ impl ChunkHolder {
             pos,
             ticket_level: AtomicU8::new(ticket_level),
             started_work: AtomicUsize::new(usize::MAX),
-            highest_allowed_status: highest_allowed_status_receiver,
-            highest_allowed_status_sender,
+            highest_allowed_status: AtomicU8::new(highest_allowed_status),
             min_y,
             height,
             has_changed_sections: AtomicBool::new(false),
@@ -120,7 +116,8 @@ impl ChunkHolder {
     pub fn update_highest_allowed_status(&self, ticket_level: u8) {
         let new_status =
             generation_status(Some(ticket_level)).map_or(STATUS_NONE, |s| s.get_index() as u8);
-        self.highest_allowed_status_sender.send_replace(new_status);
+        self.highest_allowed_status
+            .store(new_status, Ordering::Release);
     }
 
     /// Records a block change at the given position.
@@ -169,7 +166,7 @@ impl ChunkHolder {
 
     /// Checks if the given status is disallowed.
     pub fn is_status_disallowed(&self, status: ChunkStatus) -> bool {
-        let allowed = *self.highest_allowed_status.borrow();
+        let allowed = self.highest_allowed_status.load(Ordering::Acquire);
         if allowed == STATUS_NONE {
             return true;
         }
@@ -230,7 +227,6 @@ impl ChunkHolder {
         status: ChunkStatus,
     ) -> impl Future<Output = Option<Guard<Option<Arc<ChunkAccess>>>>> {
         let mut subscriber = self.sender.subscribe();
-        let mut status_subscriber = self.highest_allowed_status_sender.subscribe();
         async move {
             loop {
                 {
@@ -250,19 +246,9 @@ impl ChunkHolder {
                     return None;
                 }
 
-                select! {
-                    val = subscriber.changed() => {
-                        if val.is_err() {
-                            log::error!("Failed to wait for chunk access");
-                            return None;
-                        }
-                    }
-                    val = status_subscriber.changed() => {
-                        if val.is_err() {
-                            log::error!("Failed to wait for highest allowed status");
-                            return None;
-                        }
-                    }
+                if subscriber.changed().await.is_err() {
+                    log::error!("Failed to wait for chunk access");
+                    return None;
                 }
             }
         }

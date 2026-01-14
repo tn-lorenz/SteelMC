@@ -82,8 +82,8 @@ impl ChunkMap {
         )));
 
         Self {
-            chunks: scc::HashMap::with_capacity_and_hasher(1000, FxBuildHasher),
-            unloading_chunks: scc::HashMap::with_capacity_and_hasher(1000, FxBuildHasher),
+            chunks: scc::HashMap::default(),
+            unloading_chunks: scc::HashMap::default(),
             pending_generation_tasks: SyncMutex::new(Vec::new()),
             task_tracker: TaskTracker::new(),
             chunk_tickets: SyncMutex::new(ChunkTicketManager::new()),
