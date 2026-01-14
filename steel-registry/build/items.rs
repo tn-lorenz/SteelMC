@@ -237,8 +237,6 @@ pub(crate) fn build() -> TokenStream {
 
     let mut item_definitions = TokenStream::new();
     let mut item_construction = TokenStream::new();
-    let mut behavior_definitions = TokenStream::new();
-    let mut behavior_assignments = TokenStream::new();
 
     for item in &item_assets.items {
         let item_ident = Ident::new(&item.name, Span::call_site());
@@ -250,20 +248,6 @@ pub(crate) fn build() -> TokenStream {
 
         if let Some(block_name) = &item.block_item {
             let block_ident = Ident::new(&block_name.to_shouty_snake_case(), Span::call_site());
-            let behavior_ident = Ident::new(
-                &format!("{}_BEHAVIOR", item.name.to_shouty_snake_case()),
-                Span::call_site(),
-            );
-
-            // Generate behavior static
-            behavior_definitions.extend(quote! {
-                static #behavior_ident: BlockItemBehavior = BlockItemBehavior::new(vanilla_blocks::#block_ident);
-            });
-
-            // Generate behavior assignment
-            behavior_assignments.extend(quote! {
-                registry.set_behavior(&ITEMS.#item_ident, &#behavior_ident);
-            });
 
             if block_name != &item.name {
                 item_construction.extend(quote! {
@@ -306,7 +290,7 @@ pub(crate) fn build() -> TokenStream {
         use crate::{
             data_components::{vanilla_components, DataComponentMap},
             vanilla_blocks,
-            items::{Item, ItemRegistry, item::BlockItemBehavior},
+            items::{Item, ItemRegistry},
         };
         use steel_utils::Identifier;
         use std::sync::LazyLock;
@@ -327,14 +311,6 @@ pub(crate) fn build() -> TokenStream {
 
         pub fn register_items(registry: &mut ItemRegistry) {
             #register_stream
-        }
-
-        // Behavior statics
-        #behavior_definitions
-
-        /// Assigns behaviors to items after registration
-        pub fn assign_item_behaviors(registry: &mut ItemRegistry) {
-            #behavior_assignments
         }
     }
 }

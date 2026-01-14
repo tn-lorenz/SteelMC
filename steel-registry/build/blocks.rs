@@ -580,32 +580,18 @@ pub(crate) fn build() -> TokenStream {
     }
 
     let mut register_stream = TokenStream::new();
-    let mut behavior_statics = TokenStream::new();
-    let mut behavior_assignments = TokenStream::new();
 
     for block in &block_assets.blocks {
         let block_name = Ident::new(&block.name.to_shouty_snake_case(), Span::call_site());
-        let behavior_name = Ident::new(
-            &format!("{}_BEHAVIOR", block.name.to_shouty_snake_case()),
-            Span::call_site(),
-        );
 
         register_stream.extend(quote! {
             registry.register(#block_name);
-        });
-
-        behavior_statics.extend(quote! {
-            static #behavior_name: DefaultBlockBehaviour = DefaultBlockBehaviour::new(#block_name);
-        });
-
-        behavior_assignments.extend(quote! {
-            registry.set_behavior(#block_name, &#behavior_name);
         });
     }
 
     quote! {
         use crate::{
-            blocks::{behaviour::{BlockConfig, PushReaction, DefaultBlockBehaviour}, Block, offset, BlockRegistry},
+            blocks::{behaviour::{BlockConfig, PushReaction}, Block, offset, BlockRegistry},
             blocks::properties::{self, BlockStateProperties, NoteBlockInstrument},
             blocks::shapes::AABB,
         };
@@ -625,12 +611,6 @@ pub(crate) fn build() -> TokenStream {
 
         pub fn register_blocks(registry: &mut BlockRegistry) {
             #register_stream
-        }
-
-        #behavior_statics
-
-        pub fn assign_block_behaviors(registry: &mut BlockRegistry) {
-            #behavior_assignments
         }
     }
 }

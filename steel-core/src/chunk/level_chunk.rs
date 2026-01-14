@@ -16,6 +16,7 @@ use steel_utils::{
     BlockPos, BlockStateId, ChunkPos, codec::BitSet, locks::SyncRwLock, types::UpdateFlags,
 };
 
+use crate::behavior::BLOCK_BEHAVIORS;
 use crate::chunk::{
     heightmap::{ChunkHeightmaps, HeightmapType},
     proto_chunk::ProtoChunk,
@@ -153,6 +154,10 @@ impl LevelChunk {
     /// * `pos` - The absolute block position
     /// * `state` - The new block state to set
     /// * `flags` - Update flags controlling behavior
+    ///
+    /// # Panics
+    ///
+    /// Panics if the behavior registry has not been initialized.
     #[must_use]
     pub fn set_block_state(
         &self,
@@ -248,13 +253,15 @@ impl LevelChunk {
 
             // Notify neighbors that we were removed (for rails, etc.)
             if block_changed && (flags.contains(UpdateFlags::UPDATE_NEIGHBORS) || moved_by_piston) {
-                let behavior = REGISTRY.blocks.get_behavior(old_block);
+                let block_behaviors = BLOCK_BEHAVIORS.get().expect("Behaviors not initialized");
+                let behavior = block_behaviors.get_behavior(old_block);
                 behavior.affect_neighbors_after_removal(old_state, &*level, pos, moved_by_piston);
             }
 
             // Call on_place for the new block
             if !flags.contains(UpdateFlags::UPDATE_SKIP_ON_PLACE) {
-                let behavior = REGISTRY.blocks.get_behavior(new_block);
+                let block_behaviors = BLOCK_BEHAVIORS.get().expect("Behaviors not initialized");
+                let behavior = block_behaviors.get_behavior(new_block);
                 behavior.on_place(state, &*level, pos, old_state, moved_by_piston);
             }
 

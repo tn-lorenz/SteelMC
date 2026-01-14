@@ -1,14 +1,11 @@
-use steel_utils::{BlockPos, BlockStateId, math::Vector3, types::InteractionHand};
+//! Block configuration and static properties.
+//!
+//! This module contains constant/static data about blocks. Dynamic behavior
+//! has been moved to `steel-core::behavior`.
 
-use crate::REGISTRY;
-use crate::compat_traits::{RegistryPlayer, RegistryWorld};
-use crate::item_stack::ItemStack;
-use crate::items::item::{BlockHitResult, InteractionResult};
-
-use crate::blocks::BlockRef;
-use crate::blocks::properties::Direction;
 pub use crate::blocks::properties::NoteBlockInstrument;
 
+/// How a block reacts when pushed by a piston.
 #[derive(Debug, Clone, Copy)]
 pub enum PushReaction {
     Normal,
@@ -18,6 +15,10 @@ pub enum PushReaction {
     PushOnly,
 }
 
+/// Static configuration for a block type.
+///
+/// This contains constant properties that don't change based on game state.
+/// Dynamic behavior is handled by `BlockBehaviour` in steel-core.
 #[derive(Debug)]
 pub struct BlockConfig {
     pub has_collision: bool,
@@ -178,195 +179,5 @@ impl BlockConfig {
 impl Default for BlockConfig {
     fn default() -> Self {
         Self::new()
-    }
-}
-
-pub struct BlockPlaceContext<'a> {
-    pub clicked_pos: BlockPos,
-    pub clicked_face: Direction,
-    pub click_location: Vector3<f64>,
-    pub inside: bool,
-    pub relative_pos: BlockPos,
-    pub replace_clicked: bool,
-    pub horizontal_direction: Direction,
-    pub rotation: f32,
-    pub world: &'a dyn RegistryWorld,
-}
-
-pub trait BlockBehaviour: Send + Sync {
-    /// Called when a neighboring block changes shape.
-    /// Returns the new state for this block after considering the neighbor change.
-    fn update_shape(
-        &self,
-        state: BlockStateId,
-        _world: &dyn RegistryWorld,
-        _pos: BlockPos,
-        _direction: Direction,
-        _neighbor_pos: BlockPos,
-        _neighbor_state: BlockStateId,
-    ) -> BlockStateId {
-        state
-    }
-
-    /// Returns the block state to use when placing this block.
-    fn get_state_for_placement(&self, context: &BlockPlaceContext<'_>) -> Option<BlockStateId>;
-
-    /// Called when this block is placed in the world.
-    ///
-    /// # Arguments
-    /// * `state` - The new block state that was placed
-    /// * `world` - The world the block was placed in
-    /// * `pos` - The position where the block was placed
-    /// * `old_state` - The previous block state at this position
-    /// * `moved_by_piston` - Whether the block was moved by a piston
-    #[allow(unused_variables)]
-    fn on_place(
-        &self,
-        state: BlockStateId,
-        world: &dyn RegistryWorld,
-        pos: BlockPos,
-        old_state: BlockStateId,
-        moved_by_piston: bool,
-    ) {
-        // Default: no-op
-    }
-
-    /// Called after this block is removed from the world, to affect neighbors.
-    ///
-    /// This is used for things like rails notifying neighbors when removed.
-    ///
-    /// # Arguments
-    /// * `state` - The block state that was removed
-    /// * `world` - The world the block was removed from
-    /// * `pos` - The position where the block was removed
-    /// * `moved_by_piston` - Whether the block was moved by a piston
-    #[allow(unused_variables)]
-    fn affect_neighbors_after_removal(
-        &self,
-        state: BlockStateId,
-        world: &dyn RegistryWorld,
-        pos: BlockPos,
-        moved_by_piston: bool,
-    ) {
-        // Default: no-op
-    }
-
-    /// Called when a player uses an item on this block.
-    ///
-    /// Returns `TryEmptyHandInteraction` by default to fall through to item use.
-    /// Override this to handle block-specific interactions (e.g., opening chests,
-    /// using buttons, etc.).
-    #[allow(unused_variables, clippy::too_many_arguments)]
-    fn use_item_on(
-        &self,
-        item_stack: &ItemStack,
-        state: BlockStateId,
-        world: &dyn RegistryWorld,
-        pos: BlockPos,
-        player: &dyn RegistryPlayer,
-        hand: InteractionHand,
-        hit_result: &BlockHitResult,
-    ) -> InteractionResult {
-        InteractionResult::TryEmptyHandInteraction
-    }
-
-    /// Called when a player uses this block without an item (or as a fallback
-    /// when `use_item_on` returns `TryEmptyHandInteraction`).
-    ///
-    /// Returns `Pass` by default. Override this for blocks that have interactions
-    /// without needing an item (e.g., buttons, levers, repeaters).
-    #[allow(unused_variables)]
-    fn use_without_item(
-        &self,
-        state: BlockStateId,
-        world: &dyn RegistryWorld,
-        pos: BlockPos,
-        player: &dyn RegistryPlayer,
-        hit_result: &BlockHitResult,
-    ) -> InteractionResult {
-        InteractionResult::Pass
-    }
-
-    /// Called when a neighboring block changes (not shape-related).
-    ///
-    /// This is the Rust equivalent of vanilla's `BlockState.handleNeighborChanged()`.
-    /// Used by redstone components, doors, and other blocks that react to neighbor changes.
-    ///
-    /// # Arguments
-    /// * `state` - The current block state
-    /// * `world` - The world
-    /// * `pos` - Position of this block
-    /// * `source_block` - The block type that changed
-    /// * `moved_by_piston` - Whether the change was caused by a piston
-    #[allow(unused_variables)]
-    fn handle_neighbor_changed(
-        &self,
-        state: BlockStateId,
-        world: &dyn RegistryWorld,
-        pos: BlockPos,
-        source_block: BlockRef,
-        moved_by_piston: bool,
-    ) {
-        // Default: no-op
-        // Override for redstone components, doors, etc.
-    }
-
-    /// Returns the item stack to give when a player picks this block (middle click).
-    ///
-    /// The default implementation looks up an item with the same key as the block.
-    /// Override this for blocks where the pick item differs from the block key
-    /// (e.g., crops → seeds, redstone wire → redstone dust, wall torch → torch).
-    ///
-    /// # Arguments
-    /// * `block` - The block being picked
-    /// * `_state` - The block state (some blocks vary pick item based on state)
-    /// * `_include_data` - Whether to include block entity data (creative + Ctrl)
-    #[allow(unused_variables)]
-    fn get_clone_item_stack(
-        &self,
-        block: BlockRef,
-        state: BlockStateId,
-        include_data: bool,
-    ) -> Option<ItemStack> {
-        // Default: look up item by block's key
-        REGISTRY.items.by_key(&block.key).map(ItemStack::new)
-    }
-}
-
-/// A placeholder behavior that returns None for placement.
-/// Used as an initial placeholder when blocks are registered, before their
-/// actual behavior is set.
-pub struct PlaceholderBlockBehaviour;
-
-impl BlockBehaviour for PlaceholderBlockBehaviour {
-    fn get_state_for_placement(&self, _context: &BlockPlaceContext<'_>) -> Option<BlockStateId> {
-        None
-    }
-}
-
-/// Static instance of placeholder behavior for use during block registration.
-pub static PLACEHOLDER_BEHAVIOR: PlaceholderBlockBehaviour = PlaceholderBlockBehaviour;
-
-pub struct DefaultBlockBehaviour {
-    block: BlockRef,
-}
-
-impl DefaultBlockBehaviour {
-    pub const fn new(block: BlockRef) -> Self {
-        Self { block }
-    }
-}
-
-impl BlockBehaviour for DefaultBlockBehaviour {
-    fn get_state_for_placement(&self, _context: &BlockPlaceContext<'_>) -> Option<BlockStateId> {
-        let test = self.block.default_state();
-        log::info!(
-            "{:?}, {:?}, {:?}, {:?}",
-            REGISTRY.blocks.get_properties(test),
-            test,
-            self.block.key,
-            REGISTRY.blocks.by_state_id(test)
-        );
-        Some(self.block.default_state())
     }
 }

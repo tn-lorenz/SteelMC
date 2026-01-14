@@ -14,12 +14,15 @@ use steel_registry::blocks::BlockRef;
 use steel_registry::blocks::block_state_ext::BlockStateExt;
 use steel_registry::blocks::properties::Direction;
 use steel_registry::vanilla_blocks;
-use steel_registry::{REGISTRY, compat_traits::RegistryWorld, dimension_type::DimensionTypeRef};
+use steel_registry::{REGISTRY, dimension_type::DimensionTypeRef};
+
+use crate::compat_traits::RegistryWorld;
 use steel_utils::{BlockPos, BlockStateId, ChunkPos, SectionPos, types::UpdateFlags};
 use tokio::{runtime::Runtime, time::Instant};
 
 use crate::{
     ChunkMap,
+    behavior::BLOCK_BEHAVIORS,
     chunk::chunk_access::ChunkAccess,
     player::{LastSeen, Player},
 };
@@ -260,7 +263,8 @@ impl World {
         // if flags.contains(UpdateFlags::UPDATE_SKIP_SHAPE_UPDATE_ON_WIRE)
         //     && current_state.is_redstone_wire() { return; }
 
-        let behavior = REGISTRY.blocks.get_behavior(current_state.get_block());
+        let block_behaviors = BLOCK_BEHAVIORS.get().expect("Behaviors not initialized");
+        let behavior = block_behaviors.get_behavior(current_state.get_block());
         let new_state = behavior.update_shape(
             current_state,
             self,
@@ -288,7 +292,8 @@ impl World {
         }
 
         let state = self.get_block_state(&pos);
-        let behavior = REGISTRY.blocks.get_behavior(state.get_block());
+        let block_behaviors = BLOCK_BEHAVIORS.get().expect("Behaviors not initialized");
+        let behavior = block_behaviors.get_behavior(state.get_block());
         behavior.handle_neighbor_changed(state, self, pos, source_block, moved_by_piston);
     }
 

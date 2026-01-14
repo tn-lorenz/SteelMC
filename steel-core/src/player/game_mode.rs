@@ -4,9 +4,12 @@
 //! the `useItemOn` method that handles block placement and block interactions.
 
 use steel_registry::REGISTRY;
-use steel_registry::items::item::{BlockHitResult, InteractionResult, UseOnContext};
+use steel_registry::vanilla_blocks;
 use steel_utils::types::{GameType, InteractionHand};
 
+use crate::behavior::{
+    BLOCK_BEHAVIORS, BlockHitResult, ITEM_BEHAVIORS, InteractionResult, UseOnContext,
+};
 use crate::player::Player;
 use crate::world::World;
 
@@ -43,6 +46,10 @@ pub fn use_item_on(
         || !inv.get_item_in_hand(InteractionHand::OffHand).is_empty();
     let suppress_block_use = player.is_secondary_use_active() && have_something;
 
+    // Get behavior registries
+    let block_behaviors = BLOCK_BEHAVIORS.get().expect("Behaviors not initialized");
+    let item_behaviors = ITEM_BEHAVIORS.get().expect("Behaviors not initialized");
+
     // Try block interaction first (if not suppressed)
     if !suppress_block_use {
         // Get block behavior and call use_item_on
@@ -50,7 +57,7 @@ pub fn use_item_on(
             // Block state not found in registry, skip block interaction
             return InteractionResult::Pass;
         };
-        let behavior = REGISTRY.blocks.get_behavior(block);
+        let behavior = block_behaviors.get_behavior(block);
         let item_stack = inv.get_item_in_hand(hand);
 
         let block_result =
@@ -64,6 +71,16 @@ pub fn use_item_on(
         if matches!(block_result, InteractionResult::TryEmptyHandInteraction)
             && hand == InteractionHand::MainHand
         {
+            // Handle special blocks that open menus
+            // This is done here in steel-core because menu management requires Player
+            if block.key == vanilla_blocks::CRAFTING_TABLE.key {
+                // Release the inventory lock before opening the menu
+                drop(inv);
+                player.open_crafting_menu(*pos);
+                // TODO: Award stat INTERACT_WITH_CRAFTING_TABLE
+                return InteractionResult::Success;
+            }
+
             let empty_result = behavior.use_without_item(state, world, *pos, player, hit_result);
 
             if empty_result.consumes_action() {
@@ -89,7 +106,7 @@ pub fn use_item_on(
         };
 
         // Get item behavior and call use_on
-        let item_behavior = REGISTRY.items.get_behavior(context.item_stack.item);
+        let item_behavior = item_behaviors.get_behavior(context.item_stack.item);
         let result = item_behavior.use_on(&mut context);
 
         // Restore count for creative mode (infinite materials)

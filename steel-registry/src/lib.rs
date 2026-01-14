@@ -46,7 +46,7 @@ pub mod blocks;
 pub mod cat_variant;
 pub mod chat_type;
 pub mod chicken_variant;
-pub mod compat_traits;
+
 pub mod cow_variant;
 pub mod damage_type;
 pub mod data_components;
@@ -326,14 +326,10 @@ impl Registry {
 
         vanilla_blocks::register_blocks(&mut registry.blocks);
         vanilla_block_tags::register_block_tags(&mut registry.blocks);
-        vanilla_blocks::assign_block_behaviors(&mut registry.blocks);
-        blocks::vanilla_behaviours::assign_custom_block_behaviors(&mut registry.blocks);
 
         vanilla_components::register_vanilla_data_components(&mut registry.data_components);
 
         vanilla_items::register_items(&mut registry.items);
-        vanilla_items::assign_item_behaviors(&mut registry.items);
-        items::vanilla_item_behaviors::assign_custom_item_behaviors(&mut registry.items);
         vanilla_item_tags::register_item_tags(&mut registry.items);
 
         vanilla_biomes::register_biomes(&mut registry.biomes);

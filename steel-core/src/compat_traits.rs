@@ -1,10 +1,17 @@
-use steel_utils::{BlockPos, BlockStateId, types::UpdateFlags};
+//! Compatibility traits for behavior system.
+//!
+//! These traits provide an abstraction layer that allows behaviors to interact
+//! with the world and player without directly depending on their concrete types.
 
-use crate::blocks::BlockRef;
-use crate::blocks::properties::Direction;
+use steel_registry::blocks::BlockRef;
+use steel_registry::blocks::properties::Direction;
+use steel_utils::types::UpdateFlags;
+use steel_utils::{BlockPos, BlockStateId};
 
+/// Marker trait for player types that can interact with behaviors.
 pub trait RegistryPlayer {}
 
+/// Trait for world types that can be used by behaviors.
 pub trait RegistryWorld {
     /// Gets the block state at the given position.
     fn get_block_state(&self, pos: &BlockPos) -> BlockStateId;
@@ -49,5 +56,3 @@ pub trait RegistryWorld {
     /// * `moved_by_piston` - Whether the change was caused by a piston
     fn neighbor_changed(&self, pos: BlockPos, source_block: BlockRef, moved_by_piston: bool);
 }
-
-pub trait RegistryServer {}

@@ -4,9 +4,11 @@
 
 use crate::chunk::chunk_map::ChunkMap;
 
+pub mod behavior;
 pub mod chunk;
 pub mod chunk_saver;
 pub mod command;
+pub mod compat_traits;
 pub mod config;
 pub mod entity;
 pub mod inventory;

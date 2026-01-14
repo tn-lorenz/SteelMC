@@ -14,7 +14,7 @@ mod signature_cache;
 use std::{
     sync::{
         Arc, Weak,
-        atomic::{AtomicBool, AtomicI32, Ordering},
+        atomic::{AtomicBool, AtomicI32, AtomicU8, Ordering},
     },
     time::{Duration, SystemTime, UNIX_EPOCH},
 };
@@ -44,27 +44,30 @@ use steel_crypto::{SignatureValidator, public_key_from_bytes, signature::NoValid
 use steel_protocol::packets::{
     common::SCustomPayload,
     game::{
-        CBlockChangedAck, CBlockUpdate, CGameEvent, CMoveEntityPosRot, CMoveEntityRot, CPlayerChat,
-        CPlayerInfoUpdate, CRotateHead, ChatTypeBound, FilterType, GameEventType, PreviousMessage,
-        SChat, SChatAck, SChatSessionUpdate, SContainerButtonClick, SContainerClick,
-        SContainerClose, SContainerSlotStateChanged, SMovePlayer, SPlayerInput,
-        SSetCreativeModeSlot, calc_delta, to_angle_byte,
+        CBlockChangedAck, CBlockUpdate, CContainerClose, CGameEvent, CMoveEntityPosRot,
+        CMoveEntityRot, COpenScreen, CPlayerChat, CPlayerInfoUpdate, CRotateHead, ChatTypeBound,
+        FilterType, GameEventType, PreviousMessage, SChat, SChatAck, SChatSessionUpdate,
+        SContainerButtonClick, SContainerClick, SContainerClose, SContainerSlotStateChanged,
+        SMovePlayer, SPlayerInput, SSetCreativeModeSlot, calc_delta, to_angle_byte,
     },
 };
-use steel_registry::{
-    REGISTRY, blocks::properties::Direction, compat_traits::RegistryPlayer, item_stack::ItemStack,
-    items::item::InteractionResult,
-};
+use steel_registry::{blocks::properties::Direction, item_stack::ItemStack};
+
+use crate::compat_traits::RegistryPlayer;
+
+use crate::behavior::{BLOCK_BEHAVIORS, InteractionResult};
 use steel_utils::BlockPos;
+use steel_utils::text::translation::TranslatedMessage;
 use steel_utils::types::InteractionHand;
 use steel_utils::{ChunkPos, math::Vector3, text::TextComponent, translations};
 
 use crate::entity::LivingEntity;
 use crate::inventory::{
+    CraftingMenu,
     container::Container,
     inventory_menu::InventoryMenu,
     lock::{ContainerId, ContainerLockGuard},
-    menu::Menu,
+    menu::{Menu, MenuBehavior},
     slot::Slot,
 };
 
@@ -74,6 +77,49 @@ pub type PreviousMessageEntry = PreviousMessage;
 use crate::chunk::player_chunk_view::PlayerChunkView;
 use crate::player::{chunk_sender::ChunkSender, networking::JavaConnection};
 use crate::world::World;
+
+/// Represents the currently open menu for a player.
+///
+/// This enum tracks which external menu (not the player inventory) is open.
+/// When None, the player's inventory menu is the active container.
+pub enum OpenMenu {
+    /// A 3x3 crafting table menu.
+    Crafting(CraftingMenu),
+    // Future menu types can be added here:
+    // Chest(ChestMenu),
+    // Furnace(FurnaceMenu),
+    // etc.
+}
+
+impl OpenMenu {
+    /// Returns a reference to the menu behavior.
+    #[must_use]
+    pub fn behavior(&self) -> &MenuBehavior {
+        match self {
+            OpenMenu::Crafting(menu) => menu.behavior(),
+        }
+    }
+
+    /// Returns a mutable reference to the menu behavior.
+    pub fn behavior_mut(&mut self) -> &mut MenuBehavior {
+        match self {
+            OpenMenu::Crafting(menu) => menu.behavior_mut(),
+        }
+    }
+
+    /// Returns the container ID of this menu.
+    #[must_use]
+    pub fn container_id(&self) -> u8 {
+        self.behavior().container_id
+    }
+
+    /// Calls `removed` on the underlying menu.
+    pub fn removed(&mut self, player: &Player) {
+        match self {
+            OpenMenu::Crafting(menu) => menu.removed(player),
+        }
+    }
+}
 
 /// A struct representing a player.
 pub struct Player {
@@ -142,6 +188,13 @@ pub struct Player {
 
     /// The player's inventory menu (always open, even when `container_id` is 0).
     inventory_menu: SyncMutex<InventoryMenu>,
+
+    /// The currently open menu (None if player inventory is open).
+    /// This is separate from `inventory_menu` which is always present.
+    open_menu: SyncMutex<Option<OpenMenu>>,
+
+    /// Counter for generating container IDs (1-100, wraps around).
+    container_counter: AtomicU8,
 
     /// Tracks the last acknowledged block change sequence number.
     ack_block_changes_up_to: AtomicI32,
@@ -235,6 +288,8 @@ impl Player {
             game_mode: AtomicCell::new(GameType::Survival),
             inventory: inventory.clone(),
             inventory_menu: SyncMutex::new(InventoryMenu::new(inventory)),
+            open_menu: SyncMutex::new(None),
+            container_counter: AtomicU8::new(0),
             ack_block_changes_up_to: AtomicI32::new(-1),
             shift_key_down: AtomicBool::new(false),
             awaiting_position_from_client: SyncMutex::new(None),
@@ -1087,14 +1142,41 @@ impl Player {
 
     /// Handles a container click packet (slot interaction).
     pub fn handle_container_click(&self, packet: SContainerClick) {
-        let mut menu = self.inventory_menu.lock();
+        // First check if we have an open external menu
+        let mut open_menu_guard = self.open_menu.lock();
 
-        // Check container ID matches
-        if i32::from(menu.behavior().container_id) != packet.container_id {
-            return;
+        if let Some(ref mut open_menu) = *open_menu_guard {
+            // Check container ID matches the open menu
+            if i32::from(open_menu.container_id()) != packet.container_id {
+                return;
+            }
+
+            // Handle the click using the appropriate menu
+            match open_menu {
+                OpenMenu::Crafting(menu) => {
+                    self.process_container_click(menu, packet);
+                }
+            }
+        } else {
+            // No external menu open, use the inventory menu
+            drop(open_menu_guard);
+            let mut menu = self.inventory_menu.lock();
+
+            // Check container ID matches
+            if i32::from(menu.behavior().container_id) != packet.container_id {
+                return;
+            }
+
+            self.process_container_click(&mut *menu, packet);
         }
+    }
 
-        // Handle spectator mode - just resync the inventory
+    /// Processes a container click on any menu implementing the Menu trait.
+    ///
+    /// This is the common implementation shared between inventory menu and
+    /// external menus (crafting table, chest, etc.).
+    fn process_container_click(&self, menu: &mut dyn Menu, packet: SContainerClick) {
+        // Handle spectator mode - just resync
         if self.game_mode.load() == GameType::Spectator {
             menu.behavior_mut()
                 .send_all_data_to_remote(&self.connection);
@@ -1148,12 +1230,26 @@ impl Player {
     }
 
     /// Handles a container close packet.
+    ///
+    /// Based on Java's `ServerGamePacketListenerImpl::handleContainerClose`.
     pub fn handle_container_close(&self, packet: SContainerClose) {
         log::debug!(
             "Player {} closed container {}",
             self.gameprofile.name,
             packet.container_id
         );
+
+        // Check if the closed container matches the currently open menu
+        let open_menu = self.open_menu.lock();
+        if let Some(ref menu) = *open_menu
+            && i32::from(menu.container_id()) == packet.container_id
+        {
+            drop(open_menu);
+            // Close the external menu (returns items to inventory)
+            self.do_close_container();
+            return;
+        }
+        drop(open_menu);
 
         // For the player inventory menu (container_id 0), call removed() to:
         // - Return crafting grid items to inventory
@@ -1162,8 +1258,6 @@ impl Player {
             let mut menu = self.inventory_menu.lock();
             menu.removed(self);
         }
-        // TODO: Handle other container types (chests, crafting tables, etc.)
-        // - Notify any block entities that the player left
     }
 
     /// Handles a container slot state changed packet (e.g., crafter slot toggle).
@@ -1565,6 +1659,10 @@ impl Player {
     }
 
     /// Handles the pick block action (middle click on a block).
+    ///
+    /// # Panics
+    ///
+    /// Panics if the behavior registry has not been initialized.
     pub fn handle_pick_item_from_block(&self, packet: SPickItemFromBlock) {
         // Check if player is within interaction range (with 1.0 buffer like vanilla)
         if !self.is_within_block_interaction_range(&packet.pos) {
@@ -1579,7 +1677,8 @@ impl Player {
 
         // Get the block and its behavior
         let block = state.get_block();
-        let behavior = REGISTRY.blocks.get_behavior(block);
+        let block_behaviors = BLOCK_BEHAVIORS.get().expect("Behaviors not initialized");
+        let behavior = block_behaviors.get_behavior(block);
 
         // Only include data if player has infinite materials (creative mode)
         let include_data = self.has_infinite_materials() && packet.include_data;
@@ -1646,13 +1745,103 @@ impl Player {
             .send_all_data_to_remote(&self.connection);
     }
 
+    // ==================== Menu Management ====================
+
+    /// Generates the next container ID (1-100, wrapping around).
+    ///
+    /// Based on Java's `ServerPlayer::nextContainerCounter`.
+    fn next_container_counter(&self) -> u8 {
+        let current = self.container_counter.load(Ordering::Relaxed);
+        let next = (current % 100) + 1;
+        self.container_counter.store(next, Ordering::Relaxed);
+        next
+    }
+
+    /// Opens the crafting table menu for this player.
+    ///
+    /// Based on Java's `ServerPlayer::openMenu`.
+    ///
+    /// # Arguments
+    /// * `block_pos` - The position of the crafting table block
+    pub fn open_crafting_menu(&self, block_pos: BlockPos) {
+        // Close any currently open menu first
+        self.do_close_container();
+
+        // Generate a new container ID
+        let container_id = self.next_container_counter();
+
+        // Create the crafting menu
+        let menu = CraftingMenu::new(self.inventory.clone(), container_id, block_pos);
+
+        // Send the open screen packet to the client
+        self.connection.send_packet(COpenScreen {
+            container_id: i32::from(container_id),
+            menu_type: CraftingMenu::menu_type(),
+            title: TextComponent::new()
+                .translate(TranslatedMessage::new("container.crafting", None)),
+        });
+
+        // Send all slot data to the client
+        let mut open_menu = self.open_menu.lock();
+        *open_menu = Some(OpenMenu::Crafting(menu));
+
+        // Send full state after setting the menu
+        if let Some(ref mut menu) = *open_menu {
+            menu.behavior_mut()
+                .send_all_data_to_remote(&self.connection);
+        }
+    }
+
+    /// Closes the currently open container and returns to the inventory menu.
+    ///
+    /// Based on Java's `ServerPlayer::closeContainer`.
+    /// This sends a close packet to the client.
+    pub fn close_container(&self) {
+        let open_menu = self.open_menu.lock();
+        if let Some(ref menu) = *open_menu {
+            self.connection.send_packet(CContainerClose {
+                container_id: i32::from(menu.container_id()),
+            });
+        }
+        drop(open_menu);
+        self.do_close_container();
+    }
+
+    /// Internal close container logic without sending a packet.
+    ///
+    /// Based on Java's `ServerPlayer::doCloseContainer`.
+    /// Called when the client sends a close packet or when opening a new menu.
+    pub fn do_close_container(&self) {
+        let mut open_menu = self.open_menu.lock();
+        if let Some(ref mut menu) = *open_menu {
+            menu.removed(self);
+            // TODO: Java calls inventoryMenu.transferState(containerMenu) here
+            // to transfer crafting remainders, but we handle that in removed()
+        }
+        *open_menu = None;
+    }
+
+    /// Returns true if the player has an external menu open (not the inventory).
+    #[must_use]
+    pub fn has_container_open(&self) -> bool {
+        self.open_menu.lock().is_some()
+    }
+
     /// Broadcasts inventory changes to the client (incremental sync).
     /// This is called every tick to sync only changed slots.
     pub fn broadcast_inventory_changes(&self) {
-        self.inventory_menu
-            .lock()
-            .behavior_mut()
-            .broadcast_changes(&self.connection);
+        // First, broadcast changes for any open external menu
+        let mut open_menu = self.open_menu.lock();
+        if let Some(ref mut menu) = *open_menu {
+            menu.behavior_mut().broadcast_changes(&self.connection);
+        } else {
+            drop(open_menu);
+            // Only broadcast inventory menu changes if no external menu is open
+            self.inventory_menu
+                .lock()
+                .behavior_mut()
+                .broadcast_changes(&self.connection);
+        }
     }
 
     /// Drops an item into the world.

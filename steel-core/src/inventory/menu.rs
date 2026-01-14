@@ -22,7 +22,7 @@ use steel_protocol::packets::game::{
     CContainerSetContent, CContainerSetData, CContainerSetSlot, CSetCursorItem, ClickType,
     HashedStack,
 };
-use steel_registry::{REGISTRY, item_stack::ItemStack, menu_type::MenuType};
+use steel_registry::{REGISTRY, item_stack::ItemStack, menu_type::MenuTypeRef};
 
 use crate::{
     inventory::{
@@ -205,7 +205,7 @@ pub struct MenuBehavior {
     /// Incremented every time the server and client mismatch.
     pub state_id: u32,
     /// None for player inventory. Some for all other menus.
-    pub menu_type: Option<MenuType>,
+    pub menu_type: Option<MenuTypeRef>,
     /// When true, remote updates are suppressed (during click handling).
     suppress_remote_updates: bool,
     /// Current quickcraft drag type (-1 if not dragging).
@@ -223,7 +223,7 @@ pub struct MenuBehavior {
 impl MenuBehavior {
     /// Creates a new menu behavior with the given slots.
     #[must_use]
-    pub fn new(slots: Vec<SlotType>, container_id: u8, menu_type: Option<MenuType>) -> Self {
+    pub fn new(slots: Vec<SlotType>, container_id: u8, menu_type: Option<MenuTypeRef>) -> Self {
         let slot_count = slots.len();
         Self {
             slots,

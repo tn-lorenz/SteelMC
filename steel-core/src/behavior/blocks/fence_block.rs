@@ -2,18 +2,15 @@
 //!
 //! Fences connect to adjacent fences, fence gates, and solid blocks.
 
+use steel_registry::REGISTRY;
+use steel_registry::blocks::BlockRef;
+use steel_registry::blocks::block_state_ext::BlockStateExt;
+use steel_registry::blocks::properties::{BlockStateProperties, BoolProperty, Direction};
 use steel_utils::{BlockPos, BlockStateId, Identifier};
 
-use crate::{
-    REGISTRY,
-    blocks::{
-        BlockRef,
-        behaviour::{BlockBehaviour, BlockPlaceContext},
-        block_state_ext::BlockStateExt,
-        properties::{BlockStateProperties, BoolProperty, Direction},
-    },
-    compat_traits::RegistryWorld,
-};
+use crate::behavior::block::BlockBehaviour;
+use crate::behavior::context::BlockPlaceContext;
+use crate::compat_traits::RegistryWorld;
 
 /// Behavior for fence blocks.
 ///
@@ -27,12 +24,19 @@ pub struct FenceBlock {
 }
 
 impl FenceBlock {
+    /// North connection property.
     pub const NORTH: BoolProperty = BlockStateProperties::NORTH;
+    /// East connection property.
     pub const EAST: BoolProperty = BlockStateProperties::EAST;
+    /// South connection property.
     pub const SOUTH: BoolProperty = BlockStateProperties::SOUTH;
+    /// West connection property.
     pub const WEST: BoolProperty = BlockStateProperties::WEST;
+    /// Waterlogged property.
     pub const WATERLOGGED: BoolProperty = BlockStateProperties::WATERLOGGED;
 
+    /// Creates a new fence block behavior for the given block.
+    #[must_use]
     pub const fn new(block: BlockRef) -> Self {
         Self { block }
     }
@@ -65,13 +69,13 @@ impl FenceBlock {
                 if let Some(gate_facing) = gate_facing {
                     // Gate connects perpendicular to its facing
                     let connects = match (gate_facing, direction) {
-                        // Gate facing N/S connects to blocks on E/W sides
+                        // Gate facing N/S connects to blocks on E/W sides,
+                        // Gate facing E/W connects to blocks on N/S sides
                         (
                             Direction::North | Direction::South,
                             Direction::East | Direction::West,
-                        ) => true,
-                        // Gate facing E/W connects to blocks on N/S sides
-                        (
+                        )
+                        | (
                             Direction::East | Direction::West,
                             Direction::North | Direction::South,
                         ) => true,

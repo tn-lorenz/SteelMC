@@ -2,12 +2,11 @@ pub mod behaviour;
 pub mod block_state_ext;
 pub mod properties;
 pub mod shapes;
-pub mod vanilla_behaviours;
 
 use rustc_hash::FxHashMap;
 
 use crate::RegistryExt;
-use crate::blocks::behaviour::{BlockBehaviour, BlockConfig};
+use crate::blocks::behaviour::BlockConfig;
 use crate::blocks::properties::{DynProperty, Property};
 
 /// Function type for shape lookups. Takes a state offset and returns the shape.
@@ -124,7 +123,6 @@ pub type BlockRef = &'static Block;
 pub struct BlockRegistry {
     blocks_by_id: Vec<BlockRef>,
     blocks_by_key: FxHashMap<Identifier, usize>,
-    behaviors: Vec<&'static dyn BlockBehaviour>,
     tags: FxHashMap<Identifier, Vec<BlockRef>>,
     allows_registering: bool,
     pub state_to_block_lookup: Vec<BlockRef>,
@@ -149,7 +147,6 @@ impl BlockRegistry {
         Self {
             blocks_by_id: Vec::new(),
             blocks_by_key: FxHashMap::default(),
-            behaviors: Vec::new(),
             tags: FxHashMap::default(),
             allows_registering: true,
             state_to_block_lookup: Vec::new(),
@@ -171,8 +168,6 @@ impl BlockRegistry {
         self.blocks_by_key.insert(block.key.clone(), id);
         self.blocks_by_id.push(block);
         self.block_to_base_state.push(base_state_id);
-        // Push a placeholder behavior that will be replaced by the actual behavior later
-        self.behaviors.push(&behaviour::PLACEHOLDER_BEHAVIOR);
 
         let mut state_count = 1;
         for property in block.properties {
@@ -469,38 +464,6 @@ impl BlockRegistry {
     /// Gets all tag keys.
     pub fn tag_keys(&self) -> impl Iterator<Item = &Identifier> + '_ {
         self.tags.keys()
-    }
-
-    #[must_use]
-    pub fn get_behavior(&self, block: BlockRef) -> &dyn BlockBehaviour {
-        let id = self.get_id(block);
-        self.behaviors[*id]
-    }
-
-    #[must_use]
-    pub fn get_behavior_by_id(&self, id: usize) -> Option<&dyn BlockBehaviour> {
-        self.behaviors.get(id).copied()
-    }
-
-    pub fn set_behavior(&mut self, block: BlockRef, behavior: &'static dyn BlockBehaviour) {
-        assert!(
-            self.allows_registering,
-            "Cannot set behaviors after the registry has been frozen"
-        );
-
-        let id = *self.get_id(block);
-        self.behaviors[id] = behavior;
-    }
-
-    pub fn set_behavior_by_key(&mut self, key: &Identifier, behavior: &'static dyn BlockBehaviour) {
-        assert!(
-            self.allows_registering,
-            "Cannot set behaviors after the registry has been frozen"
-        );
-
-        if let Some(&id) = self.blocks_by_key.get(key) {
-            self.behaviors[id] = behavior;
-        }
     }
 }
 
