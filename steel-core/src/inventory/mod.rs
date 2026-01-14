@@ -14,6 +14,6 @@ pub mod menu_provider;
 pub mod recipe_manager;
 pub mod slot;
 
-pub use crafting_menu::CraftingMenu;
+pub use crafting_menu::{CraftingMenu, CraftingMenuProvider};
 pub use lock::SyncPlayerInv;
-pub use menu_provider::MenuInstance;
+pub use menu_provider::{MenuInstance, MenuProvider};

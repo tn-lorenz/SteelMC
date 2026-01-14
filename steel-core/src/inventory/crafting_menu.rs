@@ -11,10 +11,9 @@ use std::{mem, sync::Arc};
 use steel_registry::item_stack::ItemStack;
 use steel_registry::menu_type::MenuTypeRef;
 use steel_registry::vanilla_menu_types;
-use steel_utils::BlockPos;
 use steel_utils::locks::SyncMutex;
 use steel_utils::text::TextComponent;
-use steel_utils::text::translation::TranslatedMessage;
+use steel_utils::{BlockPos, translations};
 
 use crate::inventory::{
     SyncPlayerInv,
@@ -22,7 +21,7 @@ use crate::inventory::{
     crafting::{CraftingContainer, ResultContainer},
     lock::{ContainerLockGuard, ContainerRef},
     menu::{Menu, MenuBehavior},
-    menu_provider::MenuInstance,
+    menu_provider::{MenuInstance, MenuProvider},
     slot::{
         CraftingGridSlot, CraftingResultSlot, Slot, SlotType, SyncCraftingContainer,
         SyncResultContainer, add_standard_inventory_slots,
@@ -338,8 +337,32 @@ impl MenuInstance for CraftingMenu {
     fn container_id(&self) -> u8 {
         self.behavior.container_id
     }
+}
 
+/// Provider for creating a crafting menu.
+pub struct CraftingMenuProvider {
+    inventory: SyncPlayerInv,
+    pos: BlockPos,
+}
+
+impl CraftingMenuProvider {
+    /// Creates a new crafting menu provider.
+    #[must_use]
+    pub fn new(inventory: SyncPlayerInv, pos: BlockPos) -> Self {
+        Self { inventory, pos }
+    }
+}
+
+impl MenuProvider for CraftingMenuProvider {
     fn title(&self) -> TextComponent {
-        TextComponent::new().translate(TranslatedMessage::new("container.crafting", None))
+        TextComponent::new().translate(translations::CONTAINER_CRAFTING.msg())
+    }
+
+    fn create(&self, container_id: u8) -> Box<dyn MenuInstance> {
+        Box::new(CraftingMenu::new(
+            self.inventory.clone(),
+            container_id,
+            self.pos,
+        ))
     }
 }

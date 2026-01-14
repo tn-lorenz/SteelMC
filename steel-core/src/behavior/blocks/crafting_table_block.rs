@@ -7,7 +7,7 @@ use steel_utils::{BlockPos, BlockStateId};
 
 use crate::behavior::block::BlockBehaviour;
 use crate::behavior::context::{BlockHitResult, BlockPlaceContext, InteractionResult};
-use crate::inventory::CraftingMenu;
+use crate::inventory::CraftingMenuProvider;
 use crate::player::Player;
 use crate::world::World;
 
@@ -40,9 +40,7 @@ impl BlockBehaviour for CraftingTableBlock {
         player: &Player,
         _hit_result: &BlockHitResult,
     ) -> InteractionResult {
-        let container_id = player.next_container_counter();
-        let menu = CraftingMenu::new(player.inventory.clone(), container_id, pos);
-        player.open_menu(Box::new(menu));
+        player.open_menu(&CraftingMenuProvider::new(player.inventory.clone(), pos));
         // TODO: Award stat INTERACT_WITH_CRAFTING_TABLE
         InteractionResult::Success
     }

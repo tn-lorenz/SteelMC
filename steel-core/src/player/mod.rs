@@ -61,7 +61,7 @@ use steel_utils::{ChunkPos, math::Vector3, text::TextComponent, translations};
 
 use crate::entity::LivingEntity;
 use crate::inventory::{
-    MenuInstance,
+    MenuInstance, MenuProvider,
     container::Container,
     inventory_menu::InventoryMenu,
     lock::{ContainerId, ContainerLockGuard},
@@ -1701,7 +1701,7 @@ impl Player {
     /// Generates the next container ID (1-100, wrapping around).
     ///
     /// Based on Java's `ServerPlayer::nextContainerCounter`.
-    pub fn next_container_counter(&self) -> u8 {
+    fn next_container_counter(&self) -> u8 {
         let current = self.container_counter.load(Ordering::Relaxed);
         let next = (current % 100) + 1;
         self.container_counter.store(next, Ordering::Relaxed);
@@ -1713,16 +1713,20 @@ impl Player {
     /// Based on Java's `ServerPlayer::openMenu`.
     ///
     /// # Arguments
-    /// * `menu` - The menu to open
-    pub fn open_menu(&self, mut menu: Box<dyn MenuInstance>) {
+    /// * `provider` - The menu provider containing the title and factory
+    pub fn open_menu(&self, provider: &impl MenuProvider) {
         // Close any currently open menu first
         self.do_close_container();
+
+        // Generate a new container ID and create the menu
+        let container_id = self.next_container_counter();
+        let mut menu = provider.create(container_id);
 
         // Send the open screen packet to the client
         self.connection.send_packet(COpenScreen {
             container_id: i32::from(menu.container_id()),
             menu_type: menu.menu_type(),
-            title: menu.title(),
+            title: provider.title(),
         });
 
         // Send all slot data to the client
