@@ -53,8 +53,6 @@ use steel_protocol::packets::{
 };
 use steel_registry::{blocks::properties::Direction, item_stack::ItemStack};
 
-use crate::compat_traits::RegistryPlayer;
-
 use crate::behavior::{BLOCK_BEHAVIORS, InteractionResult};
 use steel_utils::BlockPos;
 use steel_utils::text::translation::TranslatedMessage;
@@ -1916,8 +1914,6 @@ impl Player {
     /// Cleans up player resources.
     pub fn cleanup(&self) {}
 }
-
-impl RegistryPlayer for Player {}
 
 impl LivingEntity for Player {
     fn get_health(&self) -> f32 {

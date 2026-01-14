@@ -6,10 +6,11 @@ use steel_utils::BlockPos;
 use steel_utils::math::Vector3;
 use steel_utils::types::InteractionHand;
 
-use crate::compat_traits::{RegistryPlayer, RegistryWorld};
-
 // Re-export BlockHitResult from steel-registry since it's also used by steel-protocol
 pub use steel_registry::items::item::BlockHitResult;
+
+use crate::player::Player;
+use crate::world::World;
 
 /// Result of an interaction (item use, block use, etc.)
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
@@ -52,19 +53,19 @@ pub struct BlockPlaceContext<'a> {
     /// The player's rotation (yaw).
     pub rotation: f32,
     /// The world where the block is being placed.
-    pub world: &'a dyn RegistryWorld,
+    pub world: &'a World,
 }
 
 /// Context for using an item on a block.
 pub struct UseOnContext<'a> {
     /// The player using the item.
-    pub player: &'a dyn RegistryPlayer,
+    pub player: &'a Player,
     /// Which hand the item is in.
     pub hand: InteractionHand,
     /// Information about where the block was hit.
     pub hit_result: BlockHitResult,
     /// The world where the interaction is happening.
-    pub world: &'a dyn RegistryWorld,
+    pub world: &'a World,
     /// The item stack being used (mutable for consumption).
     pub item_stack: &'a mut ItemStack,
 }

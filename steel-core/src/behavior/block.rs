@@ -8,7 +8,8 @@ use steel_utils::types::InteractionHand;
 use steel_utils::{BlockPos, BlockStateId};
 
 use crate::behavior::context::{BlockHitResult, BlockPlaceContext, InteractionResult};
-use crate::compat_traits::{RegistryPlayer, RegistryWorld};
+use crate::player::Player;
+use crate::world::World;
 
 /// Trait defining the behavior of a block.
 ///
@@ -23,7 +24,7 @@ pub trait BlockBehaviour: Send + Sync {
     fn update_shape(
         &self,
         state: BlockStateId,
-        _world: &dyn RegistryWorld,
+        _world: &World,
         _pos: BlockPos,
         _direction: Direction,
         _neighbor_pos: BlockPos,
@@ -47,7 +48,7 @@ pub trait BlockBehaviour: Send + Sync {
     fn on_place(
         &self,
         state: BlockStateId,
-        world: &dyn RegistryWorld,
+        world: &World,
         pos: BlockPos,
         old_state: BlockStateId,
         moved_by_piston: bool,
@@ -68,7 +69,7 @@ pub trait BlockBehaviour: Send + Sync {
     fn affect_neighbors_after_removal(
         &self,
         state: BlockStateId,
-        world: &dyn RegistryWorld,
+        world: &World,
         pos: BlockPos,
         moved_by_piston: bool,
     ) {
@@ -85,9 +86,9 @@ pub trait BlockBehaviour: Send + Sync {
         &self,
         item_stack: &ItemStack,
         state: BlockStateId,
-        world: &dyn RegistryWorld,
+        world: &World,
         pos: BlockPos,
-        player: &dyn RegistryPlayer,
+        player: &Player,
         hand: InteractionHand,
         hit_result: &BlockHitResult,
     ) -> InteractionResult {
@@ -103,9 +104,9 @@ pub trait BlockBehaviour: Send + Sync {
     fn use_without_item(
         &self,
         state: BlockStateId,
-        world: &dyn RegistryWorld,
+        world: &World,
         pos: BlockPos,
-        player: &dyn RegistryPlayer,
+        player: &Player,
         hit_result: &BlockHitResult,
     ) -> InteractionResult {
         InteractionResult::Pass
@@ -126,7 +127,7 @@ pub trait BlockBehaviour: Send + Sync {
     fn handle_neighbor_changed(
         &self,
         state: BlockStateId,
-        world: &dyn RegistryWorld,
+        world: &World,
         pos: BlockPos,
         source_block: BlockRef,
         moved_by_piston: bool,

@@ -10,7 +10,7 @@ use steel_utils::{BlockPos, BlockStateId, Identifier};
 
 use crate::behavior::block::BlockBehaviour;
 use crate::behavior::context::BlockPlaceContext;
-use crate::compat_traits::RegistryWorld;
+use crate::world::World;
 
 /// Behavior for fence blocks.
 ///
@@ -101,7 +101,7 @@ impl FenceBlock {
     }
 
     /// Gets the connection state for a position by checking all 4 horizontal neighbors.
-    fn get_connection_state(&self, world: &dyn RegistryWorld, pos: &BlockPos) -> BlockStateId {
+    fn get_connection_state(&self, world: &World, pos: &BlockPos) -> BlockStateId {
         let mut state = self.block.default_state();
 
         // Check north
@@ -145,7 +145,7 @@ impl BlockBehaviour for FenceBlock {
     fn update_shape(
         &self,
         state: BlockStateId,
-        _world: &dyn RegistryWorld,
+        _world: &World,
         _pos: BlockPos,
         direction: Direction,
         _neighbor_pos: BlockPos,

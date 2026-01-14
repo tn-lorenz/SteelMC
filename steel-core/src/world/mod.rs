@@ -16,7 +16,6 @@ use steel_registry::blocks::properties::Direction;
 use steel_registry::vanilla_blocks;
 use steel_registry::{REGISTRY, dimension_type::DimensionTypeRef};
 
-use crate::compat_traits::RegistryWorld;
 use steel_utils::{BlockPos, BlockStateId, ChunkPos, SectionPos, types::UpdateFlags};
 use tokio::{runtime::Runtime, time::Instant};
 
@@ -466,43 +465,5 @@ impl World {
             progress: progress.clamp(-1, 9) as u8,
         };
         self.broadcast_to_nearby(chunk, packet, Some(entity_id));
-    }
-}
-
-impl RegistryWorld for World {
-    fn get_block_state(&self, pos: &BlockPos) -> BlockStateId {
-        Self::get_block_state(self, pos)
-    }
-
-    fn set_block(&self, pos: BlockPos, block_state: BlockStateId, flags: UpdateFlags) -> bool {
-        Self::set_block(self, pos, block_state, flags)
-    }
-
-    fn is_in_valid_bounds(&self, block_pos: &BlockPos) -> bool {
-        Self::is_in_valid_bounds(self, block_pos)
-    }
-
-    fn neighbor_shape_changed(
-        &self,
-        direction: Direction,
-        pos: BlockPos,
-        neighbor_pos: BlockPos,
-        neighbor_state: BlockStateId,
-        flags: UpdateFlags,
-        update_limit: i32,
-    ) {
-        Self::neighbor_shape_changed(
-            self,
-            direction,
-            pos,
-            neighbor_pos,
-            neighbor_state,
-            flags,
-            update_limit,
-        );
-    }
-
-    fn neighbor_changed(&self, pos: BlockPos, source_block: BlockRef, moved_by_piston: bool) {
-        Self::neighbor_changed(self, pos, source_block, moved_by_piston);
     }
 }
