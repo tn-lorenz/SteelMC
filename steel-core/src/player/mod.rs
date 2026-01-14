@@ -55,17 +55,17 @@ use steel_registry::{blocks::properties::Direction, item_stack::ItemStack};
 
 use crate::behavior::{BLOCK_BEHAVIORS, InteractionResult};
 use steel_utils::BlockPos;
-use steel_utils::text::translation::TranslatedMessage;
+
 use steel_utils::types::InteractionHand;
 use steel_utils::{ChunkPos, math::Vector3, text::TextComponent, translations};
 
 use crate::entity::LivingEntity;
 use crate::inventory::{
-    CraftingMenu,
+    MenuInstance,
     container::Container,
     inventory_menu::InventoryMenu,
     lock::{ContainerId, ContainerLockGuard},
-    menu::{Menu, MenuBehavior},
+    menu::Menu,
     slot::Slot,
 };
 
@@ -75,49 +75,6 @@ pub type PreviousMessageEntry = PreviousMessage;
 use crate::chunk::player_chunk_view::PlayerChunkView;
 use crate::player::{chunk_sender::ChunkSender, networking::JavaConnection};
 use crate::world::World;
-
-/// Represents the currently open menu for a player.
-///
-/// This enum tracks which external menu (not the player inventory) is open.
-/// When None, the player's inventory menu is the active container.
-pub enum OpenMenu {
-    /// A 3x3 crafting table menu.
-    Crafting(CraftingMenu),
-    // Future menu types can be added here:
-    // Chest(ChestMenu),
-    // Furnace(FurnaceMenu),
-    // etc.
-}
-
-impl OpenMenu {
-    /// Returns a reference to the menu behavior.
-    #[must_use]
-    pub fn behavior(&self) -> &MenuBehavior {
-        match self {
-            OpenMenu::Crafting(menu) => menu.behavior(),
-        }
-    }
-
-    /// Returns a mutable reference to the menu behavior.
-    pub fn behavior_mut(&mut self) -> &mut MenuBehavior {
-        match self {
-            OpenMenu::Crafting(menu) => menu.behavior_mut(),
-        }
-    }
-
-    /// Returns the container ID of this menu.
-    #[must_use]
-    pub fn container_id(&self) -> u8 {
-        self.behavior().container_id
-    }
-
-    /// Calls `removed` on the underlying menu.
-    pub fn removed(&mut self, player: &Player) {
-        match self {
-            OpenMenu::Crafting(menu) => menu.removed(player),
-        }
-    }
-}
 
 /// A struct representing a player.
 pub struct Player {
@@ -189,7 +146,7 @@ pub struct Player {
 
     /// The currently open menu (None if player inventory is open).
     /// This is separate from `inventory_menu` which is always present.
-    open_menu: SyncMutex<Option<OpenMenu>>,
+    open_menu: SyncMutex<Option<Box<dyn MenuInstance>>>,
 
     /// Counter for generating container IDs (1-100, wraps around).
     container_counter: AtomicU8,
@@ -1143,18 +1100,14 @@ impl Player {
         // First check if we have an open external menu
         let mut open_menu_guard = self.open_menu.lock();
 
-        if let Some(ref mut open_menu) = *open_menu_guard {
+        if let Some(ref mut menu) = *open_menu_guard {
             // Check container ID matches the open menu
-            if i32::from(open_menu.container_id()) != packet.container_id {
+            if i32::from(menu.container_id()) != packet.container_id {
                 return;
             }
 
-            // Handle the click using the appropriate menu
-            match open_menu {
-                OpenMenu::Crafting(menu) => {
-                    self.process_container_click(menu, packet);
-                }
-            }
+            // Handle the click using the open menu
+            self.process_container_click(menu.as_mut(), packet);
         } else {
             // No external menu open, use the inventory menu
             drop(open_menu_guard);
@@ -1748,46 +1701,36 @@ impl Player {
     /// Generates the next container ID (1-100, wrapping around).
     ///
     /// Based on Java's `ServerPlayer::nextContainerCounter`.
-    fn next_container_counter(&self) -> u8 {
+    pub fn next_container_counter(&self) -> u8 {
         let current = self.container_counter.load(Ordering::Relaxed);
         let next = (current % 100) + 1;
         self.container_counter.store(next, Ordering::Relaxed);
         next
     }
 
-    /// Opens the crafting table menu for this player.
+    /// Opens a menu for this player.
     ///
     /// Based on Java's `ServerPlayer::openMenu`.
     ///
     /// # Arguments
-    /// * `block_pos` - The position of the crafting table block
-    pub fn open_crafting_menu(&self, block_pos: BlockPos) {
+    /// * `menu` - The menu to open
+    pub fn open_menu(&self, mut menu: Box<dyn MenuInstance>) {
         // Close any currently open menu first
         self.do_close_container();
 
-        // Generate a new container ID
-        let container_id = self.next_container_counter();
-
-        // Create the crafting menu
-        let menu = CraftingMenu::new(self.inventory.clone(), container_id, block_pos);
-
         // Send the open screen packet to the client
         self.connection.send_packet(COpenScreen {
-            container_id: i32::from(container_id),
-            menu_type: CraftingMenu::menu_type(),
-            title: TextComponent::new()
-                .translate(TranslatedMessage::new("container.crafting", None)),
+            container_id: i32::from(menu.container_id()),
+            menu_type: menu.menu_type(),
+            title: menu.title(),
         });
 
         // Send all slot data to the client
-        let mut open_menu = self.open_menu.lock();
-        *open_menu = Some(OpenMenu::Crafting(menu));
+        menu.behavior_mut()
+            .send_all_data_to_remote(&self.connection);
 
-        // Send full state after setting the menu
-        if let Some(ref mut menu) = *open_menu {
-            menu.behavior_mut()
-                .send_all_data_to_remote(&self.connection);
-        }
+        // Store the menu
+        *self.open_menu.lock() = Some(menu);
     }
 
     /// Closes the currently open container and returns to the inventory menu.

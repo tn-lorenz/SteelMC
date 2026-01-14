@@ -13,6 +13,8 @@ use steel_registry::menu_type::MenuTypeRef;
 use steel_registry::vanilla_menu_types;
 use steel_utils::BlockPos;
 use steel_utils::locks::SyncMutex;
+use steel_utils::text::TextComponent;
+use steel_utils::text::translation::TranslatedMessage;
 
 use crate::inventory::{
     SyncPlayerInv,
@@ -20,6 +22,7 @@ use crate::inventory::{
     crafting::{CraftingContainer, ResultContainer},
     lock::{ContainerLockGuard, ContainerRef},
     menu::{Menu, MenuBehavior},
+    menu_provider::MenuInstance,
     slot::{
         CraftingGridSlot, CraftingResultSlot, Slot, SlotType, SyncCraftingContainer,
         SyncResultContainer, add_standard_inventory_slots,
@@ -324,5 +327,19 @@ impl Menu for CraftingMenu {
 
         // Clear the result slot (it's virtual, just clear it)
         self.result_container.lock().set_item(0, ItemStack::empty());
+    }
+}
+
+impl MenuInstance for CraftingMenu {
+    fn menu_type(&self) -> MenuTypeRef {
+        vanilla_menu_types::CRAFTING
+    }
+
+    fn container_id(&self) -> u8 {
+        self.behavior.container_id
+    }
+
+    fn title(&self) -> TextComponent {
+        TextComponent::new().translate(TranslatedMessage::new("container.crafting", None))
     }
 }
