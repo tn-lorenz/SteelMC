@@ -1760,8 +1760,13 @@ impl Player {
         let mut open_menu = self.open_menu.lock();
         if let Some(ref mut menu) = *open_menu {
             menu.removed(self);
-            // TODO: Java calls inventoryMenu.transferState(containerMenu) here
-            // to transfer crafting remainders, but we handle that in removed()
+            // Transfer remote slot state from the container menu to the inventory menu.
+            // This ensures the inventory menu knows what the client thinks it has in
+            // the shared slots (player inventory), preventing unnecessary resyncs.
+            self.inventory_menu
+                .lock()
+                .behavior_mut()
+                .transfer_state(menu.behavior());
         }
         *open_menu = None;
     }

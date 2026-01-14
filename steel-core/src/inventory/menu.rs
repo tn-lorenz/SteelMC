@@ -430,6 +430,40 @@ impl MenuBehavior {
         self.suppress_remote_updates = false;
     }
 
+    /// Transfers remote slot state from another menu to this one.
+    ///
+    /// When a container menu is closed, the inventory menu needs to know what
+    /// the client thinks it has in the shared slots (player inventory). Without
+    /// this transfer, the inventory menu would think the client has stale data
+    /// and would try to resync slots that are actually correct.
+    ///
+    /// This matches slots by their (`container_id`, `container_slot`) pair, so only
+    /// slots that reference the same underlying container position will transfer.
+    ///
+    /// Based on Java's `AbstractContainerMenu::transferState`.
+    pub fn transfer_state(&mut self, other: &MenuBehavior) {
+        use rustc_hash::FxHashMap;
+
+        // Build a map of (container_id, container_slot) -> slot_index for the other menu
+        let mut other_slots: FxHashMap<(ContainerId, usize), usize> = FxHashMap::default();
+        for (slot_index, slot) in other.slots.iter().enumerate() {
+            if let Some(key) = slot.container_key() {
+                other_slots.insert(key, slot_index);
+            }
+        }
+
+        // Transfer state for matching slots
+        for (slot_index, slot) in self.slots.iter().enumerate() {
+            if let Some(key) = slot.container_key()
+                && let Some(&other_slot_index) = other_slots.get(&key) {
+                    // Transfer last_slots (the cached item state)
+                    self.last_slots[slot_index] = other.last_slots[other_slot_index].clone();
+                    // Transfer remote_slots (client's perception)
+                    self.remote_slots[slot_index] = other.remote_slots[other_slot_index].clone();
+                }
+        }
+    }
+
     /// Returns true if a slot index is valid for this menu.
     /// -999 is used for clicking outside the inventory.
     /// -1 is also accepted (matches Java behavior, though not used by vanilla clients).

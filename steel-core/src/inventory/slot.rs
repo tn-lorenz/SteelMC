@@ -694,6 +694,20 @@ impl SlotType {
             }
         }
     }
+
+    /// Returns the primary container ID and container slot index for this slot.
+    /// Used for matching slots between menus when transferring state.
+    ///
+    /// Only returns `Some` for slots that reference a persistent container
+    /// (player inventory). Returns `None` for fake/virtual slots like crafting results.
+    #[must_use]
+    pub fn container_key(&self) -> Option<(ContainerId, usize)> {
+        match self {
+            SlotType::Normal(s) => Some((s.container_ref().container_id(), s.get_container_slot())),
+            SlotType::Armor(s) => Some((s.container_ref().container_id(), s.get_container_slot())),
+            _ => None,
+        }
+    }
 }
 
 // ==================== Slot Builder Helpers ====================
