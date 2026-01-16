@@ -2,6 +2,7 @@ use std::{fs, path::Path, process::Command};
 
 mod banner_patterns;
 mod biomes;
+mod block_entity_types;
 mod block_tags;
 mod blocks;
 mod cat_variants;
@@ -67,6 +68,7 @@ const RECIPES: &str = "recipes";
 const VANILLA_ENTITIES: &str = "entities";
 const ENTITY_DATA_SERIALIZERS: &str = "entity_data_serializers";
 const LOOT_TABLES: &str = "loot_tables";
+const BLOCK_ENTITY_TYPES: &str = "block_entity_types";
 
 pub fn main() {
     if !Path::new(OUT_DIR).exists() {
@@ -105,6 +107,7 @@ pub fn main() {
         (entities::build(), VANILLA_ENTITIES),
         (entity_data_serializers::build(), ENTITY_DATA_SERIALIZERS),
         (loot_tables::build(), LOOT_TABLES),
+        (block_entity_types::build(), BLOCK_ENTITY_TYPES),
     ];
 
     for (content, file_name) in vanilla_builds {
