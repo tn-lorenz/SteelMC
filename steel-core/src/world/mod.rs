@@ -170,9 +170,9 @@ impl World {
     }
 
     /// Sets the value of a game rule.
-    pub fn set_game_rule(&self, rule: GameRuleRef, value: GameRuleValue) {
+    pub fn set_game_rule(&self, rule: GameRuleRef, value: GameRuleValue) -> bool {
         let mut level_data = self.level_data.write();
-        level_data
+        return level_data
             .data_mut()
             .game_rules_values
             .set(rule, value, &REGISTRY.game_rules);
