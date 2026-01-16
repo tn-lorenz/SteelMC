@@ -52,8 +52,10 @@ pub struct ChunkMap {
     pub chunk_tickets: SyncMutex<ChunkTicketManager>,
     /// The world generation context.
     pub world_gen_context: Arc<WorldGenContext>,
-    /// The thread pool to use for generation.
-    pub thread_pool: Arc<ThreadPool>,
+    /// The thread pool to use for chunk generation (throughput-oriented).
+    pub generation_pool: Arc<ThreadPool>,
+    /// The thread pool to use for chunk ticking (latency-oriented).
+    pub tick_pool: Arc<ThreadPool>,
     /// The runtime to use for chunk tasks.
     pub chunk_runtime: Arc<Runtime>,
     /// Manager for chunk saving and loading.
@@ -88,7 +90,8 @@ impl ChunkMap {
             task_tracker: TaskTracker::new(),
             chunk_tickets: SyncMutex::new(ChunkTicketManager::new()),
             world_gen_context: Arc::new(WorldGenContext::new(generator, world)),
-            thread_pool: Arc::new(ThreadPoolBuilder::new().build().unwrap()),
+            generation_pool: Arc::new(ThreadPoolBuilder::new().build().unwrap()),
+            tick_pool: Arc::new(ThreadPoolBuilder::new().build().unwrap()),
             chunk_runtime,
             region_manager: Arc::new(RegionManager::new(format!("world/{}", dimension.key.path))),
             chunks_to_broadcast: SyncMutex::new(Vec::new()),
@@ -228,7 +231,7 @@ impl ChunkMap {
             pos,
             target_status,
             self.clone(),
-            self.thread_pool.clone(),
+            self.generation_pool.clone(),
         ));
         if start.elapsed() >= Duration::from_millis(1) {
             log::warn!("schedule_generation_task_b took: {:?}", start.elapsed());
@@ -329,12 +332,14 @@ impl ChunkMap {
             let holder_creation_elapsed = holder_creation_start.elapsed();
 
             let schedule_start = Instant::now();
-            holders_to_schedule.par_iter().for_each(|(holder, level)| {
-                if let Some(level) = level
-                    && is_full(*level)
-                {
-                    holder.schedule_chunk_generation_task_b(ChunkStatus::Full, self);
-                }
+            self.tick_pool.install(|| {
+                holders_to_schedule.par_iter().for_each(|(holder, level)| {
+                    if let Some(level) = level
+                        && is_full(*level)
+                    {
+                        holder.schedule_chunk_generation_task_b(ChunkStatus::Full, self);
+                    }
+                });
             });
             let schedule_elapsed = schedule_start.elapsed();
 
@@ -381,6 +386,33 @@ impl ChunkMap {
                 self.chunks.len(),
                 self.unloading_chunks.len()
             );
+        }
+
+        // Chunk ticking - tick all full chunks in parallel
+        let tickable_chunks: Vec<_> = {
+            let tickets = self.chunk_tickets.lock();
+            tickets
+                .iter_levels()
+                .filter_map(|(pos, level)| {
+                    if is_full(level) {
+                        self.chunks.read_sync(&pos, |_, h| h.clone())
+                    } else {
+                        None
+                    }
+                })
+                .collect()
+        };
+
+        if !tickable_chunks.is_empty() {
+            self.tick_pool.install(|| {
+                tickable_chunks.par_iter().for_each(|holder| {
+                    if let Some(chunk_guard) = holder.try_chunk(ChunkStatus::Full) {
+                        if let Some(chunk) = chunk_guard.as_ref() {
+                            chunk.tick();
+                        }
+                    }
+                });
+            });
         }
     }
 
