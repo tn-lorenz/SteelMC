@@ -35,29 +35,32 @@ pub fn build() -> TokenStream {
         let rule_name = Literal::string(&rule.name);
         let category = Ident::new(&rule.category, Span::call_site());
 
-        match rule.value_type.as_str() {
+        let (value_type, default_value) = match rule.value_type.as_str() {
             "bool" => {
-                let default_value = rule.default.as_bool().unwrap_or(false);
-                constants.extend(quote! {
-                    pub const #const_name: &GameRule<bool> = &GameRule {
-                        key: Identifier::vanilla_static(#rule_name),
-                        category: GameRuleCategory::#category,
-                        default_value: #default_value,
-                    };
-                });
+                let value = rule.default.as_bool().unwrap_or(false);
+                (
+                    quote! { GameRuleType::Bool },
+                    quote! { GameRuleValue::Bool(#value) },
+                )
             }
             "int" => {
-                let default_value = rule.default.as_i64().unwrap_or(0) as i32;
-                constants.extend(quote! {
-                    pub const #const_name: &GameRule<i32> = &GameRule {
-                        key: Identifier::vanilla_static(#rule_name),
-                        category: GameRuleCategory::#category,
-                        default_value: #default_value,
-                    };
-                });
+                let value = rule.default.as_i64().unwrap_or(0) as i32;
+                (
+                    quote! { GameRuleType::Int },
+                    quote! { GameRuleValue::Int(#value) },
+                )
             }
             _ => panic!("Unknown game rule type: {}", rule.value_type),
-        }
+        };
+
+        constants.extend(quote! {
+            pub const #const_name: &GameRule = &GameRule {
+                key: Identifier::vanilla_static(#rule_name),
+                category: GameRuleCategory::#category,
+                value_type: #value_type,
+                default_value: #default_value,
+            };
+        });
 
         registrations.extend(quote! {
             registry.register(#const_name);
@@ -65,7 +68,7 @@ pub fn build() -> TokenStream {
     }
 
     quote! {
-        use crate::game_rules::{GameRule, GameRuleRegistry, GameRuleCategory};
+        use crate::game_rules::{GameRule, GameRuleRegistry, GameRuleCategory, GameRuleType, GameRuleValue};
         use steel_utils::Identifier;
 
         #constants

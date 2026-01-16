@@ -12,7 +12,7 @@ use std::{
 use rustc_hash::FxHashMap;
 use serde::{Deserialize, Serialize};
 use steel_registry::REGISTRY;
-use steel_registry::game_rules::GameRuleValues;
+use steel_registry::game_rules::{GameRuleValue, GameRuleValues};
 use steel_utils::BlockPos;
 use tokio::fs;
 
@@ -77,16 +77,6 @@ pub struct WeatherState {
     pub clear_weather_time: i32,
 }
 
-/// A game rule value that can be serialized.
-#[derive(Debug, Clone, Serialize, Deserialize)]
-#[serde(untagged)]
-pub enum GameRuleValue {
-    /// Boolean game rule value.
-    Bool(bool),
-    /// Integer game rule value.
-    Int(i32),
-}
-
 impl Default for LevelData {
     fn default() -> Self {
         Self::new_with_seed(rand::random())
@@ -113,23 +103,19 @@ impl LevelData {
     pub fn load_game_rules(&mut self) {
         self.game_rules_values = GameRuleValues::new(&REGISTRY.game_rules);
         for (name, value) in &self.game_rules {
-            match value {
-                GameRuleValue::Bool(b) => {
-                    self.game_rules_values
-                        .set_bool_by_name(name, *b, &REGISTRY.game_rules);
-                }
-                GameRuleValue::Int(i) => {
-                    self.game_rules_values
-                        .set_int_by_name(name, *i, &REGISTRY.game_rules);
-                }
-            }
+            self.game_rules_values
+                .set_by_name(name, *value, &REGISTRY.game_rules);
         }
     }
 
     /// Saves game rules from the runtime values to the serialized map.
     pub fn save_game_rules(&mut self) {
-        let values = self.game_rules_values.clone();
-        self.export_game_rules(&values);
+        self.game_rules.clear();
+        for (_, rule) in REGISTRY.game_rules.iter() {
+            let name = rule.key.path.to_string();
+            let value = self.game_rules_values.get(rule, &REGISTRY.game_rules);
+            self.game_rules.insert(name, value);
+        }
     }
 
     /// Gets the spawn position as a `BlockPos`.
@@ -143,40 +129,6 @@ impl LevelData {
         self.spawn.x = pos.x();
         self.spawn.y = pos.y();
         self.spawn.z = pos.z();
-    }
-
-    /// Exports game rules from a `GameRuleValues` instance.
-    pub fn export_game_rules(&mut self, values: &GameRuleValues) {
-        self.game_rules.clear();
-
-        for (_, rule) in REGISTRY.game_rules.iter() {
-            let name = rule.key().path.to_string();
-            let value = if let Some(&b) = rule.default_as_any().downcast_ref::<bool>() {
-                // Get actual value, not default - we need to read from values
-                let actual = values.get_bool_dyn(rule, &REGISTRY.game_rules).unwrap_or(b);
-                GameRuleValue::Bool(actual)
-            } else if let Some(&i) = rule.default_as_any().downcast_ref::<i32>() {
-                let actual = values.get_int_dyn(rule, &REGISTRY.game_rules).unwrap_or(i);
-                GameRuleValue::Int(actual)
-            } else {
-                continue;
-            };
-            self.game_rules.insert(name, value);
-        }
-    }
-
-    /// Imports game rules into a `GameRuleValues` instance.
-    pub fn import_game_rules(&self, values: &mut GameRuleValues) {
-        for (name, value) in &self.game_rules {
-            match value {
-                GameRuleValue::Bool(b) => {
-                    values.set_bool_by_name(name, *b, &REGISTRY.game_rules);
-                }
-                GameRuleValue::Int(i) => {
-                    values.set_int_by_name(name, *i, &REGISTRY.game_rules);
-                }
-            }
-        }
     }
 }
 

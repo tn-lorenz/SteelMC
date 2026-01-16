@@ -1,6 +1,5 @@
-use std::any::Any;
-
 use rustc_hash::FxHashMap;
+use serde::{Deserialize, Serialize};
 use steel_utils::Identifier;
 
 use crate::RegistryExt;
@@ -17,60 +16,88 @@ pub enum GameRuleCategory {
     Updates,
 }
 
-/// Trait for game rule value types.
-pub trait GameRuleValue: Any + Send + Sync + 'static {
-    fn as_any(&self) -> &dyn Any;
+/// The type of a game rule value.
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+pub enum GameRuleType {
+    Bool,
+    Int,
 }
 
-impl GameRuleValue for bool {
-    fn as_any(&self) -> &dyn Any {
-        self
+/// A game rule value - either a boolean or an integer.
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize, Deserialize)]
+#[serde(untagged)]
+pub enum GameRuleValue {
+    Bool(bool),
+    Int(i32),
+}
+
+impl GameRuleValue {
+    /// Returns the boolean value if this is a Bool variant.
+    #[must_use]
+    pub fn as_bool(&self) -> Option<bool> {
+        match self {
+            Self::Bool(b) => Some(*b),
+            Self::Int(_) => None,
+        }
+    }
+
+    /// Returns the integer value if this is an Int variant.
+    #[must_use]
+    pub fn as_int(&self) -> Option<i32> {
+        match self {
+            Self::Bool(_) => None,
+            Self::Int(i) => Some(*i),
+        }
+    }
+
+    /// Returns true if this is a Bool variant.
+    #[must_use]
+    pub fn is_bool(&self) -> bool {
+        matches!(self, Self::Bool(_))
+    }
+
+    /// Returns true if this is an Int variant.
+    #[must_use]
+    pub fn is_int(&self) -> bool {
+        matches!(self, Self::Int(_))
+    }
+
+    /// Returns true if this value matches the given type.
+    #[must_use]
+    pub fn matches_type(&self, value_type: GameRuleType) -> bool {
+        matches!(
+            (self, value_type),
+            (Self::Bool(_), GameRuleType::Bool) | (Self::Int(_), GameRuleType::Int)
+        )
     }
 }
 
-impl GameRuleValue for i32 {
-    fn as_any(&self) -> &dyn Any {
-        self
+impl std::fmt::Display for GameRuleValue {
+    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        match self {
+            Self::Bool(b) => write!(f, "{b}"),
+            Self::Int(i) => write!(f, "{i}"),
+        }
     }
 }
 
-/// A strongly typed game rule definition.
+/// A game rule definition.
 #[derive(Debug)]
-pub struct GameRule<T: GameRuleValue> {
+pub struct GameRule {
     /// The key/name of the game rule (e.g., "keep_inventory").
     pub key: Identifier,
     /// The category this game rule belongs to.
     pub category: GameRuleCategory,
+    /// The type of this game rule (bool or int).
+    pub value_type: GameRuleType,
     /// The default value of this game rule.
-    pub default_value: T,
+    pub default_value: GameRuleValue,
 }
 
-/// Type-erased game rule for storage in the registry.
-pub trait GameRuleDyn: Send + Sync {
-    fn key(&self) -> &Identifier;
-    fn category(&self) -> GameRuleCategory;
-    fn default_as_any(&self) -> &dyn Any;
-}
-
-impl<T: GameRuleValue> GameRuleDyn for GameRule<T> {
-    fn key(&self) -> &Identifier {
-        &self.key
-    }
-
-    fn category(&self) -> GameRuleCategory {
-        self.category
-    }
-
-    fn default_as_any(&self) -> &dyn Any {
-        self.default_value.as_any()
-    }
-}
-
-pub type GameRuleRef<T> = &'static GameRule<T>;
-pub type GameRuleDynRef = &'static dyn GameRuleDyn;
+pub type GameRuleRef = &'static GameRule;
 
 pub struct GameRuleRegistry {
-    game_rules_by_id: Vec<GameRuleDynRef>,
+    game_rules_by_id: Vec<GameRuleRef>,
     game_rules_by_key: FxHashMap<Identifier, usize>,
     allows_registering: bool,
 }
@@ -85,7 +112,7 @@ impl GameRuleRegistry {
         }
     }
 
-    pub fn register<T: GameRuleValue>(&mut self, game_rule: GameRuleRef<T>) -> usize {
+    pub fn register(&mut self, game_rule: GameRuleRef) -> usize {
         assert!(
             self.allows_registering,
             "Cannot register game rules after the registry has been frozen"
@@ -98,25 +125,25 @@ impl GameRuleRegistry {
     }
 
     #[must_use]
-    pub fn by_id(&self, id: usize) -> Option<GameRuleDynRef> {
+    pub fn by_id(&self, id: usize) -> Option<GameRuleRef> {
         self.game_rules_by_id.get(id).copied()
     }
 
     #[must_use]
-    pub fn get_id<T: GameRuleValue>(&self, game_rule: GameRuleRef<T>) -> &usize {
+    pub fn get_id(&self, game_rule: GameRuleRef) -> &usize {
         self.game_rules_by_key
             .get(&game_rule.key)
             .expect("Game rule not found")
     }
 
     #[must_use]
-    pub fn by_key(&self, key: &Identifier) -> Option<GameRuleDynRef> {
+    pub fn by_key(&self, key: &Identifier) -> Option<GameRuleRef> {
         self.game_rules_by_key
             .get(key)
             .and_then(|id| self.by_id(*id))
     }
 
-    pub fn iter(&self) -> impl Iterator<Item = (usize, GameRuleDynRef)> + '_ {
+    pub fn iter(&self) -> impl Iterator<Item = (usize, GameRuleRef)> + '_ {
         self.game_rules_by_id
             .iter()
             .enumerate()
@@ -156,118 +183,72 @@ impl Default for GameRuleRegistry {
 ///
 /// This is separate from the registry - the registry holds static definitions,
 /// while `GameRuleValues` holds the actual mutable values for a specific world.
-#[derive(Default)]
+#[derive(Debug, Clone, Default)]
 pub struct GameRuleValues {
-    /// Values stored as type-erased Any, indexed by game rule registry ID.
-    values: Vec<Box<dyn Any + Send + Sync>>,
-}
-
-impl std::fmt::Debug for GameRuleValues {
-    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
-        f.debug_struct("GameRuleValues")
-            .field("values_count", &self.values.len())
-            .finish()
-    }
-}
-
-impl Clone for GameRuleValues {
-    fn clone(&self) -> Self {
-        let values = self
-            .values
-            .iter()
-            .map(|v| {
-                if let Some(&b) = v.downcast_ref::<bool>() {
-                    Box::new(b) as Box<dyn Any + Send + Sync>
-                } else if let Some(&i) = v.downcast_ref::<i32>() {
-                    Box::new(i) as Box<dyn Any + Send + Sync>
-                } else {
-                    panic!("Unknown game rule type in clone")
-                }
-            })
-            .collect();
-        Self { values }
-    }
+    /// Values indexed by game rule registry ID.
+    values: Vec<GameRuleValue>,
 }
 
 impl GameRuleValues {
     /// Creates a new `GameRuleValues` with all default values from the registry.
     #[must_use]
     pub fn new(registry: &GameRuleRegistry) -> Self {
-        let mut values = Vec::with_capacity(registry.len());
-        for (_, rule) in registry.iter() {
-            // Clone the default value into a boxed Any
-            let boxed: Box<dyn Any + Send + Sync> =
-                if let Some(&b) = rule.default_as_any().downcast_ref::<bool>() {
-                    Box::new(b)
-                } else if let Some(&i) = rule.default_as_any().downcast_ref::<i32>() {
-                    Box::new(i)
-                } else {
-                    panic!("Unknown game rule type");
-                };
-            values.push(boxed);
-        }
+        let values = registry
+            .iter()
+            .map(|(_, rule)| rule.default_value)
+            .collect();
         Self { values }
     }
 
     /// Gets the value of a game rule.
     #[must_use]
-    pub fn get<T: GameRuleValue + Copy>(
-        &self,
-        rule: GameRuleRef<T>,
-        registry: &GameRuleRegistry,
-    ) -> T {
+    pub fn get(&self, rule: GameRuleRef, registry: &GameRuleRegistry) -> GameRuleValue {
         let id = *registry.get_id(rule);
-        *self.values[id]
-            .downcast_ref::<T>()
-            .expect("Game rule type mismatch")
+        self.values[id]
     }
 
     /// Sets the value of a game rule.
-    pub fn set<T: GameRuleValue>(
+    ///
+    /// Returns `true` if the value was set, `false` if the type didn't match.
+    pub fn set(
         &mut self,
-        rule: GameRuleRef<T>,
-        value: T,
+        rule: GameRuleRef,
+        value: GameRuleValue,
         registry: &GameRuleRegistry,
-    ) {
+    ) -> bool {
+        if !value.matches_type(rule.value_type) {
+            return false;
+        }
         let id = *registry.get_id(rule);
-        self.values[id] = Box::new(value);
+        self.values[id] = value;
+        true
     }
 
-    /// Gets a boolean game rule value by dynamic reference.
+    /// Gets a game rule value by name.
     #[must_use]
-    pub fn get_bool_dyn(&self, rule: GameRuleDynRef, registry: &GameRuleRegistry) -> Option<bool> {
-        let id = registry.get_id_by_key(rule.key())?;
-        self.values.get(id)?.downcast_ref::<bool>().copied()
+    pub fn get_by_name(&self, name: &str, registry: &GameRuleRegistry) -> Option<GameRuleValue> {
+        let key = Identifier::vanilla(name.to_string());
+        let id = registry.get_id_by_key(&key)?;
+        self.values.get(id).copied()
     }
 
-    /// Gets an integer game rule value by dynamic reference.
-    #[must_use]
-    pub fn get_int_dyn(&self, rule: GameRuleDynRef, registry: &GameRuleRegistry) -> Option<i32> {
-        let id = registry.get_id_by_key(rule.key())?;
-        self.values.get(id)?.downcast_ref::<i32>().copied()
-    }
-
-    /// Sets a boolean game rule value by name.
-    pub fn set_bool_by_name(
+    /// Sets a game rule value by name.
+    ///
+    /// Returns `true` if the game rule was found and set, `false` if the rule
+    /// doesn't exist or the value type doesn't match.
+    pub fn set_by_name(
         &mut self,
         name: &str,
-        value: bool,
+        value: GameRuleValue,
         registry: &GameRuleRegistry,
     ) -> bool {
         let key = Identifier::vanilla(name.to_string());
-        if let Some(id) = registry.get_id_by_key(&key) {
-            self.values[id] = Box::new(value);
-            true
-        } else {
-            false
-        }
-    }
-
-    /// Sets an integer game rule value by name.
-    pub fn set_int_by_name(&mut self, name: &str, value: i32, registry: &GameRuleRegistry) -> bool {
-        let key = Identifier::vanilla(name.to_string());
-        if let Some(id) = registry.get_id_by_key(&key) {
-            self.values[id] = Box::new(value);
+        if let Some(rule) = registry.by_key(&key) {
+            if !value.matches_type(rule.value_type) {
+                return false;
+            }
+            let id = *registry.get_id(rule);
+            self.values[id] = value;
             true
         } else {
             false

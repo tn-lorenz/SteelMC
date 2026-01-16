@@ -13,7 +13,7 @@ use steel_protocol::packets::game::{CBlockDestruction, CPlayerChat, CSystemChat}
 use steel_registry::blocks::BlockRef;
 use steel_registry::blocks::block_state_ext::BlockStateExt;
 use steel_registry::blocks::properties::Direction;
-use steel_registry::game_rules::{GameRuleDynRef, GameRuleRef, GameRuleValue};
+use steel_registry::game_rules::{GameRuleRef, GameRuleValue};
 use steel_registry::vanilla_blocks;
 use steel_registry::{REGISTRY, dimension_type::DimensionTypeRef};
 
@@ -159,9 +159,9 @@ impl World {
             .store(runs_normally, Ordering::Relaxed);
     }
 
-    /// Gets the value of a typed game rule.
+    /// Gets the value of a game rule.
     #[must_use]
-    pub fn get_game_rule<T: GameRuleValue + Copy>(&self, rule: GameRuleRef<T>) -> T {
+    pub fn get_game_rule(&self, rule: GameRuleRef) -> GameRuleValue {
         let level_data = self.level_data.read();
         level_data
             .data()
@@ -169,53 +169,13 @@ impl World {
             .get(rule, &REGISTRY.game_rules)
     }
 
-    /// Sets the value of a typed game rule.
-    pub fn set_game_rule<T: GameRuleValue>(&self, rule: GameRuleRef<T>, value: T) {
+    /// Sets the value of a game rule.
+    pub fn set_game_rule(&self, rule: GameRuleRef, value: GameRuleValue) {
         let mut level_data = self.level_data.write();
         level_data
             .data_mut()
             .game_rules_values
             .set(rule, value, &REGISTRY.game_rules);
-    }
-
-    /// Gets a boolean game rule value by dynamic reference.
-    #[must_use]
-    pub fn get_game_rule_bool_dyn(&self, rule: GameRuleDynRef) -> Option<bool> {
-        let level_data = self.level_data.read();
-        level_data
-            .data()
-            .game_rules_values
-            .get_bool_dyn(rule, &REGISTRY.game_rules)
-    }
-
-    /// Gets an integer game rule value by dynamic reference.
-    #[must_use]
-    pub fn get_game_rule_int_dyn(&self, rule: GameRuleDynRef) -> Option<i32> {
-        let level_data = self.level_data.read();
-        level_data
-            .data()
-            .game_rules_values
-            .get_int_dyn(rule, &REGISTRY.game_rules)
-    }
-
-    /// Sets a boolean game rule value by dynamic reference.
-    pub fn set_game_rule_bool_dyn(&self, rule: GameRuleDynRef, value: bool) {
-        let mut level_data = self.level_data.write();
-        level_data.data_mut().game_rules_values.set_bool_by_name(
-            &rule.key().path,
-            value,
-            &REGISTRY.game_rules,
-        );
-    }
-
-    /// Sets an integer game rule value by dynamic reference.
-    pub fn set_game_rule_int_dyn(&self, rule: GameRuleDynRef, value: i32) {
-        let mut level_data = self.level_data.write();
-        level_data.data_mut().game_rules_values.set_int_by_name(
-            &rule.key().path,
-            value,
-            &REGISTRY.game_rules,
-        );
     }
 
     /// Gets the block state at the given position.

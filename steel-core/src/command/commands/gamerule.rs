@@ -3,7 +3,7 @@ use std::borrow::Cow;
 use std::sync::Arc;
 
 use steel_registry::REGISTRY;
-use steel_registry::game_rules::GameRuleDynRef;
+use steel_registry::game_rules::{GameRuleRef, GameRuleType, GameRuleValue};
 use steel_utils::text::TextComponent;
 use steel_utils::translations;
 
@@ -26,30 +26,32 @@ pub fn command_handler() -> impl CommandHandlerDyn {
     );
 
     for (_, rule) in REGISTRY.game_rules.iter() {
-        let Cow::Borrowed(rule_name) = &rule.key().path else {
+        let Cow::Borrowed(rule_name) = &rule.key.path else {
             unreachable!("registry identifiers are always static")
         };
-        let is_bool = rule.default_as_any().downcast_ref::<bool>().is_some();
 
-        if is_bool {
-            handler = handler.then(
-                literal(rule_name)
-                    .executes(QueryExecutor(rule))
-                    .then(argument("value", BoolArgument).executes(SetBoolExecutor(rule))),
-            );
-        } else {
-            handler = handler.then(
-                literal(rule_name)
-                    .executes(QueryExecutor(rule))
-                    .then(argument("value", IntegerArgument).executes(SetIntExecutor(rule))),
-            );
+        match rule.value_type {
+            GameRuleType::Bool => {
+                handler = handler.then(
+                    literal(rule_name)
+                        .executes(QueryExecutor(rule))
+                        .then(argument("value", BoolArgument).executes(SetBoolExecutor(rule))),
+                );
+            }
+            GameRuleType::Int => {
+                handler = handler.then(
+                    literal(rule_name)
+                        .executes(QueryExecutor(rule))
+                        .then(argument("value", IntegerArgument).executes(SetIntExecutor(rule))),
+                );
+            }
         }
     }
 
     handler
 }
 
-struct QueryExecutor(GameRuleDynRef);
+struct QueryExecutor(GameRuleRef);
 
 impl CommandExecutor<()> for QueryExecutor {
     fn execute(
@@ -59,23 +61,14 @@ impl CommandExecutor<()> for QueryExecutor {
         _server: &Arc<Server>,
     ) -> Result<(), CommandError> {
         let world = context.get_world()?;
-        let rule_name = self.0.key().path.to_string();
-
-        let value_str = if let Some(b) = world.get_game_rule_bool_dyn(self.0) {
-            b.to_string()
-        } else if let Some(i) = world.get_game_rule_int_dyn(self.0) {
-            i.to_string()
-        } else {
-            return Err(CommandError::CommandFailed(Box::new(
-                TextComponent::const_text("Unknown game rule type"),
-            )));
-        };
+        let rule_name = self.0.key.path.to_string();
+        let value = world.get_game_rule(self.0);
 
         context.sender.send_message(
             translations::COMMANDS_GAMERULE_QUERY
                 .message([
                     TextComponent::from(rule_name),
-                    TextComponent::from(value_str),
+                    TextComponent::from(value.to_string()),
                 ])
                 .into(),
         );
@@ -84,7 +77,7 @@ impl CommandExecutor<()> for QueryExecutor {
     }
 }
 
-struct SetBoolExecutor(GameRuleDynRef);
+struct SetBoolExecutor(GameRuleRef);
 
 impl CommandExecutor<((), bool)> for SetBoolExecutor {
     fn execute(
@@ -95,9 +88,9 @@ impl CommandExecutor<((), bool)> for SetBoolExecutor {
     ) -> Result<(), CommandError> {
         let ((), value) = args;
         let world = context.get_world()?;
-        let rule_name = self.0.key().path.to_string();
+        let rule_name = self.0.key.path.to_string();
 
-        world.set_game_rule_bool_dyn(self.0, value);
+        world.set_game_rule(self.0, GameRuleValue::Bool(value));
 
         context.sender.send_message(
             translations::COMMANDS_GAMERULE_SET
@@ -112,7 +105,7 @@ impl CommandExecutor<((), bool)> for SetBoolExecutor {
     }
 }
 
-struct SetIntExecutor(GameRuleDynRef);
+struct SetIntExecutor(GameRuleRef);
 
 impl CommandExecutor<((), i32)> for SetIntExecutor {
     fn execute(
@@ -123,9 +116,9 @@ impl CommandExecutor<((), i32)> for SetIntExecutor {
     ) -> Result<(), CommandError> {
         let ((), value) = args;
         let world = context.get_world()?;
-        let rule_name = self.0.key().path.to_string();
+        let rule_name = self.0.key.path.to_string();
 
-        world.set_game_rule_int_dyn(self.0, value);
+        world.set_game_rule(self.0, GameRuleValue::Int(value));
 
         context.sender.send_message(
             translations::COMMANDS_GAMERULE_SET
