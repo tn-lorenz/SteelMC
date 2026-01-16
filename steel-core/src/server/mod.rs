@@ -69,10 +69,26 @@ impl Server {
 
         let registry_cache = RegistryCache::new().await;
 
+        let seed: i64 = if STEEL_CONFIG.seed.is_empty() {
+            rand::random()
+        } else {
+            STEEL_CONFIG.seed.parse().unwrap_or_else(|_| {
+                let mut hash: i64 = 0;
+                for byte in STEEL_CONFIG.seed.bytes() {
+                    hash = hash.wrapping_mul(31).wrapping_add(i64::from(byte));
+                }
+                hash
+            })
+        };
+
+        let overworld = World::new(chunk_runtime, OVERWORLD, "world", seed)
+            .await
+            .expect("Failed to create overworld");
+
         Server {
             cancel_token,
             key_store: KeyStore::create(),
-            worlds: vec![World::new(chunk_runtime, OVERWORLD)],
+            worlds: vec![overworld],
             registry_cache,
             tick_rate_manager: SyncRwLock::new(TickRateManager::new()),
             command_dispatcher: SyncRwLock::new(CommandDispatcher::new()),

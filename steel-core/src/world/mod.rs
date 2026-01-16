@@ -1,6 +1,7 @@
 //! This module contains the `World` struct, which represents a world.
 use std::{
     io,
+    path::Path,
     sync::{
         Arc, Weak,
         atomic::{AtomicBool, Ordering},
@@ -16,6 +17,7 @@ use steel_registry::blocks::properties::Direction;
 use steel_registry::vanilla_blocks;
 use steel_registry::{REGISTRY, dimension_type::DimensionTypeRef};
 
+use steel_utils::locks::SyncRwLock;
 use steel_utils::{BlockPos, BlockStateId, ChunkPos, SectionPos, types::UpdateFlags};
 use tokio::{runtime::Runtime, time::Instant};
 
@@ -23,6 +25,7 @@ use crate::{
     ChunkMap,
     behavior::BLOCK_BEHAVIORS,
     chunk::chunk_access::ChunkAccess,
+    level_data::LevelDataManager,
     player::{LastSeen, Player},
 };
 
@@ -43,6 +46,8 @@ pub struct World {
     pub player_area_map: PlayerAreaMap,
     /// The dimension of the world.
     pub dimension: DimensionTypeRef,
+    /// Level data manager for persistent world state.
+    pub level_data: SyncRwLock<LevelDataManager>,
     /// Whether the tick rate is running normally (not frozen/paused).
     /// When false, movement validation checks are skipped.
     tick_runs_normally: AtomicBool,
@@ -54,15 +59,40 @@ impl World {
     /// Uses `Arc::new_cyclic` to create a cyclic reference between
     /// the World and its `ChunkMap`'s `WorldGenContext`.
     #[allow(clippy::new_without_default)]
-    #[must_use]
-    pub fn new(chunk_runtime: Arc<Runtime>, dimension: DimensionTypeRef) -> Arc<Self> {
-        Arc::new_cyclic(|weak_self: &Weak<World>| Self {
+    pub async fn new(
+        chunk_runtime: Arc<Runtime>,
+        dimension: DimensionTypeRef,
+        world_dir: impl AsRef<Path>,
+        seed: i64,
+    ) -> io::Result<Arc<Self>> {
+        let level_data = LevelDataManager::new(world_dir, seed).await?;
+
+        Ok(Arc::new_cyclic(|weak_self: &Weak<World>| Self {
             chunk_map: Arc::new(ChunkMap::new(chunk_runtime, weak_self.clone(), &dimension)),
             players: PlayerMap::new(),
             player_area_map: PlayerAreaMap::new(),
             dimension,
+            level_data: SyncRwLock::new(level_data),
             tick_runs_normally: AtomicBool::new(true),
-        })
+        }))
+    }
+
+    /// Cleans up the world by saving all chunks.
+    /// await_holding_lock is safe here cause it's only done on shutdown
+    #[allow(clippy::await_holding_lock)]
+    pub async fn cleanup(&self, total_saved: &mut usize) {
+        match self.level_data.write().save_force().await {
+            Ok(()) => log::info!(
+                "World {} level data saved successfully",
+                self.dimension.key.path
+            ),
+            Err(e) => log::error!("Failed to save world level data: {e}"),
+        }
+
+        match self.save_all_chunks().await {
+            Ok(count) => *total_saved += count,
+            Err(e) => log::error!("Failed to save world chunks: {e}"),
+        }
     }
 
     /// Returns the total height of the world in blocks.
