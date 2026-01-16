@@ -404,15 +404,14 @@ impl ChunkMap {
         };
 
         if !tickable_chunks.is_empty() {
-            self.tick_pool.install(|| {
-                tickable_chunks.par_iter().for_each(|holder| {
-                    if let Some(chunk_guard) = holder.try_chunk(ChunkStatus::Full) {
-                        if let Some(chunk) = chunk_guard.as_ref() {
-                            chunk.tick();
-                        }
-                    }
-                });
-            });
+            // TODO: In the future we might want to tick different regions/islands in parallel
+            for holder in &tickable_chunks {
+                if let Some(chunk_guard) = holder.try_chunk(ChunkStatus::Full)
+                    && let Some(chunk) = chunk_guard.as_ref()
+                {
+                    chunk.tick();
+                }
+            }
         }
     }
 
