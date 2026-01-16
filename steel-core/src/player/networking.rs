@@ -10,7 +10,7 @@ use steel_protocol::packet_writer::TCPNetworkEncoder;
 use steel_protocol::packets::common::{CDisconnect, CKeepAlive, SCustomPayload, SKeepAlive};
 use steel_protocol::packets::game::{
     SAcceptTeleportation, SChat, SChatAck, SChatCommand, SChatSessionUpdate, SChunkBatchReceived,
-    SClientTickEnd, SContainerButtonClick, SContainerClick, SContainerClose,
+    SClientTickEnd, SCommandSuggestion, SContainerButtonClick, SContainerClick, SContainerClose,
     SContainerSlotStateChanged, SMovePlayerPos, SMovePlayerPosRot, SMovePlayerRot,
     SMovePlayerStatusOnly, SPickItemFromBlock, SPlayerAction, SPlayerInput, SPlayerLoad,
     SSetCarriedItem, SSetCreativeModeSlot, SSwing, SUseItem, SUseItemOn,
@@ -174,6 +174,7 @@ impl JavaConnection {
     }
 
     /// Processes a packet from the client.
+    #[allow(clippy::too_many_lines)]
     pub fn process_packet(
         self: &Arc<Self>,
         packet: RawPacket,
@@ -235,6 +236,14 @@ impl JavaConnection {
                     CommandSender::Player(player),
                     SChatCommand::read_packet(data)?.command,
                     &server,
+                );
+            }
+            play::S_COMMAND_SUGGESTION => {
+                let packet = SCommandSuggestion::read_packet(data)?;
+                server.command_dispatcher.read().handle_suggestions(
+                    &player,
+                    packet.id,
+                    &packet.command,
                 );
             }
             play::S_CONTAINER_BUTTON_CLICK => {
