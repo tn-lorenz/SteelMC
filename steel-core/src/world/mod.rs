@@ -1,7 +1,6 @@
 //! This module contains the `World` struct, which represents a world.
 use std::{
     io,
-    path::Path,
     sync::{
         Arc, Weak,
         atomic::{AtomicBool, Ordering},
@@ -78,7 +77,7 @@ impl World {
     }
 
     /// Cleans up the world by saving all chunks.
-    /// await_holding_lock is safe here cause it's only done on shutdown
+    /// `await_holding_lock` is safe here cause it's only done on shutdown
     #[allow(clippy::await_holding_lock)]
     pub async fn cleanup(&self, total_saved: &mut usize) {
         match self.level_data.write().save_force().await {
