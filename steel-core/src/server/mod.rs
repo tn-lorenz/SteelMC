@@ -81,7 +81,7 @@ impl Server {
             })
         };
 
-        let overworld = World::new(chunk_runtime, OVERWORLD, "world", seed)
+        let overworld = World::new(chunk_runtime, OVERWORLD, seed)
             .await
             .expect("Failed to create overworld");
 

@@ -62,10 +62,10 @@ impl World {
     pub async fn new(
         chunk_runtime: Arc<Runtime>,
         dimension: DimensionTypeRef,
-        world_dir: impl AsRef<Path>,
         seed: i64,
     ) -> io::Result<Arc<Self>> {
-        let level_data = LevelDataManager::new(world_dir, seed).await?;
+        let level_data =
+            LevelDataManager::new(format!("world/{}", dimension.key.path), seed).await?;
 
         Ok(Arc::new_cyclic(|weak_self: &Weak<World>| Self {
             chunk_map: Arc::new(ChunkMap::new(chunk_runtime, weak_self.clone(), &dimension)),
