@@ -26,11 +26,13 @@ use message_chain::SignedMessageChain;
 use message_validator::LastSeenMessagesValidator;
 use profile_key::RemoteChatSession;
 pub use signature_cache::{LastSeen, MessageCache};
+use steel_protocol::packet_traits::EncodedPacket;
 use steel_protocol::packets::game::CSetHeldSlot;
 use steel_protocol::packets::game::{
     AnimateAction, CAnimate, CPlayerPosition, PlayerAction, SAcceptTeleportation,
     SPickItemFromBlock, SPlayerAction, SSetCarriedItem, SUseItem, SUseItemOn,
 };
+use steel_protocol::utils::ConnectionProtocol;
 use steel_registry::blocks::block_state_ext::BlockStateExt;
 use steel_registry::blocks::shapes::AABBd;
 use steel_utils::locks::SyncMutex;
@@ -963,8 +965,14 @@ impl Player {
                     x_rot: to_angle_byte(pitch),
                     on_ground: packet.on_ground,
                 };
-                self.world
-                    .broadcast_to_nearby(new_chunk, move_packet, Some(self.entity_id));
+                if let Ok(encoded) = EncodedPacket::from_bare(
+                    move_packet,
+                    STEEL_CONFIG.compression,
+                    ConnectionProtocol::Play,
+                ) {
+                    self.world
+                        .broadcast_to_nearby(new_chunk, encoded, Some(self.entity_id));
+                }
             } else {
                 let rot_packet = CMoveEntityRot {
                     entity_id: self.entity_id,
@@ -972,8 +980,14 @@ impl Player {
                     x_rot: to_angle_byte(pitch),
                     on_ground: packet.on_ground,
                 };
-                self.world
-                    .broadcast_to_nearby(new_chunk, rot_packet, Some(self.entity_id));
+                if let Ok(encoded) = EncodedPacket::from_bare(
+                    rot_packet,
+                    STEEL_CONFIG.compression,
+                    ConnectionProtocol::Play,
+                ) {
+                    self.world
+                        .broadcast_to_nearby(new_chunk, encoded, Some(self.entity_id));
+                }
             }
 
             if packet.has_rot {
@@ -981,8 +995,14 @@ impl Player {
                     entity_id: self.entity_id,
                     head_y_rot: to_angle_byte(yaw),
                 };
-                self.world
-                    .broadcast_to_nearby(new_chunk, head_packet, Some(self.entity_id));
+                if let Ok(encoded) = EncodedPacket::from_bare(
+                    head_packet,
+                    STEEL_CONFIG.compression,
+                    ConnectionProtocol::Play,
+                ) {
+                    self.world
+                        .broadcast_to_nearby(new_chunk, encoded, Some(self.entity_id));
+                }
             }
 
             *self.prev_position.lock() = pos;
@@ -1544,7 +1564,11 @@ impl Player {
         } else {
             Some(self.entity_id)
         };
-        self.world.broadcast_to_nearby(chunk, packet, exclude);
+        if let Ok(encoded) =
+            EncodedPacket::from_bare(packet, STEEL_CONFIG.compression, ConnectionProtocol::Play)
+        {
+            self.world.broadcast_to_nearby(chunk, encoded, exclude);
+        }
     }
 
     /// Handles a player input packet (movement keys, sneaking, sprinting).

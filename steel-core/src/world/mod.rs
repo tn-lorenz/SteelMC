@@ -9,8 +9,9 @@ use std::{
 };
 
 use sha2::{Digest, Sha256};
-use steel_protocol::packet_traits::ClientPacket;
+use steel_protocol::packet_traits::EncodedPacket;
 use steel_protocol::packets::game::{CBlockDestruction, CPlayerChat, CSystemChat};
+use steel_protocol::utils::ConnectionProtocol;
 use steel_registry::blocks::BlockRef;
 use steel_registry::blocks::block_state_ext::BlockStateExt;
 use steel_registry::blocks::properties::Direction;
@@ -26,6 +27,7 @@ use crate::{
     ChunkMap,
     behavior::BLOCK_BEHAVIORS,
     chunk::chunk_access::ChunkAccess,
+    config::STEEL_CONFIG,
     level_data::LevelDataManager,
     player::{LastSeen, Player},
 };
@@ -489,12 +491,11 @@ impl World {
         });
     }
 
-    /// Broadcasts a packet to all players tracking the given chunk.
-    /// TODO: Look into sending `EncodedPacket` instead
-    pub fn broadcast_to_nearby<P: ClientPacket + Clone>(
+    /// Broadcasts an encoded packet to all players tracking the given chunk.
+    pub fn broadcast_to_nearby(
         &self,
         chunk: ChunkPos,
-        packet: P,
+        packet: EncodedPacket,
         exclude: Option<i32>,
     ) {
         let tracking_players = self.player_area_map.get_tracking_players(chunk);
@@ -503,7 +504,7 @@ impl World {
                 continue;
             }
             if let Some(player) = self.players.get_by_entity_id(entity_id) {
-                player.connection.send_packet(packet.clone());
+                player.connection.send_encoded_packet(packet.clone());
             }
         }
     }
@@ -536,6 +537,12 @@ impl World {
             pos,
             progress: progress.clamp(-1, 9) as u8,
         };
-        self.broadcast_to_nearby(chunk, packet, Some(entity_id));
+        let Ok(encoded) =
+            EncodedPacket::from_bare(packet, STEEL_CONFIG.compression, ConnectionProtocol::Play)
+        else {
+            log::warn!("Failed to encode block destruction packet");
+            return;
+        };
+        self.broadcast_to_nearby(chunk, encoded, Some(entity_id));
     }
 }
