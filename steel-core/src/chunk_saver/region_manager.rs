@@ -707,18 +707,14 @@ impl RegionManager {
 
         match status {
             ChunkStatus::Full => ChunkAccess::Full(LevelChunk::from_disk(
-                Sections {
-                    sections: sections.into_iter().map(SectionHolder::new).collect(),
-                },
+                Sections::from_owned(sections.into_boxed_slice()),
                 pos,
                 min_y,
                 height,
                 level,
             )),
             _ => ChunkAccess::Proto(ProtoChunk::from_disk(
-                Sections {
-                    sections: sections.into_iter().map(SectionHolder::new).collect(),
-                },
+                Sections::from_owned(sections.into_boxed_slice()),
                 pos,
                 status,
                 min_y,

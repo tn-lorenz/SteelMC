@@ -61,9 +61,8 @@ impl Sections {
     /// Creates a new `Sections` from a box of owned `ChunkSection`s.
     #[must_use]
     pub fn from_owned(sections: Box<[ChunkSection]>) -> Self {
-        Self {
-            sections: sections.into_iter().map(SectionHolder::new).collect(),
-        }
+        let holders: Arc<[SectionHolder]> = sections.into_iter().map(SectionHolder::new).collect();
+        Self { sections: holders }
     }
 
     /// Gets a block at a relative position in the chunk.

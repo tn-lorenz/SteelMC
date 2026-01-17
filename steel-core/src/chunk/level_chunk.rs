@@ -65,20 +65,20 @@ impl LevelChunk {
             return;
         }
 
-        let Some(world) = self.get_level() else {
-            return;
-        };
-
-        let block_behaviors = &*BLOCK_BEHAVIORS;
-        let mut rng = rand::rng();
-        let chunk_base_x = self.pos.0.x * 16;
-        let chunk_base_z = self.pos.0.y * 16;
-
         for (section_index, section) in self.sections.sections.iter().enumerate() {
             // Skip sections with no randomly-ticking blocks (lock-free check)
             if !section.is_randomly_ticking() {
                 continue;
             }
+
+            let Some(world) = self.get_level() else {
+                return;
+            };
+
+            let block_behaviors = &*BLOCK_BEHAVIORS;
+            let mut rng = rand::rng();
+            let chunk_base_x = self.pos.0.x * 16;
+            let chunk_base_z = self.pos.0.y * 16;
 
             let section_base_y = self.min_y + (section_index as i32 * 16);
 

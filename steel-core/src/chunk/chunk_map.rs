@@ -17,13 +17,13 @@ use steel_utils::{BlockPos, ChunkPos, SectionPos, locks::SyncMutex};
 use tokio::{runtime::Runtime, time::Instant};
 use tokio_util::task::TaskTracker;
 
-use crate::chunk::chunk_access::ChunkAccess;
 use crate::chunk::chunk_holder::ChunkHolder;
 use crate::chunk::chunk_ticket_manager::{
     ChunkTicketManager, LevelChange, MAX_VIEW_DISTANCE, is_full,
 };
 use crate::chunk::player_chunk_view::PlayerChunkView;
 use crate::chunk::world_gen_context::ChunkGeneratorType;
+use crate::chunk::{chunk_access::ChunkAccess, chunk_ticket_manager::is_ticked};
 use crate::chunk::{
     chunk_access::ChunkStatus, chunk_generation_task::ChunkGenerationTask,
     flat_chunk_generator::FlatChunkGenerator, world_gen_context::WorldGenContext,
@@ -399,7 +399,7 @@ impl ChunkMap {
             tickets
                 .iter_levels()
                 .filter_map(|(pos, level)| {
-                    if is_full(level) {
+                    if is_ticked(level) {
                         self.chunks.read_sync(&pos, |_, h| h.clone())
                     } else {
                         None
