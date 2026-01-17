@@ -25,10 +25,10 @@ use crate::chunk::{
     level_chunk::LevelChunk,
     paletted_container::PalettedContainer,
     proto_chunk::ProtoChunk,
-    section::{ChunkSection, Sections},
+    section::{ChunkSection, SectionHolder, Sections},
 };
 use crate::world::World;
-use steel_utils::locks::{AsyncRwLock, SyncRwLock};
+use steel_utils::locks::AsyncRwLock;
 
 use super::{
     bit_pack::{bits_for_palette_len, pack_indices, unpack_indices},
@@ -587,7 +587,7 @@ impl RegionManager {
 
     /// Converts a runtime section to persistent format.
     fn section_to_persistent(
-        section: &SyncRwLock<ChunkSection>,
+        section: &SectionHolder,
         builder: &mut ChunkBuilder,
     ) -> PersistentSection {
         let section = section.read();
@@ -708,7 +708,7 @@ impl RegionManager {
         match status {
             ChunkStatus::Full => ChunkAccess::Full(LevelChunk::from_disk(
                 Sections {
-                    sections: sections.into_iter().map(SyncRwLock::new).collect(),
+                    sections: sections.into_iter().map(SectionHolder::new).collect(),
                 },
                 pos,
                 min_y,
@@ -717,7 +717,7 @@ impl RegionManager {
             )),
             _ => ChunkAccess::Proto(ProtoChunk::from_disk(
                 Sections {
-                    sections: sections.into_iter().map(SyncRwLock::new).collect(),
+                    sections: sections.into_iter().map(SectionHolder::new).collect(),
                 },
                 pos,
                 status,
@@ -740,10 +740,7 @@ impl RegionManager {
                 let block_id = Self::resolve_block_state(chunk, *block_state);
                 let biome_data = Self::persistent_to_biomes(biomes, chunk);
 
-                ChunkSection {
-                    states: PalettedContainer::Homogeneous(block_id),
-                    biomes: biome_data,
-                }
+                ChunkSection::new_with_biomes(PalettedContainer::Homogeneous(block_id), biome_data)
             }
             PersistentSection::Heterogeneous {
                 palette,
@@ -775,10 +772,7 @@ impl RegionManager {
                 let states = PalettedContainer::from_cube(cube);
                 let biome_data = Self::persistent_to_biomes(biomes, chunk);
 
-                ChunkSection {
-                    states,
-                    biomes: biome_data,
-                }
+                ChunkSection::new_with_biomes(states, biome_data)
             }
         }
     }

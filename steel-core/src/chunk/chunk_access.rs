@@ -277,9 +277,12 @@ impl ChunkAccess {
     }
 
     /// Ticks the chunk if it's a full chunk.
-    pub fn tick(&self) {
+    ///
+    /// # Arguments
+    /// * `random_tick_speed` - Number of random blocks to tick per section per tick
+    pub fn tick(&self, random_tick_speed: u32) {
         if let Self::Full(chunk) = self {
-            chunk.tick();
+            chunk.tick(random_tick_speed);
         }
     }
 }

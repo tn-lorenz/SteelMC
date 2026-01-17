@@ -1650,7 +1650,7 @@ impl Player {
 
         // Get the block and its behavior
         let block = state.get_block();
-        let block_behaviors = BLOCK_BEHAVIORS.get().expect("Behaviors not initialized");
+        let block_behaviors = &*BLOCK_BEHAVIORS;
         let behavior = block_behaviors.get_behavior(block);
 
         // Only include data if player has infinite materials (creative mode)

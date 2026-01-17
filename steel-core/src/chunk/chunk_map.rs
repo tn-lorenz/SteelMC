@@ -308,8 +308,13 @@ impl ChunkMap {
         }
     }
 
-    /// Processes chunk updates.
-    pub fn tick_b(self: &Arc<Self>, tick_count: u64) {
+    /// Processes chunk updates and ticks chunks.
+    ///
+    /// # Arguments
+    /// * `tick_count` - The current server tick count
+    /// * `random_tick_speed` - Number of random blocks to tick per section per tick
+    #[allow(clippy::too_many_lines)]
+    pub fn tick_b(self: &Arc<Self>, tick_count: u64, random_tick_speed: u32) {
         let start = Instant::now();
 
         {
@@ -388,6 +393,7 @@ impl ChunkMap {
         }
 
         // Chunk ticking - tick all full chunks in parallel
+        let start_collect = Instant::now();
         let tickable_chunks: Vec<_> = {
             let tickets = self.chunk_tickets.lock();
             tickets
@@ -401,15 +407,30 @@ impl ChunkMap {
                 })
                 .collect()
         };
+        let collect_elapsed = start_collect.elapsed();
+        if collect_elapsed >= SLOW_TASK_WARN_THRESHOLD {
+            log::warn!(
+                "tickable_chunks collect slow: {collect_elapsed:?}, count: {}",
+                tickable_chunks.len()
+            );
+        }
 
         if !tickable_chunks.is_empty() {
+            let start_tick = Instant::now();
             // TODO: In the future we might want to tick different regions/islands in parallel
             for holder in &tickable_chunks {
                 if let Some(chunk_guard) = holder.try_chunk(ChunkStatus::Full)
                     && let Some(chunk) = chunk_guard.as_ref()
                 {
-                    chunk.tick();
+                    chunk.tick(random_tick_speed);
                 }
+            }
+            let tick_elapsed = start_tick.elapsed();
+            if tick_elapsed >= SLOW_TASK_WARN_THRESHOLD {
+                log::warn!(
+                    "chunk tick loop slow: {tick_elapsed:?}, count: {}",
+                    tickable_chunks.len()
+                );
             }
         }
     }
