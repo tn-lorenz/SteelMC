@@ -40,9 +40,13 @@ pub fn command_handler() -> impl CommandHandlerDyn {
             }
             GameRuleType::Int => {
                 handler = handler.then(
-                    literal(rule_name)
-                        .executes(QueryExecutor(rule))
-                        .then(argument("value", IntegerArgument).executes(SetIntExecutor(rule))),
+                    literal(rule_name).executes(QueryExecutor(rule)).then(
+                        argument(
+                            "value",
+                            IntegerArgument::bounded(rule.min_value, rule.max_value),
+                        )
+                        .executes(SetIntExecutor(rule)),
+                    ),
                 );
             }
         }

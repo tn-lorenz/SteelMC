@@ -92,6 +92,10 @@ pub struct GameRule {
     pub value_type: GameRuleType,
     /// The default value of this game rule.
     pub default_value: GameRuleValue,
+    /// Minimum value for integer game rules (None means no limit).
+    pub min_value: Option<i32>,
+    /// Maximum value for integer game rules (None means no limit).
+    pub max_value: Option<i32>,
 }
 
 pub type GameRuleRef = &'static GameRule;
@@ -209,7 +213,8 @@ impl GameRuleValues {
 
     /// Sets the value of a game rule.
     ///
-    /// Returns `true` if the value was set, `false` if the type didn't match.
+    /// Returns `true` if the value was set, `false` if the type didn't match
+    /// or the value is out of bounds.
     pub fn set(
         &mut self,
         rule: GameRuleRef,
@@ -218,6 +223,19 @@ impl GameRuleValues {
     ) -> bool {
         if !value.matches_type(rule.value_type) {
             return false;
+        }
+        // Check bounds for integer values
+        if let GameRuleValue::Int(v) = value {
+            if let Some(min) = rule.min_value
+                && v < min
+            {
+                return false;
+            }
+            if let Some(max) = rule.max_value
+                && v > max
+            {
+                return false;
+            }
         }
         let id = *registry.get_id(rule);
         self.values[id] = value;
@@ -235,7 +253,7 @@ impl GameRuleValues {
     /// Sets a game rule value by name.
     ///
     /// Returns `true` if the game rule was found and set, `false` if the rule
-    /// doesn't exist or the value type doesn't match.
+    /// doesn't exist, the value type doesn't match, or the value is out of bounds.
     pub fn set_by_name(
         &mut self,
         name: &str,
@@ -244,12 +262,7 @@ impl GameRuleValues {
     ) -> bool {
         let key = Identifier::vanilla(name.to_string());
         if let Some(rule) = registry.by_key(&key) {
-            if !value.matches_type(rule.value_type) {
-                return false;
-            }
-            let id = *registry.get_id(rule);
-            self.values[id] = value;
-            true
+            self.set(rule, value, registry)
         } else {
             false
         }
