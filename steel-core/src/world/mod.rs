@@ -8,6 +8,7 @@ use std::{
     time::Duration,
 };
 
+use sha2::{Digest, Sha256};
 use steel_protocol::packet_traits::ClientPacket;
 use steel_protocol::packets::game::{CBlockDestruction, CPlayerChat, CSystemChat};
 use steel_registry::blocks::BlockRef;
@@ -176,6 +177,28 @@ impl World {
             .data_mut()
             .game_rules_values
             .set(rule, value, &REGISTRY.game_rules)
+    }
+
+    /// Gets the world seed.
+    #[must_use]
+    pub fn seed(&self) -> i64 {
+        self.level_data.read().data().seed
+    }
+
+    /// Gets the obfuscated seed for sending to clients.
+    ///
+    /// This uses SHA-256 hashing to prevent clients from easily extracting
+    /// the actual world seed, matching vanilla's `BiomeManager.obfuscateSeed()`.
+    #[must_use]
+    #[allow(clippy::missing_panics_doc)] // SHA-256 always produces 32 bytes
+    pub fn obfuscated_seed(&self) -> i64 {
+        let seed = self.seed();
+        let mut hasher = Sha256::new();
+        hasher.update(seed.to_be_bytes());
+        let result = hasher.finalize();
+        // SHA-256 always produces 32 bytes, so taking 8 bytes always succeeds
+        let bytes: [u8; 8] = result[0..8].try_into().expect("SHA-256 produces 32 bytes");
+        i64::from_be_bytes(bytes)
     }
 
     /// Gets the block state at the given position.

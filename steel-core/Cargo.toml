@@ -51,6 +51,7 @@ log.workspace = true
 # Cryptography
 rsa.workspace = true
 rand.workspace = true
+sha2.workspace = true
 
 # Compression
 zstd.workspace = true

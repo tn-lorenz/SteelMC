@@ -29,7 +29,6 @@ use crate::chunk::{
     flat_chunk_generator::FlatChunkGenerator, world_gen_context::WorldGenContext,
 };
 use crate::chunk_saver::RegionManager;
-use crate::config::STEEL_CONFIG;
 use crate::player::Player;
 use crate::world::World;
 
@@ -484,7 +483,7 @@ impl ChunkMap {
     /// Updates the player's status in the chunk map.
     pub fn update_player_status(&self, player: &Player) {
         let current_chunk_pos = *player.last_chunk_pos.lock();
-        let view_distance = STEEL_CONFIG.view_distance;
+        let view_distance = player.view_distance();
 
         let new_view = PlayerChunkView::new(current_chunk_pos, view_distance);
         let mut last_view_guard = player.last_tracking_view.lock();
