@@ -1,6 +1,9 @@
 use std::{
     io, mem,
-    sync::{Arc, Weak, atomic::Ordering},
+    sync::{
+        Arc, Weak,
+        atomic::{AtomicUsize, Ordering},
+    },
     time::Duration,
 };
 
@@ -62,6 +65,8 @@ pub struct ChunkMap {
     pub region_manager: Arc<RegionManager>,
     /// Chunk holders with pending block changes to broadcast.
     pub chunks_to_broadcast: SyncMutex<Vec<Arc<ChunkHolder>>>,
+    /// Last length of `tickable_chunks` to pre-allocate with appropriate capacity.
+    last_tickable_len: AtomicUsize,
 }
 
 impl ChunkMap {
@@ -95,6 +100,7 @@ impl ChunkMap {
             chunk_runtime,
             region_manager: Arc::new(RegionManager::new(format!("world/{}", dimension.key.path))),
             chunks_to_broadcast: SyncMutex::new(Vec::new()),
+            last_tickable_len: AtomicUsize::new(0),
         }
     }
 
@@ -395,20 +401,18 @@ impl ChunkMap {
         // Chunk ticking - tick all full chunks in parallel
         let start_collect = Instant::now();
         let mut total_chunks = 0;
-        let tickable_chunks: Vec<_> = {
-            let tickets = self.chunk_tickets.lock();
-            tickets
-                .iter_levels()
-                .filter_map(|(pos, level)| {
-                    total_chunks = total_chunks + 1;
-                    if is_ticked(level) {
-                        self.chunks.read_sync(&pos, |_, h| h.clone())
-                    } else {
-                        None
-                    }
-                })
-                .collect()
-        };
+        let last_len = self.last_tickable_len.load(Ordering::Relaxed);
+        let mut tickable_chunks = Vec::with_capacity(last_len);
+        self.chunks.iter_sync(|_, holder| {
+            total_chunks += 1;
+            let level = holder.ticket_level.load(Ordering::Relaxed);
+            if is_ticked(level) {
+                tickable_chunks.push(holder.clone());
+            }
+            true
+        });
+        self.last_tickable_len
+            .store(tickable_chunks.len(), Ordering::Relaxed);
         let collect_elapsed = start_collect.elapsed();
         if collect_elapsed >= SLOW_TASK_WARN_THRESHOLD {
             log::warn!(
