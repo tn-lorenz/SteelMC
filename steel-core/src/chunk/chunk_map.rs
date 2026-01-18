@@ -296,16 +296,12 @@ impl ChunkMap {
         } else {
             //log::info!("Unloading chunk at {pos:?}");
             chunk_holder.cancel_generation_task();
+            chunk_holder.ticket_level.store(u8::MAX, Ordering::Relaxed);
+            chunk_holder.update_highest_allowed_status(u8::MAX);
 
-            // Check for two cause we are also holding a reference to the chunk
-            if let Some((_, holder)) = self
-                .chunks
-                .remove_if_sync(pos, |chunk| Arc::strong_count(chunk) == 2)
-            {
-                let _ = self.unloading_chunks.insert_sync(*pos, holder.clone());
-            } else {
-                chunk_holder.ticket_level.store(u8::MAX, Ordering::Relaxed);
-                chunk_holder.update_highest_allowed_status(u8::MAX);
+            // Move to unloading_chunks for deferred unload
+            if let Some((_, holder)) = self.chunks.remove_sync(pos) {
+                let _ = self.unloading_chunks.insert_sync(*pos, holder);
             }
             None
         }
@@ -436,19 +432,13 @@ impl ChunkMap {
         }
     }
 
-    /// Saves a chunk to disk.
-    ///
-    /// This function is currently a placeholder for the actual saving logic.
+    /// Saves a chunk to disk. Does not remove from `unloading_chunks`.
     #[allow(clippy::missing_panics_doc, clippy::unwrap_used)]
-    pub async fn save_chunk(&self, chunk_holder: &Arc<ChunkHolder>, chunk_map: &Arc<ChunkMap>) {
+    async fn save_chunk(&self, chunk_holder: &Arc<ChunkHolder>) {
         // Prepare chunk data while holding the lock, then release before async I/O
         let prepared = {
             let Some(chunk_guard) = chunk_holder.try_chunk(ChunkStatus::StructureStarts) else {
                 // Chunk was at Empty stage so no need to save it
-                let _ = chunk_map
-                    .unloading_chunks
-                    .remove_async(&chunk_holder.get_pos())
-                    .await;
                 return;
             };
 
@@ -470,50 +460,51 @@ impl ChunkMap {
 
         // Save chunk data if dirty
         if let Some(prepared) = prepared {
-            let result = chunk_map
-                .region_manager
-                .save_chunk_data(prepared, status)
-                .await;
+            let result = self.region_manager.save_chunk_data(prepared, status).await;
 
             if let Err(e) = result {
                 log::error!("Error saving chunk: {e}");
             }
         }
-
-        // Always try to remove from unloading_chunks and release
-        let res = chunk_map
-            .unloading_chunks
-            .remove_async(&chunk_holder.get_pos())
-            .await;
-        if res.is_some()
-            && let Err(e) = chunk_map
-                .region_manager
-                .release_chunk(chunk_holder.get_pos())
-                .await
-            {
-                log::error!("Error releasing chunk: {e}");
-            }
-        // else: Chunk was recovered
     }
 
     /// Processes chunks that are pending unload.
     ///
-    /// This method iterates over the chunks in the `unloading_chunks` map.
-    /// If a chunk is only held by the map (strong count is 1), it is removed
-    /// and a background task is spawned to save it.
+    /// Iterates over `unloading_chunks`. For each chunk with `strong_count == 1`:
+    /// - If not dirty: remove and release region handle
+    /// - If dirty: spawn save task (removal happens on next tick when clean)
     pub fn process_unloads(self: &Arc<Self>) {
-        self.unloading_chunks.iter_sync(|_pos, holder| {
-            // If the strong count is 1, it means only this map holds a reference to the chunk.
-            // We can safely unload it.
-            if Arc::strong_count(holder) == 1 {
-                let holder_clone = holder.clone();
-                let map_clone = self.clone();
+        log::info!("len: {}", self.unloading_chunks.len());
 
-                self.task_tracker.spawn(async move {
-                    map_clone.save_chunk(&holder_clone, &map_clone).await;
-                });
+        self.unloading_chunks.retain_sync(|pos, holder| {
+            if Arc::strong_count(holder) == 1 {
+                // Check if dirty by trying to get chunk access
+                let is_dirty = holder
+                    .try_chunk(ChunkStatus::StructureStarts)
+                    .is_some_and(|chunk| chunk.is_dirty());
+
+                if is_dirty {
+                    // Save the chunk, don't remove yet
+                    let holder_clone = holder.clone();
+                    let map_clone = self.clone();
+                    self.task_tracker.spawn(async move {
+                        map_clone.save_chunk(&holder_clone).await;
+                    });
+                    true // keep
+                } else {
+                    // Clean and no refs - remove and release region handle
+                    let pos = *pos;
+                    let map_clone = self.clone();
+                    self.task_tracker.spawn(async move {
+                        if let Err(e) = map_clone.region_manager.release_chunk(pos).await {
+                            log::error!("Error releasing chunk: {e}");
+                        }
+                    });
+                    false // remove
+                }
+            } else {
+                true // keep, still has refs
             }
-            true
         });
     }
 
