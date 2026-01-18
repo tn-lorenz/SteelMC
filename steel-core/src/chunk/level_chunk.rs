@@ -36,9 +36,9 @@ pub struct LevelChunk {
     /// The position of the chunk.
     pub pos: ChunkPos,
     /// Whether the chunk has been modified since last save.
-    pub dirty: Arc<AtomicBool>,
+    pub dirty: AtomicBool,
     /// The heightmaps for this chunk (wrapped in `RwLock` for interior mutability).
-    pub heightmaps: Arc<SyncRwLock<ChunkHeightmaps>>,
+    pub heightmaps: SyncRwLock<ChunkHeightmaps>,
     /// The minimum Y coordinate of the world this chunk belongs to.
     min_y: i32,
     /// The total height of the world.
@@ -155,15 +155,15 @@ impl LevelChunk {
         drop(proto_heightmaps);
 
         // Recalculate section counts for random tick optimization
-        for section in proto_chunk.sections.sections.iter() {
+        for section in &proto_chunk.sections.sections {
             section.write().recalculate_counts();
         }
 
         Self {
             sections: proto_chunk.sections,
             pos: proto_chunk.pos,
-            dirty: proto_chunk.dirty.clone(),
-            heightmaps: Arc::new(SyncRwLock::new(chunk_heightmaps)),
+            dirty: AtomicBool::new(proto_chunk.dirty.load(Ordering::Acquire)),
+            heightmaps: SyncRwLock::new(chunk_heightmaps),
             min_y,
             height,
             level,
@@ -192,15 +192,15 @@ impl LevelChunk {
         level: Weak<World>,
     ) -> Self {
         // Recalculate section counts for random tick optimization
-        for section in sections.sections.iter() {
+        for section in &sections.sections {
             section.write().recalculate_counts();
         }
 
         Self {
             sections,
             pos,
-            dirty: Arc::new(AtomicBool::new(false)),
-            heightmaps: Arc::new(SyncRwLock::new(ChunkHeightmaps::new(min_y, height))),
+            dirty: AtomicBool::new(false),
+            heightmaps: SyncRwLock::new(ChunkHeightmaps::new(min_y, height)),
             min_y,
             height,
             level,

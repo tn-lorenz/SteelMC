@@ -1,6 +1,5 @@
 //! This module contains the `Sections` and `ChunkSection` structs.
-use std::sync::atomic::{AtomicU16, Ordering};
-use std::{fmt::Debug, io::Cursor, sync::Arc};
+use std::{fmt::Debug, io::Cursor};
 
 use steel_registry::blocks::block_state_ext::BlockStateExt;
 use steel_utils::{BlockStateId, locks::SyncRwLock, serial::WriteTo};
@@ -8,33 +7,33 @@ use steel_utils::{BlockStateId, locks::SyncRwLock, serial::WriteTo};
 use crate::behavior::{BLOCK_BEHAVIORS, BlockBehaviorRegistry};
 use crate::chunk::paletted_container::{BiomePalette, BlockPalette};
 
-/// A wrapper around a chunk section with an atomic ticking block count.
-/// This allows checking if a section has ticking blocks without acquiring the lock.
+/// A wrapper around a chunk section.
 #[derive(Debug)]
 pub struct SectionHolder {
     /// The chunk section data (requires lock to access).
     pub section: SyncRwLock<ChunkSection>,
-    /// Shared atomic ticking block count (also held by `ChunkSection`).
-    ticking_block_count: Arc<AtomicU16>,
 }
 
 impl SectionHolder {
     /// Creates a new section holder.
     #[must_use]
     pub fn new(section: ChunkSection) -> Self {
-        let ticking_count = section.ticking_block_count.clone();
         Self {
             section: SyncRwLock::new(section),
-            ticking_block_count: ticking_count,
         }
     }
 
     /// Returns true if this section contains any randomly-ticking blocks.
-    /// This check is lock-free.
+    ///
+    /// # Safety
+    /// This performs an unsynchronized read of the ticking block count.
+    /// This is safe because:
+    /// - `ticking_block_count` is a `u16` which has atomic reads on all supported platforms
+    /// - A stale/torn read is acceptable here (worst case: we acquire an unnecessary lock)
     #[inline]
     #[must_use]
     pub fn is_randomly_ticking(&self) -> bool {
-        self.ticking_block_count.load(Ordering::Relaxed) > 0
+        unsafe { (*self.section.data_ptr()).ticking_block_count > 0 }
     }
 
     /// Acquires a read lock on the section.
@@ -51,17 +50,21 @@ impl SectionHolder {
 }
 
 /// A collection of chunk sections.
-#[derive(Debug, Clone)]
+#[derive(Debug)]
 pub struct Sections {
     /// The sections in the collection.
-    pub sections: Arc<[SectionHolder]>,
+    pub sections: Box<[SectionHolder]>,
 }
 
 impl Sections {
     /// Creates a new `Sections` from a box of owned `ChunkSection`s.
     #[must_use]
     pub fn from_owned(sections: Box<[ChunkSection]>) -> Self {
-        let holders: Arc<[SectionHolder]> = sections.into_iter().map(SectionHolder::new).collect();
+        let holders: Box<[SectionHolder]> = sections
+            .into_vec()
+            .into_iter()
+            .map(SectionHolder::new)
+            .collect();
         Self { sections: holders }
     }
 
@@ -124,8 +127,7 @@ pub struct ChunkSection {
     /// Used to quickly check if a section is empty.
     non_empty_block_count: u16,
     /// Number of randomly-ticking blocks in this section (0-4096).
-    /// Shared with `SectionHolder` for lock-free checking.
-    ticking_block_count: Arc<AtomicU16>,
+    pub ticking_block_count: u16,
 }
 
 impl ChunkSection {
@@ -139,7 +141,7 @@ impl ChunkSection {
             states,
             biomes: BiomePalette::Homogeneous(0),
             non_empty_block_count: 0,
-            ticking_block_count: Arc::new(AtomicU16::new(0)),
+            ticking_block_count: 0,
         }
     }
 
@@ -153,7 +155,7 @@ impl ChunkSection {
             states,
             biomes,
             non_empty_block_count: 0,
-            ticking_block_count: Arc::new(AtomicU16::new(0)),
+            ticking_block_count: 0,
         }
     }
 
@@ -164,7 +166,7 @@ impl ChunkSection {
             states: BlockPalette::Homogeneous(BlockStateId(0)),
             biomes: BiomePalette::Homogeneous(0),
             non_empty_block_count: 0,
-            ticking_block_count: Arc::new(AtomicU16::new(0)),
+            ticking_block_count: 0,
         }
     }
 
@@ -177,7 +179,7 @@ impl ChunkSection {
     /// Returns true if this section contains any randomly-ticking blocks.
     #[must_use]
     pub fn is_randomly_ticking(&self) -> bool {
-        self.ticking_block_count.load(Ordering::Relaxed) > 0
+        self.ticking_block_count > 0
     }
 
     /// Returns the number of non-air blocks in this section.
@@ -189,7 +191,7 @@ impl ChunkSection {
     /// Returns the number of randomly-ticking blocks in this section.
     #[must_use]
     pub fn ticking_block_count(&self) -> u16 {
-        self.ticking_block_count.load(Ordering::Relaxed)
+        self.ticking_block_count
     }
 
     /// Recalculates both cached counters by iterating all blocks.
@@ -225,7 +227,7 @@ impl ChunkSection {
         }
 
         self.non_empty_block_count = non_empty;
-        self.ticking_block_count.store(ticking, Ordering::Relaxed);
+        self.ticking_block_count = ticking;
     }
 
     /// Sets a block state and updates the cached counters.
@@ -279,9 +281,9 @@ impl ChunkSection {
                 .is_randomly_ticking(new_state);
 
             if old_ticking && !new_ticking {
-                self.ticking_block_count.fetch_sub(1, Ordering::Relaxed);
+                self.ticking_block_count -= 1;
             } else if !old_ticking && new_ticking {
-                self.ticking_block_count.fetch_add(1, Ordering::Relaxed);
+                self.ticking_block_count += 1;
             }
         }
 

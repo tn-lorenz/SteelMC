@@ -97,13 +97,16 @@ impl ChunkMap {
         }
     }
 
-    /// Returns a chunk if it's fully loaded
+    /// Executes a function with access to a fully loaded chunk.
+    /// Returns `None` if the chunk is not loaded or not at Full status.
     #[allow(clippy::missing_panics_doc)]
-    pub fn get_full_chunk(&self, pos: &ChunkPos) -> Option<Arc<ChunkAccess>> {
+    pub fn with_full_chunk<F, R>(&self, pos: &ChunkPos, f: F) -> Option<R>
+    where
+        F: FnOnce(&ChunkAccess) -> R,
+    {
         let chunk_holder = self.chunks.get_sync(pos)?;
-        chunk_holder
-            .try_chunk(ChunkStatus::Full)
-            .map(|guard| guard.as_ref().expect("Not empty by this stage").clone())
+        let guard = chunk_holder.try_chunk(ChunkStatus::Full)?;
+        Some(f(&guard))
     }
 
     /// Records a block change at the given position.
@@ -419,10 +422,8 @@ impl ChunkMap {
             let start_tick = Instant::now();
             // TODO: In the future we might want to tick different regions/islands in parallel
             for holder in &tickable_chunks {
-                if let Some(chunk_guard) = holder.try_chunk(ChunkStatus::Full)
-                    && let Some(chunk) = chunk_guard.as_ref()
-                {
-                    chunk.tick(random_tick_speed);
+                if let Some(chunk_guard) = holder.try_chunk(ChunkStatus::Full) {
+                    chunk_guard.tick(random_tick_speed);
                 }
             }
             let tick_elapsed = start_tick.elapsed();
@@ -440,44 +441,59 @@ impl ChunkMap {
     /// This function is currently a placeholder for the actual saving logic.
     #[allow(clippy::missing_panics_doc, clippy::unwrap_used)]
     pub async fn save_chunk(&self, chunk_holder: &Arc<ChunkHolder>, chunk_map: &Arc<ChunkMap>) {
-        let chunk = chunk_holder.try_chunk(ChunkStatus::StructureStarts);
+        // Prepare chunk data while holding the lock, then release before async I/O
+        let prepared = {
+            let Some(chunk_guard) = chunk_holder.try_chunk(ChunkStatus::StructureStarts) else {
+                // Chunk was at Empty stage so no need to save it
+                let _ = chunk_map
+                    .unloading_chunks
+                    .remove_async(&chunk_holder.get_pos())
+                    .await;
+                return;
+            };
 
-        if let Some(chunk) = chunk {
             let status = chunk_holder
                 .persisted_status()
                 .expect("The check above confirmed it exists");
 
-            let result = chunk_map.region_manager.save_chunk(&chunk, status).await;
+            let prepared = RegionManager::prepare_chunk_save(&chunk_guard);
 
-            match result {
-                Ok(_) => {
-                    let res = chunk_map
-                        .unloading_chunks
-                        .remove_async(&chunk_holder.get_pos())
-                        .await;
-                    if res.is_some() {
-                        if let Err(e) = chunk_map
-                            .region_manager
-                            .release_chunk(chunk_holder.get_pos())
-                            .await
-                        {
-                            log::error!("Error releasing chunk: {e}");
-                        }
-                    } else {
-                        // Chunk was recovered
-                    }
-                }
-                Err(e) => {
-                    log::error!("Error saving chunk: {e}");
-                }
+            // Clear dirty flag while we still have the lock (only if we're actually saving)
+            if prepared.is_some() {
+                chunk_guard.clear_dirty();
             }
-        } else {
-            // Chunk was at Empty stage so no need to save it
-            let _ = chunk_map
-                .unloading_chunks
-                .remove_async(&chunk_holder.get_pos())
+
+            (prepared, status)
+        }; // chunk_guard dropped here
+
+        let (prepared, status) = prepared;
+
+        // Save chunk data if dirty
+        if let Some(prepared) = prepared {
+            let result = chunk_map
+                .region_manager
+                .save_chunk_data(prepared, status)
                 .await;
+
+            if let Err(e) = result {
+                log::error!("Error saving chunk: {e}");
+            }
         }
+
+        // Always try to remove from unloading_chunks and release
+        let res = chunk_map
+            .unloading_chunks
+            .remove_async(&chunk_holder.get_pos())
+            .await;
+        if res.is_some()
+            && let Err(e) = chunk_map
+                .region_manager
+                .release_chunk(chunk_holder.get_pos())
+                .await
+            {
+                log::error!("Error releasing chunk: {e}");
+            }
+        // else: Chunk was recovered
     }
 
     /// Processes chunks that are pending unload.
@@ -625,15 +641,26 @@ impl ChunkMap {
 
         // Save all chunks that have data
         for holder in &all_chunks {
-            if let Some(chunk) = holder.try_chunk(ChunkStatus::StructureStarts)
-                && let Some(status) = holder.persisted_status()
-            {
-                match self.region_manager.save_chunk(&chunk, status).await {
-                    Ok(true) => saved_count += 1,
-                    Ok(false) => {} // Not dirty
-                    Err(e) => {
-                        log::error!("Failed to save chunk at {:?}: {e}", holder.get_pos());
-                    }
+            let prepared = {
+                let Some(chunk) = holder.try_chunk(ChunkStatus::StructureStarts) else {
+                    continue;
+                };
+                let Some(status) = holder.persisted_status() else {
+                    continue;
+                };
+                let Some(prepared) = RegionManager::prepare_chunk_save(&chunk) else {
+                    continue; // Not dirty
+                };
+                chunk.clear_dirty();
+                (prepared, status)
+            };
+
+            let (prepared, status) = prepared;
+            match self.region_manager.save_chunk_data(prepared, status).await {
+                Ok(true) => saved_count += 1,
+                Ok(false) => {} // Not dirty
+                Err(e) => {
+                    log::error!("Failed to save chunk at {:?}: {e}", holder.get_pos());
                 }
             }
         }

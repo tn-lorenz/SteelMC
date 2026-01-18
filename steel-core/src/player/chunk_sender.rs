@@ -81,20 +81,16 @@ impl ChunkSender {
                     let _ = spawn_blocking(move || {
                         let mut chunks_to_send = Vec::new();
                         for holder in chunks_to_process {
-                            if let Some(chunk) = holder.try_chunk(ChunkStatus::Full).map(|chunk| {
-                                if let ChunkAccess::Full(chunk) =
-                                    chunk.as_ref().expect("Chunk is not loaded").as_ref()
-                                {
-                                    CLevelChunkWithLight {
+                            if let Some(chunk_guard) = holder.try_chunk(ChunkStatus::Full) {
+                                if let ChunkAccess::Full(chunk) = &*chunk_guard {
+                                    chunks_to_send.push(CLevelChunkWithLight {
                                         pos: holder.get_pos(),
                                         chunk_data: chunk.extract_chunk_data(),
                                         light_data: chunk.extract_light_data(),
-                                    }
+                                    });
                                 } else {
                                     panic!("Chunk must be at Full status to be sent to the client");
                                 }
-                            }) {
-                                chunks_to_send.push(chunk);
                             }
                         }
 

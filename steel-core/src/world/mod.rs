@@ -28,7 +28,6 @@ use tokio::{runtime::Runtime, time::Instant};
 use crate::{
     ChunkMap,
     behavior::BLOCK_BEHAVIORS,
-    chunk::chunk_access::ChunkAccess,
     config::STEEL_CONFIG,
     level_data::LevelDataManager,
     player::{LastSeen, Player},
@@ -260,11 +259,10 @@ impl World {
             return REGISTRY.blocks.get_base_state_id(vanilla_blocks::AIR);
         }
 
-        let Some(chunk) = self.get_chunk_at(pos) else {
-            return REGISTRY.blocks.get_base_state_id(vanilla_blocks::AIR);
-        };
-
-        chunk.get_block_state(*pos)
+        let chunk_pos = Self::chunk_pos_for_block(pos);
+        self.chunk_map
+            .with_full_chunk(&chunk_pos, |chunk| chunk.get_block_state(*pos))
+            .unwrap_or_else(|| REGISTRY.blocks.get_base_state_id(vanilla_blocks::AIR))
     }
 
     /// Sets a block at the given position.
@@ -296,11 +294,14 @@ impl World {
             return false;
         }
 
-        let Some(chunk) = self.get_chunk_at(&pos) else {
-            return false;
-        };
-
-        let Some(old_state) = chunk.set_block_state(pos, block_state, flags) else {
+        let chunk_pos = Self::chunk_pos_for_block(&pos);
+        let Some(old_state) = self
+            .chunk_map
+            .with_full_chunk(&chunk_pos, |chunk| {
+                chunk.set_block_state(pos, block_state, flags)
+            })
+            .flatten()
+        else {
             return false;
         };
 
@@ -418,12 +419,11 @@ impl World {
         behavior.handle_neighbor_changed(state, self, pos, source_block, moved_by_piston);
     }
 
-    fn get_chunk_at(&self, pos: &BlockPos) -> Option<Arc<ChunkAccess>> {
-        let chunk_pos = ChunkPos::new(
+    fn chunk_pos_for_block(pos: &BlockPos) -> ChunkPos {
+        ChunkPos::new(
             SectionPos::block_to_section_coord(pos.0.x),
             SectionPos::block_to_section_coord(pos.0.z),
-        );
-        self.chunk_map.get_full_chunk(&chunk_pos)
+        )
     }
 
     /// Ticks the world.
