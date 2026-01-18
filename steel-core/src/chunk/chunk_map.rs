@@ -37,6 +37,7 @@ const PROCESS_CHANGES_WARN_THRESHOLD: usize = 1_000;
 #[allow(dead_code)]
 const PROCESS_CHANGES_WARN_MIN_DURATION: Duration = Duration::from_micros(500);
 const SLOW_TASK_WARN_THRESHOLD: Duration = Duration::from_micros(250);
+const SLOW_TASK_WARN_THRESHOLD_BIG: Duration = Duration::from_micros(800);
 /// A map of chunks managing their state, loading, and generation.
 pub struct ChunkMap {
     /// Map of active chunks.
@@ -393,11 +394,13 @@ impl ChunkMap {
 
         // Chunk ticking - tick all full chunks in parallel
         let start_collect = Instant::now();
+        let mut total_chunks = 0;
         let tickable_chunks: Vec<_> = {
             let tickets = self.chunk_tickets.lock();
             tickets
                 .iter_levels()
                 .filter_map(|(pos, level)| {
+                    total_chunks = total_chunks + 1;
                     if is_ticked(level) {
                         self.chunks.read_sync(&pos, |_, h| h.clone())
                     } else {
@@ -423,10 +426,11 @@ impl ChunkMap {
                 }
             }
             let tick_elapsed = start_tick.elapsed();
-            if tick_elapsed >= SLOW_TASK_WARN_THRESHOLD {
+            if tick_elapsed >= SLOW_TASK_WARN_THRESHOLD_BIG {
                 log::warn!(
-                    "chunk tick loop slow: {tick_elapsed:?}, count: {}",
-                    tickable_chunks.len()
+                    "chunk tick loop slow: {tick_elapsed:?}, count: {}/{}",
+                    tickable_chunks.len(),
+                    total_chunks
                 );
             }
         }
@@ -474,8 +478,6 @@ impl ChunkMap {
     /// - If not dirty: remove and release region handle
     /// - If dirty: spawn save task (removal happens on next tick when clean)
     pub fn process_unloads(self: &Arc<Self>) {
-        log::info!("len: {}", self.unloading_chunks.len());
-
         self.unloading_chunks.retain_sync(|pos, holder| {
             if Arc::strong_count(holder) == 1 {
                 // Check if dirty by trying to get chunk access
