@@ -1,6 +1,6 @@
 //! Item stack implementation.
 
-use std::io::{Read, Result, Write};
+use std::io::{Cursor, Result, Write};
 
 use steel_utils::{
     Identifier,
@@ -127,7 +127,7 @@ impl ItemStack {
     #[must_use]
     pub fn get_damage_value(&self) -> i32 {
         self.get(DAMAGE)
-            .copied()
+            .map(|d| d.0)
             .unwrap_or(0)
             .clamp(0, self.get_max_damage())
     }
@@ -135,7 +135,7 @@ impl ItemStack {
     /// Gets the maximum damage this item can take before breaking.
     #[must_use]
     pub fn get_max_damage(&self) -> i32 {
-        self.get(MAX_DAMAGE).copied().unwrap_or(0)
+        self.get(MAX_DAMAGE).map(|d| d.0).unwrap_or(0)
     }
 
     /// Returns true if this item has the specified component (by type).
@@ -182,7 +182,7 @@ impl ItemStack {
     }
 
     pub fn max_stack_size(&self) -> i32 {
-        self.get(MAX_STACK_SIZE).copied().unwrap_or(64)
+        self.get(MAX_STACK_SIZE).map(|s| s.0).unwrap_or(64)
     }
 
     /// Returns the equippable component if this item has one.
@@ -244,6 +244,12 @@ impl ItemStack {
     /// The prototype value will be visible again.
     pub fn clear<T: 'static>(&mut self, component: DataComponentType<T>) {
         self.patch.clear(component);
+    }
+
+    /// Returns a reference to the component patch.
+    #[must_use]
+    pub fn patch(&self) -> &DataComponentPatch {
+        &self.patch
     }
 
     /// Gets the Tool component if present.
@@ -675,7 +681,7 @@ impl WriteTo for ItemStack {
 }
 
 impl ReadFrom for ItemStack {
-    fn read(data: &mut impl Read) -> Result<Self> {
+    fn read(data: &mut Cursor<&[u8]>) -> Result<Self> {
         let count = VarInt::read(data)?.0;
         if count <= 0 {
             return Ok(Self::empty());
