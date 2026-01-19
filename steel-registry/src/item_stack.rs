@@ -154,12 +154,22 @@ impl ItemStack {
     ///
     /// Returns `true` if the item broke and should be removed/replaced.
     ///
+    /// # Arguments
+    /// * `amount` - The amount of damage to apply
+    /// * `has_infinite_materials` - If true (creative mode), skip damage entirely
+    ///
     /// This handles:
     /// - Checking if the item is damageable
+    /// - Skipping damage for players with infinite materials (creative mode)
     /// - Applying unbreaking enchantment (TODO: when enchantments are implemented)
     /// - Breaking the item when durability reaches zero
-    pub fn hurt_and_break(&mut self, amount: i32) -> bool {
+    pub fn hurt_and_break(&mut self, amount: i32, has_infinite_materials: bool) -> bool {
         if !self.is_damageable_item() || amount <= 0 {
+            return false;
+        }
+
+        // Creative mode players don't consume durability
+        if has_infinite_materials {
             return false;
         }
 
@@ -170,10 +180,16 @@ impl ItemStack {
         let effective_amount = amount;
 
         let new_damage = self.get_damage_value() + effective_amount;
+
+        // TODO: Trigger ITEM_DURABILITY_CHANGED advancement criteria
+
         self.set_damage_value(new_damage);
 
         // Check if item broke
         if self.is_broken() {
+            // TODO: Call onEquippedItemBroken callback which:
+            // - Broadcasts entity event (byte 47 for mainhand) for break sound/particles
+            // - Stops location-based effects (removes attribute modifiers)
             self.shrink(1);
             return true;
         }
