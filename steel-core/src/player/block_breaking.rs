@@ -293,7 +293,27 @@ impl BlockBreakingManager {
                     drop_block_loot(player, world, pos, state);
                 }
 
-                // TODO: Damage the tool
+                // Damage the tool if the block has non-zero destroy time
+                let block_destroy_time = REGISTRY
+                    .blocks
+                    .by_state_id(state)
+                    .map_or(0.0, |b| b.config.destroy_time);
+
+                if block_destroy_time != 0.0 {
+                    let mut inv = player.inventory.lock();
+                    let damage_per_block = inv.get_selected_item().get_tool_damage_per_block();
+
+                    if damage_per_block > 0 {
+                        // Use with_selected_item_mut to ensure set_changed() is called
+                        let broke = inv.with_selected_item_mut(|main_hand| {
+                            main_hand.hurt_and_break(damage_per_block)
+                        });
+                        if broke {
+                            // TODO: Play item break sound/particles
+                            log::debug!("Tool broke while mining block at {pos:?}");
+                        }
+                    }
+                }
             }
         }
 

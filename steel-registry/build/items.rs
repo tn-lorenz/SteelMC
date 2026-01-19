@@ -179,6 +179,12 @@ fn generate_builder_calls(item: &Item) -> Vec<TokenStream> {
                     quote! { .builder_set(vanilla_components::#component_ident, Some(vanilla_components::MaxDamage(#val))) },
                 );
             }
+            "minecraft:damage" => {
+                let val = value.as_i64().unwrap() as i32;
+                builder_calls.push(
+                    quote! { .builder_set(vanilla_components::#component_ident, Some(vanilla_components::Damage(#val))) },
+                );
+            }
             "minecraft:repair_cost" => {
                 let val = value.as_i64().unwrap() as i32;
                 if val != 0 {

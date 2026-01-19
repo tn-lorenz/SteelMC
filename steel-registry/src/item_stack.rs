@@ -14,8 +14,8 @@ use crate::{
         ComponentPatchEntry, ComponentValue, DataComponentMap, DataComponentPatch,
         DataComponentType,
         vanilla_components::{
-            DAMAGE, EQUIPPABLE, Equippable, EquippableSlot, MAX_DAMAGE, MAX_STACK_SIZE, TOOL, Tool,
-            UNBREAKABLE,
+            DAMAGE, Damage, EQUIPPABLE, Equippable, EquippableSlot, MAX_DAMAGE, MAX_STACK_SIZE,
+            TOOL, Tool, UNBREAKABLE,
         },
     },
     items::ItemRef,
@@ -132,10 +132,53 @@ impl ItemStack {
             .clamp(0, self.get_max_damage())
     }
 
+    /// Sets the damage value of this item.
+    pub fn set_damage_value(&mut self, value: i32) {
+        let clamped = value.clamp(0, self.get_max_damage());
+        self.set(DAMAGE, Damage(clamped));
+    }
+
     /// Gets the maximum damage this item can take before breaking.
     #[must_use]
     pub fn get_max_damage(&self) -> i32 {
         self.get(MAX_DAMAGE).map(|d| d.0).unwrap_or(0)
+    }
+
+    /// Returns true if the item is broken (damage >= max damage).
+    #[must_use]
+    pub fn is_broken(&self) -> bool {
+        self.is_damageable_item() && self.get_damage_value() >= self.get_max_damage()
+    }
+
+    /// Damages the item and breaks it if durability reaches zero.
+    ///
+    /// Returns `true` if the item broke and should be removed/replaced.
+    ///
+    /// This handles:
+    /// - Checking if the item is damageable
+    /// - Applying unbreaking enchantment (TODO: when enchantments are implemented)
+    /// - Breaking the item when durability reaches zero
+    pub fn hurt_and_break(&mut self, amount: i32) -> bool {
+        if !self.is_damageable_item() || amount <= 0 {
+            return false;
+        }
+
+        // TODO: Apply unbreaking enchantment
+        // let unbreaking_level = self.get_enchantment_level_by_name("unbreaking");
+        // Vanilla formula: chance to not consume durability = unbreaking_level / (unbreaking_level + 1)
+        // For tools: 100% / (level + 1) chance to consume durability
+        let effective_amount = amount;
+
+        let new_damage = self.get_damage_value() + effective_amount;
+        self.set_damage_value(new_damage);
+
+        // Check if item broke
+        if self.is_broken() {
+            self.shrink(1);
+            return true;
+        }
+
+        false
     }
 
     /// Returns true if this item has the specified component (by type).
