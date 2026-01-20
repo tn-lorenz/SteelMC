@@ -2,6 +2,7 @@ mod c_add_entity;
 mod c_animate;
 mod c_block_changed_ack;
 mod c_block_destruction;
+mod c_block_event;
 mod c_block_update;
 mod c_chunk_batch_finished;
 mod c_chunk_batch_start;
@@ -15,6 +16,7 @@ mod c_disguised_chat;
 mod c_forget_level_chunk;
 mod c_game_event;
 mod c_level_chunk_with_light;
+mod c_level_event;
 mod c_login;
 mod c_move_entity;
 mod c_open_screen;
@@ -64,6 +66,7 @@ pub use c_add_entity::CAddEntity;
 pub use c_animate::{AnimateAction, CAnimate};
 pub use c_block_changed_ack::CBlockChangedAck;
 pub use c_block_destruction::CBlockDestruction;
+pub use c_block_event::CBlockEvent;
 pub use c_block_update::CBlockUpdate;
 pub use c_chunk_batch_finished::CChunkBatchFinished;
 pub use c_chunk_batch_start::CChunkBatchStart;
@@ -81,6 +84,7 @@ pub use c_level_chunk_with_light::{
     BlockEntityInfo, CLevelChunkWithLight, ChunkPacketData, HeightmapType, Heightmaps,
     LightUpdatePacketData,
 };
+pub use c_level_event::CLevelEvent;
 pub use c_login::CLogin;
 pub use c_login::CommonPlayerSpawnInfo;
 pub use c_move_entity::{

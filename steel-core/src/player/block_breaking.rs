@@ -277,7 +277,8 @@ impl BlockBreakingManager {
         let changed = world.set_block(pos, air_state, UpdateFlags::UPDATE_ALL);
 
         if changed {
-            // TODO: Call block.destroy for effects
+            // Play block destruction particles and sound
+            world.destroy_block_effect(pos, u32::from(state.0));
 
             // Check if player has correct tool for drops
             let has_correct_tool = {

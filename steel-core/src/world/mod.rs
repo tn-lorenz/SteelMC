@@ -11,7 +11,7 @@ use std::{
 use sha2::{Digest, Sha256};
 use steel_protocol::packet_traits::EncodedPacket;
 use steel_protocol::packets::game::{
-    CBlockDestruction, CPlayerChat, CPlayerInfoUpdate, CSystemChat,
+    CBlockDestruction, CBlockEvent, CLevelEvent, CPlayerChat, CPlayerInfoUpdate, CSystemChat,
 };
 use steel_protocol::utils::ConnectionProtocol;
 
@@ -19,6 +19,7 @@ use steel_registry::blocks::BlockRef;
 use steel_registry::blocks::block_state_ext::BlockStateExt;
 use steel_registry::blocks::properties::Direction;
 use steel_registry::game_rules::{GameRuleRef, GameRuleValue};
+use steel_registry::level_events;
 use steel_registry::vanilla_blocks;
 use steel_registry::vanilla_game_rules::RANDOM_TICK_SPEED;
 use steel_registry::{REGISTRY, dimension_type::DimensionTypeRef};
@@ -632,5 +633,88 @@ impl World {
             return;
         };
         self.broadcast_to_nearby(chunk, encoded, Some(entity_id));
+    }
+
+    /// Broadcasts a level event to nearby players within 64 blocks.
+    ///
+    /// Level events trigger sounds, particles, and animations on the client.
+    /// See `steel_registry::level_events` for available event type constants.
+    ///
+    /// # Arguments
+    /// * `event_type` - The event type ID from `steel_registry::level_events`
+    /// * `pos` - The position where the event occurs
+    /// * `data` - Event-specific data (e.g., block state ID for block destruction)
+    pub fn level_event(&self, event_type: i32, pos: BlockPos, data: i32) {
+        let chunk = ChunkPos::new(
+            SectionPos::block_to_section_coord(pos.x()),
+            SectionPos::block_to_section_coord(pos.z()),
+        );
+        let packet = CLevelEvent::new(event_type, pos, data, false);
+        let Ok(encoded) =
+            EncodedPacket::from_bare(packet, STEEL_CONFIG.compression, ConnectionProtocol::Play)
+        else {
+            log::warn!("Failed to encode level event packet");
+            return;
+        };
+        self.broadcast_to_nearby(chunk, encoded, None);
+    }
+
+    /// Broadcasts a global level event to all players in the world.
+    ///
+    /// Unlike `level_event`, this sends the event to all players regardless of distance.
+    /// Used for events like the ender dragon death or wither spawn.
+    ///
+    /// # Arguments
+    /// * `event_type` - The event type ID from `steel_registry::level_events`
+    /// * `pos` - The position where the event occurs
+    /// * `data` - Event-specific data
+    pub fn global_level_event(&self, event_type: i32, pos: BlockPos, data: i32) {
+        let packet = CLevelEvent::new(event_type, pos, data, true);
+        self.players.iter_players(|_, player| {
+            player.connection.send_packet(packet.clone());
+            true
+        });
+    }
+
+    /// Broadcasts block destruction particles and sound for a destroyed block.
+    ///
+    /// This is a convenience method that sends the `PARTICLES_DESTROY_BLOCK` level event.
+    ///
+    /// # Arguments
+    /// * `pos` - The position of the destroyed block
+    /// * `block_state_id` - The block state ID of the destroyed block
+    pub fn destroy_block_effect(&self, pos: BlockPos, block_state_id: u32) {
+        self.level_event(
+            level_events::PARTICLES_DESTROY_BLOCK,
+            pos,
+            block_state_id as i32,
+        );
+    }
+
+    /// Broadcasts a block event to nearby players.
+    ///
+    /// Block events are used for special block behaviors like pistons, note blocks,
+    /// chests, and bells. Each block type interprets the parameters differently.
+    ///
+    /// # Arguments
+    /// * `pos` - The position of the block
+    /// * `block` - The block reference
+    /// * `action_id` - The action ID (block-specific meaning)
+    /// * `action_param` - The action parameter (block-specific meaning)
+    pub fn block_event(&self, pos: BlockPos, block: BlockRef, action_id: u8, action_param: u8) {
+        let block_id = *REGISTRY.blocks.get_id(block) as i32;
+
+        let chunk = ChunkPos::new(
+            SectionPos::block_to_section_coord(pos.x()),
+            SectionPos::block_to_section_coord(pos.z()),
+        );
+        let packet = CBlockEvent::new(pos, action_id, action_param, block_id);
+        let Ok(encoded) =
+            EncodedPacket::from_bare(packet, STEEL_CONFIG.compression, ConnectionProtocol::Play)
+        else {
+            log::warn!("Failed to encode block event packet");
+            return;
+        };
+        self.broadcast_to_nearby(chunk, encoded, None);
     }
 }

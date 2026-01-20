@@ -21,6 +21,7 @@ mod instruments;
 mod item_tags;
 mod items;
 mod jukebox_songs;
+mod level_events;
 mod loot_tables;
 mod menu_types;
 mod packets;
@@ -73,6 +74,7 @@ const ENTITY_DATA_SERIALIZERS: &str = "entity_data_serializers";
 const LOOT_TABLES: &str = "loot_tables";
 const BLOCK_ENTITY_TYPES: &str = "block_entity_types";
 const GAME_RULES: &str = "game_rules";
+const LEVEL_EVENTS: &str = "level_events";
 
 pub fn main() {
     // Rerun build script when any file in the build/ directory changes
@@ -117,6 +119,7 @@ pub fn main() {
         (loot_tables::build(), LOOT_TABLES),
         (block_entity_types::build(), BLOCK_ENTITY_TYPES),
         (game_rules::build(), GAME_RULES),
+        (level_events::build(), LEVEL_EVENTS),
     ];
 
     for (content, file_name) in vanilla_builds {
