@@ -22,8 +22,8 @@ use crate::{
 /// Thread-safe reference to a player inventory.
 pub type SyncPlayerInv = Arc<SyncMutex<PlayerInventory>>;
 
-/// A boxed container for plugin-defined container types.
-pub type PluginContainer = Box<dyn Container + Send + Sync>;
+/// Thread-safe reference to a generic container implementing the Container trait.
+pub type GenericContainer = Arc<SyncMutex<dyn Container + Send + Sync>>;
 
 /// A locked container guard that provides access to the underlying container.
 ///
@@ -36,8 +36,8 @@ pub enum LockedContainer {
     CraftingContainer(ArcMutexGuard<RawMutex, CraftingContainer>),
     /// A locked crafting result container.
     ResultContainer(ArcMutexGuard<RawMutex, ResultContainer>),
-    /// A locked plugin-defined container.
-    Other(ArcMutexGuard<RawMutex, PluginContainer>),
+    /// A locked generic container.
+    Other(ArcMutexGuard<RawMutex, dyn Container + Send + Sync>),
 }
 
 impl Deref for LockedContainer {
@@ -48,7 +48,7 @@ impl Deref for LockedContainer {
             LockedContainer::PlayerInventory(guard) => &**guard,
             LockedContainer::CraftingContainer(guard) => &**guard,
             LockedContainer::ResultContainer(guard) => &**guard,
-            LockedContainer::Other(guard) => (**guard).as_ref(),
+            LockedContainer::Other(guard) => &**guard,
         }
     }
 }
@@ -59,7 +59,7 @@ impl DerefMut for LockedContainer {
             LockedContainer::PlayerInventory(guard) => &mut **guard,
             LockedContainer::CraftingContainer(guard) => &mut **guard,
             LockedContainer::ResultContainer(guard) => &mut **guard,
-            LockedContainer::Other(guard) => (**guard).as_mut(),
+            LockedContainer::Other(guard) => &mut **guard,
         }
     }
 }
@@ -77,8 +77,8 @@ pub enum ContainerRef {
     CraftingContainer(Arc<SyncMutex<CraftingContainer>>),
     /// Reference to a crafting result container.
     ResultContainer(Arc<SyncMutex<ResultContainer>>),
-    /// Reference to a plugin-defined container.
-    Other(Arc<SyncMutex<PluginContainer>>),
+    /// Reference to a generic container.
+    Other(GenericContainer),
 }
 
 impl From<SyncPlayerInv> for ContainerRef {
