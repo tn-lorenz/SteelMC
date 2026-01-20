@@ -12,13 +12,15 @@ use std::{
 };
 
 use rustc_hash::FxHashMap;
+use simdnbt::owned::NbtCompound;
 use steel_registry::{REGISTRY, Registry};
-use steel_utils::{BlockStateId, ChunkPos, Identifier};
+use steel_utils::{BlockPos, BlockStateId, ChunkPos, Identifier, locks::AsyncRwLock};
 use tokio::{
     fs::{self, File, OpenOptions},
     io::{AsyncReadExt, AsyncSeekExt, AsyncWriteExt},
 };
 
+use crate::block_entity::{BLOCK_ENTITIES, SharedBlockEntity};
 use crate::chunk::{
     chunk_access::{ChunkAccess, ChunkStatus},
     level_chunk::LevelChunk,
@@ -27,15 +29,14 @@ use crate::chunk::{
     section::{ChunkSection, SectionHolder, Sections},
 };
 use crate::world::World;
-use steel_utils::locks::AsyncRwLock;
 
 use super::{
     bit_pack::{bits_for_palette_len, pack_indices, unpack_indices},
     format::{
         BIOMES_PER_SECTION, BLOCKS_PER_SECTION, CHUNK_TABLE_SIZE, FILE_HEADER_SIZE,
         FIRST_DATA_SECTOR, FORMAT_VERSION, MAX_CHUNK_SIZE, PersistentBiomeData,
-        PersistentBlockState, PersistentChunk, PersistentSection, REGION_MAGIC, RegionHeader,
-        RegionPos, SECTOR_SIZE,
+        PersistentBlockEntity, PersistentBlockState, PersistentChunk, PersistentSection,
+        REGION_MAGIC, RegionHeader, RegionPos, SECTOR_SIZE,
     },
 };
 
@@ -312,7 +313,14 @@ impl RegionManager {
         }
 
         let pos = chunk.pos();
-        let persistent = Self::sections_to_persistent(chunk.sections());
+
+        // Get block entities if this is a full chunk
+        let block_entities: Vec<SharedBlockEntity> = chunk
+            .as_full()
+            .map(|c| c.get_block_entities())
+            .unwrap_or_default();
+
+        let persistent = Self::to_persistent(chunk.sections(), &block_entities, pos);
 
         Some(PreparedChunkSave { pos, persistent })
     }
@@ -575,14 +583,41 @@ impl RegionManager {
         Ok(())
     }
 
-    /// Converts sections to persistent format.
-    fn sections_to_persistent(sections: &Sections) -> PersistentChunk {
+    /// Converts chunk data to persistent format.
+    fn to_persistent(
+        sections: &Sections,
+        block_entities: &[SharedBlockEntity],
+        chunk_pos: ChunkPos,
+    ) -> PersistentChunk {
         let mut builder = ChunkBuilder::new(&REGISTRY);
 
         let persistent_sections = sections
             .sections
             .iter()
             .map(|section| Self::section_to_persistent(section, &mut builder))
+            .collect();
+
+        // Serialize block entities
+        let persistent_block_entities: Vec<PersistentBlockEntity> = block_entities
+            .iter()
+            .map(|entity| {
+                let guard = entity.lock();
+                let pos = guard.get_block_pos();
+
+                // Serialize NBT data
+                let mut nbt = NbtCompound::new();
+                guard.save_additional(&mut nbt);
+                let mut nbt_bytes = Vec::new();
+                nbt.write(&mut nbt_bytes);
+
+                PersistentBlockEntity {
+                    x: (pos.0.x - chunk_pos.0.x * 16) as u8,
+                    y: pos.0.y as i16,
+                    z: (pos.0.z - chunk_pos.0.y * 16) as u8,
+                    entity_type: guard.get_type().key.clone(),
+                    nbt_data: nbt_bytes,
+                }
+            })
             .collect();
 
         PersistentChunk {
@@ -593,7 +628,7 @@ impl RegionManager {
             block_states: builder.block_states,
             biomes: builder.biomes,
             sections: persistent_sections,
-            block_entities: Vec::new(), // TODO: Implement block entity serialization
+            block_entities: persistent_block_entities,
         }
     }
 
@@ -718,13 +753,31 @@ impl RegionManager {
             .collect();
 
         match status {
-            ChunkStatus::Full => ChunkAccess::Full(LevelChunk::from_disk(
-                Sections::from_owned(sections.into_boxed_slice()),
-                pos,
-                min_y,
-                height,
-                level,
-            )),
+            ChunkStatus::Full => {
+                let chunk = LevelChunk::from_disk(
+                    Sections::from_owned(sections.into_boxed_slice()),
+                    pos,
+                    min_y,
+                    height,
+                    level,
+                );
+
+                // Load block entities
+                for persistent_be in &persistent.block_entities {
+                    if let Some(block_entity) =
+                        Self::persistent_to_block_entity(persistent_be, pos, &chunk)
+                    {
+                        chunk.add_and_register_block_entity(block_entity);
+                    }
+                }
+
+                // Clear dirty flag since we just loaded (add_and_register marks dirty)
+                chunk
+                    .dirty
+                    .store(false, std::sync::atomic::Ordering::Release);
+
+                ChunkAccess::Full(chunk)
+            }
             _ => ChunkAccess::Proto(ProtoChunk::from_disk(
                 Sections::from_owned(sections.into_boxed_slice()),
                 pos,
@@ -733,6 +786,38 @@ impl RegionManager {
                 height,
             )),
         }
+    }
+
+    /// Converts a persistent block entity to runtime format.
+    fn persistent_to_block_entity(
+        persistent: &PersistentBlockEntity,
+        chunk_pos: ChunkPos,
+        chunk: &LevelChunk,
+    ) -> Option<SharedBlockEntity> {
+        // Calculate absolute position
+        let abs_x = chunk_pos.0.x * 16 + persistent.x as i32;
+        let abs_z = chunk_pos.0.y * 16 + persistent.z as i32;
+        let pos = BlockPos::new(abs_x, persistent.y as i32, abs_z);
+
+        // Get the block state at this position
+        let state = chunk.get_block_state(pos);
+
+        // Look up the block entity type
+        let block_entity_type = REGISTRY
+            .block_entity_types
+            .by_key(&persistent.entity_type)?;
+
+        // Deserialize NBT data
+        let nbt = if persistent.nbt_data.is_empty() {
+            NbtCompound::new()
+        } else {
+            // Parse NBT from bytes
+            simdnbt::owned::read_compound(&mut std::io::Cursor::new(&persistent.nbt_data))
+                .unwrap_or_else(|_| NbtCompound::new())
+        };
+
+        // Create the block entity using the registry
+        BLOCK_ENTITIES.create_and_load(block_entity_type, pos, state, &nbt)
     }
 
     /// Converts a persistent section to runtime format.
