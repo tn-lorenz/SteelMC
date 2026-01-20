@@ -425,6 +425,8 @@ impl RegionManager {
     /// * `min_y` - The minimum Y coordinate of the world
     /// * `height` - The total height of the world
     /// * `level` - Weak reference to the world for `LevelChunk`
+    ///
+    /// The region must already be acquired via `acquire_chunk` before calling this.
     #[allow(clippy::missing_panics_doc)]
     pub async fn load_chunk(
         &self,
@@ -439,31 +441,15 @@ impl RegionManager {
 
         let mut regions = self.regions.write().await;
 
-        // Track if we just opened this region
-        let was_already_open = regions.contains_key(&region_pos);
-
-        // Get or open the region
-        let handle = if let Some(handle) = regions.get_mut(&region_pos) {
-            handle
-        } else {
-            // Try to open region file
-            match self.open_region(region_pos).await {
-                Ok(handle) => {
-                    regions.insert(region_pos, handle);
-                    regions.get_mut(&region_pos).expect("just inserted")
-                }
-                Err(e) if e.kind() == io::ErrorKind::NotFound => return Ok(None),
-                Err(e) => return Err(e),
-            }
+        // Get the region (should already be open via acquire_chunk)
+        let Some(handle) = regions.get_mut(&region_pos) else {
+            log::warn!("load_chunk called without acquire_chunk for region {region_pos:?}");
+            return Ok(None);
         };
 
         // Check if chunk exists
         let entry = handle.header.entries[index];
         if !entry.exists() {
-            // Clean up if we just opened this region for nothing
-            if !was_already_open && handle.loaded_chunk_count == 0 && !handle.header_dirty {
-                regions.remove(&region_pos);
-            }
             return Ok(None);
         }
 
@@ -482,10 +468,40 @@ impl RegionManager {
         let status = entry.status;
         let chunk = Self::persistent_to_chunk(&persistent, pos, status, min_y, height, level);
 
+        Ok(Some((chunk, status)))
+    }
+
+    /// Acquires a chunk, incrementing the region's reference count.
+    ///
+    /// This opens or creates the region file. Call this before loading or
+    /// generating a chunk, and call `release_chunk` when done with the chunk.
+    ///
+    /// Returns `Ok(true)` if the chunk exists on disk, `Ok(false)` if it doesn't.
+    #[allow(clippy::missing_panics_doc)]
+    pub async fn acquire_chunk(&self, pos: ChunkPos) -> io::Result<bool> {
+        let region_pos = RegionPos::from_chunk(pos.0.x, pos.0.y);
+        let (local_x, local_z) = RegionPos::local_chunk_pos(pos.0.x, pos.0.y);
+        let index = RegionHeader::chunk_index(local_x, local_z);
+
+        let mut regions = self.regions.write().await;
+
+        // Get or open/create the region
+        let handle = if let Some(handle) = regions.get_mut(&region_pos) {
+            handle
+        } else {
+            // open_region creates the file if it doesn't exist
+            let handle = self.open_region(region_pos).await?;
+            regions.insert(region_pos, handle);
+            regions.get_mut(&region_pos).expect("just inserted")
+        };
+
+        // Check if chunk exists
+        let exists = handle.header.entries[index].exists();
+
         // Increment ref count
         handle.loaded_chunk_count += 1;
 
-        Ok(Some((chunk, status)))
+        Ok(exists)
     }
 
     /// Releases a loaded chunk, decrementing the region's reference count.

@@ -229,31 +229,33 @@ impl simdnbt::FromNbtTag for Tool {
         // Parse rules
         let mut rules = Vec::new();
         if let Some(rules_list) = compound.get("rules").and_then(|t| t.list())
-            && let Some(compounds) = rules_list.compounds() {
-                for rule_compound in compounds {
-                    let mut blocks = Vec::new();
-                    if let Some(blocks_list) = rule_compound.get("blocks").and_then(|t| t.list())
-                        && let Some(strings) = blocks_list.strings() {
-                            for s in strings {
-                                if let Ok(id) = s.to_str().parse() {
-                                    blocks.push(id);
-                                }
-                            }
+            && let Some(compounds) = rules_list.compounds()
+        {
+            for rule_compound in compounds {
+                let mut blocks = Vec::new();
+                if let Some(blocks_list) = rule_compound.get("blocks").and_then(|t| t.list())
+                    && let Some(strings) = blocks_list.strings()
+                {
+                    for s in strings {
+                        if let Ok(id) = s.to_str().parse() {
+                            blocks.push(id);
                         }
-
-                    let speed = rule_compound.get("speed").and_then(|t| t.float());
-                    let correct_for_drops = rule_compound
-                        .get("correct_for_drops")
-                        .and_then(|t| t.byte())
-                        .map(|b| b != 0);
-
-                    rules.push(ToolRule {
-                        blocks,
-                        speed,
-                        correct_for_drops,
-                    });
+                    }
                 }
+
+                let speed = rule_compound.get("speed").and_then(|t| t.float());
+                let correct_for_drops = rule_compound
+                    .get("correct_for_drops")
+                    .and_then(|t| t.byte())
+                    .map(|b| b != 0);
+
+                rules.push(ToolRule {
+                    blocks,
+                    speed,
+                    correct_for_drops,
+                });
             }
+        }
 
         let default_mining_speed = compound
             .get("default_mining_speed")

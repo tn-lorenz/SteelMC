@@ -644,11 +644,12 @@ impl FromNbtTag for DataComponentPatch {
                 // Set component - use registry to deserialize
                 if let Ok(id) = key_str.parse::<Identifier>()
                     && let Some(reader) = REGISTRY.data_components.get_nbt_reader_by_key(&id)
-                        && let Some(component_value) = reader(value) {
-                            patch
-                                .entries
-                                .insert(id, ComponentPatchEntry::Set(component_value));
-                        }
+                    && let Some(component_value) = reader(value)
+                {
+                    patch
+                        .entries
+                        .insert(id, ComponentPatchEntry::Set(component_value));
+                }
             }
         }
 
