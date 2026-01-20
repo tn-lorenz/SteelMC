@@ -5,14 +5,14 @@
 //! format, avoiding memory duplication.
 
 use std::{
-    io,
+    io::{self, Cursor},
     path::PathBuf,
-    sync::Weak,
+    sync::{Weak, atomic::Ordering},
     time::{SystemTime, UNIX_EPOCH},
 };
 
 use rustc_hash::FxHashMap;
-use simdnbt::owned::NbtCompound;
+use simdnbt::owned::{NbtCompound, read_compound};
 use steel_registry::{REGISTRY, Registry};
 use steel_utils::{BlockPos, BlockStateId, ChunkPos, Identifier, locks::AsyncRwLock};
 use tokio::{
@@ -317,7 +317,7 @@ impl RegionManager {
         // Get block entities if this is a full chunk
         let block_entities: Vec<SharedBlockEntity> = chunk
             .as_full()
-            .map(|c| c.get_block_entities())
+            .map(super::super::chunk::level_chunk::LevelChunk::get_block_entities)
             .unwrap_or_default();
 
         let persistent = Self::to_persistent(chunk.sections(), &block_entities, pos);
@@ -772,9 +772,7 @@ impl RegionManager {
                 }
 
                 // Clear dirty flag since we just loaded (add_and_register marks dirty)
-                chunk
-                    .dirty
-                    .store(false, std::sync::atomic::Ordering::Release);
+                chunk.dirty.store(false, Ordering::Release);
 
                 ChunkAccess::Full(chunk)
             }
@@ -795,9 +793,9 @@ impl RegionManager {
         chunk: &LevelChunk,
     ) -> Option<SharedBlockEntity> {
         // Calculate absolute position
-        let abs_x = chunk_pos.0.x * 16 + persistent.x as i32;
-        let abs_z = chunk_pos.0.y * 16 + persistent.z as i32;
-        let pos = BlockPos::new(abs_x, persistent.y as i32, abs_z);
+        let abs_x = chunk_pos.0.x * 16 + i32::from(persistent.x);
+        let abs_z = chunk_pos.0.y * 16 + i32::from(persistent.z);
+        let pos = BlockPos::new(abs_x, i32::from(persistent.y), abs_z);
 
         // Get the block state at this position
         let state = chunk.get_block_state(pos);
@@ -812,7 +810,7 @@ impl RegionManager {
             NbtCompound::new()
         } else {
             // Parse NBT from bytes
-            simdnbt::owned::read_compound(&mut std::io::Cursor::new(&persistent.nbt_data))
+            read_compound(&mut Cursor::new(&persistent.nbt_data))
                 .unwrap_or_else(|_| NbtCompound::new())
         };
 

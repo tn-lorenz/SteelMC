@@ -15,6 +15,8 @@ use steel_protocol::packets::game::{
 };
 use steel_protocol::utils::ConnectionProtocol;
 
+use simdnbt::owned::NbtCompound;
+use steel_registry::block_entity_type::BlockEntityTypeRef;
 use steel_registry::blocks::BlockRef;
 use steel_registry::blocks::block_state_ext::BlockStateExt;
 use steel_registry::blocks::properties::Direction;
@@ -31,6 +33,7 @@ use tokio::{runtime::Runtime, time::Instant};
 use crate::{
     ChunkMap,
     behavior::BLOCK_BEHAVIORS,
+    block_entity::SharedBlockEntity,
     config::STEEL_CONFIG,
     level_data::LevelDataManager,
     player::{LastSeen, Player},
@@ -433,6 +436,19 @@ impl World {
         )
     }
 
+    /// Gets a block entity at the given position.
+    ///
+    /// Returns `None` if the chunk is not loaded or there is no block entity at the position.
+    #[must_use]
+    pub fn get_block_entity(&self, pos: &BlockPos) -> Option<SharedBlockEntity> {
+        let chunk_pos = Self::chunk_pos_for_block(pos);
+        self.chunk_map
+            .with_full_chunk(&chunk_pos, |chunk| {
+                chunk.as_full().and_then(|lc| lc.get_block_entity(*pos))
+            })
+            .flatten()
+    }
+
     /// Ticks the world.
     ///
     /// * `tick_count` - The current tick number
@@ -632,5 +648,47 @@ impl World {
             return;
         };
         self.broadcast_to_nearby(chunk, encoded, Some(entity_id));
+    }
+
+    /// Broadcasts a block entity update to all players tracking the chunk.
+    ///
+    /// This is used when block entity data changes (e.g., sign text updated).
+    ///
+    /// # Arguments
+    /// * `pos` - The position of the block entity
+    /// * `block_entity_type` - The type of block entity
+    /// * `nbt` - The NBT data to send
+    pub fn broadcast_block_entity_update(
+        &self,
+        pos: BlockPos,
+        block_entity_type: BlockEntityTypeRef,
+        nbt: NbtCompound,
+    ) {
+        use steel_protocol::packets::game::CBlockEntityData;
+        use steel_utils::serial::OptionalNbt;
+
+        let chunk = ChunkPos::new(
+            SectionPos::block_to_section_coord(pos.x()),
+            SectionPos::block_to_section_coord(pos.z()),
+        );
+
+        // Get the block entity type ID from the registry
+        let type_id = *REGISTRY.block_entity_types.get_id(block_entity_type);
+
+        let packet = CBlockEntityData {
+            pos,
+            block_entity_type: type_id as i32,
+            nbt: OptionalNbt(Some(nbt)),
+        };
+
+        let Ok(encoded) =
+            EncodedPacket::from_bare(packet, STEEL_CONFIG.compression, ConnectionProtocol::Play)
+        else {
+            log::warn!("Failed to encode block entity data packet");
+            return;
+        };
+
+        // Broadcast to all tracking players (no exclusions)
+        self.broadcast_to_nearby(chunk, encoded, None);
     }
 }

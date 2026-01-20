@@ -37,6 +37,10 @@ pub fn build(blocks: &[BlockClass]) -> String {
     let mut farm_blocks = Vec::new();
     let mut fence_blocks = Vec::new();
     let mut rotated_pillar_blocks = Vec::new();
+    let mut standing_sign_blocks = Vec::new();
+    let mut wall_sign_blocks = Vec::new();
+    let mut ceiling_hanging_sign_blocks = Vec::new();
+    let mut wall_hanging_sign_blocks = Vec::new();
 
     for block in blocks {
         let const_ident = to_const_ident(&block.name);
@@ -47,6 +51,10 @@ pub fn build(blocks: &[BlockClass]) -> String {
             "FarmBlock" => farm_blocks.push(const_ident),
             "FenceBlock" => fence_blocks.push(const_ident),
             "RotatedPillarBlock" => rotated_pillar_blocks.push(const_ident),
+            "StandingSignBlock" => standing_sign_blocks.push(const_ident),
+            "WallSignBlock" => wall_sign_blocks.push(const_ident),
+            "CeilingHangingSignBlock" => ceiling_hanging_sign_blocks.push(const_ident),
+            "WallHangingSignBlock" => wall_hanging_sign_blocks.push(const_ident),
             _ => {}
         }
     }
@@ -57,6 +65,10 @@ pub fn build(blocks: &[BlockClass]) -> String {
     let farmland_type = Ident::new("FarmlandBlock", Span::call_site());
     let fence_type = Ident::new("FenceBlock", Span::call_site());
     let pillar_type = Ident::new("RotatedPillarBlock", Span::call_site());
+    let standing_sign_type = Ident::new("StandingSignBlock", Span::call_site());
+    let wall_sign_type = Ident::new("WallSignBlock", Span::call_site());
+    let ceiling_hanging_sign_type = Ident::new("CeilingHangingSignBlock", Span::call_site());
+    let wall_hanging_sign_type = Ident::new("WallHangingSignBlock", Span::call_site());
 
     let crafting_table_registrations =
         generate_registrations(crafting_table_blocks.iter(), &crafting_table_type);
@@ -66,13 +78,26 @@ pub fn build(blocks: &[BlockClass]) -> String {
     let farm_registrations = generate_registrations(farm_blocks.iter(), &farmland_type);
     let fence_registrations = generate_registrations(fence_blocks.iter(), &fence_type);
     let pillar_registrations = generate_registrations(rotated_pillar_blocks.iter(), &pillar_type);
+    let standing_sign_registrations =
+        generate_registrations(standing_sign_blocks.iter(), &standing_sign_type);
+    let wall_sign_registrations = generate_registrations(wall_sign_blocks.iter(), &wall_sign_type);
+    let ceiling_hanging_sign_registrations = generate_registrations(
+        ceiling_hanging_sign_blocks.iter(),
+        &ceiling_hanging_sign_type,
+    );
+    let wall_hanging_sign_registrations =
+        generate_registrations(wall_hanging_sign_blocks.iter(), &wall_hanging_sign_type);
 
     let output = quote! {
         //! Generated block behavior assignments.
 
         use steel_registry::vanilla_blocks;
         use crate::behavior::BlockBehaviorRegistry;
-        use crate::behavior::blocks::{CraftingTableBlock, CropBlock, EndPortalFrameBlock, FarmlandBlock, FenceBlock, RotatedPillarBlock};
+        use crate::behavior::blocks::{
+            CraftingTableBlock, CropBlock, EndPortalFrameBlock, FarmlandBlock, FenceBlock,
+            RotatedPillarBlock, StandingSignBlock, WallSignBlock, CeilingHangingSignBlock,
+            WallHangingSignBlock,
+        };
 
         pub fn register_block_behaviors(registry: &mut BlockBehaviorRegistry) {
             #crafting_table_registrations
@@ -81,6 +106,10 @@ pub fn build(blocks: &[BlockClass]) -> String {
             #farm_registrations
             #fence_registrations
             #pillar_registrations
+            #standing_sign_registrations
+            #wall_sign_registrations
+            #ceiling_hanging_sign_registrations
+            #wall_hanging_sign_registrations
         }
     };
 

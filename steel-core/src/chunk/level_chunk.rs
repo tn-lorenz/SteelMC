@@ -429,10 +429,8 @@ impl LevelChunk {
             if block_changed && old_behavior.has_block_entity() {
                 let should_keep = new_behavior.should_keep_block_entity(old_state, state);
                 if !should_keep {
-                    if side_effects {
-                        if let Some(block_entity) = self.get_block_entity(pos) {
-                            block_entity.lock().pre_remove_side_effects(pos, old_state);
-                        }
+                    if side_effects && let Some(block_entity) = self.get_block_entity(pos) {
+                        block_entity.lock().pre_remove_side_effects(pos, old_state);
                     }
                     self.remove_block_entity(pos);
                 }
@@ -529,7 +527,7 @@ impl LevelChunk {
                     packed_xz,
                     y: pos.0.y as i16,
                     type_id,
-                    data: update_tag,
+                    data: update_tag.into(),
                 }
             })
             .collect();

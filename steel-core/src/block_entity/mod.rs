@@ -23,9 +23,11 @@
 //! let entity = BLOCK_ENTITIES.create(block_entity_type, pos, state);
 //! ```
 
+pub mod entities;
 mod registry;
 mod storage;
 
+use std::any::Any;
 use std::sync::Arc;
 
 use simdnbt::owned::NbtCompound;
@@ -42,6 +44,14 @@ use crate::world::World;
 /// Block entities are attached to specific blocks in the world and provide
 /// additional data storage beyond what block states can hold.
 pub trait BlockEntity: Send + Sync {
+    // === Downcasting ===
+
+    /// Returns a reference to the block entity as `Any` for downcasting.
+    fn as_any(&self) -> &dyn Any;
+
+    /// Returns a mutable reference to the block entity as `Any` for downcasting.
+    fn as_any_mut(&mut self) -> &mut dyn Any;
+
     // === Identity ===
 
     /// Returns the type of this block entity.

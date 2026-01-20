@@ -28,6 +28,7 @@ use tokio::{runtime::Runtime, task::spawn_blocking, time::sleep};
 use tokio_util::sync::CancellationToken;
 
 use crate::behavior::init_behaviors;
+use crate::block_entity::init_block_entities;
 use crate::command::CommandDispatcher;
 use crate::config::STEEL_CONFIG;
 use crate::player::Player;
@@ -73,6 +74,7 @@ impl Server {
 
         // Initialize behavior registries after the main registry is frozen
         init_behaviors();
+        init_block_entities();
         log::info!("Behavior registries initialized");
 
         let registry_cache = RegistryCache::new();

@@ -340,6 +340,64 @@ impl Direction {
         }
     }
 
+    /// Returns the yaw rotation for this direction.
+    ///
+    /// Only meaningful for horizontal directions.
+    /// Vertical directions return 0.
+    #[must_use]
+    pub fn to_yaw(&self) -> f32 {
+        match self {
+            Direction::North => 180.0,
+            Direction::South => 0.0,
+            Direction::West => 90.0,
+            Direction::East => 270.0,
+            Direction::Up | Direction::Down => 0.0,
+        }
+    }
+
+    /// Returns the axis this direction is on.
+    #[must_use]
+    pub fn axis(&self) -> Axis {
+        self.get_axis()
+    }
+
+    /// Returns whether this direction is horizontal (not up or down).
+    #[must_use]
+    pub fn is_horizontal(&self) -> bool {
+        matches!(
+            self,
+            Direction::North | Direction::South | Direction::East | Direction::West
+        )
+    }
+
+    /// Rotates this direction 90 degrees clockwise around the Y axis.
+    ///
+    /// Vertical directions are unchanged.
+    #[must_use]
+    pub fn rotate_y_clockwise(&self) -> Direction {
+        match self {
+            Direction::North => Direction::East,
+            Direction::East => Direction::South,
+            Direction::South => Direction::West,
+            Direction::West => Direction::North,
+            other => *other,
+        }
+    }
+
+    /// Rotates this direction 90 degrees counter-clockwise around the Y axis.
+    ///
+    /// Vertical directions are unchanged.
+    #[must_use]
+    pub fn rotate_y_counter_clockwise(&self) -> Direction {
+        match self {
+            Direction::North => Direction::West,
+            Direction::West => Direction::South,
+            Direction::South => Direction::East,
+            Direction::East => Direction::North,
+            other => *other,
+        }
+    }
+
     /// The order in which neighbor shape updates are processed.
     /// This matches vanilla's `BlockBehaviour.UPDATE_SHAPE_ORDER`.
     pub const UPDATE_SHAPE_ORDER: [Direction; 6] = [

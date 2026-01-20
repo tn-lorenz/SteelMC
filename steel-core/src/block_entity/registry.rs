@@ -3,12 +3,17 @@
 use std::ops::Deref;
 use std::sync::OnceLock;
 
+use std::sync::Arc;
+
 use simdnbt::owned::NbtCompound;
 use steel_registry::REGISTRY;
 use steel_registry::block_entity_type::BlockEntityTypeRef;
+use steel_registry::vanilla_block_entity_types;
+use steel_utils::locks::SyncMutex;
 use steel_utils::{BlockPos, BlockStateId};
 
 use super::SharedBlockEntity;
+use super::entities::SignBlockEntity;
 
 /// Factory function type for creating block entities.
 ///
@@ -123,13 +128,17 @@ pub static BLOCK_ENTITIES: BlockEntityRegistryLock = BlockEntityRegistryLock(Onc
 ///
 /// Panics if called more than once.
 pub fn init_block_entities() {
-    let registry = BlockEntityRegistry::new();
+    let mut registry = BlockEntityRegistry::new();
 
-    // TODO: Register block entity factories here when implementations are added
-    // Example:
-    // registry.register(&vanilla_block_entity_types::CHEST, |pos, state| {
-    //     Arc::new(SyncMutex::new(ChestBlockEntity::new(pos, state)))
-    // });
+    // Register sign block entity factory
+    registry.register(vanilla_block_entity_types::SIGN, |pos, state| {
+        Arc::new(SyncMutex::new(SignBlockEntity::new(pos, state)))
+    });
+
+    // Register hanging sign block entity factory
+    registry.register(vanilla_block_entity_types::HANGING_SIGN, |pos, state| {
+        Arc::new(SyncMutex::new(SignBlockEntity::new_hanging(pos, state)))
+    });
 
     assert!(
         BLOCK_ENTITIES.set(registry).is_ok(),
