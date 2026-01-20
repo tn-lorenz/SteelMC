@@ -645,6 +645,8 @@ impl World {
     /// * `pos` - The position where the event occurs
     /// * `data` - Event-specific data (e.g., block state ID for block destruction)
     pub fn level_event(&self, event_type: i32, pos: BlockPos, data: i32) {
+        const MAX_DISTANCE_SQ: f64 = 64.0 * 64.0;
+
         let chunk = ChunkPos::new(
             SectionPos::block_to_section_coord(pos.x()),
             SectionPos::block_to_section_coord(pos.z()),
@@ -656,7 +658,27 @@ impl World {
             log::warn!("Failed to encode level event packet");
             return;
         };
-        self.broadcast_to_nearby(chunk, encoded, None);
+
+        // Get players tracking this chunk, then filter by 64-block distance
+        let event_pos = (
+            f64::from(pos.x()) + 0.5,
+            f64::from(pos.y()) + 0.5,
+            f64::from(pos.z()) + 0.5,
+        );
+
+        for entity_id in self.player_area_map.get_tracking_players(chunk) {
+            if let Some(player) = self.players.get_by_entity_id(entity_id) {
+                let player_pos = *player.position.lock();
+                let dx = player_pos.x - event_pos.0;
+                let dy = player_pos.y - event_pos.1;
+                let dz = player_pos.z - event_pos.2;
+                let dist_sq = dx * dx + dy * dy + dz * dz;
+
+                if dist_sq <= MAX_DISTANCE_SQ {
+                    player.connection.send_encoded_packet(encoded.clone());
+                }
+            }
+        }
     }
 
     /// Broadcasts a global level event to all players in the world.
@@ -691,7 +713,7 @@ impl World {
         );
     }
 
-    /// Broadcasts a block event to nearby players.
+    /// Broadcasts a block event to nearby players within 64 blocks.
     ///
     /// Block events are used for special block behaviors like pistons, note blocks,
     /// chests, and bells. Each block type interprets the parameters differently.
@@ -702,6 +724,8 @@ impl World {
     /// * `action_id` - The action ID (block-specific meaning)
     /// * `action_param` - The action parameter (block-specific meaning)
     pub fn block_event(&self, pos: BlockPos, block: BlockRef, action_id: u8, action_param: u8) {
+        const MAX_DISTANCE_SQ: f64 = 64.0 * 64.0;
+
         let block_id = *REGISTRY.blocks.get_id(block) as i32;
 
         let chunk = ChunkPos::new(
@@ -715,6 +739,26 @@ impl World {
             log::warn!("Failed to encode block event packet");
             return;
         };
-        self.broadcast_to_nearby(chunk, encoded, None);
+
+        // Get players tracking this chunk, then filter by 64-block distance
+        let event_pos = (
+            f64::from(pos.x()) + 0.5,
+            f64::from(pos.y()) + 0.5,
+            f64::from(pos.z()) + 0.5,
+        );
+
+        for entity_id in self.player_area_map.get_tracking_players(chunk) {
+            if let Some(player) = self.players.get_by_entity_id(entity_id) {
+                let player_pos = *player.position.lock();
+                let dx = player_pos.x - event_pos.0;
+                let dy = player_pos.y - event_pos.1;
+                let dz = player_pos.z - event_pos.2;
+                let dist_sq = dx * dx + dy * dy + dz * dz;
+
+                if dist_sq <= MAX_DISTANCE_SQ {
+                    player.connection.send_encoded_packet(encoded.clone());
+                }
+            }
+        }
     }
 }
