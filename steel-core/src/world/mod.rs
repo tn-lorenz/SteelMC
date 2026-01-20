@@ -11,7 +11,8 @@ use std::{
 use sha2::{Digest, Sha256};
 use steel_protocol::packet_traits::EncodedPacket;
 use steel_protocol::packets::game::{
-    CBlockDestruction, CBlockEvent, CLevelEvent, CPlayerChat, CPlayerInfoUpdate, CSystemChat,
+    CBlockDestruction, CBlockEvent, CLevelEvent, CPlayerChat, CPlayerInfoUpdate, CSound,
+    CSystemChat, SoundSource,
 };
 use steel_protocol::utils::ConnectionProtocol;
 
@@ -760,5 +761,86 @@ impl World {
                 }
             }
         }
+    }
+
+    /// Plays a sound at a specific position, broadcasting to nearby players.
+    ///
+    /// The sound is sent to all players within 64 blocks of the position.
+    ///
+    /// # Arguments
+    /// * `sound_id` - The sound event registry ID (from `steel_registry::sound_events`)
+    /// * `source` - The sound source category
+    /// * `pos` - The block position (sound plays at center of block)
+    /// * `volume` - Volume multiplier (1.0 = normal)
+    /// * `pitch` - Pitch multiplier (1.0 = normal)
+    pub fn play_sound(
+        &self,
+        sound_id: i32,
+        source: SoundSource,
+        pos: BlockPos,
+        volume: f32,
+        pitch: f32,
+    ) {
+        const MAX_DISTANCE_SQ: f64 = 64.0 * 64.0;
+
+        let chunk = ChunkPos::new(
+            SectionPos::block_to_section_coord(pos.x()),
+            SectionPos::block_to_section_coord(pos.z()),
+        );
+
+        // Generate a random seed for sound variations
+        let seed = rand::random::<i64>();
+
+        let packet = CSound::new(
+            sound_id,
+            source,
+            f64::from(pos.x()) + 0.5,
+            f64::from(pos.y()) + 0.5,
+            f64::from(pos.z()) + 0.5,
+            volume,
+            pitch,
+            seed,
+        );
+        let Ok(encoded) =
+            EncodedPacket::from_bare(packet, STEEL_CONFIG.compression, ConnectionProtocol::Play)
+        else {
+            log::warn!("Failed to encode sound packet");
+            return;
+        };
+
+        // Get players tracking this chunk, then filter by 64-block distance
+        let sound_pos = (
+            f64::from(pos.x()) + 0.5,
+            f64::from(pos.y()) + 0.5,
+            f64::from(pos.z()) + 0.5,
+        );
+
+        for entity_id in self.player_area_map.get_tracking_players(chunk) {
+            if let Some(player) = self.players.get_by_entity_id(entity_id) {
+                let player_pos = *player.position.lock();
+                let dx = player_pos.x - sound_pos.0;
+                let dy = player_pos.y - sound_pos.1;
+                let dz = player_pos.z - sound_pos.2;
+                let dist_sq = dx * dx + dy * dy + dz * dz;
+
+                if dist_sq <= MAX_DISTANCE_SQ {
+                    player.connection.send_encoded_packet(encoded.clone());
+                }
+            }
+        }
+    }
+
+    /// Plays a block sound at a specific position.
+    ///
+    /// Convenience method that uses the BLOCKS sound source and applies
+    /// the sound type's volume and pitch modifiers.
+    ///
+    /// # Arguments
+    /// * `sound_id` - The sound event registry ID
+    /// * `pos` - The block position
+    /// * `volume` - Base volume (typically from `SoundType`)
+    /// * `pitch` - Base pitch (typically from `SoundType`)
+    pub fn play_block_sound(&self, sound_id: i32, pos: BlockPos, volume: f32, pitch: f32) {
+        self.play_sound(sound_id, SoundSource::Blocks, pos, volume, pitch);
     }
 }

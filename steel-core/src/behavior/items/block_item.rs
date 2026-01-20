@@ -90,10 +90,18 @@ impl ItemBehavior for BlockItemBehavior {
             return InteractionResult::Fail;
         }
 
+        // Play place sound
+        let sound_type = &self.block.config.sound_type;
+        context.world.play_block_sound(
+            sound_type.place_sound,
+            place_pos,
+            sound_type.volume,
+            sound_type.pitch,
+        );
+
         // Consume one item from the stack
         context.item_stack.shrink(1);
 
-        // TODO: Play place sound
         // TODO: Call behavior.on_place()
 
         InteractionResult::Success
