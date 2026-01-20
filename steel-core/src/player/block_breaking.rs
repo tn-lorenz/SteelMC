@@ -277,8 +277,14 @@ impl BlockBreakingManager {
         let changed = world.set_block(pos, air_state, UpdateFlags::UPDATE_ALL);
 
         if changed {
-            // Play block destruction particles and sound
-            world.destroy_block_effect(pos, u32::from(state.0));
+            // Play block destruction particles and sound (skip for fire blocks like vanilla)
+            let block = REGISTRY.blocks.by_state_id(state);
+            let is_fire = block.is_some_and(|b| {
+                b.key == vanilla_blocks::FIRE.key || b.key == vanilla_blocks::SOUL_FIRE.key
+            });
+            if !is_fire {
+                world.destroy_block_effect(pos, u32::from(state.0));
+            }
 
             // Check if player has correct tool for drops
             let has_correct_tool = {
