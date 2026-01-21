@@ -22,7 +22,7 @@ use std::{
 
 use block_breaking::BlockBreakingManager;
 use crossbeam::atomic::AtomicCell;
-pub use game_profile::GameProfile;
+pub use game_profile::{GameProfile, GameProfileAction};
 use message_chain::SignedMessageChain;
 use message_validator::LastSeenMessagesValidator;
 use profile_key::RemoteChatSession;
