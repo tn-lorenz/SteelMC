@@ -13,6 +13,7 @@ use crate::behavior::block::BlockBehaviour;
 use crate::behavior::context::{BlockHitResult, BlockPlaceContext, InteractionResult};
 use crate::block_entity::{BLOCK_ENTITIES, SharedBlockEntity};
 use crate::inventory::chest_menu::ChestMenuProvider;
+use crate::inventory::container::calculate_redstone_signal_from_container;
 use crate::inventory::lock::ContainerRef;
 use crate::player::Player;
 use crate::world::World;
@@ -35,11 +36,8 @@ impl BarrelBlock {
 
 impl BlockBehaviour for BarrelBlock {
     fn get_state_for_placement(&self, context: &BlockPlaceContext<'_>) -> Option<BlockStateId> {
-        // Barrel faces opposite to the player's look direction.
-        // For now, we use horizontal_direction since BlockPlaceContext doesn't have pitch.
-        // This means barrels will always face horizontally when placed.
-        // TODO: Add pitch to BlockPlaceContext for proper 6-direction facing.
-        let facing = context.horizontal_direction.opposite();
+        // Barrel faces opposite to the player's look direction (all 6 directions).
+        let facing = context.get_nearest_looking_direction().opposite();
 
         Some(
             self.block
@@ -75,6 +73,9 @@ impl BlockBehaviour for BarrelBlock {
 
         // TODO: Award stat OPEN_BARREL
         // TODO: Anger nearby piglins (PiglinAi.angerNearbyPiglins)
+        // TODO: Implement ContainerOpenersCounter to track open state, play sounds,
+        //       and update OPEN block property. Requires scheduled block ticks (scheduleTick)
+        //       for recheck functionality. See vanilla BarrelBlockEntity and ContainerOpenersCounter.
 
         InteractionResult::Success
     }
@@ -90,5 +91,23 @@ impl BlockBehaviour for BarrelBlock {
         state: BlockStateId,
     ) -> Option<SharedBlockEntity> {
         BLOCK_ENTITIES.create(vanilla_block_entity_types::BARREL, level, pos, state)
+    }
+
+    fn has_analog_output_signal(&self, _state: BlockStateId) -> bool {
+        true
+    }
+
+    fn get_analog_output_signal(&self, _state: BlockStateId, world: &World, pos: BlockPos) -> i32 {
+        // Get the block entity and calculate signal from container contents
+        world
+            .get_block_entity(&pos)
+            .map_or(0, |be| {
+                let guard = be.lock();
+                if let Some(container) = guard.as_container() {
+                    calculate_redstone_signal_from_container(container)
+                } else {
+                    0
+                }
+            })
     }
 }

@@ -223,6 +223,31 @@ pub trait BlockBehaviour: Send + Sync {
     fn should_keep_block_entity(&self, old_state: BlockStateId, new_state: BlockStateId) -> bool {
         false
     }
+
+    // === Redstone / Comparator Methods ===
+
+    /// Returns whether this block can provide an analog output signal to comparators.
+    ///
+    /// Override to return `true` for containers (chests, barrels, hoppers, etc.)
+    /// and other blocks that comparators can read (composters, beehives, etc.).
+    #[allow(unused_variables)]
+    fn has_analog_output_signal(&self, state: BlockStateId) -> bool {
+        false
+    }
+
+    /// Returns the analog output signal strength (0-15) for comparators.
+    ///
+    /// Only called if `has_analog_output_signal()` returns `true`.
+    /// For containers, this is typically based on how full they are.
+    ///
+    /// # Arguments
+    /// * `state` - The current block state
+    /// * `world` - The world
+    /// * `pos` - The position of the block
+    #[allow(unused_variables)]
+    fn get_analog_output_signal(&self, state: BlockStateId, world: &World, pos: BlockPos) -> i32 {
+        0
+    }
 }
 
 /// Default block behavior that returns the block's default state for placement.

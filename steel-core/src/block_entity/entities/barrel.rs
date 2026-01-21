@@ -94,13 +94,22 @@ impl BlockEntity for BarrelBlockEntity {
         self.level.upgrade()
     }
 
+    fn pre_remove_side_effects(&mut self, pos: BlockPos, _state: BlockStateId) {
+        // Drop all items when the barrel is broken
+        if let Some(world) = self.level.upgrade() {
+            for item in self.items.drain(..) {
+                world.drop_item_stack(pos, item);
+            }
+        }
+    }
+
     fn load_additional(&mut self, nbt: &BorrowedNbtCompound<'_>) {
         // Convert to NbtCompound view for accessing methods
         let nbt_view: simdnbt::borrow::NbtCompound<'_, '_> = nbt.into();
 
         // Load items from NBT using borrowed NBT for proper ItemStack parsing
-        if let Some(items_list) = nbt_view.list("Items") {
-            if let Some(compounds) = items_list.compounds() {
+        if let Some(items_list) = nbt_view.list("Items")
+            && let Some(compounds) = items_list.compounds() {
                 for compound in compounds {
                     // Each item has a "Slot" byte and item data
                     if let Some(slot) = compound.byte("Slot") {
@@ -114,7 +123,6 @@ impl BlockEntity for BarrelBlockEntity {
                     }
                 }
             }
-        }
     }
 
     fn save_additional(&self, nbt: &mut NbtCompound) {
@@ -176,7 +184,7 @@ impl Container for BarrelBlockEntity {
     }
 }
 
-/// Parses an ItemStack from a borrowed NbtCompound.
+/// Parses an `ItemStack` from a borrowed `NbtCompound`.
 ///
 /// This mirrors the logic of `ItemStack::from_nbt_tag` but works directly with
 /// borrowed compound data, properly parsing component patches.

@@ -21,6 +21,7 @@ use steel_registry::blocks::BlockRef;
 use steel_registry::blocks::block_state_ext::BlockStateExt;
 use steel_registry::blocks::properties::Direction;
 use steel_registry::game_rules::{GameRuleRef, GameRuleValue};
+use steel_registry::item_stack::ItemStack;
 use steel_registry::vanilla_blocks;
 use steel_registry::vanilla_game_rules::RANDOM_TICK_SPEED;
 use steel_registry::{REGISTRY, dimension_type::DimensionTypeRef};
@@ -702,5 +703,27 @@ impl World {
 
         // Broadcast to all tracking players (no exclusions)
         self.broadcast_to_nearby(chunk, encoded, None);
+    }
+
+    /// Drops an item stack at the given position.
+    ///
+    /// This spawns an item entity at the specified location with random velocity.
+    /// Based on Java's `Containers.dropItemStack`.
+    ///
+    /// # Arguments
+    /// * `pos` - The block position to drop the item at
+    /// * `item` - The item stack to drop
+    pub fn drop_item_stack(&self, pos: BlockPos, item: ItemStack) {
+        if item.is_empty() {
+            return;
+        }
+        // TODO: Spawn ItemEntity when entity system is implemented
+        // For now, items are lost when containers are broken
+        log::debug!(
+            "Would drop item at {:?}: {:?} x{}",
+            pos,
+            item.item().key,
+            item.count()
+        );
     }
 }

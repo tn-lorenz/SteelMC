@@ -179,11 +179,14 @@ impl ItemBehavior for SignItemBehavior {
             replace_clicked,
             horizontal_direction: Direction::from_yaw(yaw),
             rotation: yaw,
+            pitch,
             world: context.world,
         };
 
         // Try to get a valid placement state (standing or wall)
-        let Some(new_state) = self.get_placement_state(&place_context, &place_pos, pitch) else {
+        let Some(new_state) =
+            self.get_placement_state(&place_context, &place_pos, place_context.pitch)
+        else {
             return InteractionResult::Fail;
         };
 
@@ -331,7 +334,7 @@ impl ItemBehavior for HangingSignItemBehavior {
         }
 
         // Get player rotation for placement context
-        let (yaw, _pitch) = context.player.rotation.load();
+        let (yaw, pitch) = context.player.rotation.load();
 
         let place_context = BlockPlaceContext {
             clicked_pos,
@@ -342,6 +345,7 @@ impl ItemBehavior for HangingSignItemBehavior {
             replace_clicked,
             horizontal_direction: Direction::from_yaw(yaw),
             rotation: yaw,
+            pitch,
             world: context.world,
         };
 
