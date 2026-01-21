@@ -6,8 +6,8 @@
 use std::any::Any;
 use std::sync::{Arc, Weak};
 
-use simdnbt::borrow::BaseNbtCompound as BorrowedNbtCompound;
-use simdnbt::owned::{NbtCompound, NbtList};
+use simdnbt::borrow::{BaseNbtCompound as BorrowedNbtCompound, NbtCompound as NbtCompoundView};
+use simdnbt::owned::{NbtCompound, NbtList, NbtTag};
 use simdnbt::{FromNbtTag, ToNbtTag};
 use steel_registry::REGISTRY;
 use steel_registry::block_entity_type::BlockEntityTypeRef;
@@ -105,7 +105,7 @@ impl BlockEntity for BarrelBlockEntity {
 
     fn load_additional(&mut self, nbt: &BorrowedNbtCompound<'_>) {
         // Convert to NbtCompound view for accessing methods
-        let nbt_view: simdnbt::borrow::NbtCompound<'_, '_> = nbt.into();
+        let nbt_view: NbtCompoundView<'_, '_> = nbt.into();
 
         // Load items from NBT using borrowed NBT for proper ItemStack parsing
         if let Some(items_list) = nbt_view.list("Items")
@@ -132,7 +132,7 @@ impl BlockEntity for BarrelBlockEntity {
         for (slot, item) in self.items.iter().enumerate() {
             if !item.is_empty() {
                 // Use ItemStack's ToNbtTag implementation for proper component serialization
-                if let simdnbt::owned::NbtTag::Compound(mut item_nbt) = item.clone().to_nbt_tag() {
+                if let NbtTag::Compound(mut item_nbt) = item.clone().to_nbt_tag() {
                     item_nbt.insert("Slot", slot as i8);
                     items.push(item_nbt);
                 }
@@ -189,9 +189,7 @@ impl Container for BarrelBlockEntity {
 ///
 /// This mirrors the logic of `ItemStack::from_nbt_tag` but works directly with
 /// borrowed compound data, properly parsing component patches.
-fn item_from_borrowed_compound(
-    compound: &simdnbt::borrow::NbtCompound<'_, '_>,
-) -> Option<ItemStack> {
+fn item_from_borrowed_compound(compound: &NbtCompoundView<'_, '_>) -> Option<ItemStack> {
     // Get the item ID
     let id_str = compound.string("id")?.to_str();
     let id = id_str.parse::<Identifier>().ok()?;

@@ -2,6 +2,8 @@
 //!
 //! Opens a 27-slot container menu when right-clicked.
 
+use std::sync::Weak;
+
 use steel_registry::blocks::BlockRef;
 use steel_registry::blocks::block_state_ext::BlockStateExt;
 use steel_registry::blocks::properties::BlockStateProperties;
@@ -86,7 +88,7 @@ impl BlockBehaviour for BarrelBlock {
 
     fn new_block_entity(
         &self,
-        level: std::sync::Weak<World>,
+        level: Weak<World>,
         pos: BlockPos,
         state: BlockStateId,
     ) -> Option<SharedBlockEntity> {
@@ -99,15 +101,13 @@ impl BlockBehaviour for BarrelBlock {
 
     fn get_analog_output_signal(&self, _state: BlockStateId, world: &World, pos: BlockPos) -> i32 {
         // Get the block entity and calculate signal from container contents
-        world
-            .get_block_entity(&pos)
-            .map_or(0, |be| {
-                let guard = be.lock();
-                if let Some(container) = guard.as_container() {
-                    calculate_redstone_signal_from_container(container)
-                } else {
-                    0
-                }
-            })
+        world.get_block_entity(&pos).map_or(0, |be| {
+            let guard = be.lock();
+            if let Some(container) = guard.as_container() {
+                calculate_redstone_signal_from_container(container)
+            } else {
+                0
+            }
+        })
     }
 }

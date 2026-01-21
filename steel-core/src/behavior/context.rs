@@ -104,17 +104,9 @@ impl BlockPlaceContext<'_> {
 
         // Return the direction with the largest magnitude
         if x_yaw > z_yaw {
-            if y_mag > x_mag {
-                axis_y
-            } else if z_mag > y_mag {
-                axis_x
-            } else {
-                axis_x
-            }
+            if y_mag > x_mag { axis_y } else { axis_x }
         } else if y_mag > z_mag {
             axis_y
-        } else if x_mag > y_mag {
-            axis_z
         } else {
             axis_z
         }
