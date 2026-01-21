@@ -449,6 +449,18 @@ impl World {
             .flatten()
     }
 
+    /// Called when a block entity's data changes.
+    ///
+    /// Marks the containing chunk as unsaved so it will be persisted to disk.
+    pub fn block_entity_changed(&self, pos: BlockPos) {
+        let chunk_pos = Self::chunk_pos_for_block(&pos);
+        self.chunk_map.with_full_chunk(&chunk_pos, |chunk| {
+            if let Some(lc) = chunk.as_full() {
+                lc.dirty.store(true, Ordering::Release);
+            }
+        });
+    }
+
     /// Ticks the world.
     ///
     /// * `tick_count` - The current tick number

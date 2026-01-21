@@ -5,7 +5,11 @@
 
 use std::any::Any;
 use std::array;
+use std::sync::{Arc, Weak};
 
+use simdnbt::borrow::{
+    BaseNbtCompound as BorrowedNbtCompound, NbtCompound as BorrowedNbtCompoundView,
+};
 use simdnbt::owned::{NbtCompound, NbtList, NbtTag};
 use steel_registry::block_entity_type::BlockEntityTypeRef;
 use steel_registry::loot_table::DyeColor;
@@ -77,14 +81,15 @@ impl SignText {
         })
     }
 
-    /// Loads sign text from NBT.
-    pub fn load(&mut self, nbt: &NbtCompound) {
+    /// Loads sign text from borrowed NBT.
+    pub fn load(&mut self, nbt: BorrowedNbtCompoundView<'_, '_>) {
         // Load messages - they are stored as a list of compounds (text components)
-        if let Some(NbtTag::List(messages)) = nbt.get("messages")
+        if let Some(messages) = nbt.list("messages")
             && let Some(compounds) = messages.compounds()
         {
-            for (i, compound) in compounds.iter().enumerate().take(SIGN_LINES) {
-                if let Some(text) = TextComponent::from_nbt_tag(&NbtTag::Compound(compound.clone()))
+            for (i, compound) in compounds.into_iter().enumerate().take(SIGN_LINES) {
+                if let Some(text) =
+                    TextComponent::from_nbt_tag(&NbtTag::Compound(compound.to_owned()))
                 {
                     self.messages[i] = text;
                 }
@@ -92,13 +97,13 @@ impl SignText {
         }
 
         // Load color
-        if let Some(NbtTag::String(color_str)) = nbt.get("color") {
+        if let Some(color_str) = nbt.string("color") {
             self.color = dye_color_from_str(&color_str.to_str());
         }
 
         // Load glow
-        if let Some(NbtTag::Byte(glow)) = nbt.get("has_glowing_text") {
-            self.has_glowing_text = *glow != 0;
+        if let Some(glow) = nbt.byte("has_glowing_text") {
+            self.has_glowing_text = glow != 0;
         }
     }
 
@@ -124,6 +129,8 @@ impl SignText {
 ///
 /// Stores text on both front and back sides of the sign.
 pub struct SignBlockEntity {
+    /// Weak reference to the world for marking chunks dirty.
+    level: Weak<World>,
     /// Block entity type (sign or `hanging_sign`).
     block_entity_type: BlockEntityTypeRef,
     /// Position in the world.
@@ -146,24 +153,26 @@ pub struct SignBlockEntity {
 impl SignBlockEntity {
     /// Creates a new sign block entity.
     #[must_use]
-    pub fn new(pos: BlockPos, state: BlockStateId) -> Self {
-        Self::with_type(vanilla_block_entity_types::SIGN, pos, state)
+    pub fn new(level: Weak<World>, pos: BlockPos, state: BlockStateId) -> Self {
+        Self::with_type(level, vanilla_block_entity_types::SIGN, pos, state)
     }
 
     /// Creates a new hanging sign block entity.
     #[must_use]
-    pub fn new_hanging(pos: BlockPos, state: BlockStateId) -> Self {
-        Self::with_type(vanilla_block_entity_types::HANGING_SIGN, pos, state)
+    pub fn new_hanging(level: Weak<World>, pos: BlockPos, state: BlockStateId) -> Self {
+        Self::with_type(level, vanilla_block_entity_types::HANGING_SIGN, pos, state)
     }
 
     /// Creates a sign block entity with a specific type.
     #[must_use]
     pub fn with_type(
+        level: Weak<World>,
         block_entity_type: BlockEntityTypeRef,
         pos: BlockPos,
         state: BlockStateId,
     ) -> Self {
         Self {
+            level,
             block_entity_type,
             pos,
             state,
@@ -259,24 +268,27 @@ impl BlockEntity for SignBlockEntity {
         self.removed = false;
     }
 
-    fn set_changed(&self) {
-        // TODO: Mark chunk as dirty when we have chunk reference
+    fn get_level(&self) -> Option<Arc<World>> {
+        self.level.upgrade()
     }
 
-    fn load_additional(&mut self, nbt: &NbtCompound) {
+    fn load_additional(&mut self, nbt: &BorrowedNbtCompound<'_>) {
+        // Convert to NbtCompound view for accessing methods
+        let nbt_view: BorrowedNbtCompoundView<'_, '_> = nbt.into();
+
         // Load front text
-        if let Some(NbtTag::Compound(front_nbt)) = nbt.get("front_text") {
+        if let Some(front_nbt) = nbt_view.compound("front_text") {
             self.front_text.load(front_nbt);
         }
 
         // Load back text
-        if let Some(NbtTag::Compound(back_nbt)) = nbt.get("back_text") {
+        if let Some(back_nbt) = nbt_view.compound("back_text") {
             self.back_text.load(back_nbt);
         }
 
         // Load waxed state
-        if let Some(NbtTag::Byte(waxed)) = nbt.get("is_waxed") {
-            self.is_waxed = *waxed != 0;
+        if let Some(waxed) = nbt_view.byte("is_waxed") {
+            self.is_waxed = waxed != 0;
         }
     }
 

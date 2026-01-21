@@ -66,6 +66,12 @@ impl ItemStack {
         }
     }
 
+    /// Creates a new item stack with the specified count and component patch.
+    #[must_use]
+    pub fn with_count_and_patch(item: ItemRef, count: i32, patch: DataComponentPatch) -> Self {
+        Self { item, count, patch }
+    }
+
     #[must_use]
     fn prototype(&self) -> &'static DataComponentMap {
         &self.item.components

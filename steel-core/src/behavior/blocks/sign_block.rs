@@ -4,7 +4,7 @@
 
 use std::cmp::Ordering;
 use std::f64::consts::PI;
-use std::sync::Arc;
+use std::sync::{Arc, Weak};
 
 use steel_registry::REGISTRY;
 use steel_registry::blocks::BlockRef;
@@ -323,8 +323,15 @@ impl BlockBehaviour for StandingSignBlock {
         true
     }
 
-    fn new_block_entity(&self, pos: BlockPos, state: BlockStateId) -> Option<SharedBlockEntity> {
-        Some(Arc::new(SyncMutex::new(SignBlockEntity::new(pos, state))))
+    fn new_block_entity(
+        &self,
+        level: Weak<World>,
+        pos: BlockPos,
+        state: BlockStateId,
+    ) -> Option<SharedBlockEntity> {
+        Some(Arc::new(SyncMutex::new(SignBlockEntity::new(
+            level, pos, state,
+        ))))
     }
 
     fn should_keep_block_entity(&self, _old_state: BlockStateId, _new_state: BlockStateId) -> bool {
@@ -404,8 +411,15 @@ impl BlockBehaviour for WallSignBlock {
         true
     }
 
-    fn new_block_entity(&self, pos: BlockPos, state: BlockStateId) -> Option<SharedBlockEntity> {
-        Some(Arc::new(SyncMutex::new(SignBlockEntity::new(pos, state))))
+    fn new_block_entity(
+        &self,
+        level: Weak<World>,
+        pos: BlockPos,
+        state: BlockStateId,
+    ) -> Option<SharedBlockEntity> {
+        Some(Arc::new(SyncMutex::new(SignBlockEntity::new(
+            level, pos, state,
+        ))))
     }
 
     fn should_keep_block_entity(&self, _old_state: BlockStateId, _new_state: BlockStateId) -> bool {
@@ -518,9 +532,14 @@ impl BlockBehaviour for CeilingHangingSignBlock {
         true
     }
 
-    fn new_block_entity(&self, pos: BlockPos, state: BlockStateId) -> Option<SharedBlockEntity> {
+    fn new_block_entity(
+        &self,
+        level: Weak<World>,
+        pos: BlockPos,
+        state: BlockStateId,
+    ) -> Option<SharedBlockEntity> {
         Some(Arc::new(SyncMutex::new(SignBlockEntity::new_hanging(
-            pos, state,
+            level, pos, state,
         ))))
     }
 
@@ -618,9 +637,14 @@ impl BlockBehaviour for WallHangingSignBlock {
         true
     }
 
-    fn new_block_entity(&self, pos: BlockPos, state: BlockStateId) -> Option<SharedBlockEntity> {
+    fn new_block_entity(
+        &self,
+        level: Weak<World>,
+        pos: BlockPos,
+        state: BlockStateId,
+    ) -> Option<SharedBlockEntity> {
         Some(Arc::new(SyncMutex::new(SignBlockEntity::new_hanging(
-            pos, state,
+            level, pos, state,
         ))))
     }
 

@@ -224,6 +224,15 @@ impl LevelChunk {
         self.level.upgrade()
     }
 
+    /// Returns the weak reference to the world.
+    ///
+    /// Use this when you need to pass the world reference to block entities
+    /// at construction time.
+    #[must_use]
+    pub fn level_weak(&self) -> Weak<World> {
+        self.level.clone()
+    }
+
     /// Returns the minimum Y coordinate of the world.
     #[must_use]
     pub const fn min_y(&self) -> i32 {
@@ -270,6 +279,8 @@ impl LevelChunk {
     /// This is the main entry point for adding block entities. It:
     /// 1. Stores the block entity in the chunk
     /// 2. Registers it for ticking if `is_ticking()` returns true
+    ///
+    /// Note: The world reference should be passed at block entity construction time.
     pub fn add_and_register_block_entity(&self, block_entity: SharedBlockEntity) {
         self.block_entities.add_and_register(block_entity);
         self.mark_unsaved();
@@ -459,7 +470,9 @@ impl LevelChunk {
                     self.update_block_entity_ticker(&existing);
                 } else {
                     // Create new block entity
-                    if let Some(entity) = new_behavior.new_block_entity(pos, state) {
+                    if let Some(entity) =
+                        new_behavior.new_block_entity(self.level.clone(), pos, state)
+                    {
                         self.add_and_register_block_entity(entity);
                     }
                 }

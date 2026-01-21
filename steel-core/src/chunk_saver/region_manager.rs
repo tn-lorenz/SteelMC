@@ -12,7 +12,8 @@ use std::{
 };
 
 use rustc_hash::FxHashMap;
-use simdnbt::owned::{NbtCompound, read_compound};
+use simdnbt::borrow::read_compound as read_borrowed_compound;
+use simdnbt::owned::NbtCompound;
 use steel_registry::{REGISTRY, Registry};
 use steel_utils::{BlockPos, BlockStateId, ChunkPos, Identifier, locks::AsyncRwLock};
 use tokio::{
@@ -821,17 +822,22 @@ impl RegionManager {
             .block_entity_types
             .by_key(&persistent.entity_type)?;
 
-        // Deserialize NBT data
-        let nbt = if persistent.nbt_data.is_empty() {
-            NbtCompound::new()
-        } else {
-            // Parse NBT from bytes
-            read_compound(&mut Cursor::new(&persistent.nbt_data))
-                .unwrap_or_else(|_| NbtCompound::new())
-        };
+        // Get the world reference from the chunk
+        let level = chunk.level_weak();
 
-        // Create the block entity using the registry
-        BLOCK_ENTITIES.create_and_load(block_entity_type, pos, state, &nbt)
+        // Parse and load NBT data
+        if persistent.nbt_data.is_empty() {
+            // No NBT data, just create the entity without loading
+            BLOCK_ENTITIES.create(block_entity_type, level, pos, state)
+        } else {
+            // Parse NBT from bytes as borrowed
+            let Ok(nbt) = read_borrowed_compound(&mut Cursor::new(&persistent.nbt_data)) else {
+                return BLOCK_ENTITIES.create(block_entity_type, level, pos, state);
+            };
+
+            // Create the block entity and load NBT
+            BLOCK_ENTITIES.create_and_load(block_entity_type, level, pos, state, &nbt)
+        }
     }
 
     /// Converts a persistent section to runtime format.

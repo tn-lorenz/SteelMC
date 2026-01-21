@@ -1,5 +1,7 @@
 //! Block behavior trait and registry.
 
+use std::sync::Weak;
+
 use steel_registry::REGISTRY;
 use steel_registry::blocks::BlockRef;
 use steel_registry::blocks::properties::Direction;
@@ -196,10 +198,16 @@ pub trait BlockBehaviour: Send + Sync {
     /// Only called if `has_block_entity()` returns `true`.
     ///
     /// # Arguments
+    /// * `level` - Weak reference to the world
     /// * `pos` - The position where the block entity will be placed
     /// * `state` - The block state for this block entity
     #[allow(unused_variables)]
-    fn new_block_entity(&self, pos: BlockPos, state: BlockStateId) -> Option<SharedBlockEntity> {
+    fn new_block_entity(
+        &self,
+        level: Weak<World>,
+        pos: BlockPos,
+        state: BlockStateId,
+    ) -> Option<SharedBlockEntity> {
         None
     }
 

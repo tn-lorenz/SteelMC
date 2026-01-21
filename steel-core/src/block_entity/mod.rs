@@ -30,6 +30,7 @@ mod storage;
 use std::any::Any;
 use std::sync::Arc;
 
+use simdnbt::borrow::BaseNbtCompound as BorrowedNbtCompound;
 use simdnbt::owned::NbtCompound;
 use steel_registry::block_entity_type::BlockEntityTypeRef;
 use steel_utils::{BlockPos, BlockStateId, locks::SyncMutex};
@@ -86,9 +87,17 @@ pub trait BlockEntity: Send + Sync {
 
     /// Called when the block entity's data changes.
     ///
-    /// Implementations should mark the containing chunk as dirty so changes
-    /// are persisted to disk.
-    fn set_changed(&self);
+    /// Marks the containing chunk as dirty so changes are persisted to disk.
+    fn set_changed(&self) {
+        if let Some(world) = self.get_level() {
+            world.block_entity_changed(self.get_block_pos());
+        }
+    }
+
+    /// Gets the world reference if still valid.
+    ///
+    /// Block entities receive a `Weak<World>` at construction time.
+    fn get_level(&self) -> Option<Arc<World>>;
 
     /// Called before the block entity is removed to handle side effects.
     ///
@@ -108,7 +117,7 @@ pub trait BlockEntity: Send + Sync {
     ///
     /// Called when loading the block entity from disk or receiving initial
     /// chunk data from the server.
-    fn load_additional(&mut self, nbt: &NbtCompound);
+    fn load_additional(&mut self, nbt: &BorrowedNbtCompound<'_>);
 
     /// Saves additional data to NBT.
     ///

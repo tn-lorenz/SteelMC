@@ -1,11 +1,9 @@
 //! Block entity registry for creating block entity instances.
 
 use std::ops::Deref;
-use std::sync::OnceLock;
+use std::sync::{Arc, OnceLock, Weak};
 
-use std::sync::Arc;
-
-use simdnbt::owned::NbtCompound;
+use simdnbt::borrow::BaseNbtCompound as BorrowedNbtCompound;
 use steel_registry::REGISTRY;
 use steel_registry::block_entity_type::BlockEntityTypeRef;
 use steel_registry::vanilla_block_entity_types;
@@ -13,12 +11,13 @@ use steel_utils::locks::SyncMutex;
 use steel_utils::{BlockPos, BlockStateId};
 
 use super::SharedBlockEntity;
-use super::entities::SignBlockEntity;
+use super::entities::{BarrelBlockEntity, SignBlockEntity};
+use crate::world::World;
 
 /// Factory function type for creating block entities.
 ///
-/// Takes the position and block state, returns a new block entity instance.
-pub type BlockEntityFactory = fn(BlockPos, BlockStateId) -> SharedBlockEntity;
+/// Takes the world, position and block state, returns a new block entity instance.
+pub type BlockEntityFactory = fn(Weak<World>, BlockPos, BlockStateId) -> SharedBlockEntity;
 
 /// Registry entry for a block entity type.
 struct BlockEntityEntry {
@@ -60,11 +59,12 @@ impl BlockEntityRegistry {
     pub fn create(
         &self,
         block_entity_type: BlockEntityTypeRef,
+        level: Weak<World>,
         pos: BlockPos,
         state: BlockStateId,
     ) -> Option<SharedBlockEntity> {
         let id = *REGISTRY.block_entity_types.get_id(block_entity_type);
-        self.entries.get(id)?.factory.map(|f| f(pos, state))
+        self.entries.get(id)?.factory.map(|f| f(level, pos, state))
     }
 
     /// Creates a new block entity and loads NBT data into it.
@@ -74,11 +74,12 @@ impl BlockEntityRegistry {
     pub fn create_and_load(
         &self,
         block_entity_type: BlockEntityTypeRef,
+        level: Weak<World>,
         pos: BlockPos,
         state: BlockStateId,
-        nbt: &NbtCompound,
+        nbt: &BorrowedNbtCompound<'_>,
     ) -> Option<SharedBlockEntity> {
-        let entity = self.create(block_entity_type, pos, state)?;
+        let entity = self.create(block_entity_type, level, pos, state)?;
         entity.lock().load_additional(nbt);
         Some(entity)
     }
@@ -131,13 +132,23 @@ pub fn init_block_entities() {
     let mut registry = BlockEntityRegistry::new();
 
     // Register sign block entity factory
-    registry.register(vanilla_block_entity_types::SIGN, |pos, state| {
-        Arc::new(SyncMutex::new(SignBlockEntity::new(pos, state)))
+    registry.register(vanilla_block_entity_types::SIGN, |level, pos, state| {
+        Arc::new(SyncMutex::new(SignBlockEntity::new(level, pos, state)))
     });
 
     // Register hanging sign block entity factory
-    registry.register(vanilla_block_entity_types::HANGING_SIGN, |pos, state| {
-        Arc::new(SyncMutex::new(SignBlockEntity::new_hanging(pos, state)))
+    registry.register(
+        vanilla_block_entity_types::HANGING_SIGN,
+        |level, pos, state| {
+            Arc::new(SyncMutex::new(SignBlockEntity::new_hanging(
+                level, pos, state,
+            )))
+        },
+    );
+
+    // Register barrel block entity factory
+    registry.register(vanilla_block_entity_types::BARREL, |level, pos, state| {
+        Arc::new(SyncMutex::new(BarrelBlockEntity::new(level, pos, state)))
     });
 
     assert!(
