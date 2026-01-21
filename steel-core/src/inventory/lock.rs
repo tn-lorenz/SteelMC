@@ -12,6 +12,7 @@ use std::sync::Arc;
 use steel_utils::locks::SyncMutex;
 
 use crate::{
+    block_entity::{BlockEntity, SharedBlockEntity},
     inventory::{
         container::Container,
         crafting::{CraftingContainer, ResultContainer},
@@ -38,6 +39,11 @@ pub enum LockedContainer {
     ResultContainer(ArcMutexGuard<RawMutex, ResultContainer>),
     /// A locked generic container.
     Other(ArcMutexGuard<RawMutex, dyn Container + Send + Sync>),
+    /// A locked block entity that implements Container.
+    ///
+    /// The block entity is guaranteed to return `Some` from `as_container()`
+    /// because this variant is only constructed after validation.
+    BlockEntity(ArcMutexGuard<RawMutex, dyn BlockEntity>),
 }
 
 impl Deref for LockedContainer {
@@ -49,6 +55,9 @@ impl Deref for LockedContainer {
             LockedContainer::CraftingContainer(guard) => &**guard,
             LockedContainer::ResultContainer(guard) => &**guard,
             LockedContainer::Other(guard) => &**guard,
+            LockedContainer::BlockEntity(guard) => (**guard)
+                .as_container()
+                .expect("BlockEntity variant should only be used for container block entities"),
         }
     }
 }
@@ -60,6 +69,9 @@ impl DerefMut for LockedContainer {
             LockedContainer::CraftingContainer(guard) => &mut **guard,
             LockedContainer::ResultContainer(guard) => &mut **guard,
             LockedContainer::Other(guard) => &mut **guard,
+            LockedContainer::BlockEntity(guard) => (**guard)
+                .as_container_mut()
+                .expect("BlockEntity variant should only be used for container block entities"),
         }
     }
 }
@@ -79,6 +91,11 @@ pub enum ContainerRef {
     ResultContainer(Arc<SyncMutex<ResultContainer>>),
     /// Reference to a generic container.
     Other(GenericContainer),
+    /// Reference to a block entity that implements Container.
+    ///
+    /// Use [`ContainerRef::from_block_entity`] to create this variant,
+    /// which validates that the block entity actually implements Container.
+    BlockEntity(SharedBlockEntity),
 }
 
 impl From<SyncPlayerInv> for ContainerRef {
@@ -88,6 +105,20 @@ impl From<SyncPlayerInv> for ContainerRef {
 }
 
 impl ContainerRef {
+    /// Creates a `ContainerRef` from a block entity, if it implements Container.
+    ///
+    /// Returns `None` if the block entity does not implement Container
+    /// (i.e., `as_container()` returns `None`).
+    #[must_use]
+    pub fn from_block_entity(block_entity: SharedBlockEntity) -> Option<Self> {
+        let is_container = block_entity.lock().as_container().is_some();
+        if is_container {
+            Some(Self::BlockEntity(block_entity))
+        } else {
+            None
+        }
+    }
+
     /// Returns a unique identifier for this container based on its Arc pointer address.
     #[must_use]
     pub fn container_id(&self) -> ContainerId {
@@ -96,6 +127,7 @@ impl ContainerRef {
             ContainerRef::CraftingContainer(arc) => ContainerId::from_arc(arc),
             ContainerRef::ResultContainer(arc) => ContainerId::from_arc(arc),
             ContainerRef::Other(arc) => ContainerId::from_arc(arc),
+            ContainerRef::BlockEntity(arc) => ContainerId::from_arc(arc),
         }
     }
 
@@ -112,6 +144,9 @@ impl ContainerRef {
                 LockedContainer::ResultContainer(SyncMutex::lock_arc(arc))
             }
             ContainerRef::Other(arc) => LockedContainer::Other(SyncMutex::lock_arc(arc)),
+            ContainerRef::BlockEntity(arc) => {
+                LockedContainer::BlockEntity(SyncMutex::lock_arc(arc))
+            }
         }
     }
 }

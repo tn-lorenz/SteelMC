@@ -37,6 +37,7 @@ use steel_utils::{BlockPos, BlockStateId, locks::SyncMutex};
 pub use registry::{BLOCK_ENTITIES, BlockEntityFactory, BlockEntityRegistry, init_block_entities};
 pub use storage::BlockEntityStorage;
 
+use crate::inventory::container::Container;
 use crate::world::World;
 
 /// Trait for all block entities.
@@ -140,6 +141,24 @@ pub trait BlockEntity: Send + Sync {
     #[allow(unused_variables)]
     fn tick(&mut self, world: &World) {
         // Default: no-op
+    }
+
+    // === Container Access ===
+
+    /// Returns this block entity as a container, if it implements Container.
+    ///
+    /// Override this in block entities that are also containers (e.g., chests,
+    /// furnaces) to enable integration with the inventory locking system.
+    fn as_container(&self) -> Option<&(dyn Container + 'static)> {
+        None
+    }
+
+    /// Returns this block entity as a mutable container, if it implements Container.
+    ///
+    /// Override this in block entities that are also containers (e.g., chests,
+    /// furnaces) to enable integration with the inventory locking system.
+    fn as_container_mut(&mut self) -> Option<&mut (dyn Container + 'static)> {
+        None
     }
 }
 
