@@ -321,10 +321,7 @@ impl Server {
 
         // Broadcast to all players in all worlds
         for world in &self.worlds {
-            world.players.iter_players(|_, player| {
-                player.connection.send_packet(packet.clone());
-                true
-            });
+            world.broadcast_to_all(packet.clone());
         }
     }
 
@@ -342,10 +339,7 @@ impl Server {
         let packet = CSystemChat::new(message, false);
 
         for world in &self.worlds {
-            world.players.iter_players(|_, player| {
-                player.connection.send_packet(packet.clone());
-                true
-            });
+            world.broadcast_to_all(packet.clone());
         }
     }
 
@@ -357,10 +351,7 @@ impl Server {
         drop(tick_manager);
 
         for world in &self.worlds {
-            world.players.iter_players(|_, player| {
-                player.connection.send_packet(packet.clone());
-                true
-            });
+            world.broadcast_to_all(packet.clone());
         }
     }
 
@@ -372,10 +363,7 @@ impl Server {
         drop(tick_manager);
 
         for world in &self.worlds {
-            world.players.iter_players(|_, player| {
-                player.connection.send_packet(packet.clone());
-                true
-            });
+            world.broadcast_to_all(packet.clone());
         }
     }
 

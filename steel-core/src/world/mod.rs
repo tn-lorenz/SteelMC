@@ -9,7 +9,7 @@ use std::{
 };
 
 use sha2::{Digest, Sha256};
-use steel_protocol::packet_traits::EncodedPacket;
+use steel_protocol::packet_traits::{ClientPacket, EncodedPacket};
 use steel_protocol::packets::game::{
     CBlockDestruction, CPlayerChat, CPlayerInfoUpdate, CSystemChat,
 };
@@ -504,11 +504,7 @@ impl World {
         // Only broadcast if there are players
         if !latency_entries.is_empty() {
             let packet = CPlayerInfoUpdate::update_latency(latency_entries);
-
-            self.players.iter_players(|_, player| {
-                player.connection.send_packet(packet.clone());
-                true
-            });
+            self.broadcast_to_all(packet);
         }
     }
 
@@ -584,8 +580,28 @@ impl World {
 
     /// Broadcasts a system chat message to all players.
     pub fn broadcast_system_chat(&self, packet: CSystemChat) {
+        self.broadcast_to_all(packet);
+    }
+
+    /// Broadcasts a packet to all players in the world.
+    ///
+    /// This method handles encoding the packet once and sending it to all players,
+    /// avoiding repeated cloning of unencoded packets.
+    pub fn broadcast_to_all<P: ClientPacket>(&self, packet: P) {
+        let Ok(encoded) =
+            EncodedPacket::from_bare(packet, STEEL_CONFIG.compression, ConnectionProtocol::Play)
+        else {
+            return;
+        };
+        self.broadcast_to_all_encoded(encoded);
+    }
+
+    /// Broadcasts an already-encoded packet to all players in the world.
+    ///
+    /// Use this when you have a pre-encoded packet to avoid re-encoding.
+    pub fn broadcast_to_all_encoded(&self, packet: EncodedPacket) {
         self.players.iter_players(|_, player| {
-            player.connection.send_packet(packet.clone());
+            player.connection.send_encoded_packet(packet.clone());
             true
         });
     }
@@ -608,8 +624,28 @@ impl World {
         });
     }
 
-    /// Broadcasts an encoded packet to all players tracking the given chunk.
-    pub fn broadcast_to_nearby(
+    /// Broadcasts a packet to all players tracking the given chunk.
+    ///
+    /// This method handles encoding the packet internally, avoiding boilerplate at call sites.
+    /// If encoding fails, the broadcast is silently skipped.
+    pub fn broadcast_to_nearby<P: ClientPacket>(
+        &self,
+        chunk: ChunkPos,
+        packet: P,
+        exclude: Option<i32>,
+    ) {
+        let Ok(encoded) =
+            EncodedPacket::from_bare(packet, STEEL_CONFIG.compression, ConnectionProtocol::Play)
+        else {
+            return;
+        };
+        self.broadcast_to_nearby_encoded(chunk, encoded, exclude);
+    }
+
+    /// Broadcasts an already-encoded packet to all players tracking the given chunk.
+    ///
+    /// Use this when you have a pre-encoded packet to avoid re-encoding.
+    pub fn broadcast_to_nearby_encoded(
         &self,
         chunk: ChunkPos,
         packet: EncodedPacket,
@@ -654,13 +690,7 @@ impl World {
             pos,
             progress: progress.clamp(-1, 9) as u8,
         };
-        let Ok(encoded) =
-            EncodedPacket::from_bare(packet, STEEL_CONFIG.compression, ConnectionProtocol::Play)
-        else {
-            log::warn!("Failed to encode block destruction packet");
-            return;
-        };
-        self.broadcast_to_nearby(chunk, encoded, Some(entity_id));
+        self.broadcast_to_nearby(chunk, packet, Some(entity_id));
     }
 
     /// Broadcasts a block entity update to all players tracking the chunk.
@@ -694,15 +724,7 @@ impl World {
             nbt: OptionalNbt(Some(nbt)),
         };
 
-        let Ok(encoded) =
-            EncodedPacket::from_bare(packet, STEEL_CONFIG.compression, ConnectionProtocol::Play)
-        else {
-            log::warn!("Failed to encode block entity data packet");
-            return;
-        };
-
-        // Broadcast to all tracking players (no exclusions)
-        self.broadcast_to_nearby(chunk, encoded, None);
+        self.broadcast_to_nearby(chunk, packet, None);
     }
 
     /// Drops an item stack at the given position.

@@ -27,13 +27,11 @@ use message_chain::SignedMessageChain;
 use message_validator::LastSeenMessagesValidator;
 use profile_key::RemoteChatSession;
 pub use signature_cache::{LastSeen, MessageCache};
-use steel_protocol::packet_traits::EncodedPacket;
 use steel_protocol::packets::game::CSetHeldSlot;
 use steel_protocol::packets::game::{
     AnimateAction, CAnimate, COpenSignEditor, CPlayerPosition, PlayerAction, SAcceptTeleportation,
     SPickItemFromBlock, SPlayerAction, SSetCarriedItem, SUseItem, SUseItemOn,
 };
-use steel_protocol::utils::ConnectionProtocol;
 use steel_registry::blocks::block_state_ext::BlockStateExt;
 use steel_registry::game_rules::GameRuleValue;
 use steel_registry::vanilla_game_rules::{ELYTRA_MOVEMENT_CHECK, PLAYER_MOVEMENT_CHECK};
@@ -835,14 +833,8 @@ impl Player {
                     x_rot: to_angle_byte(pitch),
                     on_ground: packet.on_ground,
                 };
-                if let Ok(encoded) = EncodedPacket::from_bare(
-                    move_packet,
-                    STEEL_CONFIG.compression,
-                    ConnectionProtocol::Play,
-                ) {
-                    self.world
-                        .broadcast_to_nearby(new_chunk, encoded, Some(self.entity_id));
-                }
+                self.world
+                    .broadcast_to_nearby(new_chunk, move_packet, Some(self.entity_id));
             } else {
                 let rot_packet = CMoveEntityRot {
                     entity_id: self.entity_id,
@@ -850,14 +842,8 @@ impl Player {
                     x_rot: to_angle_byte(pitch),
                     on_ground: packet.on_ground,
                 };
-                if let Ok(encoded) = EncodedPacket::from_bare(
-                    rot_packet,
-                    STEEL_CONFIG.compression,
-                    ConnectionProtocol::Play,
-                ) {
-                    self.world
-                        .broadcast_to_nearby(new_chunk, encoded, Some(self.entity_id));
-                }
+                self.world
+                    .broadcast_to_nearby(new_chunk, rot_packet, Some(self.entity_id));
             }
 
             if packet.has_rot {
@@ -865,14 +851,8 @@ impl Player {
                     entity_id: self.entity_id,
                     head_y_rot: to_angle_byte(yaw),
                 };
-                if let Ok(encoded) = EncodedPacket::from_bare(
-                    head_packet,
-                    STEEL_CONFIG.compression,
-                    ConnectionProtocol::Play,
-                ) {
-                    self.world
-                        .broadcast_to_nearby(new_chunk, encoded, Some(self.entity_id));
-                }
+                self.world
+                    .broadcast_to_nearby(new_chunk, head_packet, Some(self.entity_id));
             }
 
             *self.prev_position.lock() = pos;
@@ -914,11 +894,7 @@ impl Player {
         // Broadcast the chat session to all players so they can verify this player's signatures
         let update_packet =
             CPlayerInfoUpdate::update_chat_session(self.gameprofile.id, protocol_data);
-
-        self.world.players.iter_players(|_, player| {
-            player.connection.send_packet(update_packet.clone());
-            true
-        });
+        self.world.broadcast_to_all(update_packet);
     }
 
     /// Gets a reference to the player's chat session if present
@@ -1471,11 +1447,7 @@ impl Player {
         } else {
             Some(self.entity_id)
         };
-        if let Ok(encoded) =
-            EncodedPacket::from_bare(packet, STEEL_CONFIG.compression, ConnectionProtocol::Play)
-        {
-            self.world.broadcast_to_nearby(chunk, encoded, exclude);
-        }
+        self.world.broadcast_to_nearby(chunk, packet, exclude);
     }
 
     /// Handles a player input packet (movement keys, sneaking, sprinting).
@@ -1784,6 +1756,14 @@ impl Player {
     /// * `pos` - Position of the sign block
     /// * `is_front_text` - Whether to edit front (true) or back (false) text
     pub fn open_sign_editor(&self, pos: BlockPos, is_front_text: bool) {
+        // Set this player as the one who may edit the sign
+        if let Some(block_entity) = self.world.get_block_entity(&pos) {
+            let mut guard = block_entity.lock();
+            if let Some(sign) = guard.as_any_mut().downcast_mut::<SignBlockEntity>() {
+                sign.set_player_who_may_edit(Some(self.gameprofile.id));
+            }
+        }
+
         // Send the block update first to ensure client has latest state
         let state = self.world.get_block_state(&pos);
         self.connection.send_packet(CBlockUpdate {
