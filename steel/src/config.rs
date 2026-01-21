@@ -66,11 +66,11 @@ fn load_or_create(path: &Path) -> ServerConfig {
 /// # Errors
 /// This function will return an error if the configuration is invalid.
 fn validate(config: &ServerConfig) -> Result<(), &'static str> {
-    if !(1..=64).contains(&config.view_distance) {
-        return Err("View distance must in range 1..64");
+    if !(1..=32).contains(&config.view_distance) {
+        return Err("View distance must in range 1..32");
     }
-    if !(1..=32).contains(&config.simulation_distance) {
-        return Err("Simulation distance must in range 1..32");
+    if config.simulation_distance > config.view_distance {
+        return Err("Simulation distance must be less than or equal to view distance");
     }
     if let Some(compression) = config.compression {
         if compression.threshold.get() < 256 {
