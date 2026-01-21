@@ -109,20 +109,21 @@ impl BlockEntity for BarrelBlockEntity {
 
         // Load items from NBT using borrowed NBT for proper ItemStack parsing
         if let Some(items_list) = nbt_view.list("Items")
-            && let Some(compounds) = items_list.compounds() {
-                for compound in compounds {
-                    // Each item has a "Slot" byte and item data
-                    if let Some(slot) = compound.byte("Slot") {
-                        let slot = slot as usize;
-                        if slot < BARREL_SLOTS {
-                            // Parse item directly from the borrowed compound
-                            if let Some(item) = item_from_borrowed_compound(&compound) {
-                                self.items[slot] = item;
-                            }
+            && let Some(compounds) = items_list.compounds()
+        {
+            for compound in compounds {
+                // Each item has a "Slot" byte and item data
+                if let Some(slot) = compound.byte("Slot") {
+                    let slot = slot as usize;
+                    if slot < BARREL_SLOTS {
+                        // Parse item directly from the borrowed compound
+                        if let Some(item) = item_from_borrowed_compound(&compound) {
+                            self.items[slot] = item;
                         }
                     }
                 }
             }
+        }
     }
 
     fn save_additional(&self, nbt: &mut NbtCompound) {

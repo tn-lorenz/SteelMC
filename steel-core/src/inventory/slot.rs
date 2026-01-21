@@ -89,13 +89,16 @@ pub trait Slot {
     }
 
     /// Returns the maximum stack size for this slot.
-    fn get_max_stack_size(&self) -> i32 {
-        99
-    }
+    ///
+    /// For normal slots, this delegates to the container's max stack size.
+    /// For special slots (like armor), this may return a fixed value (e.g., 1).
+    fn get_max_stack_size(&self, guard: &ContainerLockGuard) -> i32;
 
     /// Returns the maximum stack size for a specific item in this slot.
-    fn get_max_stack_size_for_item(&self, stack: &ItemStack) -> i32 {
-        self.get_max_stack_size().min(stack.max_stack_size())
+    ///
+    /// Takes the minimum of the slot's max stack size and the item's max stack size.
+    fn get_max_stack_size_for_item(&self, guard: &ContainerLockGuard, stack: &ItemStack) -> i32 {
+        self.get_max_stack_size(guard).min(stack.max_stack_size())
     }
 
     /// Removes up to `amount` items from this slot and returns them.
@@ -251,6 +254,13 @@ impl Slot for NormalSlot {
     fn get_container_slot(&self) -> usize {
         self.index
     }
+
+    fn get_max_stack_size(&self, guard: &ContainerLockGuard) -> i32 {
+        guard
+            .get(self.container.container_id())
+            .expect("container not locked")
+            .get_max_stack_size()
+    }
 }
 
 /// An armor slot that only accepts items equippable in the corresponding slot.
@@ -322,7 +332,7 @@ impl Slot for ArmorSlot {
         stack.is_equippable_in_slot(self.slot)
     }
 
-    fn get_max_stack_size(&self) -> i32 {
+    fn get_max_stack_size(&self, _guard: &ContainerLockGuard) -> i32 {
         1
     }
 
@@ -449,6 +459,13 @@ impl Slot for CraftingGridSlot {
     fn get_container_slot(&self) -> usize {
         self.index
     }
+
+    fn get_max_stack_size(&self, guard: &ContainerLockGuard) -> i32 {
+        guard
+            .get(ContainerId::from_arc(&self.container))
+            .expect("container not locked")
+            .get_max_stack_size()
+    }
 }
 
 /// A slot that displays the crafting result.
@@ -556,6 +573,13 @@ impl Slot for CraftingResultSlot {
 
     fn get_container_slot(&self) -> usize {
         0
+    }
+
+    fn get_max_stack_size(&self, guard: &ContainerLockGuard) -> i32 {
+        guard
+            .get(ContainerId::from_arc(&self.result_container))
+            .expect("container not locked")
+            .get_max_stack_size()
     }
 
     /// Called when an item is taken from the result slot.
