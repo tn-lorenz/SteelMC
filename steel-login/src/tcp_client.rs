@@ -28,7 +28,9 @@ use steel_protocol::{
 };
 use steel_registry::packets::{config, handshake, login as login_packets, status};
 use steel_utils::locks::AsyncMutex;
-use steel_utils::text::TextComponent;
+use text_components::{
+    TextComponent, content::Resolvable, custom::CustomData, resolving::TextResolutor,
+};
 use tokio::{
     io::{BufReader, BufWriter},
     net::{
@@ -435,19 +437,33 @@ impl JavaTcpClient {
 
     /// Kicks the client with a given reason.
     pub async fn kick(&self, reason: TextComponent) {
-        log::info!("Kicking client {}: {:?}", self.id, reason);
+        log::info!("Kicking client {}: {:p}", self.id, reason);
         match self.protocol.load() {
             ConnectionProtocol::Login => {
-                let packet = CLoginDisconnect::new(reason);
+                let packet = CLoginDisconnect::new(&reason, self);
                 self.send_bare_packet_now(packet).await;
             }
             ConnectionProtocol::Play | ConnectionProtocol::Config => {
-                let packet = CDisconnect::new(reason);
+                let packet = CDisconnect::new(&reason, self);
                 self.send_bare_packet_now(packet).await;
             }
             _ => {}
         }
         log::debug!("Closing connection for {}", self.id);
         self.close();
+    }
+}
+
+impl TextResolutor for JavaTcpClient {
+    fn resolve_content(&self, _resolvable: &Resolvable) -> TextComponent {
+        TextComponent::new()
+    }
+
+    fn resolve_custom(&self, _data: &CustomData) -> Option<TextComponent> {
+        None
+    }
+
+    fn translate(&self, _key: &str) -> Option<String> {
+        None
     }
 }

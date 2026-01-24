@@ -5,7 +5,8 @@ use std::sync::Arc;
 use log::LevelFilter;
 use simplelog::{ColorChoice, Config, TermLogger, TerminalMode};
 use steel::SteelServer;
-use steel_utils::translations;
+use steel_utils::{text::DisplayResolutor, translations};
+use text_components::fmt::set_display_resolutor;
 use tokio::{
     runtime::{Builder, Runtime},
     signal,
@@ -53,6 +54,7 @@ async fn main_async(chunk_runtime: Arc<Runtime>) {
         ColorChoice::Auto,
     )
     .expect("Failed to initialize logger");
+    set_display_resolutor(&DisplayResolutor);
 
     #[cfg(feature = "deadlock_detection")]
     {
@@ -85,10 +87,10 @@ async fn main_async(chunk_runtime: Arc<Runtime>) {
     let mut steel = SteelServer::new(chunk_runtime.clone()).await;
 
     log::info!(
-        "{}",
+        "{:p}",
         translations::DEATH_ATTACK_ANVIL_PLAYER
             .message(["4LVE", "Borrow Checker"])
-            .format()
+            .component()
     );
 
     let server = steel.server.clone();
