@@ -161,6 +161,9 @@ impl Server {
             enforces_secure_chat: STEEL_CONFIG.enforce_secure_chat,
         });
 
+        // Send player abilities (flight, invulnerability, etc.)
+        player.send_abilities();
+
         let commands = self.command_dispatcher.read().get_commands();
         player.connection.send_packet(commands);
 
