@@ -33,11 +33,9 @@ impl CommandExecutor<()> for FlySpeedQueryExecutor {
         let speed = player.get_flying_speed();
         let multiplier = speed / 0.05; // Show as multiplier of default speed
 
-        context.sender.send_message(
-            &TextComponent::from(format!(
-                "Current flying speed: {speed:.3} ({multiplier:.1}x)"
-            )),
-        );
+        context.sender.send_message(&TextComponent::from(format!(
+            "Current flying speed: {speed:.3} ({multiplier:.1}x)"
+        )));
 
         Ok(())
     }
@@ -58,9 +56,9 @@ impl CommandExecutor<((), f32)> for FlySpeedExecutor {
         player.send_abilities();
 
         let multiplier = speed / 0.05;
-        context.sender.send_message(
-            &TextComponent::from(format!("Set flying speed to {speed:.3} ({multiplier:.1}x)")),
-        );
+        context.sender.send_message(&TextComponent::from(format!(
+            "Set flying speed to {speed:.3} ({multiplier:.1}x)"
+        )));
 
         Ok(())
     }
