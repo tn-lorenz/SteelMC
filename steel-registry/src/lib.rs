@@ -24,6 +24,7 @@ use crate::{
     data_components::{DataComponentRegistry, vanilla_components},
     dialog::DialogRegistry,
     dimension_type::DimensionTypeRegistry,
+    entity_data::{EntityDataSerializerRegistry, register_vanilla_entity_data_serializers},
     entity_types::EntityTypeRegistry,
     frog_variant::FrogVariantRegistry,
     game_rules::GameRuleRegistry,
@@ -55,6 +56,7 @@ pub mod damage_type;
 pub mod data_components;
 pub mod dialog;
 pub mod dimension_type;
+pub mod entity_data;
 pub mod entity_types;
 pub mod frog_variant;
 pub mod game_rules;
@@ -218,6 +220,11 @@ pub mod vanilla_recipes;
 #[path = "generated/vanilla_entities.rs"]
 pub mod vanilla_entities;
 
+#[allow(warnings)]
+#[rustfmt::skip]
+#[path = "generated/vanilla_entity_data.rs"]
+pub mod vanilla_entity_data;
+
 
 
 #[allow(warnings)]
@@ -318,6 +325,7 @@ pub struct Registry {
     pub blocks: BlockRegistry,
     pub items: ItemRegistry,
     pub data_components: DataComponentRegistry,
+    pub entity_data_serializers: EntityDataSerializerRegistry,
     pub biomes: BiomeRegistry,
     pub chat_types: ChatTypeRegistry,
     pub trim_patterns: TrimPatternRegistry,
@@ -364,6 +372,8 @@ impl Registry {
 
         vanilla_components::register_vanilla_data_components(&mut registry.data_components);
 
+        register_vanilla_entity_data_serializers(&mut registry.entity_data_serializers);
+
         vanilla_items::register_items(&mut registry.items);
         vanilla_item_tags::register_item_tags(&mut registry.items);
 
@@ -406,6 +416,7 @@ impl Registry {
     pub fn freeze(&mut self) {
         self.blocks.freeze();
         self.data_components.freeze();
+        self.entity_data_serializers.freeze();
         self.items.freeze();
         self.biomes.freeze();
         self.chat_types.freeze();
@@ -440,6 +451,7 @@ impl Registry {
         Self {
             blocks: BlockRegistry::new(),
             data_components: DataComponentRegistry::new(),
+            entity_data_serializers: EntityDataSerializerRegistry::new(),
             items: ItemRegistry::new(),
             biomes: BiomeRegistry::new(),
             chat_types: ChatTypeRegistry::new(),

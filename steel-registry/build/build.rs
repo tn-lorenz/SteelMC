@@ -14,6 +14,7 @@ mod dialog_tags;
 mod dialogs;
 mod dimension_types;
 mod entities;
+mod entity_data;
 
 mod frog_variants;
 mod game_rules;
@@ -72,6 +73,7 @@ const TIMELINE_TAGS: &str = "timeline_tags";
 const ZOMBIE_NAUTILUS_VARIANTS: &str = "zombie_nautilus_variants";
 const RECIPES: &str = "recipes";
 const VANILLA_ENTITIES: &str = "entities";
+const ENTITY_DATA: &str = "entity_data";
 
 const LOOT_TABLES: &str = "loot_tables";
 const BLOCK_ENTITY_TYPES: &str = "block_entity_types";
@@ -119,6 +121,7 @@ pub fn main() {
         (zombie_nautilus_variants::build(), ZOMBIE_NAUTILUS_VARIANTS),
         (recipes::build(), RECIPES),
         (entities::build(), VANILLA_ENTITIES),
+        (entity_data::build(), ENTITY_DATA),
         (loot_tables::build(), LOOT_TABLES),
         (block_entity_types::build(), BLOCK_ENTITY_TYPES),
         (game_rules::build(), GAME_RULES),

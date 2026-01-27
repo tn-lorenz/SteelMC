@@ -17661,42 +17661,136 @@
       {
         "index": 0,
         "name": "shared_flags_id",
-        "serializer": "byte"
+        "serializer": "byte",
+        "default_value": 0
       },
       {
         "index": 1,
         "name": "air_supply_id",
-        "serializer": "int"
+        "serializer": "int",
+        "default_value": 300
       },
       {
         "index": 2,
         "name": "custom_name",
-        "serializer": "optional_component"
+        "serializer": "optional_component",
+        "default_value": {
+          "present": false
+        }
       },
       {
         "index": 3,
         "name": "custom_name_visible",
-        "serializer": "boolean"
+        "serializer": "boolean",
+        "default_value": false
       },
       {
         "index": 4,
         "name": "silent",
-        "serializer": "boolean"
+        "serializer": "boolean",
+        "default_value": false
       },
       {
         "index": 5,
         "name": "no_gravity",
-        "serializer": "boolean"
+        "serializer": "boolean",
+        "default_value": false
       },
       {
         "index": 6,
         "name": "pose",
-        "serializer": "pose"
+        "serializer": "pose",
+        "default_value": "STANDING"
       },
       {
         "index": 7,
         "name": "ticks_frozen",
-        "serializer": "int"
+        "serializer": "int",
+        "default_value": 0
+      },
+      {
+        "index": 8,
+        "name": "living_entity_flags",
+        "serializer": "byte",
+        "default_value": 0
+      },
+      {
+        "index": 9,
+        "name": "health_id",
+        "serializer": "float",
+        "default_value": 1.0
+      },
+      {
+        "index": 10,
+        "name": "effect_particles",
+        "serializer": "particles",
+        "default_value": []
+      },
+      {
+        "index": 11,
+        "name": "effect_ambience_id",
+        "serializer": "boolean",
+        "default_value": false
+      },
+      {
+        "index": 12,
+        "name": "arrow_count_id",
+        "serializer": "int",
+        "default_value": 0
+      },
+      {
+        "index": 13,
+        "name": "stinger_count_id",
+        "serializer": "int",
+        "default_value": 0
+      },
+      {
+        "index": 14,
+        "name": "sleeping_pos_id",
+        "serializer": "optional_block_pos",
+        "default_value": {
+          "present": false
+        }
+      },
+      {
+        "index": 15,
+        "name": "player_main_hand",
+        "serializer": "humanoid_arm",
+        "default_value": "RIGHT"
+      },
+      {
+        "index": 16,
+        "name": "player_mode_customisation",
+        "serializer": "byte",
+        "default_value": 0
+      },
+      {
+        "index": 17,
+        "name": "player_absorption_id",
+        "serializer": "float",
+        "default_value": 0.0
+      },
+      {
+        "index": 18,
+        "name": "score_id",
+        "serializer": "int",
+        "default_value": 0
+      },
+      {
+        "index": 19,
+        "name": "shoulder_parrot_left",
+        "serializer": "optional_unsigned_int",
+        "default_value": {
+          "present": false
+        }
+      },
+      {
+        "index": 20,
+        "name": "shoulder_parrot_right",
+        "serializer": "optional_unsigned_int",
+        "default_value": {
+          "present": false
+        }
       }
     ]
   },
