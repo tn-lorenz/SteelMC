@@ -11,11 +11,11 @@ use steel_utils::{
 use crate::{
     REGISTRY,
     data_components::{
-        ComponentPatchEntry, ComponentValue, DataComponentMap, DataComponentPatch,
+        Component, ComponentData, ComponentPatchEntry, DataComponentMap, DataComponentPatch,
         DataComponentType,
         vanilla_components::{
-            DAMAGE, Damage, EQUIPPABLE, Equippable, EquippableSlot, MAX_DAMAGE, MAX_STACK_SIZE,
-            TOOL, Tool, UNBREAKABLE,
+            DAMAGE, EQUIPPABLE, Equippable, EquippableSlot, MAX_DAMAGE, MAX_STACK_SIZE, TOOL, Tool,
+            UNBREAKABLE,
         },
     },
     items::ItemRef,
@@ -64,6 +64,12 @@ impl ItemStack {
             count,
             patch: DataComponentPatch::new(),
         }
+    }
+
+    /// Creates a new item stack with the specified count and component patch.
+    #[must_use]
+    pub fn with_count_and_patch(item: ItemRef, count: i32, patch: DataComponentPatch) -> Self {
+        Self { item, count, patch }
     }
 
     #[must_use]
@@ -127,7 +133,7 @@ impl ItemStack {
     #[must_use]
     pub fn get_damage_value(&self) -> i32 {
         self.get(DAMAGE)
-            .map(|d| d.0)
+            .copied()
             .unwrap_or(0)
             .clamp(0, self.get_max_damage())
     }
@@ -135,13 +141,13 @@ impl ItemStack {
     /// Sets the damage value of this item.
     pub fn set_damage_value(&mut self, value: i32) {
         let clamped = value.clamp(0, self.get_max_damage());
-        self.set(DAMAGE, Damage(clamped));
+        self.set(DAMAGE, clamped);
     }
 
     /// Gets the maximum damage this item can take before breaking.
     #[must_use]
     pub fn get_max_damage(&self) -> i32 {
-        self.get(MAX_DAMAGE).map(|d| d.0).unwrap_or(0)
+        self.get(MAX_DAMAGE).copied().unwrap_or(0)
     }
 
     /// Returns true if the item is broken (damage >= max damage).
@@ -241,7 +247,7 @@ impl ItemStack {
     }
 
     pub fn max_stack_size(&self) -> i32 {
-        self.get(MAX_STACK_SIZE).map(|s| s.0).unwrap_or(64)
+        self.get(MAX_STACK_SIZE).copied().unwrap_or(64)
     }
 
     /// Returns the equippable component if this item has one.
@@ -262,9 +268,11 @@ impl ItemStack {
         self.get_equippable_slot() == Some(slot)
     }
 
-    pub fn get_effective_value_raw(&self, key: &Identifier) -> Option<&dyn ComponentValue> {
+    /// Gets the raw component data by key.
+    #[must_use]
+    pub fn get_effective_value_raw(&self, key: &Identifier) -> Option<&ComponentData> {
         match self.patch.get_entry(key) {
-            Some(ComponentPatchEntry::Set(v)) => Some(v.as_ref()),
+            Some(ComponentPatchEntry::Set(data)) => Some(data),
             Some(ComponentPatchEntry::Removed) => None,
             None => self.prototype().get_raw(key),
         }
@@ -273,23 +281,19 @@ impl ItemStack {
     /// Gets the effective value of a component, considering the patch and prototype.
     /// Returns `None` if the component is not present or has been removed.
     #[must_use]
-    pub fn get<T: 'static>(&self, component: DataComponentType<T>) -> Option<&T> {
-        self.get_effective_value_raw(&component.key)
-            .and_then(|v| v.as_any().downcast_ref::<T>())
+    pub fn get<T: Component>(&self, component: DataComponentType<T>) -> Option<&T> {
+        let data = self.get_effective_value_raw(&component.key)?;
+        T::from_data_ref(data)
     }
 
     /// Gets the effective value of a component, or returns the default value if not present.
     #[must_use]
-    pub fn get_or_default<T: 'static + Clone>(
-        &self,
-        component: DataComponentType<T>,
-        default: T,
-    ) -> T {
+    pub fn get_or_default<T: Component>(&self, component: DataComponentType<T>, default: T) -> T {
         self.get(component).cloned().unwrap_or(default)
     }
 
     /// Sets a component value in this item's patch, overriding the prototype.
-    pub fn set<T: 'static + ComponentValue>(&mut self, component: DataComponentType<T>, value: T) {
+    pub fn set<T: Component>(&mut self, component: DataComponentType<T>, value: T) {
         self.patch.set(component, value);
     }
 
@@ -700,7 +704,7 @@ impl ItemStack {
 
             match (val_a, val_b) {
                 (Some(a), Some(b)) => {
-                    if !a.eq_value(b) {
+                    if a != b {
                         return false;
                     }
                 }
@@ -753,5 +757,77 @@ impl ReadFrom for ItemStack {
         let patch = DataComponentPatch::read(data)?;
 
         Ok(Self { item, count, patch })
+    }
+}
+
+// ==================== NBT Serialization ====================
+
+use simdnbt::{FromNbtTag, ToNbtTag, borrow::NbtTag as BorrowedNbtTag, owned::NbtCompound};
+
+impl ToNbtTag for ItemStack {
+    /// Converts this item stack to an NBT tag for persistent storage.
+    ///
+    /// Format (matching vanilla Minecraft):
+    /// ```text
+    /// {
+    ///     id: "minecraft:stone",
+    ///     count: 64,
+    ///     components: { ... }  // Only present if patch is non-empty
+    /// }
+    /// ```
+    fn to_nbt_tag(self) -> simdnbt::owned::NbtTag {
+        if self.is_empty() {
+            // Empty stacks are represented as an empty compound
+            return simdnbt::owned::NbtTag::Compound(NbtCompound::new());
+        }
+
+        let mut compound = NbtCompound::new();
+
+        // id: The item identifier
+        compound.insert("id", self.item.key.to_string());
+
+        // count: The stack count (vanilla uses Int for NBT storage)
+        compound.insert("count", self.count);
+
+        // components: The component patch (only if non-empty)
+        if !self.patch.is_empty() {
+            compound.insert("components", self.patch.to_nbt_tag());
+        }
+
+        simdnbt::owned::NbtTag::Compound(compound)
+    }
+}
+
+impl FromNbtTag for ItemStack {
+    /// Parses an item stack from an NBT tag.
+    ///
+    /// Accepts the vanilla format:
+    /// ```text
+    /// {
+    ///     id: "minecraft:stone",
+    ///     count: 64,
+    ///     components: { ... }
+    /// }
+    /// ```
+    fn from_nbt_tag(tag: BorrowedNbtTag) -> Option<Self> {
+        let compound = tag.compound()?;
+
+        // Get the item ID
+        let id_str = compound.get("id")?.string()?.to_str();
+        let id = id_str.parse::<Identifier>().ok()?;
+
+        // Look up the item in the registry
+        let item = REGISTRY.items.by_key(&id)?;
+
+        // Get the count (default to 1 if not present)
+        let count = compound.get("count").and_then(|t| t.int()).unwrap_or(1);
+
+        // Parse components if present
+        let patch = compound
+            .get("components")
+            .and_then(DataComponentPatch::from_nbt_tag)
+            .unwrap_or_default();
+
+        Some(Self { item, count, patch })
     }
 }

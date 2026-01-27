@@ -6,6 +6,7 @@ edition.workspace = true
 [dependencies]
 # Internal crates
 steel-core.workspace = true
+steel-login.workspace = true
 steel-protocol.workspace = true
 steel-registry.workspace = true
 steel-utils.workspace = true
@@ -17,6 +18,8 @@ tokio-util.workspace = true
 # Serialization
 serde.workspace = true
 serde_json.workspace = true
+serde_json5.workspace = true
+base64.workspace = true
 
 # Error handling
 thiserror.workspace = true
@@ -33,7 +36,13 @@ uuid.workspace = true
 
 # Logging
 log.workspace = true
-simplelog.workspace = true
+tracing.workspace = true
+tracing-subscriber.workspace = true
+tracing-log.workspace = true
+opentelemetry = { workspace = true, optional = true }
+opentelemetry_sdk = { workspace = true, optional = true }
+opentelemetry-otlp = { workspace = true, optional = true }
+tracing-opentelemetry = { workspace = true, optional = true }
 
 # Networking
 reqwest.workspace = true
@@ -45,6 +54,7 @@ rsa-der.workspace = true
 sha1.workspace = true
 sha2.workspace = true
 hex.workspace = true
+text_components.workspace = true
 
 # Memory
 mimalloc = { version = "0.1.48", optional = true }
@@ -57,6 +67,13 @@ workspace = true
 
 [features]
 default = ["mimalloc"]
+stand-alone = []
 deadlock_detection = ["dep:parking_lot"]
 dhat-heap = ["dhat"]
 mimalloc = ["dep:mimalloc"]
+jaeger = [
+    "dep:opentelemetry",
+    "dep:opentelemetry_sdk",
+    "dep:opentelemetry-otlp",
+    "dep:tracing-opentelemetry",
+]

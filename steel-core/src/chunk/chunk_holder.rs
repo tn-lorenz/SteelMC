@@ -194,20 +194,23 @@ impl ChunkHolder {
         status.get_index() > allowed as usize
     }
 
-    /// Returns a future that completes when the chunk reaches the given status or is cancelled.
+    /// Schedules a generation task for this chunk if needed.
+    ///
+    /// Returns `true` if a new task was actually scheduled, `false` if the chunk
+    /// already has a suitable task or is already at the target status.
     #[allow(clippy::missing_panics_doc)]
     #[inline]
     pub(crate) fn schedule_chunk_generation_task_b(
         &self,
         status: ChunkStatus,
         chunk_map: &Arc<ChunkMap>,
-    ) {
+    ) -> bool {
         if self.is_status_disallowed(status) {
-            return;
+            return false;
         }
 
         if self.try_chunk(status).is_some() {
-            return;
+            return false;
         }
 
         let task = self.generation_task.lock();
@@ -216,6 +219,9 @@ impl ChunkHolder {
         if task.is_none() || status > task.as_ref().unwrap().target_status {
             drop(task);
             self.reschedule_chunk_task_b(status, chunk_map);
+            true
+        } else {
+            false
         }
     }
 
@@ -317,25 +323,42 @@ impl ChunkHolder {
 
         let future = chunk_map.task_tracker.spawn(async move {
             if target_status == ChunkStatus::Empty {
-                if let Ok(Some((chunk, status))) = region_manager
-                    .load_chunk(
-                        self_clone.pos,
-                        self_clone.min_y(),
-                        self_clone.height(),
-                        context.weak_world(),
-                    )
+                // Acquire the region first (creates if needed, increments ref count)
+                let chunk_exists = region_manager
+                    .acquire_chunk(self_clone.pos)
                     .await
-                {
-                    self_clone.insert_chunk(chunk, status);
+                    .unwrap_or(false);
+
+                if chunk_exists {
+                    // Try to load the chunk from disk
+                    if let Ok(Some((chunk, status))) = region_manager
+                        .load_chunk(
+                            self_clone.pos,
+                            self_clone.min_y(),
+                            self_clone.height(),
+                            context.weak_world(),
+                        )
+                        .await
+                    {
+                        self_clone.insert_chunk(chunk, status);
+                    } else {
+                        // Chunk existed but failed to load - generate fresh
+                        let holder_for_notify = self_clone.clone();
+                        rayon_spawn(&thread_pool, move || {
+                            task(context, step, &cache, self_clone)
+                        })
+                        .await
+                        .expect("Should never fail creating an empty chunk");
+                        holder_for_notify.notify_status(target_status);
+                    }
                 } else {
-                    // Clone holder before moving into rayon closure
+                    // Chunk doesn't exist - generate fresh
                     let holder_for_notify = self_clone.clone();
                     rayon_spawn(&thread_pool, move || {
                         task(context, step, &cache, self_clone)
                     })
                     .await
                     .expect("Should never fail creating an empty chunk");
-                    // Notify after rayon completes - this runs on tokio, not rayon
                     holder_for_notify.notify_status(target_status);
                 }
                 Some(())
