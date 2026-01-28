@@ -36,6 +36,7 @@ use steel_protocol::packets::game::{
     SPlayerAction, SSetCarriedItem, SUseItem, SUseItemOn,
 };
 use steel_registry::blocks::block_state_ext::BlockStateExt;
+use steel_registry::entity_data::EntityPose;
 use steel_registry::game_rules::GameRuleValue;
 use steel_registry::vanilla_entity_data::PlayerEntityData;
 use steel_registry::vanilla_game_rules::{ELYTRA_MOVEMENT_CHECK, PLAYER_MOVEMENT_CHECK};
@@ -387,6 +388,9 @@ impl Player {
         // Tick block breaking
         self.block_breaking.lock().tick(self, &self.world);
 
+        // Update pose based on current state
+        self.update_pose();
+
         // Sync dirty entity data to nearby players
         self.sync_entity_data();
 
@@ -408,8 +412,7 @@ impl Player {
         if let Some(dirty_values) = self.entity_data.lock().pack_dirty() {
             let packet = CSetEntityData::new(self.id, dirty_values);
             let chunk_pos = *self.last_chunk_pos.lock();
-            self.world
-                .broadcast_to_nearby(chunk_pos, packet, Some(self.id));
+            self.world.broadcast_to_nearby(chunk_pos, packet, None);
         }
     }
 
@@ -1440,6 +1443,29 @@ impl Player {
     #[must_use]
     pub fn is_on_ground(&self) -> bool {
         self.on_ground.load(Ordering::Relaxed)
+    }
+
+    /// Determines the desired pose based on current player state.
+    /// Priority: `Sleeping` > `FallFlying` > `Sneaking` > `Standing`
+    // TODO: Add Swimming pose (requires water detection)
+    // TODO: Add SpinAttack pose (requires riptide trident)
+    // TODO: Add pose collision checks (force crouch in low ceilings)
+    fn get_desired_pose(&self) -> EntityPose {
+        if self.sleeping.load(Ordering::Relaxed) {
+            EntityPose::Sleeping
+        } else if self.fall_flying.load(Ordering::Relaxed) {
+            EntityPose::FallFlying
+        } else if self.shift_key_down.load(Ordering::Relaxed) && !self.abilities.lock().flying {
+            EntityPose::Sneaking
+        } else {
+            EntityPose::Standing
+        }
+    }
+
+    /// Updates the player's pose in entity data based on current state.
+    fn update_pose(&self) {
+        let desired_pose = self.get_desired_pose();
+        self.entity_data.lock().pose.set(desired_pose);
     }
 
     /// Returns the player's client information settings.

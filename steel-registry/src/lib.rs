@@ -7,10 +7,6 @@
 )]
 #![allow(internal_features)]
 
-use std::{fmt::Debug, ops::Deref, sync::OnceLock};
-
-use steel_utils::Identifier;
-
 use crate::{
     banner_pattern::BannerPatternRegistry,
     biome::BiomeRegistry,
@@ -43,6 +39,9 @@ use crate::{
     wolf_variant::WolfVariantRegistry,
     zombie_nautilus_variant::ZombieNautilusVariantRegistry,
 };
+use std::{fmt::Debug, ops::Deref, sync::OnceLock};
+use steel_utils::Identifier;
+
 pub mod banner_pattern;
 pub mod biome;
 pub mod block_entity_type;
@@ -50,7 +49,6 @@ pub mod blocks;
 pub mod cat_variant;
 pub mod chat_type;
 pub mod chicken_variant;
-
 pub mod cow_variant;
 pub mod damage_type;
 pub mod data_components;
@@ -75,7 +73,6 @@ pub mod trim_pattern;
 pub mod wolf_sound_variant;
 pub mod wolf_variant;
 pub mod zombie_nautilus_variant;
-
 
 #[allow(warnings)]
 #[rustfmt::skip]
