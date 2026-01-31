@@ -8,7 +8,7 @@ use std::{
     },
 };
 
-use rand::Rng;
+use rand::RngExt;
 use steel_protocol::packets::game::{
     BlockEntityInfo, ChunkPacketData, HeightmapType as ProtocolHeightmapType, Heightmaps,
     LightUpdatePacketData,
