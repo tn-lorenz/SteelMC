@@ -8,6 +8,8 @@ use std::sync::atomic::{AtomicBool, Ordering};
 
 use steel_registry::blocks::shapes::AABBd;
 use steel_registry::entity_data::DataValue;
+use steel_registry::entity_types::EntityTypeRef;
+use steel_registry::vanilla_entities;
 use steel_registry::vanilla_entity_data::BlockDisplayEntityData;
 use steel_utils::BlockStateId;
 use steel_utils::locks::SyncMutex;
@@ -92,6 +94,10 @@ impl BlockDisplayEntity {
 }
 
 impl Entity for BlockDisplayEntity {
+    fn entity_type(&self) -> EntityTypeRef {
+        vanilla_entities::BLOCK_DISPLAY
+    }
+
     fn id(&self) -> i32 {
         self.id
     }

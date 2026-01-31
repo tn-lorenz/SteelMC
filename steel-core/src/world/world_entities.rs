@@ -31,6 +31,9 @@ impl World {
             );
             self.entity_cache.unregister(entity_id, uuid, section);
 
+            // Remove player from entity tracking (stop tracking all entities for this player)
+            self.entity_tracker().on_player_leave(entity_id);
+
             self.player_area_map.on_player_leave(&player);
             self.broadcast_to_all(CRemoveEntities::single(entity_id));
             self.broadcast_to_all(CRemovePlayerInfo::single(uuid));

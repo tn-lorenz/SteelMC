@@ -4,6 +4,7 @@ use std::sync::{Arc, Weak};
 
 use steel_registry::blocks::shapes::AABBd;
 use steel_registry::entity_data::DataValue;
+use steel_registry::entity_types::EntityTypeRef;
 use steel_registry::item_stack::ItemStack;
 use steel_utils::math::Vector3;
 use uuid::Uuid;
@@ -15,6 +16,7 @@ mod callback;
 pub mod entities;
 mod registry;
 mod storage;
+mod tracker;
 
 pub use cache::EntityCache;
 pub use callback::{
@@ -23,6 +25,7 @@ pub use callback::{
 };
 pub use registry::{ENTITIES, EntityRegistry, init_entities};
 pub use storage::EntityStorage;
+pub use tracker::EntityTracker;
 
 /// Type alias for a shared entity reference.
 pub type SharedEntity = Arc<dyn Entity>;
@@ -35,6 +38,9 @@ pub type WeakEntity = Weak<dyn Entity>;
 /// This trait provides the core functionality for entities.
 /// It's based on Minecraft's `Entity` class.
 pub trait Entity: Send + Sync {
+    /// Gets the entity type containing tracking range, dimensions, etc.
+    fn entity_type(&self) -> EntityTypeRef;
+
     /// Gets the entity's unique network ID (session-local).
     fn id(&self) -> i32;
 
@@ -50,7 +56,7 @@ pub trait Entity: Send + Sync {
     /// Called every game tick when the entity is in a ticked chunk.
     ///
     /// Override this to add entity-specific tick behavior.
-    /// The caller (EntityStorage) handles base tick logic like dirty data sync.
+    /// The caller (`EntityStorage`) handles base tick logic like dirty data sync.
     fn tick(&self) {}
 
     /// Packs dirty entity data for network synchronization.

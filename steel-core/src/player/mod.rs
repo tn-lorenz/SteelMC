@@ -38,7 +38,9 @@ use steel_protocol::packets::game::{
 use steel_registry::blocks::block_state_ext::BlockStateExt;
 use steel_registry::blocks::shapes::AABBd;
 use steel_registry::entity_data::EntityPose;
+use steel_registry::entity_types::EntityTypeRef;
 use steel_registry::game_rules::GameRuleValue;
+use steel_registry::vanilla_entities;
 use steel_registry::vanilla_entity_data::PlayerEntityData;
 use steel_registry::vanilla_game_rules::{ELYTRA_MOVEMENT_CHECK, PLAYER_MOVEMENT_CHECK};
 use steel_registry::{REGISTRY, vanilla_chat_types};
@@ -2154,6 +2156,10 @@ impl Player {
 }
 
 impl Entity for Player {
+    fn entity_type(&self) -> EntityTypeRef {
+        vanilla_entities::PLAYER
+    }
+
     fn id(&self) -> i32 {
         self.id
     }
