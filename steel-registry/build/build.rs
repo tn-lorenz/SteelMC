@@ -1,4 +1,8 @@
-use std::{fs, path::Path, process::Command};
+use std::{
+    fs,
+    path::{Path, PathBuf},
+    process::Command,
+};
 
 mod banner_patterns;
 mod biomes;
@@ -141,7 +145,7 @@ pub fn main() {
     let mut generated_files = Vec::new();
 
     for (content, file_name) in vanilla_builds {
-        let path = format!("{OUT_DIR}/vanilla_{file_name}.rs");
+        let path = PathBuf::from(format!("{OUT_DIR}/vanilla_{file_name}.rs"));
         let content = content.to_string();
         generated_files.push(path.clone());
 
@@ -158,9 +162,7 @@ pub fn main() {
     if let Ok(entries) = fs::read_dir(OUT_DIR) {
         for entry in entries.flatten() {
             let path = entry.path();
-            if let Some(path_str) = path.to_str()
-                && !generated_files.contains(&path_str.to_string())
-            {
+            if !generated_files.contains(&path) {
                 let _ = fs::remove_file(&path);
             }
         }
