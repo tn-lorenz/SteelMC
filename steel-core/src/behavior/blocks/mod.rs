@@ -11,6 +11,7 @@ mod farmland_block;
 mod fence_block;
 mod rotated_pillar_block;
 mod sign_block;
+mod torch_block;
 
 pub use barrel_block::BarrelBlock;
 pub use crafting_table_block::CraftingTableBlock;
@@ -22,3 +23,4 @@ pub use rotated_pillar_block::RotatedPillarBlock;
 pub use sign_block::{
     CeilingHangingSignBlock, StandingSignBlock, WallHangingSignBlock, WallSignBlock,
 };
+pub use torch_block::{RedstoneTorchBlock, RedstoneWallTorchBlock, TorchBlock, WallTorchBlock};
