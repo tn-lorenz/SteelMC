@@ -15,7 +15,7 @@ use crate::behavior::{BLOCK_BEHAVIORS, ItemBehavior};
 
 /// Behavior for items that place either a standing or wall variant of a block.
 ///
-/// Used for torches (torch/wall_torch), soul torches, copper torches, etc.
+/// Used for torches (`torch/wall_torch`), soul torches, copper torches, etc.
 /// When placed on top of a block, places the standing variant.
 /// When placed on the side of a block, places the wall variant.
 pub struct StandingAndWallBlockItem {

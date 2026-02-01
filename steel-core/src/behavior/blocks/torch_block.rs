@@ -18,7 +18,7 @@ use crate::behavior::block::BlockBehaviour;
 use crate::behavior::context::BlockPlaceContext;
 use crate::world::World;
 
-/// Behavior for standing torch blocks (torch, soul_torch, copper_torch).
+/// Behavior for standing torch blocks (torch, `soul_torch`, `copper_torch`).
 ///
 /// Standing torches are placed on top of blocks and require center support
 /// from the block below to survive.
@@ -69,7 +69,7 @@ impl BlockBehaviour for TorchBlock {
     }
 }
 
-/// Behavior for wall torch blocks (wall_torch, soul_wall_torch, copper_wall_torch).
+/// Behavior for wall torch blocks (`wall_torch`, `soul_wall_torch`, `copper_wall_torch`).
 ///
 /// Wall torches are placed on the side of blocks and require a sturdy face
 /// from the block they're attached to.
@@ -146,7 +146,7 @@ impl BlockBehaviour for WallTorchBlock {
     }
 }
 
-/// Behavior for redstone torch blocks (redstone_torch).
+/// Behavior for redstone torch blocks (`redstone_torch`).
 ///
 /// Redstone torches are placed on top of blocks and require center support
 /// from the block below to survive. They have the same placement logic as
@@ -217,7 +217,7 @@ impl BlockBehaviour for RedstoneTorchBlock {
     // TODO: Implement is_signal_source (return true)
 }
 
-/// Behavior for redstone wall torch blocks (redstone_wall_torch).
+/// Behavior for redstone wall torch blocks (`redstone_wall_torch`).
 ///
 /// Redstone wall torches are placed on the side of blocks and require a sturdy face
 /// from the block they're attached to. They have the same placement logic as
@@ -227,7 +227,7 @@ impl BlockBehaviour for RedstoneTorchBlock {
 /// - Redstone signal output (getSignal/getDirectSignal - power level 15 when lit, based on facing)
 /// - Respond to incoming redstone signals (hasNeighborSignal - check block behind torch)
 /// - Scheduled tick behavior for state changes (tick method with 2 tick delay)
-/// - Burnout mechanics (inherited from RedstoneTorchBlock)
+/// - Burnout mechanics (inherited from `RedstoneTorchBlock`)
 /// - Notify neighbors when placed/removed
 /// - Particle effects when lit (animateTick - client-side only)
 pub struct RedstoneWallTorchBlock {

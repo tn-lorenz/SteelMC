@@ -30,6 +30,8 @@ fn generate_registrations<'a>(
     quote! { #(#registrations)* }
 }
 
+// Tjos is okay cause it's a long function. and because it is needed for like all of those blocks there.
+#[allow(clippy::too_many_lines)]
 pub fn build(blocks: &[BlockClass]) -> String {
     let mut barrel_blocks = Vec::new();
     let mut crafting_table_blocks = Vec::new();
