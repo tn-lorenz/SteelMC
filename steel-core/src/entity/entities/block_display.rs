@@ -3,8 +3,8 @@
 //! Display entities render a block, item, or text without collision.
 //! They're commonly used for visual effects, holograms, and decorations.
 
-use std::sync::Arc;
 use std::sync::atomic::{AtomicBool, Ordering};
+use std::sync::{Arc, Weak};
 
 use steel_registry::blocks::shapes::AABBd;
 use steel_registry::entity_data::DataValue;
@@ -17,6 +17,7 @@ use steel_utils::math::Vector3;
 use uuid::Uuid;
 
 use crate::entity::{Entity, EntityLevelCallback, NullEntityCallback, RemovalReason};
+use crate::world::World;
 
 /// A block display entity that renders a block state at its position.
 ///
@@ -28,6 +29,8 @@ pub struct BlockDisplayEntity {
     id: i32,
     /// Persistent UUID for this entity.
     uuid: Uuid,
+    /// The world this entity is in.
+    world: Weak<World>,
     /// Current position in the world.
     position: SyncMutex<Vector3<f64>>,
     /// Synced entity data for network serialization.
@@ -43,10 +46,11 @@ impl BlockDisplayEntity {
     ///
     /// The `id` should be obtained from `Server::next_entity_id()`.
     #[must_use]
-    pub fn new(id: i32, position: Vector3<f64>) -> Self {
+    pub fn new(id: i32, position: Vector3<f64>, world: Weak<World>) -> Self {
         Self {
             id,
             uuid: Uuid::new_v4(),
+            world,
             position: SyncMutex::new(position),
             entity_data: SyncMutex::new(BlockDisplayEntityData::new()),
             removed: AtomicBool::new(false),
@@ -58,10 +62,11 @@ impl BlockDisplayEntity {
     ///
     /// The `id` should be obtained from `Server::next_entity_id()`.
     #[must_use]
-    pub fn with_uuid(id: i32, position: Vector3<f64>, uuid: Uuid) -> Self {
+    pub fn with_uuid(id: i32, position: Vector3<f64>, uuid: Uuid, world: Weak<World>) -> Self {
         Self {
             id,
             uuid,
+            world,
             position: SyncMutex::new(position),
             entity_data: SyncMutex::new(BlockDisplayEntityData::new()),
             removed: AtomicBool::new(false),
@@ -126,6 +131,10 @@ impl Entity for BlockDisplayEntity {
     fn tick(&self) {
         // Block displays are static - no tick behavior needed
         // Interpolation is handled client-side
+    }
+
+    fn level(&self) -> Option<Arc<World>> {
+        self.world.upgrade()
     }
 
     fn pack_dirty_entity_data(&self) -> Option<Vec<DataValue>> {

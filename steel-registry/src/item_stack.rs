@@ -110,6 +110,37 @@ impl ItemStack {
         self.count -= amount;
     }
 
+    /// Splits off the specified amount from this stack and returns it as a new stack.
+    ///
+    /// If the amount is greater than or equal to the current count, this stack becomes
+    /// empty and the entire contents are returned.
+    pub fn split(&mut self, amount: i32) -> Self {
+        let take = amount.min(self.count);
+        let result = Self {
+            item: self.item,
+            count: take,
+            patch: self.patch.clone(),
+        };
+        self.shrink(take);
+        result
+    }
+
+    /// Copies the identity (item type and patch) from another stack.
+    ///
+    /// Used when splitting stacks to preserve components.
+    #[must_use]
+    pub fn copy_with_count(&self, count: i32) -> Self {
+        if self.is_empty() {
+            Self::empty()
+        } else {
+            Self {
+                item: self.item,
+                count,
+                patch: self.patch.clone(),
+            }
+        }
+    }
+
     /// Returns true if this item can stack (max stack size > 1 and not damaged).
     /// Damaged items cannot stack.
     #[must_use]

@@ -274,9 +274,10 @@ impl ChunkAccess {
     ///
     /// # Arguments
     /// * `random_tick_speed` - Number of random blocks to tick per section per tick
-    pub fn tick(&self, random_tick_speed: u32) {
+    /// * `tick_count` - Current server tick count (for entity sync timing)
+    pub fn tick(&self, random_tick_speed: u32, tick_count: i32) {
         if let Self::Full(chunk) = self {
-            chunk.tick(random_tick_speed);
+            chunk.tick(random_tick_speed, tick_count);
         }
     }
 }

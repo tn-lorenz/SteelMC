@@ -9,7 +9,14 @@ use steel_registry::item_stack::ItemStack;
 use steel_utils::math::Vector3;
 use uuid::Uuid;
 
+use crate::physics::{
+    EntityPhysicsState, MoveResult, MoverType, WorldCollisionProvider, move_entity,
+};
+use crate::server::Server;
+use crate::world::World;
 use crate::{inventory::equipment::EquipmentSlot, player::Player};
+
+use entities::ItemEntity;
 
 mod cache;
 mod callback;
@@ -55,9 +62,25 @@ pub trait Entity: Send + Sync {
 
     /// Called every game tick when the entity is in a ticked chunk.
     ///
-    /// Override this to add entity-specific tick behavior.
+    /// Use `self.level()` to access the world for physics, block queries, etc.
     /// The caller (`EntityStorage`) handles base tick logic like dirty data sync.
     fn tick(&self) {}
+
+    /// Sends position/velocity changes to tracking players.
+    ///
+    /// Called every tick by `EntityStorage` after `tick()`, mirrors vanilla's
+    /// `ServerEntity.sendChanges()`. Handles position sync based on `updateInterval`,
+    /// velocity sync when `needsSync` is set, and on-ground state changes.
+    ///
+    /// Default implementation does nothing. Override for entities that need
+    /// position/velocity synchronization (items, projectiles, etc.).
+    fn send_changes(&self, _tick_count: i32) {}
+
+    /// Gets the world this entity is in.
+    ///
+    /// Returns `None` if the entity is not in a world or the world was dropped.
+    /// Mirrors vanilla's `Entity.level()`.
+    fn level(&self) -> Option<Arc<World>>;
 
     /// Packs dirty entity data for network synchronization.
     ///
@@ -86,6 +109,141 @@ pub trait Entity: Send + Sync {
     /// Gets the entity as a Player if it is one.
     fn as_player(self: Arc<Self>) -> Option<Arc<Player>> {
         None
+    }
+
+    /// Gets the entity as an `ItemEntity` if it is one.
+    fn as_item_entity(self: Arc<Self>) -> Option<Arc<ItemEntity>> {
+        None
+    }
+
+    /// Gets the entity's rotation as (yaw, pitch) in degrees.
+    ///
+    /// Yaw is horizontal rotation (0-360), pitch is vertical (-90 to 90).
+    fn rotation(&self) -> (f32, f32) {
+        (0.0, 0.0)
+    }
+
+    /// Gets the entity's velocity in blocks per tick.
+    fn velocity(&self) -> Vector3<f64> {
+        Vector3::new(0.0, 0.0, 0.0)
+    }
+
+    /// Sets the entity's velocity.
+    fn set_velocity(&self, _velocity: Vector3<f64>) {}
+
+    /// Returns true if the entity is on the ground.
+    fn on_ground(&self) -> bool {
+        false
+    }
+
+    /// Sets whether the entity is on the ground.
+    fn set_on_ground(&self, _on_ground: bool) {}
+
+    /// Sets the entity's position.
+    fn set_position(&self, _pos: Vector3<f64>) {}
+
+    // === Physics Helper Methods ===
+    // These mirror vanilla's Entity class methods.
+
+    /// Gets the default gravity for this entity type.
+    ///
+    /// Override this to specify entity-specific gravity.
+    /// Vanilla values: `ItemEntity` = 0.04, `LivingEntity` = 0.08
+    fn get_default_gravity(&self) -> f64 {
+        0.0
+    }
+
+    /// Returns true if gravity is disabled for this entity.
+    ///
+    /// Override to read from entity data's `no_gravity` field.
+    fn is_no_gravity(&self) -> bool {
+        false
+    }
+
+    /// Gets the current gravity value.
+    ///
+    /// Returns 0 if `no_gravity` is set, otherwise returns `get_default_gravity()`.
+    fn get_gravity(&self) -> f64 {
+        if self.is_no_gravity() {
+            0.0
+        } else {
+            self.get_default_gravity()
+        }
+    }
+
+    /// Applies gravity to the entity's velocity.
+    ///
+    /// Mirrors vanilla's `Entity.applyGravity()`.
+    fn apply_gravity(&self) {
+        let gravity = self.get_gravity();
+        if gravity != 0.0 {
+            let mut vel = self.velocity();
+            vel.y -= gravity;
+            self.set_velocity(vel);
+        }
+    }
+
+    /// Moves the entity with collision detection.
+    ///
+    /// Mirrors vanilla's `Entity.move(MoverType, Vec3)`.
+    /// Updates position, `on_ground`, velocity (on collision), and returns collision info.
+    fn do_move(&self, mover_type: MoverType) -> Option<MoveResult> {
+        let world = self.level()?;
+        let velocity = self.velocity();
+
+        // Build physics state
+        let mut physics_state = EntityPhysicsState::new(self.position(), self.entity_type());
+        physics_state.velocity = velocity;
+        physics_state.on_ground = self.on_ground();
+        // Most entities don't step up; override for entities that do
+        physics_state.max_up_step = 0.0;
+        physics_state.is_crouching = false;
+
+        // Perform collision detection and movement
+        let collision_world = WorldCollisionProvider::new(&world);
+        let result = move_entity(&physics_state, velocity, mover_type, &collision_world);
+
+        // Update entity state
+        self.set_position(result.final_position);
+        self.set_on_ground(result.on_ground);
+
+        // Vanilla: Entity.move() zeros velocity components on collision.
+        // Horizontal collision zeros X/Z individually based on which axis collided.
+        // Vertical collision calls Block.updateEntityMovementAfterFallOn which by default zeros Y.
+        // (vanilla: Entity.move lines 776-785)
+        // TODO: Support block-specific behavior (slime bounce, etc.)
+        if result.horizontal_collision {
+            let vel = self.velocity();
+            self.set_velocity(Vector3::new(
+                if result.x_collision { 0.0 } else { vel.x },
+                vel.y,
+                if result.z_collision { 0.0 } else { vel.z },
+            ));
+        }
+        if result.vertical_collision {
+            // Default Block.updateEntityMovementAfterFallOn behavior: zero Y velocity
+            let vel = self.velocity();
+            self.set_velocity(Vector3::new(vel.x, 0.0, vel.z));
+        }
+
+        Some(result)
+    }
+
+    /// Spawns an item at this entity's location.
+    ///
+    /// Mirrors vanilla's `Entity.spawnAtLocation()`. The item spawns at the
+    /// entity's position with the given Y offset and has a default pickup delay.
+    ///
+    /// Returns `None` if the item stack is empty or the entity has no world.
+    fn spawn_at_location(
+        &self,
+        item: ItemStack,
+        y_offset: f64,
+        server: &Server,
+    ) -> Option<Arc<entities::ItemEntity>> {
+        let world = self.level()?;
+        let pos = self.position();
+        world.spawn_item(Vector3::new(pos.x, pos.y + y_offset, pos.z), item, server)
     }
 }
 

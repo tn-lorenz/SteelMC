@@ -928,13 +928,13 @@ impl MenuBehavior {
                 if button == 0 {
                     // Left click outside - drop all carried items
                     let to_drop = mem::take(&mut self.carried);
-                    player.drop_item(to_drop, true);
+                    player.drop_item(to_drop, false, true);
                 } else {
                     // Right click outside - drop one carried item
                     let mut to_drop = self.carried.clone();
                     to_drop.set_count(1);
                     self.carried.shrink(1);
-                    player.drop_item(to_drop, true);
+                    player.drop_item(to_drop, false, true);
                 }
             }
             return;
@@ -1127,7 +1127,7 @@ impl MenuBehavior {
 
         let dropped = slot.remove(&mut guard, amount);
         if !dropped.is_empty() {
-            player.drop_item(dropped.clone(), true);
+            player.drop_item(dropped.clone(), false, true);
         }
         slot.set_changed(&mut guard);
 
@@ -1150,7 +1150,7 @@ impl MenuBehavior {
                 if more_dropped.is_empty() {
                     break;
                 }
-                player.drop_item(more_dropped, true);
+                player.drop_item(more_dropped, false, true);
                 slot.set_changed(&mut guard);
             }
         }
@@ -1196,7 +1196,7 @@ pub trait Menu {
         // Default: drop the carried item
         let carried = mem::take(&mut self.behavior_mut().carried);
         if !carried.is_empty() {
-            player.drop_item(carried, false);
+            player.drop_item(carried, false, true);
         }
     }
 

@@ -71,7 +71,7 @@ impl EntityStorage {
     /// Ticks all entities in this chunk and broadcasts dirty entity data.
     ///
     /// Called from `LevelChunk::tick()`.
-    pub fn tick(&self, world: &Arc<World>, chunk_pos: ChunkPos) {
+    pub fn tick(&self, world: &Arc<World>, chunk_pos: ChunkPos, tick_count: i32) {
         // Clone to avoid holding lock during tick
         let entities: Vec<SharedEntity> = self.entities.read().values().cloned().collect();
 
@@ -80,8 +80,11 @@ impl EntityStorage {
                 continue;
             }
 
-            // Entity-specific tick
+            // Entity-specific tick (entities access world via self.level())
             entity.tick();
+
+            // Send position/velocity changes (mirrors vanilla's ServerEntity.sendChanges())
+            entity.send_changes(tick_count);
 
             // Broadcast dirty entity data (base tick behavior)
             if let Some(dirty_data) = entity.pack_dirty_entity_data() {

@@ -32,6 +32,7 @@ use steel_registry::{REGISTRY, dimension_type::DimensionTypeRef};
 
 use steel_registry::blocks::shapes::{AABBd, VoxelShape};
 use steel_utils::locks::SyncRwLock;
+use steel_utils::math::Vector3;
 use steel_utils::{BlockPos, BlockStateId, ChunkPos, SectionPos, types::UpdateFlags};
 use tokio::{runtime::Runtime, time::Instant};
 
@@ -40,9 +41,10 @@ use crate::{
     behavior::BLOCK_BEHAVIORS,
     block_entity::SharedBlockEntity,
     config::STEEL_CONFIG,
-    entity::{EntityCache, EntityTracker, RemovalReason, SharedEntity},
+    entity::{EntityCache, EntityTracker, RemovalReason, SharedEntity, entities::ItemEntity},
     level_data::LevelDataManager,
     player::{LastSeen, Player},
+    server::Server,
 };
 
 mod player_area_map;
@@ -1080,6 +1082,148 @@ impl World {
                 self.entity_tracker.send_spawn_to_player(&entity, &player);
             }
         }
+    }
+
+    /// Spawns an item entity at the given position.
+    ///
+    /// This is a convenience method for dropping items in the world.
+    /// The item will have a default pickup delay.
+    ///
+    /// Returns `None` if the item stack is empty.
+    pub fn spawn_item(
+        self: &Arc<Self>,
+        pos: Vector3<f64>,
+        item: ItemStack,
+        server: &Server,
+    ) -> Option<Arc<ItemEntity>> {
+        self.spawn_item_with_velocity(pos, item, Vector3::new(0.0, 0.0, 0.0), server)
+    }
+
+    /// Spawns an item entity at the given position with initial velocity.
+    ///
+    /// Returns `None` if the item stack is empty.
+    pub fn spawn_item_with_velocity(
+        self: &Arc<Self>,
+        pos: Vector3<f64>,
+        item: ItemStack,
+        velocity: Vector3<f64>,
+        server: &Server,
+    ) -> Option<Arc<ItemEntity>> {
+        if item.is_empty() {
+            return None;
+        }
+
+        let entity_id = server.next_entity_id();
+        let entity = Arc::new(ItemEntity::with_item_and_velocity(
+            entity_id,
+            pos,
+            item,
+            velocity,
+            Arc::downgrade(self),
+        ));
+        entity.set_default_pickup_delay();
+
+        self.add_entity(entity.clone());
+        Some(entity)
+    }
+
+    /// Drops an item at a block position with random offset and velocity.
+    ///
+    /// Mirrors vanilla's `Block.popResource()`. Used for block drops.
+    /// The item spawns near the center of the block with slight random offset
+    /// and small random velocity.
+    pub fn pop_resource(
+        self: &Arc<Self>,
+        pos: &BlockPos,
+        item: ItemStack,
+        server: &Server,
+    ) -> Option<Arc<ItemEntity>> {
+        use steel_registry::vanilla_entities;
+
+        if item.is_empty() {
+            return None;
+        }
+
+        // Vanilla uses EntityType.ITEM dimensions for offset calculation
+        let half_height = f64::from(vanilla_entities::ITEM.dimensions.height) / 2.0;
+
+        // Random offset within block (vanilla: nextDouble(-0.25, 0.25))
+        let x = f64::from(pos.x()) + 0.5 + (rand::random::<f64>() - 0.5) * 0.5;
+        let y = f64::from(pos.y()) + 0.5 + (rand::random::<f64>() - 0.5) * 0.5 - half_height;
+        let z = f64::from(pos.z()) + 0.5 + (rand::random::<f64>() - 0.5) * 0.5;
+
+        self.spawn_item(Vector3::new(x, y, z), item, server)
+    }
+
+    /// Drops an item from a block face with directional velocity.
+    ///
+    /// Mirrors vanilla's `Block.popResourceFromFace()`. Used for items ejected
+    /// from a specific side of a block.
+    pub fn pop_resource_from_face(
+        self: &Arc<Self>,
+        pos: &BlockPos,
+        face: Direction,
+        item: ItemStack,
+        server: &Server,
+    ) -> Option<Arc<ItemEntity>> {
+        use steel_registry::vanilla_entities;
+
+        if item.is_empty() {
+            return None;
+        }
+
+        let half_width = f64::from(vanilla_entities::ITEM.dimensions.width) / 2.0;
+        let half_height = f64::from(vanilla_entities::ITEM.dimensions.height) / 2.0;
+
+        let (step_x, step_y, step_z) = face.offset();
+
+        // Position calculation (vanilla logic)
+        let x = f64::from(pos.x())
+            + 0.5
+            + if step_x == 0 {
+                (rand::random::<f64>() - 0.5) * 0.5
+            } else {
+                f64::from(step_x) * (0.5 + half_width)
+            };
+        let y = f64::from(pos.y())
+            + 0.5
+            + if step_y == 0 {
+                (rand::random::<f64>() - 0.5) * 0.5
+            } else {
+                f64::from(step_y) * (0.5 + half_height)
+            }
+            - half_height;
+        let z = f64::from(pos.z())
+            + 0.5
+            + if step_z == 0 {
+                (rand::random::<f64>() - 0.5) * 0.5
+            } else {
+                f64::from(step_z) * (0.5 + half_width)
+            };
+
+        // Velocity in direction of face
+        let delta_x = if step_x == 0 {
+            (rand::random::<f64>() - 0.5) * 0.2
+        } else {
+            f64::from(step_x) * 0.1
+        };
+        let delta_y = if step_y == 0 {
+            rand::random::<f64>() * 0.1
+        } else {
+            f64::from(step_y) * 0.1 + 0.1
+        };
+        let delta_z = if step_z == 0 {
+            (rand::random::<f64>() - 0.5) * 0.2
+        } else {
+            f64::from(step_z) * 0.1
+        };
+
+        self.spawn_item_with_velocity(
+            Vector3::new(x, y, z),
+            item,
+            Vector3::new(delta_x, delta_y, delta_z),
+            server,
+        )
     }
 
     /// Gets an entity by its network ID.

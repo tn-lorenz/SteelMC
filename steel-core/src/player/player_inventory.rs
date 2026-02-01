@@ -257,6 +257,55 @@ impl Container for PlayerInventory {
         Self::INVENTORY_SIZE + 7
     }
 
+    /// Adds an item to the player's main inventory (slots 0-35 only).
+    ///
+    /// Overrides the default `Container::add()` to prevent items from being
+    /// placed in armor or equipment slots. Matches vanilla's `Inventory.add()`
+    /// behavior which only adds to `this.items` (the 36 main slots).
+    fn add(&mut self, stack: &mut ItemStack) -> bool {
+        if stack.is_empty() {
+            return true;
+        }
+
+        let max_size = self.get_max_stack_size_for_item(stack);
+
+        // First pass: try to stack with existing items in main inventory only
+        if stack.is_stackable() {
+            for slot in 0..Self::INVENTORY_SIZE {
+                if stack.is_empty() {
+                    return true;
+                }
+                let existing = &mut self.items[slot];
+                if !existing.is_empty() && ItemStack::is_same_item_same_components(existing, stack)
+                {
+                    let space = max_size - existing.count();
+                    if space > 0 {
+                        let to_add = stack.count().min(space);
+                        existing.grow(to_add);
+                        stack.shrink(to_add);
+                    }
+                }
+            }
+        }
+
+        // Second pass: try empty slots in main inventory only
+        for slot in 0..Self::INVENTORY_SIZE {
+            if stack.is_empty() {
+                return true;
+            }
+            if self.items[slot].is_empty() {
+                let to_place = stack.count().min(max_size);
+                let mut placed = stack.clone();
+                placed.set_count(to_place);
+                self.items[slot] = placed;
+                stack.shrink(to_place);
+            }
+        }
+
+        self.set_changed();
+        stack.is_empty()
+    }
+
     fn get_item(&self, slot: usize) -> &ItemStack {
         if slot < Self::INVENTORY_SIZE {
             &self.items[slot]

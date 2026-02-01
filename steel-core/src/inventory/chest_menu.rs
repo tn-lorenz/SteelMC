@@ -279,7 +279,7 @@ impl Menu for ChestMenu {
     fn removed(&mut self, player: &Player) {
         let carried = mem::take(&mut self.behavior.carried);
         if !carried.is_empty() {
-            player.drop_item(carried, false);
+            player.drop_item(carried, false, true);
         }
     }
 }

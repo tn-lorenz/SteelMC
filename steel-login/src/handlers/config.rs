@@ -115,6 +115,7 @@ impl JavaTcpClient {
                 gameprofile,
                 connection,
                 world,
+                Arc::downgrade(&self.server),
                 entity_id,
                 player_weak,
                 client_info,

@@ -11,7 +11,7 @@
 use std::sync::Arc;
 
 use rustc_hash::FxHashSet;
-use steel_protocol::packets::game::{CAddEntity, CRemoveEntities, CSetEntityData};
+use steel_protocol::packets::game::{CAddEntity, CRemoveEntities, CSetEntityData, to_angle_byte};
 use steel_registry::REGISTRY;
 use steel_utils::ChunkPos;
 use steel_utils::locks::SyncRwLock;
@@ -350,7 +350,14 @@ impl EntityTracker {
 /// Sends spawn packets for an entity to a player.
 fn send_spawn_packets(entity: &SharedEntity, player: &Player) {
     let pos = entity.position();
+    let vel = entity.velocity();
+    let (yaw, pitch) = entity.rotation();
     let entity_type_id = *REGISTRY.entity_types.get_id(entity.entity_type()) as i32;
+
+    // Convert rotation from degrees to protocol byte format (256ths of a full rotation)
+    // Uses to_angle_byte which matches vanilla's Mth.packDegrees
+    let x_rot = to_angle_byte(pitch);
+    let y_rot = to_angle_byte(yaw);
 
     let spawn_packet = CAddEntity {
         id: entity.id(),
@@ -359,9 +366,12 @@ fn send_spawn_packets(entity: &SharedEntity, player: &Player) {
         x: pos.x,
         y: pos.y,
         z: pos.z,
-        x_rot: 0, // TODO: Get from entity
-        y_rot: 0, // TODO: Get from entity
-        head_y_rot: 0,
+        velocity_x: vel.x,
+        velocity_y: vel.y,
+        velocity_z: vel.z,
+        x_rot,
+        y_rot,
+        head_y_rot: y_rot,
         data: 0,
     };
 

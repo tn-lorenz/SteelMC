@@ -1,0 +1,788 @@
+//! Item entity implementation (dropped items).
+//!
+//! `ItemEntity` represents a dropped item in the world. It has physics
+//! (gravity, friction), despawns after 5 minutes, and can be picked up
+//! by players after a short delay.
+
+use std::f32::consts::PI;
+use std::sync::atomic::{AtomicBool, AtomicI32, Ordering};
+use std::sync::{Arc, Weak};
+
+use crossbeam::atomic::AtomicCell;
+use steel_registry::blocks::shapes::AABBd;
+use steel_registry::entity_data::DataValue;
+use steel_registry::entity_types::EntityTypeRef;
+use steel_registry::item_stack::ItemStack;
+use steel_registry::vanilla_entities;
+use steel_registry::vanilla_entity_data::ItemEntityData;
+use steel_utils::locks::SyncMutex;
+use steel_utils::math::Vector3;
+use uuid::Uuid;
+
+use crate::entity::{Entity, EntityLevelCallback, NullEntityCallback, RemovalReason};
+use crate::inventory::container::Container;
+use crate::physics::MoverType;
+use crate::player::Player;
+use crate::world::World;
+
+use steel_protocol::packets::game::{
+    CEntityPositionSync, CMoveEntityPos, CSetEntityMotion, CTakeItemEntity, calc_delta,
+};
+use steel_registry::blocks::block_state_ext::BlockStateExt;
+use steel_utils::BlockPos;
+
+/// Maximum age in ticks before despawn (5 minutes = 6000 ticks).
+const LIFETIME: i32 = 6000;
+
+/// Pickup delay set by `set_default_pickup_delay()` (0.5 seconds = 10 ticks).
+/// Note: Items spawn with 0 delay by default; this is only used when explicitly set.
+const DEFAULT_PICKUP_DELAY: i32 = 10;
+
+/// Pickup delay value meaning "never pickupable".
+const INFINITE_PICKUP_DELAY: i32 = 32767;
+
+/// Age value meaning "infinite lifetime" (never despawns).
+const INFINITE_LIFETIME: i32 = -32768;
+
+/// Default health (damage resistance).
+const DEFAULT_HEALTH: i32 = 5;
+
+/// Gravity applied per tick (blocks/tick^2). Vanilla: `ItemEntity.getDefaultGravity()`
+const DEFAULT_GRAVITY: f64 = 0.04;
+
+/// Air/vertical drag multiplier per tick.
+const AIR_DRAG: f64 = 0.98;
+
+/// A dropped item entity.
+///
+/// Mirrors vanilla's `ItemEntity` behavior:
+/// - Falls with gravity (0.04 per tick)
+/// - Applies friction when on ground (0.98)
+/// - Despawns after 5 minutes (6000 ticks)
+/// - Has pickup delay before players can collect it
+pub struct ItemEntity {
+    // === Core Identity ===
+    /// Unique network ID for this entity.
+    id: i32,
+    /// Persistent UUID for this entity.
+    uuid: Uuid,
+
+    // === World Reference ===
+    /// The world this entity is in. Mirrors vanilla's `Entity.level`.
+    world: Weak<World>,
+
+    // === Position & Physics ===
+    /// Current position in the world.
+    position: SyncMutex<Vector3<f64>>,
+    /// Velocity in blocks per tick.
+    velocity: SyncMutex<Vector3<f64>>,
+    /// Rotation as (yaw, pitch) in degrees. Items have random yaw on spawn.
+    rotation: AtomicCell<(f32, f32)>,
+    /// Whether the entity is on the ground.
+    on_ground: AtomicBool,
+
+    // === Synced Entity Data ===
+    /// Entity data containing the `ItemStack`.
+    entity_data: SyncMutex<ItemEntityData>,
+
+    // === Timers ===
+    /// Age in ticks. Despawns at `LIFETIME` (6000). Special value -32768 = infinite.
+    age: AtomicI32,
+    /// Ticks until pickupable. 0 = can pickup, 32767 = never.
+    pickup_delay: AtomicI32,
+    /// Health (damage resistance). Item is destroyed when this reaches 0.
+    health: AtomicI32,
+
+    // === Lifecycle ===
+    /// Whether this entity has been removed.
+    removed: AtomicBool,
+    /// Callback for entity lifecycle events.
+    level_callback: SyncMutex<Arc<dyn EntityLevelCallback>>,
+
+    // === Item-specific ===
+    /// Random offset for client-side bobbing animation.
+    bob_offset: f32,
+    /// UUID of the entity that threw/dropped this item.
+    thrower: SyncMutex<Option<Uuid>>,
+    /// UUID of the only entity that can pick up this item.
+    /// If `None`, any player can pick it up.
+    /// Vanilla calls this `target`.
+    owner: SyncMutex<Option<Uuid>>,
+
+    // === Network Sync ===
+    /// Last velocity sent to clients (for delta detection).
+    /// Mirrors vanilla's `ServerEntity.lastSentMovement`.
+    last_sent_velocity: SyncMutex<Vector3<f64>>,
+    /// Last position sent to clients (for delta detection).
+    /// Mirrors vanilla's `ServerEntity.lastSentXyz` fields.
+    last_sent_position: SyncMutex<Vector3<f64>>,
+    /// Last on_ground state sent to clients.
+    last_sent_on_ground: AtomicBool,
+    /// Whether position/velocity needs to be synced to clients.
+    /// Set when velocity changes significantly, like vanilla's `Entity.needsSync`.
+    needs_sync: AtomicBool,
+}
+
+impl ItemEntity {
+    /// Creates a new item entity with an empty item.
+    ///
+    /// Use `set_item()` to set the actual item after creation, or use `with_item()`.
+    #[must_use]
+    pub fn new(id: i32, position: Vector3<f64>, world: Weak<World>) -> Self {
+        Self::with_item(id, position, ItemStack::empty(), world)
+    }
+
+    /// Creates a new item entity with the specified item.
+    #[must_use]
+    pub fn with_item(id: i32, position: Vector3<f64>, item: ItemStack, world: Weak<World>) -> Self {
+        Self::with_item_and_velocity(id, position, item, Vector3::new(0.0, 0.0, 0.0), world)
+    }
+
+    /// Creates a new item entity with the specified item and initial velocity.
+    ///
+    /// Mirrors vanilla's `ItemEntity(Level, double, double, double, ItemStack, double, double, double)`.
+    #[must_use]
+    pub fn with_item_and_velocity(
+        id: i32,
+        position: Vector3<f64>,
+        item: ItemStack,
+        velocity: Vector3<f64>,
+        world: Weak<World>,
+    ) -> Self {
+        // Random yaw rotation for visual variety
+        let yaw = rand::random::<f32>() * 360.0;
+        // Random bob offset for client-side animation
+        let bob_offset = rand::random::<f32>() * PI * 2.0;
+
+        let mut entity_data = ItemEntityData::new();
+        entity_data.item.set(item);
+
+        Self {
+            id,
+            uuid: Uuid::new_v4(),
+            world,
+            position: SyncMutex::new(position),
+            velocity: SyncMutex::new(velocity),
+            rotation: AtomicCell::new((yaw, 0.0)),
+            on_ground: AtomicBool::new(false),
+            entity_data: SyncMutex::new(entity_data),
+            age: AtomicI32::new(0),
+            pickup_delay: AtomicI32::new(0),
+            health: AtomicI32::new(DEFAULT_HEALTH),
+            removed: AtomicBool::new(false),
+            level_callback: SyncMutex::new(Arc::new(NullEntityCallback)),
+            bob_offset,
+            thrower: SyncMutex::new(None),
+            owner: SyncMutex::new(None),
+            last_sent_velocity: SyncMutex::new(velocity),
+            last_sent_position: SyncMutex::new(position),
+            last_sent_on_ground: AtomicBool::new(false),
+            needs_sync: AtomicBool::new(false),
+        }
+    }
+
+    /// Creates a new item entity with a specific UUID.
+    #[must_use]
+    pub fn with_uuid(
+        id: i32,
+        position: Vector3<f64>,
+        uuid: Uuid,
+        item: ItemStack,
+        world: Weak<World>,
+    ) -> Self {
+        let yaw = rand::random::<f32>() * 360.0;
+        let bob_offset = rand::random::<f32>() * PI * 2.0;
+
+        let mut entity_data = ItemEntityData::new();
+        entity_data.item.set(item);
+
+        Self {
+            id,
+            uuid,
+            world,
+            position: SyncMutex::new(position),
+            velocity: SyncMutex::new(Vector3::new(0.0, 0.0, 0.0)),
+            rotation: AtomicCell::new((yaw, 0.0)),
+            on_ground: AtomicBool::new(false),
+            entity_data: SyncMutex::new(entity_data),
+            age: AtomicI32::new(0),
+            pickup_delay: AtomicI32::new(0),
+            health: AtomicI32::new(DEFAULT_HEALTH),
+            removed: AtomicBool::new(false),
+            level_callback: SyncMutex::new(Arc::new(NullEntityCallback)),
+            bob_offset,
+            thrower: SyncMutex::new(None),
+            owner: SyncMutex::new(None),
+            last_sent_velocity: SyncMutex::new(Vector3::new(0.0, 0.0, 0.0)),
+            last_sent_position: SyncMutex::new(position),
+            last_sent_on_ground: AtomicBool::new(false),
+            needs_sync: AtomicBool::new(false),
+        }
+    }
+
+    // === Item Access ===
+
+    /// Gets a clone of the item stack.
+    #[must_use]
+    pub fn get_item(&self) -> ItemStack {
+        self.entity_data.lock().item.get().clone()
+    }
+
+    /// Sets the item stack.
+    pub fn set_item(&self, item: ItemStack) {
+        self.entity_data.lock().item.set(item);
+    }
+
+    // === Position & Physics ===
+    // Note: set_position, set_velocity, set_on_ground are implemented
+    // via the Entity trait.
+
+    /// Gets whether the entity is on the ground.
+    #[must_use]
+    pub fn is_on_ground(&self) -> bool {
+        self.on_ground.load(Ordering::Relaxed)
+    }
+
+    // === Timers ===
+
+    /// Gets the current age in ticks.
+    #[must_use]
+    pub fn get_age(&self) -> i32 {
+        self.age.load(Ordering::Relaxed)
+    }
+
+    /// Sets the age in ticks.
+    pub fn set_age(&self, age: i32) {
+        self.age.store(age, Ordering::Relaxed);
+    }
+
+    /// Sets the entity to never despawn.
+    pub fn set_unlimited_lifetime(&self) {
+        self.age.store(INFINITE_LIFETIME, Ordering::Relaxed);
+    }
+
+    /// Gets the pickup delay in ticks.
+    #[must_use]
+    pub fn get_pickup_delay(&self) -> i32 {
+        self.pickup_delay.load(Ordering::Relaxed)
+    }
+
+    /// Sets the default pickup delay (10 ticks = 0.5 seconds).
+    pub fn set_default_pickup_delay(&self) {
+        self.pickup_delay
+            .store(DEFAULT_PICKUP_DELAY, Ordering::Relaxed);
+    }
+
+    /// Sets the pickup delay to zero (immediately pickupable).
+    pub fn set_no_pickup_delay(&self) {
+        self.pickup_delay.store(0, Ordering::Relaxed);
+    }
+
+    /// Sets the item to never be pickupable.
+    pub fn set_never_pickup(&self) {
+        self.pickup_delay
+            .store(INFINITE_PICKUP_DELAY, Ordering::Relaxed);
+    }
+
+    /// Sets a custom pickup delay in ticks.
+    pub fn set_pickup_delay(&self, delay: i32) {
+        self.pickup_delay.store(delay, Ordering::Relaxed);
+    }
+
+    /// Returns true if the item has a pickup delay (cannot be picked up yet).
+    #[must_use]
+    pub fn has_pickup_delay(&self) -> bool {
+        self.pickup_delay.load(Ordering::Relaxed) > 0
+    }
+
+    // === Health ===
+
+    /// Gets the health (damage resistance).
+    #[must_use]
+    pub fn get_health(&self) -> i32 {
+        self.health.load(Ordering::Relaxed)
+    }
+
+    /// Sets the health.
+    pub fn set_health(&self, health: i32) {
+        self.health.store(health, Ordering::Relaxed);
+    }
+
+    // === Thrower ===
+
+    /// Sets the entity that threw/dropped this item.
+    pub fn set_thrower(&self, uuid: Uuid) {
+        *self.thrower.lock() = Some(uuid);
+    }
+
+    /// Gets the UUID of the entity that threw/dropped this item.
+    #[must_use]
+    pub fn get_thrower(&self) -> Option<Uuid> {
+        *self.thrower.lock()
+    }
+
+    // === Owner ===
+
+    /// Sets the owner (the only entity that can pick up this item).
+    ///
+    /// Pass `None` to allow any player to pick it up.
+    /// Vanilla calls this `target`.
+    pub fn set_owner(&self, uuid: Option<Uuid>) {
+        *self.owner.lock() = uuid;
+    }
+
+    /// Gets the owner UUID (the only entity that can pick up this item).
+    ///
+    /// Returns `None` if any player can pick it up.
+    #[must_use]
+    pub fn get_owner(&self) -> Option<Uuid> {
+        *self.owner.lock()
+    }
+
+    // === Pickup ===
+
+    /// Attempts to have a player pick up this item.
+    ///
+    /// Returns `true` if the item was fully picked up (and the entity should be removed),
+    /// `false` if pickup failed or was only partial.
+    ///
+    /// Mirrors vanilla's `ItemEntity.playerTouch(Player)`.
+    pub fn try_pickup(&self, player: &Arc<Player>) -> bool {
+        // Check pickup delay
+        if self.has_pickup_delay() {
+            return false;
+        }
+
+        // Check owner restriction
+        if let Some(owner_uuid) = self.get_owner()
+            && owner_uuid != player.gameprofile.id
+        {
+            return false;
+        }
+
+        // Get the item and try to add to inventory
+        let mut item = self.get_item();
+        let original_count = item.count();
+
+        // Try to add to player's inventory
+        let added = player.inventory.lock().add(&mut item);
+
+        // If nothing was added, bail out
+        if item.count() == original_count {
+            return false;
+        }
+
+        // Calculate how many items were picked up
+        let picked_up_count = original_count - item.count();
+
+        // Send the take animation packet to nearby players
+        if let Some(world) = self.level() {
+            let pos = self.position();
+            let chunk_pos = steel_utils::ChunkPos::new((pos.x as i32) >> 4, (pos.z as i32) >> 4);
+
+            let take_packet = CTakeItemEntity::new(self.id, player.id, picked_up_count);
+            world.broadcast_to_nearby(chunk_pos, take_packet, None);
+        }
+
+        // Update or remove the item entity
+        if added {
+            // Fully picked up - mark for removal
+            self.set_removed(RemovalReason::Discarded);
+            true
+        } else {
+            // Partial pickup - update the remaining item
+            self.set_item(item);
+            false
+        }
+    }
+
+    // === Visual ===
+
+    /// Gets the bob offset for client-side animation.
+    #[must_use]
+    pub fn bob_offset(&self) -> f32 {
+        self.bob_offset
+    }
+
+    // === Network Sync ===
+
+    /// Checks if velocity should be synced and returns the packet if needed.
+    ///
+    /// Vanilla syncs velocity when:
+    /// - Velocity changed by more than 1e-7 squared distance
+    /// - OR velocity became zero (to stop client-side prediction)
+    fn check_velocity_sync(&self) -> Option<CSetEntityMotion> {
+        let current = self.velocity();
+        let last_sent = *self.last_sent_velocity.lock();
+
+        let diff_sq = (current.x - last_sent.x).powi(2)
+            + (current.y - last_sent.y).powi(2)
+            + (current.z - last_sent.z).powi(2);
+
+        // Sync if velocity changed significantly, or if it went to zero
+        // (vanilla: ServerEntity.sendChanges lines 170-172)
+        let should_sync = diff_sq > 1.0e-7
+            || (diff_sq > 0.0 && current.x == 0.0 && current.y == 0.0 && current.z == 0.0);
+
+        if should_sync {
+            *self.last_sent_velocity.lock() = current;
+            Some(CSetEntityMotion::new(
+                self.id, current.x, current.y, current.z,
+            ))
+        } else {
+            None
+        }
+    }
+
+    /// Checks if position should be synced and returns the appropriate packet.
+    ///
+    /// Uses delta encoding (CMoveEntityPos) for small movements, and falls back
+    /// to absolute position sync (CEntityPositionSync) when:
+    /// - Delta is too large for i16 encoding
+    /// - On-ground state changed
+    /// - Periodic full sync (every 60 ticks based on tick_count)
+    fn check_position_sync(&self, tick_count: i32) -> Option<PositionSyncPacket> {
+        let current_pos = self.position();
+        let last_sent = *self.last_sent_position.lock();
+        let current_on_ground = self.on_ground();
+        let last_on_ground = self.last_sent_on_ground.load(Ordering::Relaxed);
+
+        // Check if position changed enough to warrant sync
+        // Vanilla threshold: 7.6293945E-6 (TOLERANCE_LEVEL_POSITION)
+        let diff_sq = (current_pos.x - last_sent.x).powi(2)
+            + (current_pos.y - last_sent.y).powi(2)
+            + (current_pos.z - last_sent.z).powi(2);
+
+        let position_changed = diff_sq >= 7.629_394_5e-6;
+        let on_ground_changed = current_on_ground != last_on_ground;
+        // Vanilla uses tickCount % 60 for periodic full position sync (FORCED_POS_UPDATE_PERIOD)
+        let force_periodic_sync = tick_count % 60 == 0;
+
+        // Vanilla: boolean pos = positionChanged || this.tickCount % 60 == 0;
+        // We sync if position changed, on_ground changed, or periodic
+        if !position_changed && !on_ground_changed && !force_periodic_sync {
+            return None;
+        }
+
+        // Try delta encoding first
+        let dx = calc_delta(current_pos.x, last_sent.x);
+        let dy = calc_delta(current_pos.y, last_sent.y);
+        let dz = calc_delta(current_pos.z, last_sent.z);
+
+        // Use full sync if delta overflow or on-ground changed or periodic
+        // (vanilla: ServerEntity.sendChanges line 123)
+        let use_full_sync = on_ground_changed
+            || force_periodic_sync
+            || dx.is_none()
+            || dy.is_none()
+            || dz.is_none();
+
+        self.last_sent_on_ground
+            .store(current_on_ground, Ordering::Relaxed);
+
+        if use_full_sync {
+            // Full sync: client sets position directly, so store current_pos
+            *self.last_sent_position.lock() = current_pos;
+
+            let vel = self.velocity();
+            // NOTE: We do NOT update last_sent_velocity here because the client
+            // ignores the velocity field in CEntityPositionSync for non-authoritative
+            // entities (like items). The velocity sync is handled separately by
+            // check_velocity_sync() which sends CSetEntityMotion.
+
+            let (yaw, pitch) = self.rotation.load();
+            Some(PositionSyncPacket::Full(CEntityPositionSync {
+                entity_id: self.id,
+                x: current_pos.x,
+                y: current_pos.y,
+                z: current_pos.z,
+                velocity_x: vel.x,
+                velocity_y: vel.y,
+                velocity_z: vel.z,
+                yaw,
+                pitch,
+                on_ground: current_on_ground,
+            }))
+        } else {
+            // Delta sync: store the actual current position as base.
+            // Vanilla stores the actual position, not the decoded position.
+            // This works because encode() is deterministic - both server and client
+            // compute the same encoded values.
+            let dx = dx.unwrap();
+            let dy = dy.unwrap();
+            let dz = dz.unwrap();
+
+            *self.last_sent_position.lock() = current_pos;
+
+            Some(PositionSyncPacket::Delta(CMoveEntityPos {
+                entity_id: self.id,
+                dx,
+                dy,
+                dz,
+                on_ground: current_on_ground,
+            }))
+        }
+    }
+}
+
+/// Position sync packet variants.
+enum PositionSyncPacket {
+    /// Delta-encoded position update (for small movements).
+    Delta(CMoveEntityPos),
+    /// Full absolute position sync (for large movements or periodic sync).
+    Full(CEntityPositionSync),
+}
+
+impl Entity for ItemEntity {
+    fn entity_type(&self) -> EntityTypeRef {
+        vanilla_entities::ITEM
+    }
+
+    fn id(&self) -> i32 {
+        self.id
+    }
+
+    fn uuid(&self) -> Uuid {
+        self.uuid
+    }
+
+    fn position(&self) -> Vector3<f64> {
+        *self.position.lock()
+    }
+
+    fn bounding_box(&self) -> AABBd {
+        let pos = self.position();
+        let dims = self.entity_type().dimensions;
+        let half_width = f64::from(dims.width) / 2.0;
+        let height = f64::from(dims.height);
+        AABBd {
+            min_x: pos.x - half_width,
+            min_y: pos.y,
+            min_z: pos.z - half_width,
+            max_x: pos.x + half_width,
+            max_y: pos.y + height,
+            max_z: pos.z + half_width,
+        }
+    }
+
+    fn tick(&self) {
+        // Check if item is empty
+        if self.get_item().is_empty() {
+            self.set_removed(RemovalReason::Discarded);
+            return;
+        }
+
+        // Decrement pickup delay
+        let pickup_delay = self.pickup_delay.load(Ordering::Relaxed);
+        if pickup_delay > 0 && pickup_delay != INFINITE_PICKUP_DELAY {
+            self.pickup_delay.fetch_sub(1, Ordering::Relaxed);
+        }
+
+        // Increment age and check for despawn
+        let age = self.age.load(Ordering::Relaxed);
+        if age != INFINITE_LIFETIME {
+            let new_age = self.age.fetch_add(1, Ordering::Relaxed) + 1;
+            if new_age >= LIFETIME {
+                self.set_removed(RemovalReason::Discarded);
+                return;
+            }
+        }
+
+        // Store old movement for needsSync check (vanilla: ItemEntity.tick line 98)
+        let old_movement = self.velocity();
+        // Store old on_ground to detect changes (triggers immediate sync)
+        let old_on_ground = self.on_ground();
+
+        // TODO: Handle water/lava movement (setUnderwaterMovement, setUnderLavaMovement)
+        // For now, just apply gravity
+        self.apply_gravity();
+
+        // Vanilla optimization: skip physics when at rest on ground.
+        // Only process physics if:
+        // 1. Not on ground, OR
+        // 2. Has significant horizontal movement, OR
+        // 3. Every 4th tick (for items that might need to fall through opened trapdoors, etc.)
+        // (vanilla: ItemEntity.tick line 121)
+        let vel = self.velocity();
+        let horizontal_movement_sq = vel.x * vel.x + vel.z * vel.z;
+        let tick_count = age as u32;
+        let should_move = !self.on_ground()
+            || horizontal_movement_sq > 1.0e-5
+            || (tick_count + self.id as u32).is_multiple_of(4);
+
+        if should_move {
+            // Move with collision detection (do_move handles velocity zeroing on collision)
+            if let Some(result) = self.do_move(MoverType::SelfMovement) {
+                // Get world for block queries
+                if let Some(world) = self.level() {
+                    // Apply friction (vanilla: ItemEntity.tick line 125-128)
+                    let friction = if result.on_ground {
+                        // Block below that affects movement (0.999999F offset like vanilla)
+                        let pos = self.position();
+                        let block_pos = BlockPos::new(
+                            pos.x.floor() as i32,
+                            (pos.y - 0.999_999).floor() as i32,
+                            pos.z.floor() as i32,
+                        );
+                        let block_state = world.get_block_state(&block_pos);
+                        f64::from(block_state.get_block().config.friction) * 0.98
+                    } else {
+                        0.98 // Air friction
+                    };
+
+                    let mut velocity = self.velocity();
+                    velocity.x *= friction;
+                    velocity.z *= friction;
+                    velocity.y *= AIR_DRAG;
+
+                    // Bounce when landing on ground (vanilla: ItemEntity.tick lines 145-149)
+                    if result.on_ground && velocity.y < 0.0 {
+                        velocity.y *= -0.5;
+                    }
+
+                    self.set_velocity(velocity);
+                }
+            }
+        }
+
+        // Check if velocity changed significantly -> set needsSync (vanilla: ItemEntity.tick lines 160-164)
+        // Vanilla: if (getDeltaMovement().subtract(oldMovement).lengthSqr() > 0.01) needsSync = true
+        let new_movement = self.velocity();
+        let diff = Vector3::new(
+            new_movement.x - old_movement.x,
+            new_movement.y - old_movement.y,
+            new_movement.z - old_movement.z,
+        );
+        let diff_sq = diff.x * diff.x + diff.y * diff.y + diff.z * diff.z;
+        if diff_sq > 0.01 {
+            self.needs_sync.store(true, Ordering::Relaxed);
+        }
+
+        // Also set needsSync when on_ground changes - this ensures immediate sync
+        // when the item lands or becomes airborne, preventing client desync
+        if self.on_ground() != old_on_ground {
+            self.needs_sync.store(true, Ordering::Relaxed);
+        }
+
+        // Despawn after lifetime (vanilla: ItemEntity.tick line 166)
+        if age >= LIFETIME {
+            self.set_removed(RemovalReason::Discarded);
+        }
+    }
+
+    fn send_changes(&self, tick_count: i32) {
+        let Some(world) = self.level() else {
+            return;
+        };
+
+        let update_interval = self.entity_type().update_interval; // 20 for items
+        let needs_sync = self.needs_sync.load(Ordering::Relaxed);
+
+        // Only send updates on the update interval OR when needsSync is set
+        // (vanilla: ServerEntity.sendChanges line 97)
+        if tick_count % update_interval != 0 && !needs_sync {
+            return;
+        }
+
+        let current_pos = self.position();
+
+        // Determine chunk for broadcasting
+        let chunk_pos =
+            steel_utils::ChunkPos::new((current_pos.x as i32) >> 4, (current_pos.z as i32) >> 4);
+
+        // Vanilla sends velocity BEFORE position (ServerEntity.sendChanges lines 168-182).
+        // Items have trackDelta=true, so we ALWAYS check velocity when in the update window.
+        //
+        // CRITICAL: The client ignores velocity in CEntityPositionSync for non-authoritative
+        // entities (like items). The client runs its own physics simulation and accumulates
+        // gravity in deltaMovement. We MUST send CSetEntityMotion to override the client's
+        // deltaMovement, otherwise the client's accumulated gravity causes visual desync.
+        if let Some(vel_packet) = self.check_velocity_sync() {
+            world.broadcast_to_nearby(chunk_pos, vel_packet, None);
+        }
+
+        // Send position update if needed (vanilla: ServerEntity.sendChanges line 182)
+        if let Some(packet) = self.check_position_sync(tick_count) {
+            match &packet {
+                PositionSyncPacket::Delta(p) => {
+                    world.broadcast_to_nearby(chunk_pos, p.clone(), None);
+                }
+                PositionSyncPacket::Full(p) => {
+                    world.broadcast_to_nearby(chunk_pos, p.clone(), None);
+                }
+            }
+        }
+
+        // Clear needsSync after processing (vanilla: ServerEntity.sendChanges line 193)
+        self.needs_sync.store(false, Ordering::Relaxed);
+    }
+
+    fn get_default_gravity(&self) -> f64 {
+        DEFAULT_GRAVITY
+    }
+
+    fn is_no_gravity(&self) -> bool {
+        *self.entity_data.lock().no_gravity.get()
+    }
+
+    fn level(&self) -> Option<Arc<World>> {
+        self.world.upgrade()
+    }
+
+    fn as_item_entity(self: Arc<Self>) -> Option<Arc<ItemEntity>> {
+        Some(self)
+    }
+
+    fn pack_dirty_entity_data(&self) -> Option<Vec<DataValue>> {
+        self.entity_data.lock().pack_dirty()
+    }
+
+    fn pack_all_entity_data(&self) -> Vec<DataValue> {
+        self.entity_data.lock().pack_all()
+    }
+
+    fn is_removed(&self) -> bool {
+        self.removed.load(Ordering::Relaxed)
+    }
+
+    fn set_removed(&self, reason: RemovalReason) {
+        if !self.removed.swap(true, Ordering::AcqRel) {
+            self.level_callback.lock().on_remove(reason);
+        }
+    }
+
+    fn set_level_callback(&self, callback: Arc<dyn EntityLevelCallback>) {
+        *self.level_callback.lock() = callback;
+    }
+
+    fn rotation(&self) -> (f32, f32) {
+        self.rotation.load()
+    }
+
+    fn velocity(&self) -> Vector3<f64> {
+        *self.velocity.lock()
+    }
+
+    fn set_velocity(&self, velocity: Vector3<f64>) {
+        *self.velocity.lock() = velocity;
+    }
+
+    fn on_ground(&self) -> bool {
+        self.on_ground.load(Ordering::Relaxed)
+    }
+
+    fn set_on_ground(&self, on_ground: bool) {
+        self.on_ground.store(on_ground, Ordering::Relaxed);
+    }
+
+    fn set_position(&self, pos: Vector3<f64>) {
+        let old_pos = {
+            let mut position = self.position.lock();
+            let old = *position;
+            *position = pos;
+            old
+        };
+        // Notify callback of movement
+        self.level_callback.lock().on_move(old_pos, pos);
+    }
+}
