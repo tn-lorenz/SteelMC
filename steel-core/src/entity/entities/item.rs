@@ -421,6 +421,148 @@ impl ItemEntity {
         self.bob_offset
     }
 
+    // === Merging ===
+
+    /// Returns true if this item entity can be merged with others.
+    ///
+    /// Mirrors vanilla's `ItemEntity.isMergable()`.
+    /// An item is mergable if:
+    /// - It's not removed
+    /// - It doesn't have infinite pickup delay (32767)
+    /// - It doesn't have infinite lifetime (-32768)
+    /// - Its age is less than the despawn threshold (6000)
+    /// - Its count is less than max stack size
+    #[must_use]
+    pub fn is_mergable(&self) -> bool {
+        let item = self.get_item();
+        !self.is_removed()
+            && self.pickup_delay.load(Ordering::Relaxed) != INFINITE_PICKUP_DELAY
+            && self.age.load(Ordering::Relaxed) != INFINITE_LIFETIME
+            && self.age.load(Ordering::Relaxed) < LIFETIME
+            && item.count() < item.max_stack_size()
+    }
+
+    /// Checks if two item stacks can be merged together.
+    ///
+    /// Mirrors vanilla's `ItemEntity.areMergable()`.
+    /// Returns true if the items are the same type with the same components,
+    /// and their combined count wouldn't exceed max stack size.
+    #[must_use]
+    pub fn are_mergable(this_stack: &ItemStack, other_stack: &ItemStack) -> bool {
+        // Combined count must not exceed max stack size
+        if other_stack.count() + this_stack.count() > other_stack.max_stack_size() {
+            return false;
+        }
+        // Must be the same item with the same components
+        ItemStack::is_same_item_same_components(this_stack, other_stack)
+    }
+
+    /// Attempts to merge with another item entity.
+    ///
+    /// Mirrors vanilla's `ItemEntity.tryToMerge()`.
+    /// The item with fewer items is merged into the one with more.
+    fn try_to_merge(&self, other: &ItemEntity) {
+        let this_stack = self.get_item();
+        let other_stack = other.get_item();
+
+        // Both items must have the same owner (target)
+        if self.get_owner() != other.get_owner() {
+            return;
+        }
+
+        if !Self::are_mergable(&this_stack, &other_stack) {
+            return;
+        }
+
+        // Merge smaller stack into larger stack
+        if other_stack.count() < this_stack.count() {
+            Self::merge_stacks(self, &this_stack, other, &other_stack);
+        } else {
+            Self::merge_stacks(other, &other_stack, self, &this_stack);
+        }
+    }
+
+    /// Merges the from_item's stack into the to_item's stack.
+    ///
+    /// Mirrors vanilla's `ItemEntity.merge(ItemEntity, ItemStack, ItemEntity, ItemStack)`.
+    fn merge_stacks(
+        to_item: &ItemEntity,
+        to_stack: &ItemStack,
+        from_item: &ItemEntity,
+        from_stack: &ItemStack,
+    ) {
+        // Calculate how many items to transfer
+        let max_count = to_stack.max_stack_size();
+        let space_available = max_count - to_stack.count();
+        let transfer_count = space_available.min(from_stack.count());
+
+        // Create new stacks
+        let new_to_stack = to_stack.copy_with_count(to_stack.count() + transfer_count);
+        let mut new_from_stack = from_stack.clone();
+        new_from_stack.shrink(transfer_count);
+
+        // Update the destination item
+        to_item.set_item(new_to_stack);
+
+        // Pickup delay is the max of both (so merged items don't become instantly pickable)
+        let new_pickup_delay = to_item
+            .pickup_delay
+            .load(Ordering::Relaxed)
+            .max(from_item.pickup_delay.load(Ordering::Relaxed));
+        to_item
+            .pickup_delay
+            .store(new_pickup_delay, Ordering::Relaxed);
+
+        // Age is the min of both (so merged items don't despawn prematurely)
+        let new_age = to_item
+            .age
+            .load(Ordering::Relaxed)
+            .min(from_item.age.load(Ordering::Relaxed));
+        to_item.age.store(new_age, Ordering::Relaxed);
+
+        // Update or remove the source item
+        if new_from_stack.is_empty() {
+            from_item.set_removed(RemovalReason::Discarded);
+        } else {
+            from_item.set_item(new_from_stack);
+        }
+    }
+
+    /// Attempts to merge this item with nearby item entities.
+    ///
+    /// Mirrors vanilla's `ItemEntity.mergeWithNeighbours()`.
+    /// Searches for other mergable item entities within 0.5 blocks horizontally
+    /// and attempts to merge with them.
+    pub fn merge_with_neighbours(&self, world: &World) {
+        if !self.is_mergable() {
+            return;
+        }
+
+        // Search area: 0.5 blocks horizontal, 0 vertical (vanilla uses inflate(0.5, 0.0, 0.5))
+        let search_box = self.bounding_box().inflate_xyz(0.5, 0.0, 0.5);
+
+        // Get all entities in the search area
+        for entity in world.get_entities_in_aabb(&search_box) {
+            // Skip self
+            if entity.id() == self.id {
+                continue;
+            }
+
+            // Try to get as ItemEntity
+            if let Some(other_item) = entity.as_item_entity() {
+                // Double-check mergability (might have changed)
+                if other_item.is_mergable() {
+                    self.try_to_merge(&other_item);
+
+                    // If we've been removed (merged into other), stop
+                    if self.is_removed() {
+                        break;
+                    }
+                }
+            }
+        }
+    }
+
     // === Network Sync ===
 
     /// Checks if velocity should be synced and returns the packet if needed.
@@ -608,6 +750,8 @@ impl Entity for ItemEntity {
             }
         }
 
+        // Store old position for merge rate calculation (vanilla: xo, yo, zo)
+        let old_pos = self.position();
         // Store old movement for needsSync check (vanilla: ItemEntity.tick line 98)
         let old_movement = self.velocity();
         // Store old on_ground to detect changes (triggers immediate sync)
@@ -661,6 +805,20 @@ impl Entity for ItemEntity {
 
                     self.set_velocity(velocity);
                 }
+            }
+        }
+
+        // Item merging (vanilla: ItemEntity.tick lines 152-156)
+        // Merge rate depends on whether the item moved to a different block
+        let current_pos = self.position();
+        let moved_block = old_pos.x.floor() as i32 != current_pos.x.floor() as i32
+            || old_pos.y.floor() as i32 != current_pos.y.floor() as i32
+            || old_pos.z.floor() as i32 != current_pos.z.floor() as i32;
+        let merge_rate = if moved_block { 2 } else { 40 };
+
+        if tick_count % merge_rate == 0 && self.is_mergable() {
+            if let Some(world) = self.level() {
+                self.merge_with_neighbours(&world);
             }
         }
 
