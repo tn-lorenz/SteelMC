@@ -25,6 +25,7 @@ pub struct RedstoneTorchBlock {
 
 impl RedstoneTorchBlock {
     #[must_use]
+    /// Creates a new standing redstone torch behavior for the given block ref.
     pub const fn new(block: BlockRef) -> Self {
         Self { block }
     }
@@ -74,6 +75,7 @@ pub struct RedstoneWallTorchBlock {
 
 impl RedstoneWallTorchBlock {
     #[must_use]
+    /// Creates a new wall redstone torch behavior for the given block ref.
     pub const fn new(block: BlockRef) -> Self {
         Self { block }
     }
