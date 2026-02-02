@@ -2179,8 +2179,8 @@ impl Player {
         let (yaw, pitch) = self.rotation.load();
 
         // Spawn position: eye height - 0.3 (hand level)
-        let eye_y = pos.y + 1.62; // Player eye height
-        let spawn_y = eye_y - 0.3;
+        // Vanilla: double yHandPos = this.getEyeY() - 0.3F
+        let spawn_y = self.get_eye_y() - 0.3;
 
         // Calculate velocity based on throw type
         let velocity = if throw_randomly {
@@ -2353,6 +2353,23 @@ impl Entity for Player {
 
     fn on_ground(&self) -> bool {
         self.on_ground.load(Ordering::Relaxed)
+    }
+
+    /// Returns the eye height for the current pose.
+    ///
+    /// Vanilla eye heights from `Avatar.POSES`:
+    /// - Standing: 1.62
+    /// - Crouching: 1.27
+    /// - Swimming/FallFlying/SpinAttack: 0.4
+    /// - Sleeping/Dying: 0.2
+    fn get_eye_height(&self) -> f64 {
+        match self.get_desired_pose() {
+            EntityPose::Sneaking => 1.27,
+            EntityPose::FallFlying | EntityPose::Swimming | EntityPose::SpinAttack => 0.4,
+            EntityPose::Sleeping | EntityPose::Dying => 0.2,
+            // Standing and all other poses use default player eye height
+            _ => f64::from(vanilla_entities::PLAYER.dimensions.eye_height),
+        }
     }
 }
 

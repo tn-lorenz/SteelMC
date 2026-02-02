@@ -123,6 +123,21 @@ pub trait Entity: Send + Sync {
         (0.0, 0.0)
     }
 
+    /// Gets the eye height for this entity.
+    ///
+    /// Default implementation returns the eye height from the entity type dimensions.
+    /// Override for entities with pose-dependent eye heights (e.g., players).
+    fn get_eye_height(&self) -> f64 {
+        f64::from(self.entity_type().dimensions.eye_height)
+    }
+
+    /// Gets the Y coordinate of the entity's eyes.
+    ///
+    /// Equivalent to vanilla's `Entity.getEyeY()`.
+    fn get_eye_y(&self) -> f64 {
+        self.position().y + self.get_eye_height()
+    }
+
     /// Gets the entity's velocity in blocks per tick.
     fn velocity(&self) -> Vector3<f64> {
         Vector3::new(0.0, 0.0, 0.0)
