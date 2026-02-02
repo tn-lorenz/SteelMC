@@ -88,6 +88,12 @@ pub struct ItemEntity {
     // === Timers ===
     /// Age in ticks. Despawns at `LIFETIME` (6000). Special value -32768 = infinite.
     age: AtomicI32,
+    /// Per-entity tick counter used for vanilla timing logic.
+    ///
+    /// Vanilla uses `Entity.tickCount` (always increments) for things like the
+    /// `(tickCount + id) % 4 == 0` movement fallback and periodic position sync.
+    /// This must not be tied to `age` because `age` can be set to `INFINITE_LIFETIME`.
+    tick_count: AtomicI32,
     /// Ticks until pickupable. 0 = can pickup, 32767 = never.
     pickup_delay: AtomicI32,
     /// Health (damage resistance). Item is destroyed when this reaches 0.
@@ -167,6 +173,7 @@ impl ItemEntity {
             on_ground: AtomicBool::new(false),
             entity_data: SyncMutex::new(entity_data),
             age: AtomicI32::new(0),
+            tick_count: AtomicI32::new(0),
             pickup_delay: AtomicI32::new(0),
             health: AtomicI32::new(DEFAULT_HEALTH),
             removed: AtomicBool::new(false),
@@ -206,6 +213,7 @@ impl ItemEntity {
             on_ground: AtomicBool::new(false),
             entity_data: SyncMutex::new(entity_data),
             age: AtomicI32::new(0),
+            tick_count: AtomicI32::new(0),
             pickup_delay: AtomicI32::new(0),
             health: AtomicI32::new(DEFAULT_HEALTH),
             removed: AtomicBool::new(false),
@@ -254,6 +262,15 @@ impl ItemEntity {
     /// Sets the age in ticks.
     pub fn set_age(&self, age: i32) {
         self.age.store(age, Ordering::Relaxed);
+    }
+
+    /// Returns this entity's internal tick counter.
+    ///
+    /// This mirrors vanilla `Entity.tickCount` and always increments, even when
+    /// `age` is set to `INFINITE_LIFETIME`.
+    #[must_use]
+    pub fn get_tick_count(&self) -> i32 {
+        self.tick_count.load(Ordering::Relaxed)
     }
 
     /// Sets the entity to never despawn.
@@ -566,6 +583,9 @@ impl Entity for ItemEntity {
     }
 
     fn tick(&self) {
+        // Vanilla: `Entity.tickCount` increments every tick regardless of item age/lifetime.
+        let tick_count = self.tick_count.fetch_add(1, Ordering::Relaxed) + 1;
+
         // Check if item is empty
         if self.get_item().is_empty() {
             self.set_removed(RemovalReason::Discarded);
@@ -605,10 +625,9 @@ impl Entity for ItemEntity {
         // (vanilla: ItemEntity.tick line 121)
         let vel = self.velocity();
         let horizontal_movement_sq = vel.x * vel.x + vel.z * vel.z;
-        let tick_count = age as u32;
         let should_move = !self.on_ground()
             || horizontal_movement_sq > 1.0e-5
-            || (tick_count + self.id as u32).is_multiple_of(4);
+            || ((tick_count + self.id) & 3) == 0;
 
         if should_move {
             // Move with collision detection (do_move handles velocity zeroing on collision)
@@ -664,10 +683,7 @@ impl Entity for ItemEntity {
             self.needs_sync.store(true, Ordering::Relaxed);
         }
 
-        // Despawn after lifetime (vanilla: ItemEntity.tick line 166)
-        if age >= LIFETIME {
-            self.set_removed(RemovalReason::Discarded);
-        }
+        // Age-based despawn handled above; when `age == INFINITE_LIFETIME` vanilla never despawns.
     }
 
     fn send_changes(&self, tick_count: i32) {

@@ -6,8 +6,6 @@
 use steel_registry::blocks::shapes::{AABB, AABBd};
 use steel_utils::math::{Axis, Vector3};
 
-use crate::physics::COLLISION_EPSILON;
-
 /// Computes the maximum safe movement along an axis for an entity AABB through a list of obstacle shapes.
 ///
 /// This is the core collision function used by vanilla's `Shapes.collide()`.
@@ -191,20 +189,6 @@ pub fn translate_shape(shape: &AABB, block_pos: Vector3<i32>) -> AABBd {
         max_x: bx + f64::from(shape.max_x),
         max_y: by + f64::from(shape.max_y),
         max_z: bz + f64::from(shape.max_z),
-    }
-}
-
-/// Deflates (shrinks) an AABB by the collision epsilon on all sides.
-///
-/// Used to avoid floating-point precision issues in collision detection.
-pub fn deflate_aabb(aabb: &AABBd) -> AABBd {
-    AABBd {
-        min_x: aabb.min_x + COLLISION_EPSILON,
-        min_y: aabb.min_y + COLLISION_EPSILON,
-        min_z: aabb.min_z + COLLISION_EPSILON,
-        max_x: aabb.max_x - COLLISION_EPSILON,
-        max_y: aabb.max_y - COLLISION_EPSILON,
-        max_z: aabb.max_z - COLLISION_EPSILON,
     }
 }
 
