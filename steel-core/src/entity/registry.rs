@@ -1,7 +1,7 @@
 //! Entity registry for creating entity instances.
 
 use std::ops::Deref;
-use std::sync::{Arc, OnceLock};
+use std::sync::{Arc, OnceLock, Weak};
 
 use steel_registry::REGISTRY;
 use steel_registry::entity_types::EntityTypeRef;
@@ -9,13 +9,15 @@ use steel_registry::vanilla_entities;
 use steel_utils::math::Vector3;
 
 use super::SharedEntity;
-use super::entities::BlockDisplayEntity;
+use super::entities::{BlockDisplayEntity, ItemEntity};
+use crate::world::World;
 
 /// Factory function type for creating entities.
 ///
-/// Takes the entity ID and spawn position, returns a new entity instance.
-/// The entity ID should be obtained from `Server::next_entity_id()`.
-pub type EntityFactory = fn(i32, Vector3<f64>) -> SharedEntity;
+/// Takes the entity ID, spawn position, and world reference.
+/// Returns a new entity instance. The entity ID should be obtained from
+/// `next_entity_id()`.
+pub type EntityFactory = fn(i32, Vector3<f64>, Weak<World>) -> SharedEntity;
 
 /// Registry entry for an entity type.
 struct EntityEntry {
@@ -56,9 +58,13 @@ impl EntityRegistry {
         entity_type: EntityTypeRef,
         entity_id: i32,
         pos: Vector3<f64>,
+        world: Weak<World>,
     ) -> Option<SharedEntity> {
         let id = *REGISTRY.entity_types.get_id(entity_type);
-        self.entries.get(id)?.factory.map(|f| f(entity_id, pos))
+        self.entries
+            .get(id)?
+            .factory
+            .map(|f| f(entity_id, pos, world))
     }
 
     /// Returns whether a factory is registered for the given type.
@@ -109,8 +115,13 @@ pub fn init_entities() {
     let mut registry = EntityRegistry::new();
 
     // Register block display entity factory
-    registry.register(vanilla_entities::BLOCK_DISPLAY, |id, pos| {
-        Arc::new(BlockDisplayEntity::new(id, pos))
+    registry.register(vanilla_entities::BLOCK_DISPLAY, |id, pos, world| {
+        Arc::new(BlockDisplayEntity::new(id, pos, world))
+    });
+
+    // Register item entity factory
+    registry.register(vanilla_entities::ITEM, |id, pos, world| {
+        Arc::new(ItemEntity::new(id, pos, world))
     });
 
     assert!(

@@ -11,7 +11,7 @@
 use std::sync::Arc;
 
 use rustc_hash::FxHashSet;
-use steel_protocol::packets::game::{CAddEntity, CRemoveEntities, CSetEntityData};
+use steel_protocol::packets::game::{CAddEntity, CRemoveEntities, CSetEntityData, to_angle_byte};
 use steel_registry::REGISTRY;
 use steel_utils::ChunkPos;
 use steel_utils::locks::SyncRwLock;
@@ -348,9 +348,19 @@ impl EntityTracker {
 }
 
 /// Sends spawn packets for an entity to a player.
+///
+/// Uses packet bundling to ensure all spawn-related packets (add entity, metadata, etc.)
+/// are processed atomically by the client in a single tick.
 fn send_spawn_packets(entity: &SharedEntity, player: &Player) {
     let pos = entity.position();
+    let vel = entity.velocity();
+    let (yaw, pitch) = entity.rotation();
     let entity_type_id = *REGISTRY.entity_types.get_id(entity.entity_type()) as i32;
+
+    // Convert rotation from degrees to protocol byte format (256ths of a full rotation)
+    // Uses to_angle_byte which matches vanilla's Mth.packDegrees
+    let x_rot = to_angle_byte(pitch);
+    let y_rot = to_angle_byte(yaw);
 
     let spawn_packet = CAddEntity {
         id: entity.id(),
@@ -359,19 +369,26 @@ fn send_spawn_packets(entity: &SharedEntity, player: &Player) {
         x: pos.x,
         y: pos.y,
         z: pos.z,
-        x_rot: 0, // TODO: Get from entity
-        y_rot: 0, // TODO: Get from entity
-        head_y_rot: 0,
+        velocity_x: vel.x,
+        velocity_y: vel.y,
+        velocity_z: vel.z,
+        x_rot,
+        y_rot,
+        head_y_rot: y_rot,
         data: 0,
     };
 
-    player.connection.send_packet(spawn_packet);
+    // Collect entity data before entering the bundle closure
+    let entity_data = entity.pack_all_entity_data();
+    let entity_id = entity.id();
 
-    // Send entity data if any
-    let data = entity.pack_all_entity_data();
-    if !data.is_empty() {
-        player
-            .connection
-            .send_packet(CSetEntityData::new(entity.id(), data));
-    }
+    // Send all spawn packets in a bundle so client processes them atomically
+    player.connection.send_bundle(|bundle| {
+        bundle.add(spawn_packet);
+
+        // Send entity data if any
+        if !entity_data.is_empty() {
+            bundle.add(CSetEntityData::new(entity_id, entity_data));
+        }
+    });
 }

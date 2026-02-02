@@ -64,16 +64,17 @@ impl LevelChunk {
     /// # Arguments
     /// * `random_tick_speed` - Number of random blocks to tick per section per tick.
     ///   This is controlled by the `randomTickSpeed` game rule.
+    /// * `tick_count` - Current server tick count (for entity sync timing).
     ///
     /// # Panics
     /// Panics if the block behavior registry has not been initialized.
-    pub fn tick(&self, random_tick_speed: u32) {
+    pub fn tick(&self, random_tick_speed: u32, tick_count: i32) {
         // Tick block entities regardless of random tick speed
         self.tick_block_entities();
 
         // Tick entities in this chunk
         if let Some(world) = self.get_level() {
-            self.entities.tick(&world, self.pos);
+            self.entities.tick(&world, self.pos, tick_count);
         }
 
         if random_tick_speed == 0 {
