@@ -11,6 +11,9 @@ pub struct ItemClass {
     pub class: String,
     #[serde(default)]
     pub block: Option<String>,
+    #[serde(default)]
+    #[serde(rename = "standingAndWallBlockItem")]
+    pub standing_and_wall_block_item: Option<String>,
 }
 
 /// Items use lowercase field names (`vanilla_items::ITEMS.stone`)
@@ -94,66 +97,6 @@ fn generate_simple_registrations<'a>(
     quote! { #(#registrations)* }
 }
 
-/// Derives wall sign block name from standing sign block name.
-/// e.g., "`oak_sign`" -> "`oak_wall_sign`"
-fn derive_wall_sign_block(standing_block: &str) -> String {
-    // standing_block is like "oak_sign", we need "oak_wall_sign"
-    if let Some(prefix) = standing_block.strip_suffix("_sign") {
-        format!("{prefix}_wall_sign")
-    } else {
-        // Fallback, shouldn't happen with valid data
-        format!("{standing_block}_wall")
-    }
-}
-
-/// Derives wall hanging sign block name from ceiling hanging sign block name.
-/// e.g., "`oak_hanging_sign`" -> "`oak_wall_hanging_sign`"
-fn derive_wall_hanging_sign_block(ceiling_block: &str) -> String {
-    // ceiling_block is like "oak_hanging_sign", we need "oak_wall_hanging_sign"
-    if let Some(prefix) = ceiling_block.strip_suffix("_hanging_sign") {
-        format!("{prefix}_wall_hanging_sign")
-    } else {
-        // Fallback, shouldn't happen with valid data
-        format!("{ceiling_block}_wall")
-    }
-}
-
-/// Derives wall block name from standing block name for torches, coral fans, skulls, heads, etc.
-/// e.g., "`torch`" -> "`wall_torch`", "`soul_torch`" -> "`soul_wall_torch`"
-/// e.g., "`tube_coral_fan`" -> "`tube_coral_wall_fan`"
-/// e.g., "`skeleton_skull`" -> "`skeleton_wall_skull`"
-/// e.g., "`zombie_head`" -> "`zombie_wall_head`"
-fn derive_wall_block(standing_block: &str) -> String {
-    // For torches: "torch" -> "wall_torch", "soul_torch" -> "soul_wall_torch"
-    if standing_block == "torch" {
-        return "wall_torch".to_string();
-    }
-    if let Some(prefix) = standing_block.strip_suffix("_torch") {
-        return format!("{prefix}_wall_torch");
-    }
-
-    // For coral fans: "tube_coral_fan" -> "tube_coral_wall_fan"
-    // Pattern: *_coral_fan -> *_coral_wall_fan
-    if let Some(prefix) = standing_block.strip_suffix("_coral_fan") {
-        return format!("{prefix}_coral_wall_fan");
-    }
-
-    // For skulls: "skeleton_skull" -> "skeleton_wall_skull"
-    // Pattern: *_skull -> *_wall_skull
-    if let Some(prefix) = standing_block.strip_suffix("_skull") {
-        return format!("{prefix}_wall_skull");
-    }
-
-    // For heads: "zombie_head" -> "zombie_wall_head"
-    // Pattern: *_head -> *_wall_head
-    if let Some(prefix) = standing_block.strip_suffix("_head") {
-        return format!("{prefix}_wall_head");
-    }
-
-    // Generic fallback: just prepend "wall_"
-    format!("wall_{standing_block}")
-}
-
 pub fn build(items: &[ItemClass]) -> String {
     let mut block_items: Vec<(Ident, Ident)> = Vec::new();
     let mut sign_items: Vec<(Ident, Ident, Ident)> = Vec::new();
@@ -171,28 +114,40 @@ pub fn build(items: &[ItemClass]) -> String {
                 }
             }
             "SignItem" => {
-                if let Some(block) = &item.block {
-                    let standing_const = to_block_const(block);
-                    let wall_block = derive_wall_sign_block(block);
-                    let wall_const = to_block_const(&wall_block);
-                    sign_items.push((item_field, standing_const, wall_const));
-                }
+                let block = item.block.as_ref().expect("SignItem missing `block`");
+                let wall_block = item
+                    .standing_and_wall_block_item
+                    .as_ref()
+                    .expect("SignItem missing `standingAndWallBlockItem`");
+                let standing_const = to_block_const(block);
+                let wall_const = to_block_const(wall_block);
+                sign_items.push((item_field, standing_const, wall_const));
             }
             "HangingSignItem" => {
-                if let Some(block) = &item.block {
-                    let ceiling_const = to_block_const(block);
-                    let wall_block = derive_wall_hanging_sign_block(block);
-                    let wall_const = to_block_const(&wall_block);
-                    hanging_sign_items.push((item_field, ceiling_const, wall_const));
-                }
+                let block = item
+                    .block
+                    .as_ref()
+                    .expect("HangingSignItem missing `block`");
+                let wall_block = item
+                    .standing_and_wall_block_item
+                    .as_ref()
+                    .expect("HangingSignItem missing `standingAndWallBlockItem`");
+                let ceiling_const = to_block_const(block);
+                let wall_const = to_block_const(wall_block);
+                hanging_sign_items.push((item_field, ceiling_const, wall_const));
             }
             "StandingAndWallBlockItem" => {
-                if let Some(block) = &item.block {
-                    let standing_const = to_block_const(block);
-                    let wall_block = derive_wall_block(block);
-                    let wall_const = to_block_const(&wall_block);
-                    standing_and_wall_items.push((item_field, standing_const, wall_const));
-                }
+                let block = item
+                    .block
+                    .as_ref()
+                    .expect("StandingAndWallBlockItem missing `block`");
+                let wall_block = item
+                    .standing_and_wall_block_item
+                    .as_ref()
+                    .expect("StandingAndWallBlockItem missing `standingAndWallBlockItem`");
+                let standing_const = to_block_const(block);
+                let wall_const = to_block_const(wall_block);
+                standing_and_wall_items.push((item_field, standing_const, wall_const));
             }
             "EnderEyeItem" => ender_eye_items.push(item_field),
             _ => {}
