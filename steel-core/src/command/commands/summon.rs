@@ -15,8 +15,8 @@ use crate::command::commands::{
 use crate::command::context::CommandContext;
 use crate::command::error::CommandError;
 use crate::command::sender::CommandSender;
-use crate::entity::Entity;
 use crate::entity::entities::BlockDisplayEntity;
+use crate::entity::{Entity, next_entity_id};
 
 /// Handler for the "summon" command.
 #[must_use]
@@ -44,14 +44,10 @@ impl CommandExecutor<()> for SummonAtSelfExecutor {
 
         let pos = player.position();
         let world = &player.world;
-        let server = context.server.clone();
-
-        // Get a new entity ID
-        let entity_id = server.next_entity_id();
 
         // Create the block display entity
         let entity = Arc::new(BlockDisplayEntity::new(
-            entity_id,
+            next_entity_id(),
             pos,
             Arc::downgrade(world),
         ));
@@ -87,14 +83,10 @@ impl CommandExecutor<((), Vector3<f64>)> for SummonAtPosExecutor {
         };
 
         let world = &player.world;
-        let server = context.server.clone();
-
-        // Get a new entity ID
-        let entity_id = server.next_entity_id();
 
         // Create the block display entity
         let entity = Arc::new(BlockDisplayEntity::new(
-            entity_id,
+            next_entity_id(),
             pos,
             Arc::downgrade(world),
         ));

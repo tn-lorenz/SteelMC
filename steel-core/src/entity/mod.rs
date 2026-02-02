@@ -1,5 +1,6 @@
 //! This module contains entity-related traits and types.
 
+use std::sync::atomic::{AtomicI32, Ordering};
 use std::sync::{Arc, Weak};
 
 use steel_registry::blocks::shapes::AABBd;
@@ -12,11 +13,25 @@ use uuid::Uuid;
 use crate::physics::{
     EntityPhysicsState, MoveResult, MoverType, WorldCollisionProvider, move_entity,
 };
-use crate::server::Server;
 use crate::world::World;
 use crate::{inventory::equipment::EquipmentSlot, player::Player};
 
 use entities::ItemEntity;
+
+/// Global counter for allocating unique entity IDs.
+///
+/// Mirrors vanilla's `Entity.ENTITY_COUNTER`. Each new entity increments this
+/// counter to get a unique network ID. Starts at 1 (0 is reserved).
+static ENTITY_COUNTER: AtomicI32 = AtomicI32::new(1);
+
+/// Allocates a new unique entity ID.
+///
+/// This is the primary way to get entity IDs for spawning entities.
+/// Thread-safe and lock-free.
+#[must_use]
+pub fn next_entity_id() -> i32 {
+    ENTITY_COUNTER.fetch_add(1, Ordering::Relaxed)
+}
 
 mod cache;
 mod callback;
@@ -254,11 +269,10 @@ pub trait Entity: Send + Sync {
         &self,
         item: ItemStack,
         y_offset: f64,
-        server: &Server,
     ) -> Option<Arc<entities::ItemEntity>> {
         let world = self.level()?;
         let pos = self.position();
-        world.spawn_item(Vector3::new(pos.x, pos.y + y_offset, pos.z), item, server)
+        world.spawn_item(Vector3::new(pos.x, pos.y + y_offset, pos.z), item)
     }
 }
 

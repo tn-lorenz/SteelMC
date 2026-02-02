@@ -133,7 +133,7 @@ impl ChunkMap {
     where
         F: FnOnce(&ChunkAccess) -> R,
     {
-        let chunk_holder = self.chunks.get_sync(pos)?;
+        let chunk_holder = self.chunks.read_sync(pos, |_, chunk| chunk.clone())?;
         let guard = chunk_holder.try_chunk(ChunkStatus::Full)?;
         Some(f(&guard))
     }

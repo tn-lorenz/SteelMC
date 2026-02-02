@@ -53,7 +53,7 @@ impl ChunkGuard {
     }
 
     pub fn read(&self) -> RwLockReadGuard<'_, ChunkAccess> {
-        self.0.read()
+        self.0.read_recursive()
     }
 
     pub fn with_write<F, R>(&self, f: F) -> R

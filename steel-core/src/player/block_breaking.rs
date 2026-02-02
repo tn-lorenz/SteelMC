@@ -465,15 +465,10 @@ fn drop_block_loot(player: &Player, _world: &World, pos: BlockPos, state: BlockS
     // Generate drops
     let drops = loot_table.get_random_items(&mut ctx);
 
-    // Get server reference for spawning items
-    let Some(server) = player.server.upgrade() else {
-        return;
-    };
-
     // Spawn each dropped item using the player's world reference (Arc<World>)
     for item in drops {
         if !item.is_empty() {
-            player.world.pop_resource(&pos, item, &server);
+            player.world.pop_resource(&pos, item);
         }
     }
 }

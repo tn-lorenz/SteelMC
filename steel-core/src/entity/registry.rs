@@ -16,7 +16,7 @@ use crate::world::World;
 ///
 /// Takes the entity ID, spawn position, and world reference.
 /// Returns a new entity instance. The entity ID should be obtained from
-/// `Server::next_entity_id()`.
+/// `next_entity_id()`.
 pub type EntityFactory = fn(i32, Vector3<f64>, Weak<World>) -> SharedEntity;
 
 /// Registry entry for an entity type.

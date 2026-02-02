@@ -44,7 +44,7 @@ pub struct BlockDisplayEntity {
 impl BlockDisplayEntity {
     /// Creates a new block display entity.
     ///
-    /// The `id` should be obtained from `Server::next_entity_id()`.
+    /// The `id` should be obtained from `next_entity_id()`.
     #[must_use]
     pub fn new(id: i32, position: Vector3<f64>, world: Weak<World>) -> Self {
         Self {
@@ -60,7 +60,7 @@ impl BlockDisplayEntity {
 
     /// Creates a new block display entity with a specific UUID.
     ///
-    /// The `id` should be obtained from `Server::next_entity_id()`.
+    /// The `id` should be obtained from `next_entity_id()`.
     #[must_use]
     pub fn with_uuid(id: i32, position: Vector3<f64>, uuid: Uuid, world: Weak<World>) -> Self {
         Self {

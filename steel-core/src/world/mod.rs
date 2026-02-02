@@ -44,7 +44,6 @@ use crate::{
     entity::{EntityCache, EntityTracker, RemovalReason, SharedEntity, entities::ItemEntity},
     level_data::LevelDataManager,
     player::{LastSeen, Player},
-    server::Server,
 };
 
 mod player_area_map;
@@ -53,6 +52,14 @@ mod world_entities;
 
 pub use player_area_map::PlayerAreaMap;
 pub use player_map::PlayerMap;
+
+/// Generates a random value using triangle distribution.
+///
+/// Mirrors vanilla's `RandomSource.triangle(mode, deviation)`.
+/// Produces values centered around `mode` with a spread of `deviation`.
+fn triangle_random(mode: f64, deviation: f64) -> f64 {
+    mode + deviation * (rand::random::<f64>() - rand::random::<f64>())
+}
 
 /// Timing information for a world tick.
 #[derive(Debug)]
@@ -776,26 +783,63 @@ impl World {
         self.broadcast_to_nearby(chunk, packet, None);
     }
 
-    /// Drops an item stack at the given position.
+    /// Drops an item stack at the given position with scatter behavior.
     ///
-    /// This spawns an item entity at the specified location with random velocity.
-    /// Based on Java's `Containers.dropItemStack`.
+    /// Mirrors vanilla's `Containers.dropItemStack`. Splits large stacks into
+    /// multiple item entities (10-30 items each) and scatters them with random
+    /// positions and velocities.
     ///
     /// # Arguments
     /// * `pos` - The block position to drop the item at
     /// * `item` - The item stack to drop
-    pub fn drop_item_stack(&self, pos: BlockPos, item: ItemStack) {
+    pub fn drop_item_stack(self: &Arc<Self>, pos: BlockPos, mut item: ItemStack) {
+        use crate::entity::next_entity_id;
+        use steel_registry::vanilla_entities;
+
         if item.is_empty() {
             return;
         }
-        // TODO: Spawn ItemEntity when entity system is implemented
-        // For now, items are lost when containers are broken
-        log::debug!(
-            "Would drop item at {:?}: {:?} x{}",
-            pos,
-            item.item().key,
-            item.count()
-        );
+
+        // Vanilla uses EntityType.ITEM dimensions for position calculation
+        let item_width = f64::from(vanilla_entities::ITEM.dimensions.width);
+        let center_range = 1.0 - item_width;
+        let half_size = item_width / 2.0;
+
+        // Keep spawning item entities until the stack is empty
+        // Vanilla splits stacks into 10-30 items each
+        while !item.is_empty() {
+            // Split off 10-30 items (or remaining if less)
+            let split_count = (rand::random::<u32>() % 21 + 10) as i32;
+            let split_stack = item.split(split_count);
+
+            if split_stack.is_empty() {
+                break;
+            }
+
+            // Random position within the block (vanilla logic)
+            let x = f64::from(pos.x()).floor() + rand::random::<f64>() * center_range + half_size;
+            let y = f64::from(pos.y()).floor() + rand::random::<f64>() * center_range;
+            let z = f64::from(pos.z()).floor() + rand::random::<f64>() * center_range + half_size;
+
+            // Random velocity using triangle distribution (vanilla uses random.triangle)
+            // triangle(mode, deviation) produces values centered around mode with spread of deviation
+            // Vanilla constant: 0.05F * Mth.SQRT_OF_TWO (sqrt(2) * 0.05 ≈ 0.1148...)
+            const VELOCITY_SPREAD: f64 = 0.114_850_001_711_398_36;
+            let vx = triangle_random(0.0, VELOCITY_SPREAD);
+            let vy = triangle_random(0.2, VELOCITY_SPREAD);
+            let vz = triangle_random(0.0, VELOCITY_SPREAD);
+
+            let entity_id = next_entity_id();
+            let entity = Arc::new(ItemEntity::with_item_and_velocity(
+                entity_id,
+                Vector3::new(x, y, z),
+                split_stack,
+                Vector3::new(vx, vy, vz),
+                Arc::downgrade(self),
+            ));
+            entity.set_default_pickup_delay();
+            self.add_entity(entity);
+        }
     }
 
     /// Broadcasts a level event to nearby players within 64 blocks.
@@ -1094,9 +1138,8 @@ impl World {
         self: &Arc<Self>,
         pos: Vector3<f64>,
         item: ItemStack,
-        server: &Server,
     ) -> Option<Arc<ItemEntity>> {
-        self.spawn_item_with_velocity(pos, item, Vector3::new(0.0, 0.0, 0.0), server)
+        self.spawn_item_with_velocity(pos, item, Vector3::new(0.0, 0.0, 0.0))
     }
 
     /// Spawns an item entity at the given position with initial velocity.
@@ -1107,13 +1150,14 @@ impl World {
         pos: Vector3<f64>,
         item: ItemStack,
         velocity: Vector3<f64>,
-        server: &Server,
     ) -> Option<Arc<ItemEntity>> {
+        use crate::entity::next_entity_id;
+
         if item.is_empty() {
             return None;
         }
 
-        let entity_id = server.next_entity_id();
+        let entity_id = next_entity_id();
         let entity = Arc::new(ItemEntity::with_item_and_velocity(
             entity_id,
             pos,
@@ -1136,7 +1180,6 @@ impl World {
         self: &Arc<Self>,
         pos: &BlockPos,
         item: ItemStack,
-        server: &Server,
     ) -> Option<Arc<ItemEntity>> {
         use steel_registry::vanilla_entities;
 
@@ -1152,7 +1195,7 @@ impl World {
         let y = f64::from(pos.y()) + 0.5 + (rand::random::<f64>() - 0.5) * 0.5 - half_height;
         let z = f64::from(pos.z()) + 0.5 + (rand::random::<f64>() - 0.5) * 0.5;
 
-        self.spawn_item(Vector3::new(x, y, z), item, server)
+        self.spawn_item(Vector3::new(x, y, z), item)
     }
 
     /// Drops an item from a block face with directional velocity.
@@ -1164,7 +1207,6 @@ impl World {
         pos: &BlockPos,
         face: Direction,
         item: ItemStack,
-        server: &Server,
     ) -> Option<Arc<ItemEntity>> {
         use steel_registry::vanilla_entities;
 
@@ -1222,7 +1264,6 @@ impl World {
             Vector3::new(x, y, z),
             item,
             Vector3::new(delta_x, delta_y, delta_z),
-            server,
         )
     }
 

@@ -2171,10 +2171,6 @@ impl Player {
             return;
         }
 
-        let Some(server) = self.server.upgrade() else {
-            return;
-        };
-
         let pos = self.position();
         let (yaw, pitch) = self.rotation.load();
 
@@ -2219,7 +2215,7 @@ impl Player {
 
         if let Some(entity) = self
             .world
-            .spawn_item_with_velocity(spawn_pos, item, velocity, &server)
+            .spawn_item_with_velocity(spawn_pos, item, velocity)
         {
             // Set pickup delay: 40 ticks (2 seconds) when thrown from hand
             if thrown_from_hand {

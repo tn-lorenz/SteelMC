@@ -5,10 +5,7 @@ pub mod registry_cache;
 pub mod tick_rate_manager;
 
 use std::{
-    sync::{
-        Arc,
-        atomic::{AtomicI32, Ordering},
-    },
+    sync::Arc,
     time::{Duration, Instant},
 };
 
@@ -53,8 +50,6 @@ pub struct Server {
     pub tick_rate_manager: SyncRwLock<TickRateManager>,
     /// Saves and dispatches commands to appropriate handlers.
     pub command_dispatcher: SyncRwLock<CommandDispatcher>,
-    /// Counter for assigning unique entity IDs.
-    next_entity_id: AtomicI32,
 }
 
 impl Server {
@@ -104,14 +99,7 @@ impl Server {
             registry_cache,
             tick_rate_manager: SyncRwLock::new(TickRateManager::new()),
             command_dispatcher: SyncRwLock::new(CommandDispatcher::new()),
-            next_entity_id: AtomicI32::new(1), // Start at 1, 0 is reserved
         }
-    }
-
-    /// Allocates a new unique entity ID.
-    #[must_use]
-    pub fn next_entity_id(&self) -> i32 {
-        self.next_entity_id.fetch_add(1, Ordering::Relaxed)
     }
 
     /// Adds a player to the server.
