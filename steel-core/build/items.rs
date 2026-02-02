@@ -72,10 +72,16 @@ fn generate_standing_and_wall_item_registrations<'a>(
     items: impl Iterator<Item = &'a (Ident, Ident, Ident)>,
 ) -> TokenStream {
     let registrations = items.map(|(item_field, standing_const, wall_const)| {
+        // All vanilla StandingAndWallBlockItem instances use Direction::Down
+        // (torches, coral fans, skulls/heads, redstone torch)
         quote! {
             registry.set_behavior(
                 &vanilla_items::ITEMS.#item_field,
-                Box::new(StandingAndWallBlockItem::new(vanilla_blocks::#standing_const, vanilla_blocks::#wall_const)),
+                Box::new(StandingAndWallBlockItem::new(
+                    vanilla_blocks::#standing_const,
+                    vanilla_blocks::#wall_const,
+                    steel_registry::blocks::properties::Direction::Down,
+                )),
             );
         }
     });

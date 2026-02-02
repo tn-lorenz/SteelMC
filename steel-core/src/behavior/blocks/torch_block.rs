@@ -115,30 +115,18 @@ impl BlockBehaviour for WallTorchBlock {
     }
 
     fn get_state_for_placement(&self, context: &BlockPlaceContext<'_>) -> Option<BlockStateId> {
-        let clicked_face = context.clicked_face;
-        if clicked_face.is_horizontal() {
-            let facing = clicked_face;
-            if Self::can_survive(context.world, context.relative_pos, facing) {
-                return Some(
-                    self.block
-                        .default_state()
-                        .set_value(&BlockStateProperties::HORIZONTAL_FACING, facing),
-                );
-            }
-        }
-
-        for &facing in &[
-            Direction::North,
-            Direction::South,
-            Direction::West,
-            Direction::East,
-        ] {
-            if Self::can_survive(context.world, context.relative_pos, facing) {
-                return Some(
-                    self.block
-                        .default_state()
-                        .set_value(&BlockStateProperties::HORIZONTAL_FACING, facing),
-                );
+        // Vanilla iterates through getNearestLookingDirections() and uses the opposite
+        // of each horizontal direction as the facing (torch points away from wall)
+        for direction in context.get_nearest_looking_directions() {
+            if direction.is_horizontal() {
+                let facing = direction.opposite();
+                if Self::can_survive(context.world, context.relative_pos, facing) {
+                    return Some(
+                        self.block
+                            .default_state()
+                            .set_value(&BlockStateProperties::HORIZONTAL_FACING, facing),
+                    );
+                }
             }
         }
 
