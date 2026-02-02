@@ -13,8 +13,8 @@ use crate::chunk::chunk_map::ChunkMapTickTimings;
 use sha2::{Digest, Sha256};
 use steel_protocol::packet_traits::{ClientPacket, EncodedPacket};
 use steel_protocol::packets::game::{
-    CBlockDestruction, CBlockEvent, CLevelEvent, CPlayerChat, CPlayerInfoUpdate, CSound,
-    CSystemChat, SoundSource,
+    CBlockDestruction, CBlockEvent, CLevelEvent, CPlayerChat, CPlayerInfoUpdate, CRemoveEntities,
+    CSound, CSystemChat, SoundSource,
 };
 use steel_protocol::utils::ConnectionProtocol;
 
@@ -1302,7 +1302,8 @@ impl World {
 
             // Broadcast remove packet if entity was destroyed
             if reason.should_destroy() {
-                // TODO: Send CRemoveEntities packet to nearby players
+                let packet = CRemoveEntities::single(entity_id);
+                self.broadcast_to_nearby(chunk_pos, packet, None);
             }
         }
     }
