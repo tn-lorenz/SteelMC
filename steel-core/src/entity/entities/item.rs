@@ -4,7 +4,6 @@
 //! (gravity, friction), despawns after 5 minutes, and can be picked up
 //! by players after a short delay.
 
-use std::f32::consts::PI;
 use std::sync::atomic::{AtomicBool, AtomicI32, Ordering};
 use std::sync::{Arc, Weak};
 
@@ -15,6 +14,7 @@ use steel_registry::entity_types::EntityTypeRef;
 use steel_registry::item_stack::ItemStack;
 use steel_registry::vanilla_entities;
 use steel_registry::vanilla_entity_data::ItemEntityData;
+use steel_utils::UuidExt;
 use steel_utils::locks::SyncMutex;
 use steel_utils::math::Vector3;
 use uuid::Uuid;
@@ -25,6 +25,9 @@ use crate::physics::MoverType;
 use crate::player::Player;
 use crate::world::World;
 
+use simdnbt::ToNbtTag;
+use simdnbt::borrow::{BaseNbtCompound as BorrowedNbtCompound, NbtCompound as NbtCompoundView};
+use simdnbt::owned::{NbtCompound, NbtTag};
 use steel_protocol::packets::game::{
     CEntityPositionSync, CMoveEntityPos, CSetEntityMotion, CTakeItemEntity, calc_delta,
 };
@@ -106,8 +109,6 @@ pub struct ItemEntity {
     level_callback: SyncMutex<Arc<dyn EntityLevelCallback>>,
 
     // === Item-specific ===
-    /// Random offset for client-side bobbing animation.
-    bob_offset: f32,
     /// UUID of the entity that threw/dropped this item.
     thrower: SyncMutex<Option<Uuid>>,
     /// UUID of the only entity that can pick up this item.
@@ -157,8 +158,6 @@ impl ItemEntity {
     ) -> Self {
         // Random yaw rotation for visual variety
         let yaw = rand::random::<f32>() * 360.0;
-        // Random bob offset for client-side animation
-        let bob_offset = rand::random::<f32>() * PI * 2.0;
 
         let mut entity_data = ItemEntityData::new();
         entity_data.item.set(item);
@@ -178,7 +177,6 @@ impl ItemEntity {
             health: AtomicI32::new(DEFAULT_HEALTH),
             removed: AtomicBool::new(false),
             level_callback: SyncMutex::new(Arc::new(NullEntityCallback)),
-            bob_offset,
             thrower: SyncMutex::new(None),
             owner: SyncMutex::new(None),
             last_sent_velocity: SyncMutex::new(velocity),
@@ -188,42 +186,40 @@ impl ItemEntity {
         }
     }
 
-    /// Creates a new item entity with a specific UUID.
+    /// Creates an item entity from saved data with restored base state.
+    ///
+    /// Used when loading entities from disk. Type-specific data (item, age, etc.)
+    /// is restored via `load_additional()` after this constructor.
     #[must_use]
-    pub fn with_uuid(
+    pub fn from_saved(
         id: i32,
         position: Vector3<f64>,
         uuid: Uuid,
-        item: ItemStack,
+        velocity: Vector3<f64>,
+        rotation: (f32, f32),
+        on_ground: bool,
         world: Weak<World>,
     ) -> Self {
-        let yaw = rand::random::<f32>() * 360.0;
-        let bob_offset = rand::random::<f32>() * PI * 2.0;
-
-        let mut entity_data = ItemEntityData::new();
-        entity_data.item.set(item);
-
         Self {
             id,
             uuid,
             world,
             position: SyncMutex::new(position),
-            velocity: SyncMutex::new(Vector3::new(0.0, 0.0, 0.0)),
-            rotation: AtomicCell::new((yaw, 0.0)),
-            on_ground: AtomicBool::new(false),
-            entity_data: SyncMutex::new(entity_data),
+            velocity: SyncMutex::new(velocity),
+            rotation: AtomicCell::new(rotation),
+            on_ground: AtomicBool::new(on_ground),
+            entity_data: SyncMutex::new(ItemEntityData::new()),
             age: AtomicI32::new(0),
             tick_count: AtomicI32::new(0),
             pickup_delay: AtomicI32::new(0),
             health: AtomicI32::new(DEFAULT_HEALTH),
             removed: AtomicBool::new(false),
             level_callback: SyncMutex::new(Arc::new(NullEntityCallback)),
-            bob_offset,
             thrower: SyncMutex::new(None),
             owner: SyncMutex::new(None),
-            last_sent_velocity: SyncMutex::new(Vector3::new(0.0, 0.0, 0.0)),
+            last_sent_velocity: SyncMutex::new(velocity),
             last_sent_position: SyncMutex::new(position),
-            last_sent_on_ground: AtomicBool::new(false),
+            last_sent_on_ground: AtomicBool::new(on_ground),
             needs_sync: AtomicBool::new(false),
         }
     }
@@ -411,14 +407,6 @@ impl ItemEntity {
             self.set_item(item);
             false
         }
-    }
-
-    // === Visual ===
-
-    /// Gets the bob offset for client-side animation.
-    #[must_use]
-    pub fn bob_offset(&self) -> f32 {
-        self.bob_offset
     }
 
     // === Merging ===
@@ -840,8 +828,6 @@ impl Entity for ItemEntity {
         if self.on_ground() != old_on_ground {
             self.needs_sync.store(true, Ordering::Relaxed);
         }
-
-        // Age-based despawn handled above; when `age == INFINITE_LIFETIME` vanilla never despawns.
     }
 
     fn send_changes(&self, tick_count: i32) {
@@ -958,5 +944,66 @@ impl Entity for ItemEntity {
         };
         // Notify callback of movement
         self.level_callback.lock().on_move(old_pos, pos);
+    }
+
+    fn save_additional(&self, nbt: &mut NbtCompound) {
+        // Match vanilla's ItemEntity.addAdditionalSaveData
+        nbt.insert("Health", self.health.load(Ordering::Relaxed) as i16);
+        nbt.insert("Age", self.age.load(Ordering::Relaxed) as i16);
+        nbt.insert(
+            "PickupDelay",
+            self.pickup_delay.load(Ordering::Relaxed) as i16,
+        );
+
+        if let Some(thrower) = self.get_thrower() {
+            nbt.insert("Thrower", NbtTag::IntArray(thrower.to_int_array().to_vec()));
+        }
+        if let Some(owner) = self.get_owner() {
+            nbt.insert("Owner", NbtTag::IntArray(owner.to_int_array().to_vec()));
+        }
+
+        let item = self.get_item();
+        if !item.is_empty() {
+            nbt.insert("Item", item.to_nbt_tag());
+        }
+    }
+
+    fn load_additional(&self, nbt: &BorrowedNbtCompound<'_>) {
+        // Convert to view type to access accessor methods
+        let nbt: NbtCompoundView<'_, '_> = nbt.into();
+
+        // Match vanilla's ItemEntity.readAdditionalSaveData
+        if let Some(health) = nbt.short("Health") {
+            self.health.store(i32::from(health), Ordering::Relaxed);
+        }
+        if let Some(age) = nbt.short("Age") {
+            self.age.store(i32::from(age), Ordering::Relaxed);
+        }
+        if let Some(pickup_delay) = nbt.short("PickupDelay") {
+            self.pickup_delay
+                .store(i32::from(pickup_delay), Ordering::Relaxed);
+        }
+
+        if let Some(thrower_arr) = nbt.int_array("Thrower")
+            && let Some(uuid) = Uuid::from_int_array(&thrower_arr)
+        {
+            *self.thrower.lock() = Some(uuid);
+        }
+        if let Some(owner_arr) = nbt.int_array("Owner")
+            && let Some(uuid) = Uuid::from_int_array(&owner_arr)
+        {
+            *self.owner.lock() = Some(uuid);
+        }
+
+        if let Some(item_tag) = nbt.compound("Item")
+            && let Some(item) = ItemStack::from_borrowed_compound(&item_tag)
+        {
+            self.entity_data.lock().item.set(item);
+        }
+
+        // Vanilla behavior: discard if item is empty after load
+        if self.get_item().is_empty() {
+            self.set_removed(RemovalReason::Discarded);
+        }
     }
 }

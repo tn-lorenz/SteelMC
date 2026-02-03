@@ -485,6 +485,13 @@ impl World {
     /// Marks the containing chunk as unsaved so it will be persisted to disk.
     pub fn block_entity_changed(&self, pos: BlockPos) {
         let chunk_pos = Self::chunk_pos_for_block(&pos);
+        self.mark_chunk_dirty(chunk_pos);
+    }
+
+    /// Marks a chunk as dirty (unsaved) so it will be persisted to disk.
+    ///
+    /// Called when entities move, are added/removed, or when block entities change.
+    pub fn mark_chunk_dirty(&self, chunk_pos: ChunkPos) {
         self.chunk_map.with_full_chunk(&chunk_pos, |chunk| {
             if let Some(lc) = chunk.as_full() {
                 lc.dirty.store(true, Ordering::Release);
@@ -1089,43 +1096,21 @@ impl World {
 
     /// Adds an entity to the world.
     ///
-    /// This registers the entity in the cache, adds it to the appropriate chunk,
-    /// sets up the level callback, and broadcasts the spawn packet to nearby players.
+    /// This delegates to the chunk's `add_and_register_entity` method which handles:
+    /// - Adding to chunk storage
+    /// - Setting up level callback
+    /// - Registering in entity cache
+    /// - Adding to entity tracker and sending spawn packets
+    /// - Marking the chunk dirty
     pub fn add_entity(self: &Arc<Self>, entity: SharedEntity) {
-        use crate::entity::EntityChunkCallback;
-
         let pos = entity.position();
         let chunk_pos = ChunkPos::new((pos.x as i32) >> 4, (pos.z as i32) >> 4);
 
-        // Set up callback for chunk/section tracking
-        let callback = Arc::new(EntityChunkCallback::new(&entity, Arc::downgrade(self)));
-        entity.set_level_callback(callback);
-
-        // Register in entity cache (for fast lookups)
-        self.entity_cache.register(&entity);
-
-        // Add to chunk storage (for ticking and persistence)
         self.chunk_map.with_full_chunk(&chunk_pos, |chunk| {
             if let Some(c) = chunk.as_full() {
-                c.entities.add(entity.clone());
+                c.add_and_register_entity(entity.clone());
             }
         });
-
-        // Add to entity tracker (registers in chunk index)
-        self.entity_tracker.add(&entity);
-
-        // Send spawn packets to players who can see this entity's chunk
-        let tracking_players = self.player_area_map.get_tracking_players(chunk_pos);
-        for player_id in tracking_players {
-            if player_id == entity.id() {
-                continue; // Don't send to self
-            }
-            if let Some(player) = self.players.get_by_entity_id(player_id) {
-                // The tracker's add() already registered the entity, so we just need
-                // to mark this player as tracking and send packets
-                self.entity_tracker.send_spawn_to_player(&entity, &player);
-            }
-        }
     }
 
     /// Spawns an item entity at the given position.
