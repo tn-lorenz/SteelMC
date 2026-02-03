@@ -25,7 +25,7 @@ use crate::chunk::{
     proto_chunk::ProtoChunk,
     section::Sections,
 };
-use crate::entity::EntityStorage;
+use crate::entity::{EntityStorage, SharedEntity};
 use crate::world::World;
 
 /// A chunk that is ready to be sent to the client.
@@ -311,7 +311,7 @@ impl LevelChunk {
     /// 5. Marking the chunk dirty for persistence
     ///
     /// Returns `false` if the world reference is no longer valid.
-    pub fn add_and_register_entity(&self, entity: crate::entity::SharedEntity) -> bool {
+    pub fn add_and_register_entity(&self, entity: SharedEntity) -> bool {
         use crate::entity::EntityChunkCallback;
 
         let Some(world) = self.level.upgrade() else {

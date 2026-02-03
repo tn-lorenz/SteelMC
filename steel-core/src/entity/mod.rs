@@ -3,6 +3,8 @@
 use std::sync::atomic::{AtomicI32, Ordering};
 use std::sync::{Arc, Weak};
 
+use simdnbt::borrow::BaseNbtCompound;
+use simdnbt::owned::NbtCompound;
 use steel_registry::blocks::shapes::AABBd;
 use steel_registry::entity_data::DataValue;
 use steel_registry::entity_types::EntityTypeRef;
@@ -285,7 +287,7 @@ pub trait Entity: Send + Sync {
     /// rotation, uuid, `on_ground`) are handled by the serialization layer.
     ///
     /// Mirrors vanilla's `Entity.addAdditionalSaveData()`.
-    fn save_additional(&self, _nbt: &mut simdnbt::owned::NbtCompound) {}
+    fn save_additional(&self, _nbt: &mut NbtCompound) {}
 
     /// Loads type-specific entity data from NBT.
     ///
@@ -293,7 +295,7 @@ pub trait Entity: Send + Sync {
     /// are already restored; this handles type-specific data.
     ///
     /// Mirrors vanilla's `Entity.readAdditionalSaveData()`.
-    fn load_additional(&self, _nbt: &simdnbt::borrow::BaseNbtCompound<'_>) {}
+    fn load_additional(&self, _nbt: &BaseNbtCompound<'_>) {}
 }
 
 /// A trait for living entities that can take damage, heal, and die.

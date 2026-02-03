@@ -803,6 +803,10 @@ impl World {
         use crate::entity::next_entity_id;
         use steel_registry::vanilla_entities;
 
+        // Random velocity using triangle distribution (vanilla uses random.triangle)
+        // Vanilla constant: 0.05F * Mth.SQRT_OF_TWO (sqrt(2) * 0.05 ≈ 0.1148...)
+        const VELOCITY_SPREAD: f64 = 0.114_850_001_711_398_36;
+
         if item.is_empty() {
             return;
         }
@@ -814,7 +818,6 @@ impl World {
 
         // Keep spawning item entities until the stack is empty
         // Vanilla splits stacks into 10-30 items each
-        const VELOCITY_SPREAD: f64 = 0.114_850_001_711_398_36;
         while !item.is_empty() {
             // Split off 10-30 items (or remaining if less)
             let split_count = (rand::random::<u32>() % 21 + 10) as i32;
@@ -829,9 +832,7 @@ impl World {
             let y = f64::from(pos.y()).floor() + rand::random::<f64>() * center_range;
             let z = f64::from(pos.z()).floor() + rand::random::<f64>() * center_range + half_size;
 
-            // Random velocity using triangle distribution (vanilla uses random.triangle)
             // triangle(mode, deviation) produces values centered around mode with spread of deviation
-            // Vanilla constant: 0.05F * Mth.SQRT_OF_TWO (sqrt(2) * 0.05 ≈ 0.1148...)
             let vx = triangle_random(0.0, VELOCITY_SPREAD);
             let vy = triangle_random(0.2, VELOCITY_SPREAD);
             let vz = triangle_random(0.0, VELOCITY_SPREAD);

@@ -413,15 +413,15 @@ impl ItemEntity {
 
     /// Returns true if this item entity can be merged with others.
     ///
-    /// Mirrors vanilla's `ItemEntity.isMergable()`.
-    /// An item is mergable if:
+    /// Mirrors vanilla's `ItemEntity.isMergeable()`.
+    /// An item is mergeable if:
     /// - It's not removed
     /// - It doesn't have infinite pickup delay (32767)
     /// - It doesn't have infinite lifetime (-32768)
     /// - Its age is less than the despawn threshold (6000)
     /// - Its count is less than max stack size
     #[must_use]
-    pub fn is_mergable(&self) -> bool {
+    pub fn is_mergeable(&self) -> bool {
         let item = self.get_item();
         !self.is_removed()
             && self.pickup_delay.load(Ordering::Relaxed) != INFINITE_PICKUP_DELAY
@@ -432,11 +432,11 @@ impl ItemEntity {
 
     /// Checks if two item stacks can be merged together.
     ///
-    /// Mirrors vanilla's `ItemEntity.areMergable()`.
+    /// Mirrors vanilla's `ItemEntity.areMergeable()`.
     /// Returns true if the items are the same type with the same components,
     /// and their combined count wouldn't exceed max stack size.
     #[must_use]
-    pub fn are_mergable(this_stack: &ItemStack, other_stack: &ItemStack) -> bool {
+    pub fn are_mergeable(this_stack: &ItemStack, other_stack: &ItemStack) -> bool {
         // Combined count must not exceed max stack size
         if other_stack.count() + this_stack.count() > other_stack.max_stack_size() {
             return false;
@@ -458,7 +458,7 @@ impl ItemEntity {
             return;
         }
 
-        if !Self::are_mergable(&this_stack, &other_stack) {
+        if !Self::are_mergeable(&this_stack, &other_stack) {
             return;
         }
 
@@ -519,10 +519,10 @@ impl ItemEntity {
     /// Attempts to merge this item with nearby item entities.
     ///
     /// Mirrors vanilla's `ItemEntity.mergeWithNeighbours()`.
-    /// Searches for other mergable item entities within 0.5 blocks horizontally
+    /// Searches for other mergeable item entities within 0.5 blocks horizontally
     /// and attempts to merge with them.
     pub fn merge_with_neighbours(&self, world: &World) {
-        if !self.is_mergable() {
+        if !self.is_mergeable() {
             return;
         }
 
@@ -539,7 +539,7 @@ impl ItemEntity {
             // Try to get as ItemEntity
             if let Some(other_item) = entity.as_item_entity() {
                 // Double-check mergability (might have changed)
-                if other_item.is_mergable() {
+                if other_item.is_mergeable() {
                     self.try_to_merge(&other_item);
 
                     // If we've been removed (merged into other), stop
@@ -804,7 +804,7 @@ impl Entity for ItemEntity {
         let merge_rate = if moved_block { 2 } else { 40 };
 
         if tick_count % merge_rate == 0
-            && self.is_mergable()
+            && self.is_mergeable()
             && let Some(world) = self.level()
         {
             self.merge_with_neighbours(&world);

@@ -54,7 +54,7 @@ mod tests {
     fn test_uuid_roundtrip() {
         let uuid = Uuid::new_v4();
         let arr = uuid.to_int_array();
-        let recovered = Uuid::from_int_array(&arr).unwrap();
+        let recovered = Uuid::from_int_array(&arr).expect("Failed to recover UUID");
         assert_eq!(uuid, recovered);
     }
 
