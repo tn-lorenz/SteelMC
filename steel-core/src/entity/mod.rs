@@ -35,6 +35,7 @@ pub fn next_entity_id() -> i32 {
     ENTITY_COUNTER.fetch_add(1, Ordering::Relaxed)
 }
 
+mod base;
 mod cache;
 mod callback;
 pub mod entities;
@@ -42,6 +43,7 @@ mod registry;
 mod storage;
 mod tracker;
 
+pub use base::EntityBase;
 pub use cache::EntityCache;
 pub use callback::{
     EntityChunkCallback, EntityLevelCallback, NullEntityCallback, PlayerEntityCallback,
@@ -61,18 +63,47 @@ pub type WeakEntity = Weak<dyn Entity>;
 ///
 /// This trait provides the core functionality for entities.
 /// It's based on Minecraft's `Entity` class.
+///
+/// # Using `EntityBase`
+///
+/// Entities that embed [`EntityBase`] can implement `base()` to get default
+/// implementations for common methods like `id()`, `uuid()`, `position()`, etc.
+///
+/// ```ignore
+/// impl Entity for MyEntity {
+///     fn base(&self) -> Option<&EntityBase> { Some(&self.base) }
+///     fn entity_type(&self) -> EntityTypeRef { vanilla_entities::MY_ENTITY }
+///     fn bounding_box(&self) -> AABBd { /* ... */ }
+///     // All other common methods use defaults from EntityBase!
+/// }
+/// ```
 pub trait Entity: Send + Sync {
+    /// Returns a reference to the entity's base fields, if available.
+    ///
+    /// Implement this to get default implementations for common methods.
+    /// Returns `None` by default (for entities like Player that don't use `EntityBase`).
+    fn base(&self) -> Option<&EntityBase> {
+        None
+    }
+
     /// Gets the entity type containing tracking range, dimensions, etc.
     fn entity_type(&self) -> EntityTypeRef;
 
     /// Gets the entity's unique network ID (session-local).
-    fn id(&self) -> i32;
+    fn id(&self) -> i32 {
+        self.base().map_or(0, EntityBase::id)
+    }
 
     /// Gets the UUID of the entity (persistent identifier).
-    fn uuid(&self) -> Uuid;
+    fn uuid(&self) -> Uuid {
+        self.base().map_or(Uuid::nil(), EntityBase::uuid)
+    }
 
     /// Gets the entity's current position.
-    fn position(&self) -> Vector3<f64>;
+    fn position(&self) -> Vector3<f64> {
+        self.base()
+            .map_or(Vector3::new(0.0, 0.0, 0.0), EntityBase::position)
+    }
 
     /// Gets the entity's bounding box for collision queries.
     fn bounding_box(&self) -> AABBd;
@@ -97,7 +128,9 @@ pub trait Entity: Send + Sync {
     ///
     /// Returns `None` if the entity is not in a world or the world was dropped.
     /// Mirrors vanilla's `Entity.level()`.
-    fn level(&self) -> Option<Arc<World>>;
+    fn level(&self) -> Option<Arc<World>> {
+        self.base().and_then(EntityBase::level)
+    }
 
     /// Packs dirty entity data for network synchronization.
     ///
@@ -115,13 +148,23 @@ pub trait Entity: Send + Sync {
     }
 
     /// Returns true if the entity has been marked for removal.
-    fn is_removed(&self) -> bool;
+    fn is_removed(&self) -> bool {
+        self.base().is_some_and(EntityBase::is_removed)
+    }
 
     /// Marks the entity as removed with the given reason.
-    fn set_removed(&self, reason: RemovalReason);
+    fn set_removed(&self, reason: RemovalReason) {
+        if let Some(base) = self.base() {
+            base.set_removed(reason);
+        }
+    }
 
     /// Sets the level callback for lifecycle events (movement, removal).
-    fn set_level_callback(&self, callback: Arc<dyn EntityLevelCallback>);
+    fn set_level_callback(&self, callback: Arc<dyn EntityLevelCallback>) {
+        if let Some(base) = self.base() {
+            base.set_level_callback(callback);
+        }
+    }
 
     /// Gets the entity as a Player if it is one.
     fn as_player(self: Arc<Self>) -> Option<Arc<Player>> {
@@ -172,7 +215,11 @@ pub trait Entity: Send + Sync {
     fn set_on_ground(&self, _on_ground: bool) {}
 
     /// Sets the entity's position.
-    fn set_position(&self, _pos: Vector3<f64>) {}
+    fn set_position(&self, pos: Vector3<f64>) {
+        if let Some(base) = self.base() {
+            base.set_position(pos);
+        }
+    }
 
     // === Physics Helper Methods ===
     // These mirror vanilla's Entity class methods.
@@ -307,16 +354,18 @@ pub trait Entity: Send + Sync {
     /// during its tick, and that chunk gets ticked later in the same server tick.
     ///
     /// Returns `true` if already ticked this tick, `false` otherwise.
-    fn was_ticked_this_tick(&self, _server_tick: i32) -> bool {
-        // Default: entities without tracking are always tickable
-        false
+    fn was_ticked_this_tick(&self, server_tick: i32) -> bool {
+        self.base()
+            .is_some_and(|b| b.was_ticked_this_tick(server_tick))
     }
 
     /// Marks this entity as ticked for the given server tick.
     ///
     /// Called by `EntityStorage::tick()` before ticking an entity.
-    fn mark_ticked(&self, _server_tick: i32) {
-        // Default: no-op for entities without tick tracking
+    fn mark_ticked(&self, server_tick: i32) {
+        if let Some(base) = self.base() {
+            base.mark_ticked(server_tick);
+        }
     }
 }
 
