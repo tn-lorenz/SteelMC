@@ -12,6 +12,8 @@
 #![allow(internal_features)]
 
 pub mod codec;
+/// Direction enum for the six cardinal directions.
+pub mod direction;
 mod front_vec;
 /// CRC32C hashing for component validation.
 pub mod hash;
@@ -37,6 +39,7 @@ pub mod translations;
 #[allow(missing_docs, warnings)]
 pub mod translations_registry;
 
+pub use direction::Direction;
 pub use front_vec::FrontVec;
 pub use types::BlockPos;
 pub use types::BlockStateId;
