@@ -195,11 +195,11 @@ impl Server {
         let pos = *player.position.lock();
         let (yaw, pitch) = player.rotation.load();
 
-        world.add_player(player.clone());
-
         // Send position sync to client (ensures client is at the correct loaded position)
         // This must be sent after the player is added to the world
         player.teleport(pos.x, pos.y, pos.z, yaw, pitch);
+
+        world.add_player(player.clone());
     }
 
     /// Gets all the players on the server
