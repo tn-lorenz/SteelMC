@@ -296,6 +296,28 @@ pub trait Entity: Send + Sync {
     ///
     /// Mirrors vanilla's `Entity.readAdditionalSaveData()`.
     fn load_additional(&self, _nbt: &BaseNbtCompound<'_>) {}
+
+    // === Tick Tracking ===
+    // These methods prevent double-ticking when an entity moves between chunks
+    // during the same server tick.
+
+    /// Checks if this entity was already ticked during the given server tick.
+    ///
+    /// This prevents double-ticking when an entity moves to a different chunk
+    /// during its tick, and that chunk gets ticked later in the same server tick.
+    ///
+    /// Returns `true` if already ticked this tick, `false` otherwise.
+    fn was_ticked_this_tick(&self, _server_tick: i32) -> bool {
+        // Default: entities without tracking are always tickable
+        false
+    }
+
+    /// Marks this entity as ticked for the given server tick.
+    ///
+    /// Called by `EntityStorage::tick()` before ticking an entity.
+    fn mark_ticked(&self, _server_tick: i32) {
+        // Default: no-op for entities without tick tracking
+    }
 }
 
 /// A trait for living entities that can take damage, heal, and die.

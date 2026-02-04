@@ -3,7 +3,7 @@
 //! Display entities render a block, item, or text without collision.
 //! They're commonly used for visual effects, holograms, and decorations.
 
-use std::sync::atomic::{AtomicBool, Ordering};
+use std::sync::atomic::{AtomicBool, AtomicI32, Ordering};
 use std::sync::{Arc, Weak};
 
 use simdnbt::borrow::{BaseNbtCompound as BorrowedNbtCompound, NbtCompound as NbtCompoundView};
@@ -41,6 +41,9 @@ pub struct BlockDisplayEntity {
     removed: AtomicBool,
     /// Callback for entity lifecycle events.
     level_callback: SyncMutex<Arc<dyn EntityLevelCallback>>,
+    /// The server tick count when this entity was last ticked.
+    /// Used to prevent double-ticking when moving between chunks.
+    last_world_tick: AtomicI32,
 }
 
 impl BlockDisplayEntity {
@@ -57,6 +60,7 @@ impl BlockDisplayEntity {
             entity_data: SyncMutex::new(BlockDisplayEntityData::new()),
             removed: AtomicBool::new(false),
             level_callback: SyncMutex::new(Arc::new(NullEntityCallback)),
+            last_world_tick: AtomicI32::new(-1),
         }
     }
 
@@ -73,6 +77,7 @@ impl BlockDisplayEntity {
             entity_data: SyncMutex::new(BlockDisplayEntityData::new()),
             removed: AtomicBool::new(false),
             level_callback: SyncMutex::new(Arc::new(NullEntityCallback)),
+            last_world_tick: AtomicI32::new(-1),
         }
     }
 
@@ -189,5 +194,13 @@ impl Entity for BlockDisplayEntity {
                 .block_state
                 .set(BlockStateId(state_id as u16));
         }
+    }
+
+    fn was_ticked_this_tick(&self, server_tick: i32) -> bool {
+        self.last_world_tick.load(Ordering::Acquire) == server_tick
+    }
+
+    fn mark_ticked(&self, server_tick: i32) {
+        self.last_world_tick.store(server_tick, Ordering::Release);
     }
 }

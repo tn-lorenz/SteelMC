@@ -128,6 +128,11 @@ pub struct ItemEntity {
     /// Whether position/velocity needs to be synced to clients.
     /// Set when velocity changes significantly, like vanilla's `Entity.needsSync`.
     needs_sync: AtomicBool,
+
+    // === Tick Tracking ===
+    /// The server tick count when this entity was last ticked.
+    /// Used to prevent double-ticking when moving between chunks.
+    last_world_tick: AtomicI32,
 }
 
 impl ItemEntity {
@@ -183,6 +188,7 @@ impl ItemEntity {
             last_sent_position: SyncMutex::new(position),
             last_sent_on_ground: AtomicBool::new(false),
             needs_sync: AtomicBool::new(false),
+            last_world_tick: AtomicI32::new(-1),
         }
     }
 
@@ -221,6 +227,7 @@ impl ItemEntity {
             last_sent_position: SyncMutex::new(position),
             last_sent_on_ground: AtomicBool::new(on_ground),
             needs_sync: AtomicBool::new(false),
+            last_world_tick: AtomicI32::new(-1),
         }
     }
 
@@ -1005,5 +1012,13 @@ impl Entity for ItemEntity {
         if self.get_item().is_empty() {
             self.set_removed(RemovalReason::Discarded);
         }
+    }
+
+    fn was_ticked_this_tick(&self, server_tick: i32) -> bool {
+        self.last_world_tick.load(Ordering::Acquire) == server_tick
+    }
+
+    fn mark_ticked(&self, server_tick: i32) {
+        self.last_world_tick.store(server_tick, Ordering::Release);
     }
 }
