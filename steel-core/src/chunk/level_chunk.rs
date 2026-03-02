@@ -177,19 +177,9 @@ impl LevelChunk {
         height: i32,
         level: Weak<World>,
     ) -> Self {
-        // Transfer final heightmaps from proto chunk if available
-        let proto_heightmaps = proto_chunk.heightmaps.read();
-        let mut chunk_heightmaps = ChunkHeightmaps::new(min_y, height);
-
-        // Copy final heightmap data if available in proto chunk
-        for &hm_type in HeightmapType::final_types() {
-            if let Some(proto_hm) = proto_heightmaps.get(&hm_type) {
-                chunk_heightmaps
-                    .get_mut(hm_type)
-                    .set_raw_data(&proto_hm.get_raw_data());
-            }
-        }
-        drop(proto_heightmaps);
+        // Move final heightmaps directly from proto chunk
+        let mut proto_heightmaps = proto_chunk.heightmaps.into_inner();
+        let chunk_heightmaps = ChunkHeightmaps::from_proto(&mut proto_heightmaps, min_y, height);
 
         // Recalculate section counts for random tick optimization
         for section in &proto_chunk.sections.sections {
@@ -223,10 +213,12 @@ impl LevelChunk {
     /// * `level` - Weak reference to the world (mirrors Java's `LevelChunk.level`)
     /// * `block_ticks` - Scheduled block ticks loaded from disk
     /// * `fluid_ticks` - Scheduled fluid ticks loaded from disk
+    /// * `heightmaps` - Heightmaps loaded from disk
     ///
     /// # Panics
     /// Panics if the block behavior registry has not been initialized.
     #[must_use]
+    #[allow(clippy::too_many_arguments)]
     pub fn from_disk(
         sections: Sections,
         pos: ChunkPos,
@@ -235,6 +227,7 @@ impl LevelChunk {
         level: Weak<World>,
         block_ticks: BlockTickList,
         fluid_ticks: FluidTickList,
+        heightmaps: ChunkHeightmaps,
     ) -> Self {
         // Recalculate section counts for random tick optimization
         for section in &sections.sections {
@@ -245,7 +238,7 @@ impl LevelChunk {
             sections,
             pos,
             dirty: AtomicBool::new(false),
-            heightmaps: SyncRwLock::new(ChunkHeightmaps::new(min_y, height)),
+            heightmaps: SyncRwLock::new(heightmaps),
             min_y,
             height,
             level,

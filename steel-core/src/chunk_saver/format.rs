@@ -39,7 +39,8 @@ pub const REGION_MAGIC: [u8; 4] = *b"STLR";
 /// Current format version. Increment when making breaking changes.
 /// v3: Added entity persistence (`PersistentEntity`).
 /// v4: Added scheduled tick persistence (`PersistentTick`).
-pub const FORMAT_VERSION: u16 = 4;
+/// v5: Added heightmap persistence (`PersistentHeightmap`).
+pub const FORMAT_VERSION: u16 = 5;
 
 /// Number of chunks per region side (32×32 = 1024 chunks per region).
 pub const REGION_SIZE: usize = 32;
@@ -272,6 +273,18 @@ pub struct PersistentBlockState {
     pub properties: Vec<(&'static str, &'static str)>,
 }
 
+/// A heightmap stored with a chunk.
+///
+/// Height values are stored relative to `min_y` (same as the runtime `Heightmap`).
+/// Type discriminants: 0=WorldSurface, 1=MotionBlocking, 2=MotionBlockingNoLeaves, 3=OceanFloor.
+#[derive(SchemaWrite, SchemaRead)]
+pub struct PersistentHeightmap {
+    /// Heightmap type discriminant.
+    pub heightmap_type: u8,
+    /// 256 height values (one per column), stored relative to `min_y`.
+    pub data: Vec<u16>,
+}
+
 /// A persistent chunk containing sections and metadata.
 ///
 /// Each chunk stores its own block state and biome palettes, making it
@@ -294,6 +307,8 @@ pub struct PersistentChunk {
     pub block_ticks: Vec<PersistentTick>,
     /// Scheduled fluid ticks pending in this chunk.
     pub fluid_ticks: Vec<PersistentTick>,
+    /// Final heightmaps for full chunks (empty for proto chunks).
+    pub heightmaps: Vec<PersistentHeightmap>,
 }
 
 /// A 16×16×16 section of a chunk.

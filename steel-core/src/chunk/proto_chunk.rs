@@ -1,17 +1,11 @@
 //! A proto chunk is a chunk that is still being generated.
 use std::sync::atomic::{AtomicBool, Ordering};
 
-use rustc_hash::FxHashMap;
-
 use crossbeam::atomic::AtomicCell;
 use steel_registry::{REGISTRY, blocks::block_state_ext::BlockStateExt, vanilla_blocks};
 use steel_utils::{BlockPos, BlockStateId, ChunkPos, locks::SyncRwLock, types::UpdateFlags};
 
-use crate::chunk::{
-    chunk_access::ChunkStatus,
-    heightmap::{Heightmap, HeightmapType, prime_heightmaps},
-    section::Sections,
-};
+use crate::chunk::{chunk_access::ChunkStatus, heightmap::ProtoHeightmaps, section::Sections};
 
 /// A chunk that is still being generated.
 #[derive(Debug)]
@@ -26,8 +20,8 @@ pub struct ProtoChunk {
     /// Current generation status of this chunk. Every time a chunk is loaded it goes thru all stages.
     /// If you want the real status use the chunkholder status
     status: AtomicCell<ChunkStatus>,
-    /// Heightmaps (lazily initialized based on status).
-    pub heightmaps: SyncRwLock<FxHashMap<HeightmapType, Heightmap>>,
+    /// Heightmaps (lazily initialized based on generation status).
+    pub heightmaps: SyncRwLock<ProtoHeightmaps>,
     /// The minimum Y coordinate of the world this chunk belongs to.
     min_y: i32,
     /// The total height of the world.
@@ -37,13 +31,13 @@ pub struct ProtoChunk {
 impl ProtoChunk {
     /// Creates a new proto chunk at the given position with empty sections.
     #[must_use]
-    pub fn new(sections: Sections, pos: ChunkPos, min_y: i32, height: i32) -> Self {
+    pub const fn new(sections: Sections, pos: ChunkPos, min_y: i32, height: i32) -> Self {
         Self {
             sections,
             pos,
             dirty: AtomicBool::new(true), // New chunks are always dirty
             status: AtomicCell::new(ChunkStatus::Empty),
-            heightmaps: SyncRwLock::new(FxHashMap::default()),
+            heightmaps: SyncRwLock::new(ProtoHeightmaps::new()),
             min_y,
             height,
         }
@@ -51,7 +45,7 @@ impl ProtoChunk {
 
     /// Creates a proto chunk that was loaded from disk.
     #[must_use]
-    pub fn from_disk(
+    pub const fn from_disk(
         sections: Sections,
         pos: ChunkPos,
         status: ChunkStatus,
@@ -63,8 +57,8 @@ impl ProtoChunk {
             pos,
             dirty: AtomicBool::new(false),
             status: AtomicCell::new(status),
-            //TODO: Save heigtmaps on disk
-            heightmaps: SyncRwLock::new(FxHashMap::default()),
+            // Proto heightmaps will be re-primed during generation on the first set_block_state call
+            heightmaps: SyncRwLock::new(ProtoHeightmaps::new()),
             min_y,
             height,
         }
@@ -142,37 +136,26 @@ impl ProtoChunk {
         }
 
         let heightmap_types = self.status().heightmaps_after();
-
         let min_y = self.min_y;
         let height = self.height;
         let sections = &self.sections;
+
+        let get_block = |lx: usize, scan_y: i32, lz: usize| {
+            let scan_section_index = ((scan_y - min_y) / 16) as usize;
+            let scan_local_y = ((scan_y - min_y) % 16) as usize;
+            sections.sections[scan_section_index]
+                .read()
+                .states
+                .get(lx, scan_local_y, lz)
+        };
+
         let mut heightmaps = self.heightmaps.write();
 
-        prime_heightmaps(
-            &mut heightmaps,
-            heightmap_types,
-            min_y,
-            height,
-            |lx, scan_y, lz| {
-                let scan_section_index = ((scan_y - min_y) / 16) as usize;
-                let scan_local_y = ((scan_y - min_y) % 16) as usize;
-                sections.sections[scan_section_index]
-                    .read()
-                    .states
-                    .get(lx, scan_local_y, lz)
-            },
-        );
+        heightmaps.prime(heightmap_types, min_y, height, get_block);
 
         for &hm_type in heightmap_types {
-            if let Some(heightmap) = heightmaps.get_mut(&hm_type) {
-                heightmap.update(local_x, y, local_z, state, |lx, scan_y, lz| {
-                    let scan_section_index = ((scan_y - min_y) / 16) as usize;
-                    let scan_local_y = ((scan_y - min_y) % 16) as usize;
-                    sections.sections[scan_section_index]
-                        .read()
-                        .states
-                        .get(lx, scan_local_y, lz)
-                });
+            if let Some(heightmap) = heightmaps.get_mut(hm_type) {
+                heightmap.update(local_x, y, local_z, state, get_block);
             }
         }
 

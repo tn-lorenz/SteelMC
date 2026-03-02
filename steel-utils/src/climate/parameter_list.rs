@@ -290,6 +290,7 @@ impl FlatNode {
     /// Uses branchless `max` operations (compiles to `cmov`) to avoid branch
     /// mispredictions in the hot inner loop.
     #[inline]
+    #[allow(clippy::needless_range_loop)] // Indexing into 3 parallel arrays; iterator would be less clear
     fn distance(&self, target: &[i64; PARAMETER_COUNT]) -> i64 {
         let mut d = 0i64;
         for i in 0..PARAMETER_COUNT {

@@ -1,5 +1,6 @@
 use crate::block_entity::{BLOCK_ENTITIES, SharedBlockEntity};
 use crate::chunk::chunk_access::{ChunkAccess, ChunkStatus};
+use crate::chunk::heightmap::{ChunkHeightmaps, Heightmap, HeightmapType};
 use crate::chunk::level_chunk::LevelChunk;
 use crate::chunk::paletted_container::PalettedContainer;
 use crate::chunk::proto_chunk::ProtoChunk;
@@ -21,8 +22,8 @@ use super::ram_only::RamOnlyStorage;
 use super::region_manager::RegionManager;
 use super::{
     BIOMES_PER_SECTION, BLOCKS_PER_SECTION, PersistentBiomeData, PersistentBlockEntity,
-    PersistentBlockState, PersistentChunk, PersistentEntity, PersistentSection, PersistentTick,
-    PreparedChunkSave,
+    PersistentBlockState, PersistentChunk, PersistentEntity, PersistentHeightmap,
+    PersistentSection, PersistentTick, PreparedChunkSave,
 };
 
 /// Builder for creating a persistent chunk with its own palettes.
@@ -215,12 +216,19 @@ impl ChunkStorage {
             })
             .unwrap_or_default();
 
+        // Serialize heightmaps
+        let heightmaps = chunk
+            .as_full()
+            .map(|c| Self::heightmaps_to_persistent(&c.heightmaps.read()))
+            .unwrap_or_default();
+
         let persistent = Self::to_persistent(
             chunk.sections(),
             &block_entities,
             &entities,
             block_ticks,
             fluid_ticks,
+            heightmaps,
             pos,
         );
 
@@ -234,6 +242,7 @@ impl ChunkStorage {
         entities: &[SharedEntity],
         block_ticks: Vec<PersistentTick>,
         fluid_ticks: Vec<PersistentTick>,
+        heightmaps: Vec<PersistentHeightmap>,
         chunk_pos: ChunkPos,
     ) -> PersistentChunk {
         let mut builder = ChunkBuilder::new(&REGISTRY);
@@ -314,6 +323,7 @@ impl ChunkStorage {
             entities: persistent_entities,
             block_ticks,
             fluid_ticks,
+            heightmaps,
         }
     }
 
@@ -443,6 +453,10 @@ impl ChunkStorage {
                 let block_ticks = Self::persistent_to_block_ticks(&persistent.block_ticks, pos);
                 let fluid_ticks = Self::persistent_to_fluid_ticks(&persistent.fluid_ticks, pos);
 
+                // Reconstruct heightmaps from persistent data
+                let heightmaps =
+                    Self::persistent_to_heightmaps(&persistent.heightmaps, min_y, height);
+
                 let chunk = LevelChunk::from_disk(
                     Sections::from_owned(sections.into_boxed_slice()),
                     pos,
@@ -451,6 +465,7 @@ impl ChunkStorage {
                     level.clone(),
                     block_ticks,
                     fluid_ticks,
+                    heightmaps,
                 );
 
                 // Load block entities
@@ -704,6 +719,49 @@ impl ChunkStorage {
             })
             .collect();
         FluidTickList::from_ticks(ticks)
+    }
+
+    /// Converts chunk heightmaps to persistent format for saving.
+    fn heightmaps_to_persistent(heightmaps: &ChunkHeightmaps) -> Vec<PersistentHeightmap> {
+        HeightmapType::final_types()
+            .iter()
+            .enumerate()
+            .map(|(i, &hm_type)| {
+                let hm = heightmaps.get(hm_type);
+                PersistentHeightmap {
+                    heightmap_type: i as u8,
+                    data: hm.raw_data().to_vec(),
+                }
+            })
+            .collect()
+    }
+
+    /// Reconstructs chunk heightmaps from persistent data.
+    fn persistent_to_heightmaps(
+        persistent: &[PersistentHeightmap],
+        min_y: i32,
+        height: i32,
+    ) -> ChunkHeightmaps {
+        let final_types = HeightmapType::final_types();
+        let mut heightmaps = ChunkHeightmaps::new(min_y, height);
+
+        for ph in persistent {
+            let Some(&hm_type) = final_types.get(ph.heightmap_type as usize) else {
+                continue;
+            };
+            if ph.data.len() != 256 {
+                tracing::warn!(
+                    "Heightmap data length mismatch: expected 256, got {}. Skipping.",
+                    ph.data.len()
+                );
+                continue;
+            }
+            let mut data = Box::new([0u16; 256]);
+            data.copy_from_slice(&ph.data);
+            *heightmaps.get_mut(hm_type) = Heightmap::from_raw_data(hm_type, min_y, height, data);
+        }
+
+        heightmaps
     }
 
     /// Converts a persistent section to runtime format.
