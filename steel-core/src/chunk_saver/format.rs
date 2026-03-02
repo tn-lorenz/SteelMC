@@ -28,7 +28,7 @@
 //! Block data uses power-of-2 bit packing (1, 2, 4, 8, 16 bits) to avoid entries
 //! spanning u64 boundaries.
 
-use steel_utils::Identifier;
+use steel_utils::{BoundingBox, Identifier};
 use wincode::{SchemaRead, SchemaWrite};
 
 use crate::chunk::chunk_access::ChunkStatus;
@@ -40,7 +40,8 @@ pub const REGION_MAGIC: [u8; 4] = *b"STLR";
 /// v3: Added entity persistence (`PersistentEntity`).
 /// v4: Added scheduled tick persistence (`PersistentTick`).
 /// v5: Added heightmap persistence (`PersistentHeightmap`).
-pub const FORMAT_VERSION: u16 = 5;
+/// v6: Added structure start and structure reference persistence.
+pub const FORMAT_VERSION: u16 = 6;
 
 /// Number of chunks per region side (32×32 = 1024 chunks per region).
 pub const REGION_SIZE: usize = 32;
@@ -309,6 +310,10 @@ pub struct PersistentChunk {
     pub fluid_ticks: Vec<PersistentTick>,
     /// Final heightmaps for full chunks (empty for proto chunks).
     pub heightmaps: Vec<PersistentHeightmap>,
+    /// Structure starts originating in this chunk.
+    pub structure_starts: Vec<PersistentStructureStart>,
+    /// References to structures from nearby origin chunks.
+    pub structure_references: Vec<PersistentStructureReference>,
 }
 
 /// A 16×16×16 section of a chunk.
@@ -415,6 +420,53 @@ pub struct PersistentTick {
     pub sub_tick_order: i64,
     /// Block or fluid identifier (e.g., "`minecraft:stone_button`").
     pub tick_type: Identifier,
+}
+
+/// A structure start stored with a chunk.
+///
+/// Only valid structure starts (those with at least one piece) are stored.
+/// Vanilla's `INVALID_START` sentinel is represented by absence from the vec.
+#[derive(SchemaWrite, SchemaRead)]
+pub struct PersistentStructureStart {
+    /// Structure type identifier (e.g., "minecraft:village").
+    pub structure: Identifier,
+    /// Origin chunk X coordinate.
+    pub chunk_x: i32,
+    /// Origin chunk Z coordinate.
+    pub chunk_z: i32,
+    /// Number of chunks referencing this structure start.
+    pub references: i32,
+    /// The pieces composing this structure.
+    pub pieces: Vec<PersistentStructurePiece>,
+}
+
+/// A structure piece stored with a chunk.
+///
+/// Common fields are stored directly; type-specific data is in `nbt_data`.
+#[derive(SchemaWrite, SchemaRead)]
+pub struct PersistentStructurePiece {
+    /// Piece type identifier (e.g., "minecraft:jigsaw").
+    pub piece_type: Identifier,
+    /// Bounding box of this piece in world coordinates.
+    pub bounding_box: BoundingBox,
+    /// Generation depth in the piece tree.
+    pub gen_depth: i32,
+    /// 2D direction orientation (-1 = none, 0-3 = south/west/north/east).
+    pub orientation: i8,
+    /// Type-specific NBT data (simdnbt binary format).
+    pub nbt_data: Vec<u8>,
+}
+
+/// A structure reference entry stored with a chunk.
+///
+/// References point to structure starts in nearby origin chunks.
+/// The packed chunk positions use [`ChunkPos::as_i64`] encoding.
+#[derive(SchemaWrite, SchemaRead)]
+pub struct PersistentStructureReference {
+    /// Structure type identifier.
+    pub structure: Identifier,
+    /// Packed chunk positions of origin chunks.
+    pub references: Vec<i64>,
 }
 
 /// Position of a region in region coordinates.

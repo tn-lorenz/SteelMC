@@ -29,6 +29,7 @@ use crate::chunk::{
 };
 use crate::entity::{EntityStorage, SharedEntity};
 use crate::world::World;
+use crate::world::structure::{StructureReferenceMap, StructureStartMap};
 use crate::world::tick_scheduler::{BlockTick, BlockTickList, FluidTick, FluidTickList};
 
 /// A chunk that is ready to be sent to the client.
@@ -59,6 +60,10 @@ pub struct LevelChunk {
     pub block_ticks: SyncMutex<BlockTickList>,
     /// Scheduled fluid ticks pending in this chunk.
     pub fluid_ticks: SyncMutex<FluidTickList>,
+    /// Structure starts originating in this chunk (carried from proto).
+    pub structure_starts: SyncRwLock<StructureStartMap>,
+    /// References to structures from nearby origin chunks (carried from proto).
+    pub structure_references: SyncRwLock<StructureReferenceMap>,
 }
 
 impl LevelChunk {
@@ -186,6 +191,9 @@ impl LevelChunk {
             section.write().recalculate_counts();
         }
 
+        let structure_starts = proto_chunk.structure_starts.into_inner();
+        let structure_references = proto_chunk.structure_references.into_inner();
+
         Self {
             sections: proto_chunk.sections,
             pos: proto_chunk.pos,
@@ -198,6 +206,8 @@ impl LevelChunk {
             entities: EntityStorage::new(),
             block_ticks: SyncMutex::new(BlockTickList::new()),
             fluid_ticks: SyncMutex::new(FluidTickList::new()),
+            structure_starts: SyncRwLock::new(structure_starts),
+            structure_references: SyncRwLock::new(structure_references),
         }
     }
 
@@ -228,6 +238,8 @@ impl LevelChunk {
         block_ticks: BlockTickList,
         fluid_ticks: FluidTickList,
         heightmaps: ChunkHeightmaps,
+        structure_starts: StructureStartMap,
+        structure_references: StructureReferenceMap,
     ) -> Self {
         // Recalculate section counts for random tick optimization
         for section in &sections.sections {
@@ -246,6 +258,8 @@ impl LevelChunk {
             entities: EntityStorage::new(),
             block_ticks: SyncMutex::new(block_ticks),
             fluid_ticks: SyncMutex::new(fluid_ticks),
+            structure_starts: SyncRwLock::new(structure_starts),
+            structure_references: SyncRwLock::new(structure_references),
         }
     }
 

@@ -18,12 +18,17 @@ use std::{io, sync::Weak};
 use steel_registry::{REGISTRY, Registry, vanilla_biomes};
 use steel_utils::{BlockPos, BlockStateId, ChunkPos, Identifier};
 
+use crate::world::structure::{
+    StructurePiece, StructureReferenceMap, StructureStart, StructureStartMap,
+};
+
 use super::ram_only::RamOnlyStorage;
 use super::region_manager::RegionManager;
 use super::{
     BIOMES_PER_SECTION, BLOCKS_PER_SECTION, PersistentBiomeData, PersistentBlockEntity,
     PersistentBlockState, PersistentChunk, PersistentEntity, PersistentHeightmap,
-    PersistentSection, PersistentTick, PreparedChunkSave,
+    PersistentSection, PersistentStructurePiece, PersistentStructureReference,
+    PersistentStructureStart, PersistentTick, PreparedChunkSave,
 };
 
 /// Builder for creating a persistent chunk with its own palettes.
@@ -222,6 +227,11 @@ impl ChunkStorage {
             .map(|c| Self::heightmaps_to_persistent(&c.heightmaps.read()))
             .unwrap_or_default();
 
+        // Serialize structure data (works for both proto and full chunks)
+        let structure_starts = Self::structure_starts_to_persistent(&chunk.structure_starts());
+        let structure_references =
+            Self::structure_references_to_persistent(&chunk.structure_references());
+
         let persistent = Self::to_persistent(
             chunk.sections(),
             &block_entities,
@@ -229,6 +239,8 @@ impl ChunkStorage {
             block_ticks,
             fluid_ticks,
             heightmaps,
+            structure_starts,
+            structure_references,
             pos,
         );
 
@@ -236,6 +248,7 @@ impl ChunkStorage {
     }
 
     /// Converts chunk data to persistent format.
+    #[allow(clippy::too_many_arguments)]
     fn to_persistent(
         sections: &Sections,
         block_entities: &[SharedBlockEntity],
@@ -243,6 +256,8 @@ impl ChunkStorage {
         block_ticks: Vec<PersistentTick>,
         fluid_ticks: Vec<PersistentTick>,
         heightmaps: Vec<PersistentHeightmap>,
+        structure_starts: Vec<PersistentStructureStart>,
+        structure_references: Vec<PersistentStructureReference>,
         chunk_pos: ChunkPos,
     ) -> PersistentChunk {
         let mut builder = ChunkBuilder::new(&REGISTRY);
@@ -324,6 +339,8 @@ impl ChunkStorage {
             block_ticks,
             fluid_ticks,
             heightmaps,
+            structure_starts,
+            structure_references,
         }
     }
 
@@ -447,6 +464,11 @@ impl ChunkStorage {
             .map(|section| Self::persistent_to_section(section, persistent))
             .collect();
 
+        // Reconstruct structure data
+        let structure_starts = Self::persistent_to_structure_starts(&persistent.structure_starts);
+        let structure_references =
+            Self::persistent_to_structure_references(&persistent.structure_references);
+
         match status {
             ChunkStatus::Full => {
                 // Reconstruct scheduled ticks from persistent data
@@ -466,6 +488,8 @@ impl ChunkStorage {
                     block_ticks,
                     fluid_ticks,
                     heightmaps,
+                    structure_starts,
+                    structure_references,
                 );
 
                 // Load block entities
@@ -496,6 +520,8 @@ impl ChunkStorage {
                 status,
                 min_y,
                 height,
+                structure_starts,
+                structure_references,
             )),
         }
     }
@@ -762,6 +788,82 @@ impl ChunkStorage {
         }
 
         heightmaps
+    }
+
+    /// Converts structure starts to persistent format for saving.
+    fn structure_starts_to_persistent(starts: &StructureStartMap) -> Vec<PersistentStructureStart> {
+        starts
+            .values()
+            .map(|start| PersistentStructureStart {
+                structure: start.structure.clone(),
+                chunk_x: start.chunk_pos.0.x,
+                chunk_z: start.chunk_pos.0.y,
+                references: start.references,
+                pieces: start
+                    .pieces
+                    .iter()
+                    .map(|piece| PersistentStructurePiece {
+                        piece_type: piece.piece_type.clone(),
+                        bounding_box: piece.bounding_box,
+                        gen_depth: piece.gen_depth,
+                        orientation: piece.orientation,
+                        nbt_data: piece.nbt_data.clone(),
+                    })
+                    .collect(),
+            })
+            .collect()
+    }
+
+    /// Converts structure references to persistent format for saving.
+    fn structure_references_to_persistent(
+        refs: &StructureReferenceMap,
+    ) -> Vec<PersistentStructureReference> {
+        refs.iter()
+            .map(|(structure, positions)| PersistentStructureReference {
+                structure: structure.clone(),
+                references: positions.clone(),
+            })
+            .collect()
+    }
+
+    /// Reconstructs structure starts from persistent data.
+    fn persistent_to_structure_starts(
+        persistent: &[PersistentStructureStart],
+    ) -> StructureStartMap {
+        persistent
+            .iter()
+            .map(|ps| {
+                let pieces = ps
+                    .pieces
+                    .iter()
+                    .map(|pp| StructurePiece {
+                        piece_type: pp.piece_type.clone(),
+                        bounding_box: pp.bounding_box,
+                        gen_depth: pp.gen_depth,
+                        orientation: pp.orientation,
+                        nbt_data: pp.nbt_data.clone(),
+                    })
+                    .collect();
+
+                let start = StructureStart {
+                    structure: ps.structure.clone(),
+                    chunk_pos: ChunkPos::new(ps.chunk_x, ps.chunk_z),
+                    references: ps.references,
+                    pieces,
+                };
+                (ps.structure.clone(), start)
+            })
+            .collect()
+    }
+
+    /// Reconstructs structure references from persistent data.
+    fn persistent_to_structure_references(
+        persistent: &[PersistentStructureReference],
+    ) -> StructureReferenceMap {
+        persistent
+            .iter()
+            .map(|pr| (pr.structure.clone(), pr.references.clone()))
+            .collect()
     }
 
     /// Converts a persistent section to runtime format.

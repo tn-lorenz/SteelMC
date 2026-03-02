@@ -2,10 +2,12 @@
 use std::sync::atomic::{AtomicBool, Ordering};
 
 use crossbeam::atomic::AtomicCell;
+use rustc_hash::FxHashMap;
 use steel_registry::{REGISTRY, blocks::block_state_ext::BlockStateExt, vanilla_blocks};
 use steel_utils::{BlockPos, BlockStateId, ChunkPos, locks::SyncRwLock, types::UpdateFlags};
 
 use crate::chunk::{chunk_access::ChunkStatus, heightmap::ProtoHeightmaps, section::Sections};
+use crate::world::structure::{StructureReferenceMap, StructureStartMap};
 
 /// A chunk that is still being generated.
 #[derive(Debug)]
@@ -26,12 +28,16 @@ pub struct ProtoChunk {
     min_y: i32,
     /// The total height of the world.
     height: i32,
+    /// Structure starts originating in this chunk.
+    pub structure_starts: SyncRwLock<StructureStartMap>,
+    /// References to structures from nearby origin chunks.
+    pub structure_references: SyncRwLock<StructureReferenceMap>,
 }
 
 impl ProtoChunk {
     /// Creates a new proto chunk at the given position with empty sections.
     #[must_use]
-    pub const fn new(sections: Sections, pos: ChunkPos, min_y: i32, height: i32) -> Self {
+    pub fn new(sections: Sections, pos: ChunkPos, min_y: i32, height: i32) -> Self {
         Self {
             sections,
             pos,
@@ -40,6 +46,8 @@ impl ProtoChunk {
             heightmaps: SyncRwLock::new(ProtoHeightmaps::new()),
             min_y,
             height,
+            structure_starts: SyncRwLock::new(FxHashMap::default()),
+            structure_references: SyncRwLock::new(FxHashMap::default()),
         }
     }
 
@@ -51,6 +59,8 @@ impl ProtoChunk {
         status: ChunkStatus,
         min_y: i32,
         height: i32,
+        structure_starts: StructureStartMap,
+        structure_references: StructureReferenceMap,
     ) -> Self {
         Self {
             sections,
@@ -61,6 +71,8 @@ impl ProtoChunk {
             heightmaps: SyncRwLock::new(ProtoHeightmaps::new()),
             min_y,
             height,
+            structure_starts: SyncRwLock::new(structure_starts),
+            structure_references: SyncRwLock::new(structure_references),
         }
     }
 
