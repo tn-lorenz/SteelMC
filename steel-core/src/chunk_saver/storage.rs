@@ -16,11 +16,34 @@ use std::sync::atomic::Ordering;
 use std::time::{SystemTime, UNIX_EPOCH};
 use std::{io, sync::Weak};
 use steel_registry::{REGISTRY, Registry, vanilla_biomes};
-use steel_utils::{BlockPos, BlockStateId, ChunkPos, Identifier};
+use steel_utils::{BlockPos, BlockStateId, ChunkPos, Direction, Identifier};
 
 use crate::world::structure::{
     StructurePiece, StructureReferenceMap, StructureStart, StructureStartMap,
 };
+
+/// Converts `Option<Direction>` to the vanilla 2D data value encoding for persistence.
+/// -1 = none, 0 = south, 1 = west, 2 = north, 3 = east.
+const fn direction_to_2d(dir: Option<Direction>) -> i8 {
+    match dir {
+        Some(Direction::South) => 0,
+        Some(Direction::West) => 1,
+        Some(Direction::North) => 2,
+        Some(Direction::East) => 3,
+        None | Some(Direction::Down | Direction::Up) => -1,
+    }
+}
+
+/// Converts a vanilla 2D data value to `Option<Direction>`.
+const fn direction_from_2d(value: i8) -> Option<Direction> {
+    match value {
+        0 => Some(Direction::South),
+        1 => Some(Direction::West),
+        2 => Some(Direction::North),
+        3 => Some(Direction::East),
+        _ => None,
+    }
+}
 
 use super::ram_only::RamOnlyStorage;
 use super::region_manager::RegionManager;
@@ -806,7 +829,7 @@ impl ChunkStorage {
                         piece_type: piece.piece_type.clone(),
                         bounding_box: piece.bounding_box,
                         gen_depth: piece.gen_depth,
-                        orientation: piece.orientation,
+                        orientation: direction_to_2d(piece.orientation),
                         nbt_data: piece.nbt_data.clone(),
                     })
                     .collect(),
@@ -821,7 +844,7 @@ impl ChunkStorage {
         refs.iter()
             .map(|(structure, positions)| PersistentStructureReference {
                 structure: structure.clone(),
-                references: positions.clone(),
+                references: positions.iter().map(ChunkPos::as_i64).collect(),
             })
             .collect()
     }
@@ -840,7 +863,7 @@ impl ChunkStorage {
                         piece_type: pp.piece_type.clone(),
                         bounding_box: pp.bounding_box,
                         gen_depth: pp.gen_depth,
-                        orientation: pp.orientation,
+                        orientation: direction_from_2d(pp.orientation),
                         nbt_data: pp.nbt_data.clone(),
                     })
                     .collect();
@@ -862,7 +885,14 @@ impl ChunkStorage {
     ) -> StructureReferenceMap {
         persistent
             .iter()
-            .map(|pr| (pr.structure.clone(), pr.references.clone()))
+            .map(|pr| {
+                let positions = pr
+                    .references
+                    .iter()
+                    .map(|&l| ChunkPos::from_i64(l))
+                    .collect();
+                (pr.structure.clone(), positions)
+            })
             .collect()
     }
 

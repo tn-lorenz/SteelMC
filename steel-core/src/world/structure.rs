@@ -10,7 +10,7 @@
 
 use rustc_hash::FxHashMap;
 
-use steel_utils::{BoundingBox, ChunkPos, Identifier};
+use steel_utils::{BoundingBox, ChunkPos, Direction, Identifier};
 
 /// A structure start placed in a chunk.
 ///
@@ -41,8 +41,9 @@ pub struct StructurePiece {
     pub bounding_box: BoundingBox,
     /// Generation depth (distance from start piece in the piece tree).
     pub gen_depth: i32,
-    /// 2D direction orientation (-1 = none, 0 = south, 1 = west, 2 = north, 3 = east).
-    pub orientation: i8,
+    /// Horizontal orientation of this piece (`None` for unoriented pieces).
+    /// Only horizontal directions (North/South/East/West) are used.
+    pub orientation: Option<Direction>,
     /// Type-specific NBT data (simdnbt binary format).
     pub nbt_data: Vec<u8>,
 }
@@ -51,5 +52,5 @@ pub struct StructurePiece {
 pub type StructureStartMap = FxHashMap<Identifier, StructureStart>;
 
 /// Map of structure references keyed by structure identifier.
-/// Values are packed chunk positions ([`ChunkPos::as_i64`]) of origin chunks.
-pub type StructureReferenceMap = FxHashMap<Identifier, Vec<i64>>;
+/// Values are the chunk positions of origin chunks that contain the structure start.
+pub type StructureReferenceMap = FxHashMap<Identifier, Vec<ChunkPos>>;
