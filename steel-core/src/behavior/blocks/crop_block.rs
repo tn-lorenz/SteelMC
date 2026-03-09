@@ -1,5 +1,7 @@
 //! Crop block implementation (wheat, carrots, potatoes, beetroot).
 
+use std::sync::Arc;
+
 use steel_registry::blocks::BlockRef;
 use steel_registry::blocks::block_state_ext::BlockStateExt;
 use steel_registry::blocks::properties::{BlockStateProperties, IntProperty};
@@ -144,7 +146,7 @@ impl BlockBehaviour for CropBlock {
         !self.is_max_age(state)
     }
 
-    fn random_tick(&self, state: BlockStateId, world: &World, pos: BlockPos) {
+    fn random_tick(&self, state: BlockStateId, world: &Arc<World>, pos: BlockPos) {
         // TODO: Check light level >= 9 when light engine is implemented
         // For now, assume sufficient light
 
