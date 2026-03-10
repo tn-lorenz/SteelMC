@@ -70,6 +70,7 @@ use crate::{
     fluid::fluid_state_to_block,
     level_data::LevelDataManager,
     player::{LastSeen, Player, connection::NetworkConnection},
+    poi::PointOfInterestStorage,
 };
 
 mod player_area_map;
@@ -141,6 +142,8 @@ pub struct World {
     /// Provides stable ordering when multiple ticks fire on the same game tick
     /// with the same priority.
     sub_tick_count: AtomicI64,
+    /// Point of interest storage for efficient spatial queries of special blocks.
+    pub poi_storage: SyncMutex<PointOfInterestStorage>,
 }
 
 impl World {
@@ -213,6 +216,7 @@ impl World {
             entity_tracker: EntityTracker::new(),
             weather: SyncMutex::new(weather),
             sub_tick_count: AtomicI64::new(0),
+            poi_storage: SyncMutex::new(PointOfInterestStorage::new()),
         }))
     }
 
