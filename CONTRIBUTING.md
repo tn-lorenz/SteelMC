@@ -24,7 +24,7 @@ Please stick to Parchment mapping names most of the time for consistency and eas
 
 We allow the use of generative AI models such as LLM's for the generation of code in our project. However, we will not tolerate "vibe coding", meaning:
 1. Do not overuse AI - You should understand the code that has been generated.
-2. Re-read, check and correct the generated code to fit our coding guidelines and reduce sub-optimal implementaion, as well as poorly readable doc-comments.
+2. Re-read, check and correct the generated code to fit our coding guidelines and reduce sub-optimal implementation, as well as poorly readable doc-comments.
 
 
 Thank you for contributing to Steel!
