@@ -6,7 +6,7 @@ use std::sync::{Arc, OnceLock, Weak};
 use simdnbt::borrow::BaseNbtCompound as BorrowedNbtCompound;
 use steel_registry::entity_types::EntityTypeRef;
 use steel_registry::vanilla_entities;
-use steel_registry::{REGISTRY, RegistryEntry, RegistryExt};
+use steel_registry::{REGISTRY, RegistryEntry};
 use steel_utils::math::Vector3;
 use uuid::Uuid;
 
