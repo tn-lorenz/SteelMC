@@ -106,7 +106,6 @@ const SOUND_EVENTS: &str = "sound_events";
 const SOUND_TYPES: &str = "sound_types";
 const MULTI_NOISE: &str = "multi_noise";
 const NOISE_PARAMETERS: &str = "noise_parameters";
-const DENSITY_FUNCTIONS: &str = "density_functions";
 
 pub fn main() {
     // Rerun build script when any file in the build/ directory changes
@@ -164,7 +163,6 @@ pub fn main() {
         (sound_types::build(), SOUND_TYPES),
         (multi_noise::build(), MULTI_NOISE),
         (noise_parameters::build(), NOISE_PARAMETERS),
-        (density_functions::build(), DENSITY_FUNCTIONS),
         (poi_types::build(), POI_TYPES),
         (banner_pattern_tags::build(), BANNER_PATTERN_TAGS),
         (entity_type_tags::build(), ENTITY_TYPE_TAGS),
@@ -190,27 +188,68 @@ pub fn main() {
         fs::write(&path, content).unwrap();
     }
 
+    // Density functions are split into per-dimension files in a subdirectory
+    let df = density_functions::build();
+    let df_dir = out_dir.join("vanilla_density_functions");
+    fs::create_dir_all(&df_dir).unwrap();
+
+    let df_dimension_files = [
+        (df.overworld, "overworld"),
+        (df.nether, "nether"),
+        (df.end, "end"),
+    ];
+
+    let mut df_generated: Vec<std::path::PathBuf> = Vec::new();
+    for (content, name) in df_dimension_files {
+        let path = df_dir.join(format!("{name}.rs"));
+        let content = content.to_string();
+        df_generated.push(path.clone());
+        if let Ok(existing) = fs::read_to_string(&path)
+            && existing == content
+        {
+            continue;
+        }
+        fs::write(&path, content).unwrap();
+    }
+
+    // Density functions index (mod.rs inside the subdirectory)
+    {
+        let path = df_dir.join("mod.rs");
+        let content = df.index.to_string();
+        df_generated.push(path.clone());
+        if !(fs::read_to_string(&path).is_ok_and(|existing| existing == content)) {
+            fs::write(&path, &content).unwrap();
+        }
+    }
+
     // Remove any stale files not generated this run
     if let Ok(entries) = fs::read_dir(&out_dir) {
         for entry in entries.flatten() {
             let path = entry.path();
-            if !generated_files.contains(&path) {
+            if !generated_files.contains(&path) && path != df_dir {
                 let _ = fs::remove_file(&path);
             }
         }
     }
 
-    if FMT && let Ok(entries) = fs::read_dir(&out_dir) {
+    // Remove stale density function dimension files
+    if let Ok(entries) = fs::read_dir(&df_dir) {
         for entry in entries.flatten() {
             let path = entry.path();
-            // Skip density_functions — the generated file is too large for rustfmt
-            if path
-                .file_name()
-                .is_some_and(|n| n == "vanilla_density_functions.rs")
-            {
-                continue;
+            if !df_generated.contains(&path) {
+                let _ = fs::remove_file(&path);
             }
-            let _ = Command::new("rustfmt").arg(path).output();
+        }
+    }
+
+    if FMT {
+        for dir in [&out_dir, &df_dir] {
+            if let Ok(entries) = fs::read_dir(dir) {
+                for entry in entries.flatten() {
+                    let path = entry.path();
+                    let _ = Command::new("rustfmt").arg(path).output();
+                }
+            }
         }
     }
 }
