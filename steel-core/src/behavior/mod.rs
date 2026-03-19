@@ -43,6 +43,11 @@ pub mod item_behaviors;
 
 #[allow(warnings)]
 #[rustfmt::skip]
+#[path = "generated/waxables.rs"]
+pub mod waxables;
+
+#[allow(warnings)]
+#[rustfmt::skip]
 #[path = "generated/weathering.rs"]
 pub mod weathering;
 

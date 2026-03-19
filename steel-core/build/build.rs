@@ -8,6 +8,7 @@ use std::fs;
 mod blocks;
 mod common;
 mod items;
+mod waxables;
 mod weathering;
 
 #[derive(Debug, Deserialize)]
@@ -34,6 +35,8 @@ pub fn main() {
     .expect("Failed to write blocks.rs");
     fs::write(format!("{out_dir}/items.rs"), items::build(&classes.items))
         .expect("Failed to write items.rs");
+    fs::write(format!("{out_dir}/waxables.rs"), waxables::build())
+        .expect("Failed to write waxables.rs");
     fs::write(format!("{out_dir}/weathering.rs"), weathering::build())
         .expect("Failed to write weathering.rs");
 
