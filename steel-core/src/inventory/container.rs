@@ -43,22 +43,10 @@ pub trait Container {
     /// Removes up to `count` items from the specified slot and returns them.
     fn remove_item(&mut self, slot: usize, count: i32) -> ItemStack {
         let item = self.get_item_mut(slot);
-
         if item.is_empty() || count <= 0 {
             return ItemStack::empty();
         }
-
-        let take_count = count.min(item.count());
-        let taken = item.copy_with_count(take_count);
-
-        let remaining = item.count() - take_count;
-        if remaining <= 0 {
-            *item = ItemStack::empty();
-        } else {
-            item.set_count(remaining);
-        }
-
-        taken
+        item.split(count)
     }
 
     /// Removes the item from the specified slot without triggering updates.
@@ -184,8 +172,7 @@ pub trait Container {
             }
             if self.get_item(slot).is_empty() && self.can_place_item(slot, stack) {
                 let to_place = stack.count().min(max_size);
-                self.set_item(slot, stack.copy_with_count(to_place));
-                stack.shrink(to_place);
+                self.set_item(slot, stack.split(to_place));
             }
         }
 

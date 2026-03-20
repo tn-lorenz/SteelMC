@@ -295,8 +295,7 @@ impl Container for PlayerInventory {
             }
             if self.items[slot].is_empty() {
                 let to_place = stack.count().min(max_size);
-                self.items[slot] = stack.copy_with_count(to_place);
-                stack.shrink(to_place);
+                self.items[slot] = stack.split(to_place);
             }
         }
 

@@ -485,9 +485,7 @@ impl MenuBehavior {
                 if target.is_empty() && slot.may_place(item_stack) {
                     let max_stack_size = slot.get_max_stack_size_for_item(guard, item_stack);
                     let to_place = item_stack.count.min(max_stack_size);
-                    let placed = item_stack.copy_with_count(to_place);
-                    item_stack.shrink(to_place);
-                    slot.set_by_player(guard, placed, &ItemStack::empty());
+                    slot.set_by_player(guard, item_stack.split(to_place), &ItemStack::empty());
                     slot.set_changed(guard);
                     anything_changed = true;
                     break;
@@ -940,9 +938,7 @@ impl MenuBehavior {
                     player.drop_item(to_drop, false, true);
                 } else {
                     // Right click outside - drop one carried item
-                    let to_drop = self.carried.copy_with_count(1);
-                    self.carried.shrink(1);
-                    player.drop_item(to_drop, false, true);
+                    player.drop_item(self.carried.split(1), false, true);
                 }
             }
             return;
@@ -959,7 +955,7 @@ impl MenuBehavior {
 
         // Get the current item in the slot
         let slot_item = slot.get_item(&guard).clone();
-        let carried = mem::take(&mut self.carried);
+        let mut carried = mem::take(&mut self.carried);
 
         if slot_item.is_empty() {
             // Slot is empty - place carried items (if allowed)
@@ -968,13 +964,9 @@ impl MenuBehavior {
                 let requested = if button == 0 { carried.count } else { 1 };
                 let amount = requested.min(max_for_slot);
 
-                let to_place = carried.copy_with_count(amount);
-
-                let remaining = carried.count - amount;
-                if remaining > 0 {
-                    let mut new_carried = carried;
-                    new_carried.set_count(remaining);
-                    self.carried = new_carried;
+                let to_place = carried.split(amount);
+                if !carried.is_empty() {
+                    self.carried = carried;
                 }
 
                 slot.set_by_player(&mut guard, to_place, &ItemStack::empty());
