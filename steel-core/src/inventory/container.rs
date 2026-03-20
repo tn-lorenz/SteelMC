@@ -49,8 +49,7 @@ pub trait Container {
         }
 
         let take_count = count.min(item.count());
-        let mut taken = item.clone();
-        taken.set_count(take_count);
+        let taken = item.copy_with_count(take_count);
 
         let remaining = item.count() - take_count;
         if remaining <= 0 {
@@ -185,9 +184,7 @@ pub trait Container {
             }
             if self.get_item(slot).is_empty() && self.can_place_item(slot, stack) {
                 let to_place = stack.count().min(max_size);
-                let mut placed = stack.clone();
-                placed.set_count(to_place);
-                self.set_item(slot, placed);
+                self.set_item(slot, stack.copy_with_count(to_place));
                 stack.shrink(to_place);
             }
         }

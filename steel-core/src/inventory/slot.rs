@@ -109,8 +109,7 @@ pub trait Slot {
         }
 
         let take_count = amount.min(item.count());
-        let mut taken = item.clone();
-        taken.set_count(take_count);
+        let taken = item.copy_with_count(take_count);
 
         let remaining = item.count() - take_count;
         if remaining <= 0 {

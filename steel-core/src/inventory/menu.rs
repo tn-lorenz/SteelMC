@@ -485,8 +485,7 @@ impl MenuBehavior {
                 if target.is_empty() && slot.may_place(item_stack) {
                     let max_stack_size = slot.get_max_stack_size_for_item(guard, item_stack);
                     let to_place = item_stack.count.min(max_stack_size);
-                    let mut placed = item_stack.clone();
-                    placed.set_count(to_place);
+                    let placed = item_stack.copy_with_count(to_place);
                     item_stack.shrink(to_place);
                     slot.set_by_player(guard, placed, &ItemStack::empty());
                     slot.set_changed(guard);
@@ -941,8 +940,7 @@ impl MenuBehavior {
                     player.drop_item(to_drop, false, true);
                 } else {
                     // Right click outside - drop one carried item
-                    let mut to_drop = self.carried.clone();
-                    to_drop.set_count(1);
+                    let to_drop = self.carried.copy_with_count(1);
                     self.carried.shrink(1);
                     player.drop_item(to_drop, false, true);
                 }
@@ -970,8 +968,7 @@ impl MenuBehavior {
                 let requested = if button == 0 { carried.count } else { 1 };
                 let amount = requested.min(max_for_slot);
 
-                let mut to_place = carried.clone();
-                to_place.set_count(amount);
+                let to_place = carried.copy_with_count(amount);
 
                 let remaining = carried.count - amount;
                 if remaining > 0 {
@@ -1093,12 +1090,10 @@ impl MenuBehavior {
 
         let guard = self.lock_all_containers();
         let slot = &self.slots[slot_index];
-        let slot_item = slot.get_item(&guard).clone();
+        let slot_item = slot.get_item(&guard);
 
         if !slot_item.is_empty() {
-            let mut cloned = slot_item.clone();
-            cloned.set_count(cloned.max_stack_size());
-            self.carried = cloned;
+            self.carried = slot_item.copy_with_count(slot_item.max_stack_size());
         }
     }
 
@@ -1351,9 +1346,11 @@ pub trait Menu {
                 let max_size = target_slot.get_max_stack_size_for_item(&guard, &source_item);
                 if source_item.count > max_size {
                     // Split the stack
-                    let mut to_place = source_item.clone();
-                    to_place.set_count(max_size);
-                    target_slot.set_by_player(&mut guard, to_place, &ItemStack::empty());
+                    target_slot.set_by_player(
+                        &mut guard,
+                        source_item.copy_with_count(max_size),
+                        &ItemStack::empty(),
+                    );
                     if let Some(inv) = guard.get_mut(player_inv_id) {
                         inv.get_item_mut(inventory_slot).shrink(max_size);
                     }
@@ -1371,9 +1368,11 @@ pub trait Menu {
                 let max_size = target_slot.get_max_stack_size_for_item(&guard, &source_item);
                 if source_item.count > max_size {
                     // Source is too big - place partial and add target to inventory
-                    let mut to_place = source_item.clone();
-                    to_place.set_count(max_size);
-                    target_slot.set_by_player(&mut guard, to_place, &target_item);
+                    target_slot.set_by_player(
+                        &mut guard,
+                        source_item.copy_with_count(max_size),
+                        &target_item,
+                    );
                     if let Some(remainder) = target_slot.on_take(&mut guard, &target_item, player) {
                         player.add_item_or_drop_with_guard(&mut guard, remainder);
                     }
