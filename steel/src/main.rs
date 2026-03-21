@@ -105,9 +105,23 @@ fn main() {
     #[cfg(feature = "dhat-heap")]
     let _profiler = dhat::Profiler::new_heap();
 
-    let chunk_runtime = Arc::new(Builder::new_multi_thread().enable_all().build().unwrap());
+    let half_cpus = (std::thread::available_parallelism().map_or(4, |n| n.get()) / 2).max(2);
 
-    let main_runtime = Builder::new_multi_thread().enable_all().build().unwrap();
+    let chunk_runtime = Arc::new(
+        Builder::new_multi_thread()
+            .worker_threads(half_cpus)
+            .thread_name("chunk-worker")
+            .enable_all()
+            .build()
+            .unwrap(),
+    );
+
+    let main_runtime = Builder::new_multi_thread()
+        .worker_threads(half_cpus)
+        .thread_name("main-worker")
+        .enable_all()
+        .build()
+        .unwrap();
 
     main_runtime.block_on(main_async(chunk_runtime.clone()));
 
