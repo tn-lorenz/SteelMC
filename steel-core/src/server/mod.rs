@@ -18,6 +18,7 @@ use crate::player::player_data_storage::PlayerDataStorage;
 use crate::server::registry_cache::RegistryCache;
 use crate::world::{World, WorldConfig, WorldTickTimings};
 use crate::worldgen::BiomeSourceKind;
+use rayon::{ThreadPool, ThreadPoolBuilder};
 use small_map::FxSmallMap;
 use std::{
     sync::Arc,
@@ -35,7 +36,6 @@ use steel_registry::vanilla_game_rules::{IMMEDIATE_RESPAWN, LIMITED_CRAFTING, RE
 use steel_registry::{REGISTRY, Registry, RegistryEntry, RegistryExt, vanilla_blocks};
 use steel_utils::{Identifier, entity_events::EntityStatus, locks::SyncRwLock};
 use text_components::{Modifier, TextComponent, format::Color};
-use rayon::{ThreadPool, ThreadPoolBuilder};
 use tick_rate_manager::{SprintReport, TickRateManager};
 use tokio::{runtime::Runtime, task::spawn_blocking, time::sleep};
 use tokio_util::sync::CancellationToken;
@@ -98,13 +98,14 @@ impl Server {
         };
 
         let generation_pool: Arc<ThreadPool> = Arc::new({
-            let mut builder = ThreadPoolBuilder::new()
-                .thread_name(|i| format!("rayon-gen-{i}"));
+            let mut builder = ThreadPoolBuilder::new().thread_name(|i| format!("rayon-gen-{i}"));
             // Debug builds have deep call chains in density functions that overflow the default 2 MB stack
             if cfg!(debug_assertions) {
                 builder = builder.stack_size(8 * 1024 * 1024);
             }
-            builder.build().expect("Failed to create generation thread pool")
+            builder
+                .build()
+                .expect("Failed to create generation thread pool")
         });
 
         let overworld = World::new_with_config(

@@ -105,7 +105,8 @@ fn main() {
     #[cfg(feature = "dhat-heap")]
     let _profiler = dhat::Profiler::new_heap();
 
-    let half_cpus = (std::thread::available_parallelism().map_or(4, |n| n.get()) / 2).max(2);
+    use std::{num::NonZero, thread};
+    let half_cpus = (thread::available_parallelism().map_or(4, NonZero::get) / 2).max(2);
 
     let chunk_runtime = Arc::new(
         Builder::new_multi_thread()

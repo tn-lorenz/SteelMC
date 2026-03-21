@@ -212,12 +212,8 @@ const fn const_max_status(a: Option<ChunkStatus>, b: Option<ChunkStatus>) -> Opt
 // ============================================================================
 
 /// A task that generates a chunk.
-pub type ChunkStatusTask = fn(
-    Arc<WorldGenContext>,
-    &ChunkStep,
-    &Arc<StaticCache2D<Arc<ChunkHolder>>>,
-    Arc<ChunkHolder>,
-);
+pub type ChunkStatusTask =
+    fn(Arc<WorldGenContext>, &ChunkStep, &Arc<StaticCache2D<Arc<ChunkHolder>>>, Arc<ChunkHolder>);
 
 /// A chunk step (const-compatible).
 #[derive(Clone, Copy)]

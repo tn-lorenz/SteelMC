@@ -425,17 +425,29 @@ impl ChunkMap {
             {
                 let _span = tracing::trace_span!("schedule_generation").entered();
                 let start = Instant::now();
-                let self_ref = &*self;
-                let scheduled_count = self.generation_pool.install(|| {
+                let scheduled_count = if holders_to_schedule.len() < 100 {
                     holders_to_schedule
-                        .into_par_iter()
+                        .iter()
                         .filter(|(holder, level)| {
                             level.is_some_and(is_full)
-                                && holder
-                                    .schedule_chunk_generation_task_b(ChunkStatus::Full, self_ref)
+                                && holder.schedule_chunk_generation_task_b(ChunkStatus::Full, self)
                         })
                         .count()
-                });
+                } else {
+                    let self_ref = self;
+                    self.generation_pool.install(|| {
+                        holders_to_schedule
+                            .into_par_iter()
+                            .filter(|(holder, level)| {
+                                level.is_some_and(is_full)
+                                    && holder.schedule_chunk_generation_task_b(
+                                        ChunkStatus::Full,
+                                        self_ref,
+                                    )
+                            })
+                            .count()
+                    })
+                };
                 timings.schedule_generation = start.elapsed();
                 timings.scheduled_count = scheduled_count;
             }

@@ -9,9 +9,9 @@ use std::sync::{Arc, Weak};
 use steel_utils::locks::SyncRwLock;
 use steel_utils::{BlockPos, ChunkPos, SectionPos, locks::SyncMutex};
 use tokio::sync::{oneshot, watch};
-use tokio_util::sync::CancellationToken;
 #[cfg(feature = "slow_chunk_gen")]
 use tokio::time::sleep;
+use tokio_util::sync::CancellationToken;
 
 #[cfg(feature = "slow_chunk_gen")]
 use std::time::Duration;
