@@ -1,6 +1,8 @@
 //! Main entry point for the Steel Minecraft server.
 
+use std::num::NonZero;
 use std::sync::Arc;
+use std::thread;
 
 use steel::logger::CommandLogger;
 use steel::spawn_progress::generate_spawn_chunks;
@@ -105,7 +107,6 @@ fn main() {
     #[cfg(feature = "dhat-heap")]
     let _profiler = dhat::Profiler::new_heap();
 
-    use std::{num::NonZero, thread};
     let half_cpus = (thread::available_parallelism().map_or(4, NonZero::get) / 2).max(2);
 
     let chunk_runtime = Arc::new(
