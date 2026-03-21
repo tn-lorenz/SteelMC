@@ -20,6 +20,7 @@ use steel_registry::blocks::block_state_ext::BlockStateExt;
 use steel_registry::dimension_type::DimensionTypeRef;
 use steel_utils::{BlockPos, ChunkPos, SectionPos, locks::SyncMutex};
 use tokio::runtime::Runtime;
+use tokio_util::sync::CancellationToken;
 use tokio_util::task::TaskTracker;
 use tracing::instrument;
 
@@ -96,6 +97,9 @@ pub struct ChunkMap {
     pub chunks_to_broadcast: SyncMutex<Vec<Arc<ChunkHolder>>>,
     /// Last length of `tickable_chunks` to pre-allocate with appropriate capacity.
     last_tickable_len: AtomicUsize,
+    /// Parent cancellation token for all generation tasks.
+    /// Child tokens are created per-task; cancelling this cancels everything.
+    pub cancel_token: CancellationToken,
 }
 
 impl ChunkMap {
@@ -135,6 +139,7 @@ impl ChunkMap {
             storage,
             chunks_to_broadcast: SyncMutex::new(Vec::new()),
             last_tickable_len: AtomicUsize::new(0),
+            cancel_token: CancellationToken::new(),
         }
     }
 
@@ -292,6 +297,7 @@ impl ChunkMap {
             target_status,
             self.clone(),
             self.generation_pool.clone(),
+            self.cancel_token.child_token(),
         ));
         self.pending_generation_tasks.lock().push(task.clone());
         task
@@ -361,6 +367,9 @@ impl ChunkMap {
             chunk_holder.cancel_generation_task();
             chunk_holder.ticket_level.store(u8::MAX, Ordering::Relaxed);
             chunk_holder.update_highest_allowed_status(u8::MAX);
+            // Wake any await_chunk futures so generation tasks holding refs to
+            // this chunk can detect the status is disallowed and exit.
+            chunk_holder.wake_all_watchers();
 
             // Clean up POI data for this chunk column
             let world = self.world_gen_context.world();
