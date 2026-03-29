@@ -41,11 +41,9 @@ fn slot_to_tokens(slot: &str) -> TokenStream {
 }
 
 pub(crate) fn build() -> TokenStream {
-    println!(
-        "cargo:rerun-if-changed=build_assets/builtin_datapacks/minecraft/data/minecraft/enchantment/"
-    );
+    println!("cargo:rerun-if-changed=build_assets/builtin_datapacks/minecraft/enchantment/");
 
-    let enchantment_dir = "build_assets/builtin_datapacks/minecraft/data/minecraft/enchantment";
+    let enchantment_dir = "build_assets/builtin_datapacks/minecraft/enchantment";
     let mut enchantments = Vec::new();
 
     for entry in fs::read_dir(enchantment_dir).expect("Failed to read enchantment directory") {
