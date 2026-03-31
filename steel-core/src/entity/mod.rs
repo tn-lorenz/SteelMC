@@ -481,25 +481,32 @@ pub trait LivingEntity: Entity {
     /// Sets the entity's speed.
     fn set_speed(&self, speed: f32);
 
+    // TODO: redundant since `set_velocity` and `velocity` are already present due to the `Entity` trait (also remove redundant impl in `Player`)
+    /// Set the `delta_movement` of a `LivingEntity`
     fn set_delta_movement(&self, velocity: DVec3) {
-        self.movement.lock().delta_movement = velocity;
+        self.set_velocity(velocity)
     }
 
+    /// Get the `delta_movement` of a `LivingEntity`
     fn get_delta_movement(&self) -> DVec3 {
-        self.movement.lock().delta_movement
+        self.velocity()
     }
 }
 
+/// A trait containing combat-related functions, based on the `LivingEntity` trait. 
 pub trait Attackable: LivingEntity {
+    /// 26.1 Knockback calculation
     fn knock_back(&self, mut power: f64, mut xd: f64, mut zd: f64) {
+        // TODO: complete this, once we have Attributes
         power *= 1.0 /* - self.get_attribute_value(Attributes.KnockbackResistance)*/;
         if power <= 0.0 { return }
 
+        // TODO: whatever this is:
         // self.needs_sync = true;
         let delta_movement: DVec3 = self.get_delta_movement();
 
         while xd * xd + zd * zd < 1.0E-5 {
-            xd = (rand::random::<f64>() - rand::random::<f64>()) * 0.01;
+            xd = (rand::random::<f64>() - rand::random::<f64>()) * 0.01; // TODO: these are present 1:1 somewhere else in `Player`
             zd = (rand::random::<f64>() - rand::random::<f64>()) * 0.01;
         }
 
@@ -513,11 +520,13 @@ pub trait Attackable: LivingEntity {
             delta_movement.z / 2.0 - delta_vec.z,)
         );
     }
-    
+
+    /// Blocks an attack
     fn block_using_item(&self, attacker: &Self) {
         attacker.blocked_by_item(self);
     }
 
+    /// Apply blocking knockback to defender
     fn blocked_by_item(&self, defender: &Self) {
         defender.knock_back(
             0.5,
