@@ -1029,7 +1029,7 @@ impl Player {
                     validation.move_delta.y = 0.0;
                 }
                 // Update velocity based on actual movement (vanilla: handlePlayerKnownMovement)
-                self.set_delta_movement(validation.move_delta);
+                self.set_velocity(validation.move_delta);
 
                 // Jump detection (vanilla: jumpFromGround)
                 let moved_upwards = validation.move_delta.y > 0.0;
@@ -1097,7 +1097,7 @@ impl Player {
                             mv.last_sent_on_ground = packet.on_ground;
                         }
 
-                        let delta = self.get_delta_movement();
+                        let delta = self.velocity();
                         let sync_packet = CEntityPositionSync {
                             entity_id: self.id,
                             x: pos.x,
@@ -1133,7 +1133,7 @@ impl Player {
                         mv.last_sent_on_ground = packet.on_ground;
                     }
 
-                    let delta = self.get_delta_movement();
+                    let delta = self.velocity();
                     let sync_packet = CEntityPositionSync {
                         entity_id: self.id,
                         x: pos.x,
@@ -2960,14 +2960,6 @@ impl Entity for Player {
         self.rotation.load()
     }
 
-    fn velocity(&self) -> DVec3 {
-        self.movement.lock().delta_movement
-    }
-
-    fn on_ground(&self) -> bool {
-        self.entity_state.lock().on_ground
-    }
-
     /// Returns the eye height for the current pose.
     ///
     /// Vanilla eye heights from `Avatar.POSES`:
@@ -2983,6 +2975,18 @@ impl Entity for Player {
             // Standing and all other poses use default player eye height
             _ => f64::from(vanilla_entities::PLAYER.dimensions.eye_height),
         }
+    }
+
+    fn velocity(&self) -> DVec3 {
+        self.movement.lock().delta_movement
+    }
+
+    fn set_velocity(&self, velocity: DVec3) {
+        self.movement.lock().delta_movement = velocity
+    }
+
+    fn on_ground(&self) -> bool {
+        self.entity_state.lock().on_ground
     }
 
     fn hurt(&self, source: &DamageSource, amount: f32) -> bool {
