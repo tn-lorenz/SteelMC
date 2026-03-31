@@ -1,5 +1,6 @@
 //! This module contains entity-related traits and types.
 
+use std::ops::Mul;
 use std::sync::atomic::{AtomicI32, Ordering};
 use std::sync::{Arc, Weak};
 
@@ -510,13 +511,37 @@ pub trait Attackable: LivingEntity {
         );
     }
 
+    /// Causes extra knockback under certain conditions (fully charged/sprinting) and alters attacker velocity.
+    /// `_old_mv` is equivalent to `final Vec3 oldMovement` but it isn't actually used anywhere.
+    fn cause_extra_knockback(&self, target: &dyn Attackable, kb: f64, _old_mv: DVec3) {
+        if kb <= 0.0 { return };
+
+        let (yaw, _pitch) = self.rotation();
+        let yaw_rad = yaw as f64 * std::f64::consts::PI / 180.0;
+
+        let x = yaw_rad.sin();
+        let z = -yaw_rad.cos();
+
+        target.knock_back(kb, x, z);
+
+        let old_vel = self.velocity();
+
+        let new_vel = DVec3::new(
+            old_vel.x * 0.6,
+            old_vel.y * 1.0,
+            old_vel.z * 0.6,
+        );
+
+        self.set_velocity(new_vel);
+    }
+
     /// Blocks an attack
-    fn block_using_item(&self, attacker: &Self) {
+    fn block_using_item(&self, attacker: &dyn Attackable) where Self: Sized {
         attacker.blocked_by_item(self);
     }
 
     /// Apply blocking knockback to defender
-    fn blocked_by_item(&self, defender: &Self) {
+    fn blocked_by_item(&self, defender: &dyn Attackable) {
         defender.knock_back(
             0.5,
             defender.position().x - self.position().x,
