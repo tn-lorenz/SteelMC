@@ -1751,17 +1751,6 @@ impl Player {
         client_view_distance.min(STEEL_CONFIG.view_distance)
     }
 
-    /// Returns the player's current velocity.
-    #[must_use]
-    pub fn get_delta_movement(&self) -> DVec3 {
-        self.movement.lock().delta_movement
-    }
-
-    /// Sets the player's velocity.
-    pub fn set_delta_movement(&self, velocity: DVec3) {
-        self.movement.lock().delta_movement = velocity;
-    }
-
     /// Returns the player's current gravity value.
     ///
     /// Matches vanilla `LivingEntity.getGravity()` which reads from `Attributes.GRAVITY`.

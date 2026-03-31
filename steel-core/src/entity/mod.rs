@@ -480,4 +480,49 @@ pub trait LivingEntity: Entity {
 
     /// Sets the entity's speed.
     fn set_speed(&self, speed: f32);
+
+    fn set_delta_movement(&self, velocity: DVec3) {
+        self.movement.lock().delta_movement = velocity;
+    }
+
+    fn get_delta_movement(&self) -> DVec3 {
+        self.movement.lock().delta_movement
+    }
+}
+
+pub trait Attackable: LivingEntity {
+    fn knock_back(&self, mut power: f64, mut xd: f64, mut zd: f64) {
+        power *= 1.0 /* - self.get_attribute_value(Attributes.KnockbackResistance)*/;
+        if power <= 0.0 { return }
+
+        // self.needs_sync = true;
+        let delta_movement: DVec3 = self.get_delta_movement();
+
+        while xd * xd + zd * zd < 1.0E-5 {
+            xd = (rand::random::<f64>() - rand::random::<f64>()) * 0.01;
+            zd = (rand::random::<f64>() - rand::random::<f64>()) * 0.01;
+        }
+
+        let delta_vec: DVec3 = DVec3::new(xd, 0.0, zd).normalize() * power;
+
+        let y = if self.on_ground() { delta_movement.y / 2.0 + power.min(0.4) } else { delta_movement.y };
+
+        self.set_delta_movement(DVec3::new(
+            delta_movement.x / 2.0 - delta_vec.x,
+            y,
+            delta_movement.z / 2.0 - delta_vec.z,)
+        );
+    }
+    
+    fn block_using_item(&self, attacker: &Self) {
+        attacker.blocked_by_item(self);
+    }
+
+    fn blocked_by_item(&self, defender: &Self) {
+        defender.knock_back(
+            0.5,
+            defender.position().x - self.position().x,
+            defender.position().z - self.position().z,
+        );
+    }
 }
