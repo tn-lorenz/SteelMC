@@ -4,6 +4,9 @@
 /steel-utils/src/generated
 /steel-core/src/behavior/generated
 
+# crash-logs
+rustc-ice-*.txt
+
 # Config
 /config
 /.tmp
