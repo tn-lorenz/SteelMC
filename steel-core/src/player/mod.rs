@@ -64,7 +64,7 @@ use steel_registry::blocks::shapes::AABBd;
 use steel_registry::entity_data::EntityPose;
 use steel_registry::entity_types::EntityTypeRef;
 use steel_registry::game_rules::GameRuleValue;
-use steel_registry::vanilla_entities;
+use steel_registry::{vanilla_entities, RegistryExt, DAMAGE_TYPE_REGISTRY, REGISTRY};
 use steel_registry::vanilla_entity_data::PlayerEntityData;
 use steel_registry::vanilla_game_rules::{
     ADVANCE_TIME, ELYTRA_MOVEMENT_CHECK, IMMEDIATE_RESPAWN, KEEP_INVENTORY, PLAYER_MOVEMENT_CHECK,
@@ -85,10 +85,7 @@ use text_components::{
 };
 use uuid::Uuid;
 
-use crate::entity::{
-    DEATH_DURATION, Entity, EntityLevelCallback, LivingEntityBase, NullEntityCallback,
-    RemovalReason,
-};
+use crate::entity::{DEATH_DURATION, Entity, EntityLevelCallback, LivingEntityBase, NullEntityCallback, RemovalReason, Attackable};
 use crate::player::player_inventory::PlayerInventory;
 use crate::server::Server;
 use crate::{command::commands::gamemode::get_gamemode_translation, inventory::SyncPlayerInv};
@@ -113,7 +110,7 @@ use steel_registry::{blocks::properties::Direction, item_stack::ItemStack};
 use crate::behavior::{BLOCK_BEHAVIORS, InteractionResult};
 use crate::block_entity::BlockEntity;
 use crate::block_entity::entities::SignBlockEntity;
-use steel_utils::BlockPos;
+use steel_utils::{BlockPos, Identifier};
 
 use steel_utils::types::InteractionHand;
 use steel_utils::{ChunkPos, translations};
@@ -132,6 +129,7 @@ use crate::inventory::{
 pub type PreviousMessageEntry = PreviousMessage;
 
 pub use steel_protocol::packets::common::{ChatVisibility, HumanoidArm, ParticleStatus};
+use steel_registry::damage_type::DamageTypeRegistry;
 
 /// Client-side settings sent via `SClientInformation` packet.
 /// This is stored separately from the packet struct to allow default initialization.
@@ -2574,6 +2572,33 @@ impl Player {
                 },
                 None,
             );
+
+            // TODO: don't make a tag on the spot, check the registry
+            let tag: Identifier = Identifier::new("minecraft", "no_knockback");
+            if source.is(&tag) {
+                return false
+            }
+
+            let mut xd = 0.0;
+            let mut zd = 0.0;
+
+            // TODO: THis is the projectile check. We need to impl PartialEq with pointer equality for `EntityType`, `EntityFlags`, `EntityDimension`
+            /*if let Some(id) = source.direct_entity_id {
+                if let Some(entity_type) = REGISTRY.entity_types.by_id(id as usize) {
+                    if entity_type == vanilla_entities::ARROW || entity_type == vanilla_entities::SPECTRAL_ARROW {
+                        // TODO: add this fn (with a better ame prob)
+                        let knockback_dir: DVec3 = entity_type.calculate_horizontal_hurt_knockback_direction(self, source);
+                        xd = -knockback_dir.x;
+                        zd = -knockback_dir.z;
+                    }
+                }
+            } else */ if let Some(source_pos) = source.source_position {
+                let player_pos = *self.position.lock();
+                xd = source_pos.x - player_pos.x;
+                zd = source_pos.z - player_pos.z;
+            }
+
+            self.knock_back(0.4, xd, zd);
         }
 
         if *self.entity_data.lock().health.get() <= 0.0 {
@@ -3051,6 +3076,8 @@ impl LivingEntity for Player {
         self.speed.store(speed);
     }
 }
+
+impl Attackable for Player {}
 
 /// Strips Minecraft formatting codes (§ followed by a character) from a string.
 ///

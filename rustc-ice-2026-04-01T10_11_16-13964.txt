@@ -1,0 +1,65 @@
+thread 'rustc' panicked at /rustc-dev/905b9269674ced4b5239f485609a3bf0ab02d01b/compiler\rustc_query_system\src\dep_graph\graph.rs:1417:9:
+assertion `left == right` failed: trying to encode a dep node twice
+  left: 623695
+ right: 4294967295
+stack backtrace:
+   0:     0x7ffdb09c16be - std::backtrace_rs::backtrace::win64::trace
+                               at /rustc/905b9269674ced4b5239f485609a3bf0ab02d01b/library\std\src\..\..\backtrace\src\backtrace\win64.rs:85
+   1:     0x7ffdb09c16be - std::backtrace_rs::backtrace::trace_unsynchronized
+                               at /rustc/905b9269674ced4b5239f485609a3bf0ab02d01b/library\std\src\..\..\backtrace\src\backtrace\mod.rs:66
+   2:     0x7ffdb09c16be - std::backtrace::Backtrace::create
+                               at /rustc/905b9269674ced4b5239f485609a3bf0ab02d01b/library\std\src\backtrace.rs:331
+   3:     0x7ffdb09c15fa - std::backtrace::Backtrace::force_capture
+                               at /rustc/905b9269674ced4b5239f485609a3bf0ab02d01b/library\std\src\backtrace.rs:312
+   4:     0x7ffdb219a0a6 - core[b7e39c7d70c6637b]::slice::sort::unstable::heapsort::heapsort::<((rustc_lint_defs[953efda4b041854f]::Level, &str), usize), <((rustc_lint_defs[953efda4b041854f]::Level, &str), usize) as core[b7e39c7d70c6637b]::cmp::PartialOrd>::lt>
+   5:     0x7ffdb09d4d74 - std::panicking::panic_with_hook
+                               at /rustc/905b9269674ced4b5239f485609a3bf0ab02d01b/library\std\src\panicking.rs:833
+   6:     0x7ffdb09baa34 - std::panicking::panic_handler::closure$0
+                               at /rustc/905b9269674ced4b5239f485609a3bf0ab02d01b/library\std\src\panicking.rs:698
+   7:     0x7ffdb09b7f1f - std::sys::backtrace::__rust_end_short_backtrace<std::panicking::panic_handler::closure_env$0,never$>
+                               at /rustc/905b9269674ced4b5239f485609a3bf0ab02d01b/library\std\src\sys\backtrace.rs:182
+   8:     0x7ffdb09bb60e - std::panicking::panic_handler
+                               at /rustc/905b9269674ced4b5239f485609a3bf0ab02d01b/library\std\src\panicking.rs:689
+   9:     0x7ffdb4c185bd - core::panicking::panic_fmt
+                               at /rustc/905b9269674ced4b5239f485609a3bf0ab02d01b/library\core\src\panicking.rs:80
+  10:     0x7ffdb4c1847a - core::panicking::assert_failed_inner
+                               at /rustc/905b9269674ced4b5239f485609a3bf0ab02d01b/library\core\src\panicking.rs:434
+  11:     0x7ffdb4b153d4 - core[b7e39c7d70c6637b]::panicking::assert_failed::<u32, u32>
+  12:     0x7ffdb18a18ca - RINvNtNtCs8zLTy0MHxbF_18rustc_query_system5query8plumbing17try_execute_queryINtCsjAEywdUprJH_16rustc_query_impl26SemiDynamicQueryDispatcherINtNtCs7Ga7nlX4jfR_21rustc_data_structures9vec_cache8VecCacheNtNtCsaQk5zflhUUW_10rustc_span6def_id10LocalDefIdINtNtNt
+  13:     0x7ffdb403ba88 - core[b7e39c7d70c6637b]::panicking::assert_matches_failed::<rustc_query_system[63e6be8bbbd63b01]::dep_graph::graph::DepNodeColor>
+  14:     0x7ffdb055cde6 - rustc_query_impl[e430d6a35b9dd397]::profiling_support::alloc_self_profile_query_strings
+  15:     0x7ffdb17ff9d9 - RINvMs6_NtCs7vLRAjAU1Yp_9hashbrown3rawINtB6_8RawTableTNtNtNtCs8zLTy0MHxbF_18rustc_query_system9dep_graph8dep_node7DepNodeTNtNtCsaQk5zflhUUW_10rustc_span6def_id5DefIdNtNtCs9cfhD1DNBGC_13rustc_type_ir5solve14SizedTraitKindEEE14reserve_rehashNCINvNtB8_3map11m
+  16:     0x7ffdb17ff94f - RINvMs6_NtCs7vLRAjAU1Yp_9hashbrown3rawINtB6_8RawTableTNtNtNtCs8zLTy0MHxbF_18rustc_query_system9dep_graph8dep_node7DepNodeTNtNtCsaQk5zflhUUW_10rustc_span6def_id5DefIdNtNtCs9cfhD1DNBGC_13rustc_type_ir5solve14SizedTraitKindEEE14reserve_rehashNCINvNtB8_3map11m
+  17:     0x7ffdb17ff733 - RINvMs6_NtCs7vLRAjAU1Yp_9hashbrown3rawINtB6_8RawTableTNtNtNtCs8zLTy0MHxbF_18rustc_query_system9dep_graph8dep_node7DepNodeTNtNtCsaQk5zflhUUW_10rustc_span6def_id5DefIdNtNtCs9cfhD1DNBGC_13rustc_type_ir5solve14SizedTraitKindEEE14reserve_rehashNCINvNtB8_3map11m
+  18:     0x7ffdb0430c06 - rustc_query_system[63e6be8bbbd63b01]::query::plumbing::ensure_must_run::<rustc_query_impl[e430d6a35b9dd397]::SemiDynamicQueryDispatcher<rustc_query_system[63e6be8bbbd63b01]::query::caches::DefIdCache<rustc_middle[be6b07119875311b]::query::erase::ErasedData<[u8; 16usize]>>, false, false, false>>
+  19:     0x7ffdb050551d - rustc_query_impl[e430d6a35b9dd397]::profiling_support::alloc_self_profile_query_strings
+  20:     0x7ffdb34f33d2 - core[b7e39c7d70c6637b]::slice::sort::unstable::heapsort::heapsort::<(bool, u32), <(bool, u32) as core[b7e39c7d70c6637b]::cmp::PartialOrd>::lt>
+  21:     0x7ffdb34b24e8 - core[b7e39c7d70c6637b]::slice::sort::unstable::heapsort::heapsort::<(bool, u32), <(bool, u32) as core[b7e39c7d70c6637b]::cmp::PartialOrd>::lt>
+  22:     0x7ffdb34f5011 - core[b7e39c7d70c6637b]::slice::sort::unstable::heapsort::heapsort::<(bool, u32), <(bool, u32) as core[b7e39c7d70c6637b]::cmp::PartialOrd>::lt>
+  23:     0x7ffdb34b254f - core[b7e39c7d70c6637b]::slice::sort::unstable::heapsort::heapsort::<(bool, u32), <(bool, u32) as core[b7e39c7d70c6637b]::cmp::PartialOrd>::lt>
+  24:     0x7ffdb34f5011 - core[b7e39c7d70c6637b]::slice::sort::unstable::heapsort::heapsort::<(bool, u32), <(bool, u32) as core[b7e39c7d70c6637b]::cmp::PartialOrd>::lt>
+  25:     0x7ffdb34b254f - core[b7e39c7d70c6637b]::slice::sort::unstable::heapsort::heapsort::<(bool, u32), <(bool, u32) as core[b7e39c7d70c6637b]::cmp::PartialOrd>::lt>
+  26:     0x7ffdb34f5011 - core[b7e39c7d70c6637b]::slice::sort::unstable::heapsort::heapsort::<(bool, u32), <(bool, u32) as core[b7e39c7d70c6637b]::cmp::PartialOrd>::lt>
+  27:     0x7ffdb34b254f - core[b7e39c7d70c6637b]::slice::sort::unstable::heapsort::heapsort::<(bool, u32), <(bool, u32) as core[b7e39c7d70c6637b]::cmp::PartialOrd>::lt>
+  28:     0x7ffdb34f5011 - core[b7e39c7d70c6637b]::slice::sort::unstable::heapsort::heapsort::<(bool, u32), <(bool, u32) as core[b7e39c7d70c6637b]::cmp::PartialOrd>::lt>
+  29:     0x7ffdb34b254f - core[b7e39c7d70c6637b]::slice::sort::unstable::heapsort::heapsort::<(bool, u32), <(bool, u32) as core[b7e39c7d70c6637b]::cmp::PartialOrd>::lt>
+  30:     0x7ffdb34f5011 - core[b7e39c7d70c6637b]::slice::sort::unstable::heapsort::heapsort::<(bool, u32), <(bool, u32) as core[b7e39c7d70c6637b]::cmp::PartialOrd>::lt>
+  31:     0x7ffdb34b254f - core[b7e39c7d70c6637b]::slice::sort::unstable::heapsort::heapsort::<(bool, u32), <(bool, u32) as core[b7e39c7d70c6637b]::cmp::PartialOrd>::lt>
+  32:     0x7ffdb35a42fe - <rustc_hir_analysis[f80b68e98bfba9d2]::check::compare_impl_item::RemapHiddenTyRegions as rustc_type_ir[6b2116fe26a701f0]::fold::FallibleTypeFolder<rustc_middle[be6b07119875311b]::ty::context::TyCtxt>>::try_fold_region
+  33:     0x7ffdb4bee086 - <rustc_thread_pool[215a04d0b2179837]::registry::WorkerThread>::wait_or_steal_until_cold
+  34:     0x7ffdb4bec59c - <rustc_thread_pool[215a04d0b2179837]::registry::ThreadBuilder>::run
+  35:     0x7ffdb2190f05 - RINvNtNtCsgJuPOoFMnb2_3std3sys9backtrace28___rust_begin_short_backtraceNCNCNCINvMs1_Cs2RwRe2WC9Vj_17rustc_thread_poolNtB1k_17ThreadPoolBuilder12build_scopedNCNCNCINvNtCs2pIwcGqhnNh_15rustc_interface4util31run_in_thread_pool_with_globalsNCINvNtB2F_9interfac
+  36:     0x7ffdb219ff82 - core[b7e39c7d70c6637b]::slice::sort::unstable::heapsort::heapsort::<((rustc_lint_defs[953efda4b041854f]::Level, &str), usize), <((rustc_lint_defs[953efda4b041854f]::Level, &str), usize) as core[b7e39c7d70c6637b]::cmp::PartialOrd>::lt>
+  37:     0x7ffdb09de88c - std::sys::thread::windows::impl$0::new::thread_start
+                               at /rustc/905b9269674ced4b5239f485609a3bf0ab02d01b/library\std\src\sys\thread\windows.rs:58
+  38:     0x7ffe48de7374 - BaseThreadInitThunk
+  39:     0x7ffe4a67cc91 - RtlUserThreadStart
+
+
+rustc version: 1.95.0-nightly (905b92696 2026-01-31)
+platform: x86_64-pc-windows-msvc
+
+query stack during panic:
+#0 [mir_drops_elaborated_and_const_checked] elaborating drops for `blocks::behavior::<impl at steel-registry\src\blocks\behavior.rs:46:1: 46:17>::new`
+#1 [analysis] running analysis passes on crate `steel_registry`
+end of query stack

@@ -1,6 +1,5 @@
 //! This module contains entity-related traits and types.
 
-use std::ops::Mul;
 use std::sync::atomic::{AtomicI32, Ordering};
 use std::sync::{Arc, Weak};
 
@@ -516,7 +515,7 @@ pub trait Attackable: LivingEntity {
     fn cause_extra_knockback(&self, target: &dyn Attackable, kb: f64, _old_mv: DVec3) {
         if kb <= 0.0 { return };
 
-        let (yaw, _pitch) = self.rotation();
+        let (yaw, _) = self.rotation();
         let yaw_rad = yaw as f64 * std::f64::consts::PI / 180.0;
 
         let x = yaw_rad.sin();
