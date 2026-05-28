@@ -605,7 +605,10 @@ pub trait Attackable: LivingEntity {
     }
 
     /// Blocks an attack
-    fn block_using_item(&self, attacker: &dyn Attackable) where Self: Sized {
+    fn block_using_item(&self, attacker: &dyn Attackable)
+    where
+        Self: Sized,
+    {
         attacker.blocked_by_item(self);
     }
 

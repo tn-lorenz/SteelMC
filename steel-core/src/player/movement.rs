@@ -717,8 +717,7 @@ impl Player {
         self.movement.lock().delta_movement = velocity;
     }
 
-    // TODO: stub impl; use this later for combat mechanics
-    #[allow(dead_code)]
+    #[expect(dead_code, reason = "stub impl; use this later for combat mechanics")]
     fn on_ground(&self) -> bool {
         self.entity_state.lock().on_ground
     }
