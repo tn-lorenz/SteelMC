@@ -546,3 +546,70 @@ pub trait LivingEntity: Entity {
         }
     }
 }
+
+/// A trait containing combat-related functions, based on the `LivingEntity` trait.
+pub trait Attackable: LivingEntity {
+    /// 26.1 Knockback calculation
+    fn knock_back(&self, mut power: f64, mut xd: f64, mut zd: f64) {
+        // TODO: complete this, once we have Attributes
+        power *= 1.0 /* - self.get_attribute_value(Attributes.KnockbackResistance)*/;
+        if power <= 0.0 { return }
+
+        // TODO: whatever this is:
+        // self.needs_sync = true;
+        let delta_movement: DVec3 = self.velocity();
+
+        while xd * xd + zd * zd < 1.0E-5 {
+            xd = (rand::random::<f64>() - rand::random::<f64>()) * 0.01; // TODO: these are present 1:1 somewhere else in `Player`
+            zd = (rand::random::<f64>() - rand::random::<f64>()) * 0.01;
+        }
+
+        let delta_vec: DVec3 = DVec3::new(xd, 0.0, zd).normalize() * power;
+
+        let y = if self.on_ground() { delta_movement.y / 2.0 + power.min(0.4) } else { delta_movement.y };
+
+        self.set_velocity(DVec3::new(
+            delta_movement.x / 2.0 - delta_vec.x,
+            y,
+            delta_movement.z / 2.0 - delta_vec.z,)
+        );
+    }
+
+    /// Causes extra knockback under certain conditions (fully charged/sprinting) and alters attacker velocity.
+    /// `_old_mv` is equivalent to `final Vec3 oldMovement` but it isn't actually used anywhere.
+    fn cause_extra_knockback(&self, target: &dyn Attackable, kb: f64, _old_mv: DVec3) {
+        if kb <= 0.0 { return };
+
+        let (yaw, _) = self.rotation();
+        let yaw_rad = yaw as f64 * std::f64::consts::PI / 180.0;
+
+        let x = yaw_rad.sin();
+        let z = -yaw_rad.cos();
+
+        target.knock_back(kb, x, z);
+
+        let old_vel = self.velocity();
+
+        let new_vel = DVec3::new(
+            old_vel.x * 0.6,
+            old_vel.y * 1.0,
+            old_vel.z * 0.6,
+        );
+
+        self.set_velocity(new_vel);
+    }
+
+    /// Blocks an attack
+    fn block_using_item(&self, attacker: &dyn Attackable) where Self: Sized {
+        attacker.blocked_by_item(self);
+    }
+
+    /// Apply blocking knockback to defender
+    fn blocked_by_item(&self, defender: &dyn Attackable) {
+        defender.knock_back(
+            0.5,
+            defender.position().x - self.position().x,
+            defender.position().z - self.position().z,
+        );
+    }
+}

@@ -78,10 +78,7 @@ use uuid::Uuid;
 use crate::config::RuntimeConfig;
 use crate::entity::attribute::AttributeMap;
 use crate::entity::damage::DamageSource;
-use crate::entity::{
-    DEATH_DURATION, Entity, EntityLevelCallback, LivingEntityBase, NullEntityCallback,
-    RemovalReason,
-};
+use crate::entity::{DEATH_DURATION, Entity, EntityLevelCallback, LivingEntityBase, NullEntityCallback, RemovalReason, Attackable};
 use crate::inventory::SyncPlayerInv;
 use crate::player::experience::Experience;
 use crate::player::player_inventory::PlayerInventory;
@@ -94,7 +91,7 @@ use steel_protocol::packets::{
 };
 use steel_registry::item_stack::ItemStack;
 
-use steel_utils::BlockPos;
+use steel_utils::{BlockPos, Identifier};
 
 use steel_utils::ChunkPos;
 
@@ -699,6 +696,33 @@ impl Player {
                 None,
             );
         }
+
+        // TODO: don't make a tag on the spot, check the registry
+        let tag: Identifier = Identifier::new("minecraft", "no_knockback");
+        if source.is(&tag) {
+            return false
+        }
+
+        let mut xd = 0.0;
+        let mut zd = 0.0;
+
+        // TODO: This is the projectile check. We need to impl PartialEq with pointer equality for `EntityType`, `EntityFlags`, `EntityDimension` or maybe I'm stupid, idk
+        /*if let Some(id) = source.direct_entity_id {
+            if let Some(entity_type) = REGISTRY.entity_types.by_id(id as usize) {
+                if entity_type == vanilla_entities::ARROW || entity_type == vanilla_entities::SPECTRAL_ARROW {
+                    // TODO: add this fn (with a better name prob)
+                    let knockback_dir: DVec3 = entity_type.calculate_horizontal_hurt_knockback_direction(self, source);
+                    xd = -knockback_dir.x;
+                    zd = -knockback_dir.z;
+                }
+            }
+        } else */ if let Some(source_pos) = source.source_position {
+            let player_pos = *self.position.lock();
+            xd = source_pos.x - player_pos.x;
+            zd = source_pos.z - player_pos.z;
+        }
+
+        self.knock_back(0.4, xd, zd);
 
         if *self.entity_data.lock().health.get() <= 0.0 {
             self.die(source);
@@ -1342,3 +1366,5 @@ impl TextResolutor for Player {
         None
     }
 }
+
+impl Attackable for Player {}

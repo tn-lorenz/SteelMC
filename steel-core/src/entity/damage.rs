@@ -2,6 +2,8 @@
 
 use glam::DVec3;
 use steel_registry::damage_type::{DamageScaling, DamageType};
+use steel_registry::{TaggedRegistryExt, REGISTRY};
+use steel_utils::Identifier;
 
 /// Describes how an entity was damaged.
 #[derive(Debug, Clone)]
@@ -54,5 +56,11 @@ impl DamageSource {
             // TODO: WhenCausedByLivingNonPlayer needs entity type checking
             DamageScaling::Always | DamageScaling::WhenCausedByLivingNonPlayer => true,
         }
+    }
+
+    /// Whether this damage is of a certain type.
+    pub fn is(&self, tag: &Identifier) -> bool {
+        let reg = &REGISTRY.damage_types;
+        reg.is_in_tag(self.damage_type, tag)
     }
 }

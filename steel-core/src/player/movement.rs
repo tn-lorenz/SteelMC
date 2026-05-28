@@ -564,7 +564,7 @@ impl Player {
                 if !was_on_ground && packet.on_ground {
                     validation.move_delta.y = 0.0;
                 }
-                self.set_delta_movement(validation.move_delta);
+                self.set_velocity(validation.move_delta);
 
                 let moved_upwards = validation.move_delta.y > 0.0;
                 if was_on_ground && !packet.on_ground && moved_upwards {
@@ -634,7 +634,7 @@ impl Player {
                             mv.last_sent_on_ground = packet.on_ground;
                         }
 
-                        let delta = self.get_delta_movement();
+                        let delta = self.velocity();
                         let sync_packet = CEntityPositionSync {
                             entity_id: self.id,
                             x: pos.x,
@@ -667,7 +667,7 @@ impl Player {
                         mv.last_sent_on_ground = packet.on_ground;
                     }
 
-                    let delta = self.get_delta_movement();
+                    let delta = self.velocity();
                     let sync_packet = CEntityPositionSync {
                         entity_id: self.id,
                         x: pos.x,
@@ -708,13 +708,17 @@ impl Player {
 
     /// Returns the player's current velocity.
     #[must_use]
-    pub fn get_delta_movement(&self) -> DVec3 {
+    pub fn velocity(&self) -> DVec3 {
         self.movement.lock().delta_movement
     }
 
     /// Sets the player's velocity.
-    pub fn set_delta_movement(&self, velocity: DVec3) {
+    pub fn set_velocity(&self, velocity: DVec3) {
         self.movement.lock().delta_movement = velocity;
+    }
+
+    fn on_ground(&self) -> bool {
+        self.entity_state.lock().on_ground
     }
 
     /// Returns the player's current gravity value.
