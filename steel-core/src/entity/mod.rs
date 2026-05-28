@@ -553,7 +553,9 @@ pub trait Attackable: LivingEntity {
     fn knock_back(&self, mut power: f64, mut xd: f64, mut zd: f64) {
         // TODO: complete this, once we have Attributes
         power *= 1.0 /* - self.get_attribute_value(Attributes.KnockbackResistance)*/;
-        if power <= 0.0 { return }
+        if power <= 0.0 {
+            return;
+        }
 
         // TODO: whatever this is:
         // self.needs_sync = true;
@@ -566,19 +568,25 @@ pub trait Attackable: LivingEntity {
 
         let delta_vec: DVec3 = DVec3::new(xd, 0.0, zd).normalize() * power;
 
-        let y = if self.on_ground() { delta_movement.y / 2.0 + power.min(0.4) } else { delta_movement.y };
+        let y = if self.on_ground() {
+            delta_movement.y / 2.0 + power.min(0.4)
+        } else {
+            delta_movement.y
+        };
 
         self.set_velocity(DVec3::new(
             delta_movement.x / 2.0 - delta_vec.x,
             y,
-            delta_movement.z / 2.0 - delta_vec.z,)
-        );
+            delta_movement.z / 2.0 - delta_vec.z,
+        ));
     }
 
     /// Causes extra knockback under certain conditions (fully charged/sprinting) and alters attacker velocity.
     /// `_old_mv` is equivalent to `final Vec3 oldMovement` but it isn't actually used anywhere.
     fn cause_extra_knockback(&self, target: &dyn Attackable, kb: f64, _old_mv: DVec3) {
-        if kb <= 0.0 { return };
+        if kb <= 0.0 {
+            return;
+        };
 
         let (yaw, _) = self.rotation();
         let yaw_rad = yaw as f64 * std::f64::consts::PI / 180.0;
@@ -590,17 +598,16 @@ pub trait Attackable: LivingEntity {
 
         let old_vel = self.velocity();
 
-        let new_vel = DVec3::new(
-            old_vel.x * 0.6,
-            old_vel.y * 1.0,
-            old_vel.z * 0.6,
-        );
+        let new_vel = DVec3::new(old_vel.x * 0.6, old_vel.y * 1.0, old_vel.z * 0.6);
 
         self.set_velocity(new_vel);
     }
 
     /// Blocks an attack
-    fn block_using_item(&self, attacker: &dyn Attackable) where Self: Sized {
+    fn block_using_item(&self, attacker: &dyn Attackable)
+    where
+        Self: Sized,
+    {
         attacker.blocked_by_item(self);
     }
 

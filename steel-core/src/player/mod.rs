@@ -78,7 +78,10 @@ use uuid::Uuid;
 use crate::config::RuntimeConfig;
 use crate::entity::attribute::AttributeMap;
 use crate::entity::damage::DamageSource;
-use crate::entity::{DEATH_DURATION, Entity, EntityLevelCallback, LivingEntityBase, NullEntityCallback, RemovalReason, Attackable};
+use crate::entity::{
+    Attackable, DEATH_DURATION, Entity, EntityLevelCallback, LivingEntityBase, NullEntityCallback,
+    RemovalReason,
+};
 use crate::inventory::SyncPlayerInv;
 use crate::player::experience::Experience;
 use crate::player::player_inventory::PlayerInventory;
@@ -700,7 +703,7 @@ impl Player {
         // TODO: don't make a tag on the spot, check the registry
         let tag: Identifier = Identifier::new("minecraft", "no_knockback");
         if source.is(&tag) {
-            return false
+            return false;
         }
 
         let mut xd = 0.0;
@@ -716,7 +719,8 @@ impl Player {
                     zd = -knockback_dir.z;
                 }
             }
-        } else */ if let Some(source_pos) = source.source_position {
+        } else */
+        if let Some(source_pos) = source.source_position {
             let player_pos = *self.position.lock();
             xd = source_pos.x - player_pos.x;
             zd = source_pos.z - player_pos.z;

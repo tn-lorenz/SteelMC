@@ -2,7 +2,7 @@
 
 use glam::DVec3;
 use steel_registry::damage_type::{DamageScaling, DamageType};
-use steel_registry::{TaggedRegistryExt, REGISTRY};
+use steel_registry::{REGISTRY, TaggedRegistryExt};
 use steel_utils::Identifier;
 
 /// Describes how an entity was damaged.
