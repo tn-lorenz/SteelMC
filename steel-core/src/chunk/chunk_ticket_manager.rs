@@ -394,7 +394,16 @@ impl ChunkTicketManager {
             }
         }
 
-        // Find simulation-only changes.
+        self.record_simulation_only_changes(&old_levels, &old_simulation_levels);
+
+        &self.changes
+    }
+
+    fn record_simulation_only_changes(
+        &mut self,
+        old_levels: &FxHashMap<ChunkPos, ChunkTicketLevel>,
+        old_simulation_levels: &FxHashMap<ChunkPos, ChunkTicketLevel>,
+    ) {
         for (&pos, &new_level) in &self.simulation_levels {
             let load_changed = old_levels.get(&pos) != self.levels.get(&pos);
             if load_changed {
@@ -423,8 +432,6 @@ impl ChunkTicketManager {
                 new_simulation_level: None,
             });
         }
-
-        &self.changes
     }
 
     /// Returns the propagated level at position. Call `run_all_updates()` first.

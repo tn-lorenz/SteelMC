@@ -41,7 +41,7 @@ fn optional_ticket_level_raw(level: Option<ChunkTicketLevel>) -> u8 {
     level.map_or(NO_TICKET_LEVEL, ChunkTicketLevel::raw)
 }
 
-fn optional_ticket_level_from_raw(raw: u8) -> Option<ChunkTicketLevel> {
+const fn optional_ticket_level_from_raw(raw: u8) -> Option<ChunkTicketLevel> {
     if raw == NO_TICKET_LEVEL {
         None
     } else {

@@ -44,6 +44,15 @@ use crate::worldgen::{ChunkGeneratorType, WorldGenContext};
 
 const GENERATION_THREAD_MULTIPLE: usize = 2;
 
+/// Whether a scheduling tick should enforce the generation task cap.
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+pub enum GenerationTaskCap {
+    /// Normal server ticking path.
+    RespectMaxCap,
+    /// Startup/manual path only; drains all pending generation tasks.
+    IgnoreMaxCap,
+}
+
 /// Timing information for the game tick portion of chunk map operations.
 #[derive(Debug, Default)]
 pub struct ChunkMapGameTickTimings {
@@ -136,53 +145,6 @@ impl GenerationTaskPriority {
     }
 }
 
-#[cfg(test)]
-mod tests {
-    use super::*;
-
-    #[test]
-    fn generation_priority_prefers_simulation_tickets() {
-        let normal_strong = GenerationTaskPriority::for_levels(
-            Some(ChunkTicketLevel::for_full_chunk_radius(8)),
-            None,
-        );
-        let simulated_weak = GenerationTaskPriority::for_levels(
-            Some(ChunkTicketLevel::for_full_chunk_radius(1)),
-            Some(ChunkTicketLevel::for_full_chunk_radius(1)),
-        );
-
-        assert!(simulated_weak < normal_strong);
-    }
-
-    #[test]
-    fn generation_priority_orders_simulation_by_simulation_level() {
-        let weaker_simulation = GenerationTaskPriority::for_levels(
-            Some(ChunkTicketLevel::for_full_chunk_radius(8)),
-            Some(ChunkTicketLevel::for_full_chunk_radius(1)),
-        );
-        let stronger_simulation = GenerationTaskPriority::for_levels(
-            Some(ChunkTicketLevel::for_full_chunk_radius(1)),
-            Some(ChunkTicketLevel::for_full_chunk_radius(4)),
-        );
-
-        assert!(stronger_simulation < weaker_simulation);
-    }
-
-    #[test]
-    fn generation_priority_orders_normal_by_load_level() {
-        let weaker_load = GenerationTaskPriority::for_levels(
-            Some(ChunkTicketLevel::for_full_chunk_radius(1)),
-            None,
-        );
-        let stronger_load = GenerationTaskPriority::for_levels(
-            Some(ChunkTicketLevel::for_full_chunk_radius(4)),
-            None,
-        );
-
-        assert!(stronger_load < weaker_load);
-    }
-}
-
 struct RunningGenerationTaskPermit {
     chunk_map: Arc<ChunkMap>,
 }
@@ -251,6 +213,9 @@ impl ChunkMap {
     }
 
     /// Loads full chunks in a square radius, runs `f`, then removes the temporary ticket.
+    ///
+    /// This bypasses the generation task cap while waiting, so it should only
+    /// be used outside normally ticking server situations.
     pub async fn with_full_chunks_in_radius<F, R>(
         self: &Arc<Self>,
         center: ChunkPos,
@@ -263,7 +228,9 @@ impl ChunkMap {
         let ticket = ChunkTicket::full_chunks(radius);
 
         self.chunk_tickets.lock().add_ticket(center, ticket);
-        self.tick_scheduling();
+        // This helper is used before the normal scheduling loop is driving
+        // generation, so it drains queued startup work immediately.
+        self.tick_scheduling(GenerationTaskCap::IgnoreMaxCap);
 
         let mut holders = Vec::new();
         let radius = i32::from(radius);
@@ -272,39 +239,24 @@ impl ChunkMap {
                 let pos = ChunkPos::new(center.0.x + dx, center.0.y + dz);
                 let Some(holder) = self.chunks.read_sync(&pos, |_, holder| holder.clone()) else {
                     self.chunk_tickets.lock().remove_ticket(center, ticket);
-                    self.tick_scheduling();
+                    self.tick_scheduling(GenerationTaskCap::IgnoreMaxCap);
                     return None;
                 };
                 holders.push(holder);
             }
         }
 
-        loop {
-            let mut all_ready = true;
-            for holder in &holders {
-                if holder.is_status_disallowed(ChunkStatus::Full) {
-                    self.chunk_tickets.lock().remove_ticket(center, ticket);
-                    self.tick_scheduling();
-                    return None;
-                }
-
-                if holder.try_chunk(ChunkStatus::Full).is_none() {
-                    all_ready = false;
-                    break;
-                }
+        for holder in holders {
+            if holder.await_chunk(ChunkStatus::Full).await.is_none() {
+                self.chunk_tickets.lock().remove_ticket(center, ticket);
+                self.tick_scheduling(GenerationTaskCap::IgnoreMaxCap);
+                return None;
             }
-
-            if all_ready {
-                break;
-            }
-
-            self.tick_scheduling();
-            tokio::time::sleep(Duration::from_millis(1)).await;
         }
 
         let result = f();
         self.chunk_tickets.lock().remove_ticket(center, ticket);
-        self.tick_scheduling();
+        self.tick_scheduling(GenerationTaskCap::IgnoreMaxCap);
 
         Some(result)
     }
@@ -460,7 +412,7 @@ impl ChunkMap {
 
     /// Runs queued generation tasks.
     #[instrument(level = "trace", skip(self))]
-    pub fn run_generation_tasks_b(&self) {
+    pub fn run_generation_tasks_b(&self, generation_task_cap: GenerationTaskCap) {
         let mut pending = self.pending_generation_tasks.lock();
         if pending.is_empty() {
             return;
@@ -471,27 +423,35 @@ impl ChunkMap {
             return;
         }
 
-        let max_running_tasks = self.max_running_generation_tasks();
         let running_tasks = self.running_generation_tasks.load(Ordering::Acquire);
-        let available_slots = max_running_tasks.saturating_sub(running_tasks);
-        if available_slots == 0 {
-            tracing::trace!(
-                pending = pending.len(),
-                running_tasks,
-                max_running_tasks,
-                "Generation task cap reached"
-            );
-            return;
-        }
+        let max_running_tasks = self.max_running_generation_tasks();
+        let task_count = match generation_task_cap {
+            GenerationTaskCap::RespectMaxCap => {
+                let available_slots = max_running_tasks.saturating_sub(running_tasks);
+                if available_slots == 0 {
+                    tracing::trace!(
+                        pending = pending.len(),
+                        running_tasks,
+                        max_running_tasks,
+                        "Generation task cap reached"
+                    );
+                    return;
+                }
 
-        pending.sort_by_cached_key(|task| self.generation_task_priority(task));
-
-        let task_count = pending.len().min(available_slots);
+                let task_count = pending.len().min(available_slots);
+                if task_count < pending.len() {
+                    pending.sort_by_cached_key(|task| self.generation_task_priority(task));
+                }
+                task_count
+            }
+            GenerationTaskCap::IgnoreMaxCap => pending.len(),
+        };
         tracing::trace!(
             task_count,
             pending = pending.len(),
             running_tasks,
             max_running_tasks,
+            ?generation_task_cap,
             "Running generation tasks"
         );
         let tasks = pending.drain(..task_count).collect::<Vec<_>>();
@@ -675,7 +635,10 @@ impl ChunkMap {
     ///
     /// Runs on its own independent tick loop, separate from the game tick.
     #[instrument(level = "trace", skip(self), name = "chunk_map_scheduling_tick")]
-    pub fn tick_scheduling(self: &Arc<Self>) -> ChunkMapSchedulingTimings {
+    pub fn tick_scheduling(
+        self: &Arc<Self>,
+        generation_task_cap: GenerationTaskCap,
+    ) -> ChunkMapSchedulingTimings {
         let mut timings = ChunkMapSchedulingTimings::default();
 
         // Only hold the ticket lock for run_all_updates — holder creation and
@@ -739,7 +702,7 @@ impl ChunkMap {
         {
             let _span = tracing::trace_span!("run_generation").entered();
             let start = Instant::now();
-            self.run_generation_tasks_b();
+            self.run_generation_tasks_b(generation_task_cap);
             timings.run_generation = start.elapsed();
         }
 
@@ -1051,5 +1014,52 @@ impl ChunkMap {
         );
 
         Ok(saved_count)
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    #[test]
+    fn generation_priority_prefers_simulation_tickets() {
+        let normal_strong = GenerationTaskPriority::for_levels(
+            Some(ChunkTicketLevel::for_full_chunk_radius(8)),
+            None,
+        );
+        let simulated_weak = GenerationTaskPriority::for_levels(
+            Some(ChunkTicketLevel::for_full_chunk_radius(1)),
+            Some(ChunkTicketLevel::for_full_chunk_radius(1)),
+        );
+
+        assert!(simulated_weak < normal_strong);
+    }
+
+    #[test]
+    fn generation_priority_orders_simulation_by_simulation_level() {
+        let weaker_simulation = GenerationTaskPriority::for_levels(
+            Some(ChunkTicketLevel::for_full_chunk_radius(8)),
+            Some(ChunkTicketLevel::for_full_chunk_radius(1)),
+        );
+        let stronger_simulation = GenerationTaskPriority::for_levels(
+            Some(ChunkTicketLevel::for_full_chunk_radius(1)),
+            Some(ChunkTicketLevel::for_full_chunk_radius(4)),
+        );
+
+        assert!(stronger_simulation < weaker_simulation);
+    }
+
+    #[test]
+    fn generation_priority_orders_normal_by_load_level() {
+        let weaker_load = GenerationTaskPriority::for_levels(
+            Some(ChunkTicketLevel::for_full_chunk_radius(1)),
+            None,
+        );
+        let stronger_load = GenerationTaskPriority::for_levels(
+            Some(ChunkTicketLevel::for_full_chunk_radius(4)),
+            None,
+        );
+
+        assert!(stronger_load < weaker_load);
     }
 }

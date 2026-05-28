@@ -227,36 +227,6 @@ impl ChunkMap {
         ChunkRequestHandle::new(self.clone(), request)
     }
 
-    /// Requests a square of full chunks and marks those chunks as simulated.
-    #[must_use]
-    pub fn request_simulated_square(
-        self: &Arc<Self>,
-        center: ChunkPos,
-        radius: u8,
-        ticket_kind: ChunkTicketKind,
-    ) -> ChunkRequestHandle {
-        let radius = i32::from(radius);
-        let diameter = radius * 2 + 1;
-        let capacity = (diameter * diameter) as usize;
-        let mut positions = Vec::with_capacity(capacity);
-
-        for dz in -radius..=radius {
-            for dx in -radius..=radius {
-                positions.push(ChunkPos::new(center.0.x + dx, center.0.y + dz));
-            }
-        }
-
-        ChunkRequestHandle::new_with_ticket(
-            self.clone(),
-            ChunkRequest {
-                status: ChunkStatus::Full,
-                positions,
-                ticket_kind,
-            },
-            ChunkTicket::simulated_full_chunks(0),
-        )
-    }
-
     /// Requests one chunk at `status`.
     #[must_use]
     pub fn request_chunk(
