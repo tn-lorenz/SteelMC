@@ -28,11 +28,13 @@ use crate::behavior::BlockStateBehaviorExt;
 use crate::behavior::{BLOCK_BEHAVIORS, FLUID_BEHAVIORS};
 use crate::chunk::chunk_holder::ChunkHolder;
 use crate::chunk::chunk_ticket_manager::{
-    ChunkTicketManager, LevelChange, MAX_VIEW_DISTANCE, is_full,
+    ChunkTicket, ChunkTicketLevel, ChunkTicketManager, LevelChange, is_full, is_ticked,
 };
 use crate::chunk::player_chunk_view::PlayerChunkView;
-use crate::chunk::{chunk_access::ChunkAccess, chunk_ticket_manager::is_ticked};
-use crate::chunk::{chunk_access::ChunkStatus, chunk_generation_task::ChunkGenerationTask};
+use crate::chunk::{
+    chunk_access::{ChunkAccess, ChunkStatus},
+    chunk_generation_task::ChunkGenerationTask,
+};
 use crate::chunk_saver::ChunkStorage;
 use crate::player::Player;
 use crate::player::connection::NetworkConnection;
@@ -167,9 +169,9 @@ impl ChunkMap {
     where
         F: FnOnce() -> R,
     {
-        let ticket_level = MAX_VIEW_DISTANCE.saturating_sub(radius);
+        let ticket = ChunkTicket::full_chunks(radius);
 
-        self.chunk_tickets.lock().add_ticket(center, ticket_level);
+        self.chunk_tickets.lock().add_ticket(center, ticket);
         self.tick_scheduling();
 
         let mut holders = Vec::new();
@@ -178,9 +180,7 @@ impl ChunkMap {
             for dx in -radius..=radius {
                 let pos = ChunkPos::new(center.0.x + dx, center.0.y + dz);
                 let Some(holder) = self.chunks.read_sync(&pos, |_, holder| holder.clone()) else {
-                    self.chunk_tickets
-                        .lock()
-                        .remove_ticket(center, ticket_level);
+                    self.chunk_tickets.lock().remove_ticket(center, ticket);
                     self.tick_scheduling();
                     return None;
                 };
@@ -190,18 +190,14 @@ impl ChunkMap {
 
         for holder in holders {
             if holder.await_chunk(ChunkStatus::Full).await.is_none() {
-                self.chunk_tickets
-                    .lock()
-                    .remove_ticket(center, ticket_level);
+                self.chunk_tickets.lock().remove_ticket(center, ticket);
                 self.tick_scheduling();
                 return None;
             }
         }
 
         let result = f();
-        self.chunk_tickets
-            .lock()
-            .remove_ticket(center, ticket_level);
+        self.chunk_tickets.lock().remove_ticket(center, ticket);
         self.tick_scheduling();
 
         Some(result)
@@ -377,22 +373,18 @@ impl ChunkMap {
     /// Updates scheduling for a chunk based on its new level.
     /// Returns the chunk holder if it is active.
     #[inline]
-    #[expect(
-        clippy::missing_panics_doc,
-        clippy::unwrap_used,
-        reason = "unwrap is on new_level which was already checked non-None via new_level?"
-    )]
     pub fn update_chunk_level(
         self: &Arc<Self>,
         pos: ChunkPos,
-        new_level: Option<u8>,
+        new_level: Option<ChunkTicketLevel>,
+        new_simulation_level: Option<ChunkTicketLevel>,
     ) -> Option<Arc<ChunkHolder>> {
         // Recover from unloading if possible, else create new holder.
         let chunk_holder =
             if let Some(holder) = self.chunks.read_sync(&pos, |_, holder| holder.clone()) {
                 holder
             } else {
-                new_level?;
+                let level = new_level?;
 
                 if let Some(entry) = self.unloading_chunks.remove_sync(&pos) {
                     let _ = self.chunks.insert_sync(pos, entry.1.clone());
@@ -400,7 +392,8 @@ impl ChunkMap {
                 } else {
                     let holder = Arc::new(ChunkHolder::new(
                         pos,
-                        new_level.unwrap(),
+                        level,
+                        new_simulation_level,
                         self.world_gen_context.min_y(),
                         self.world_gen_context.height(),
                     ));
@@ -410,16 +403,18 @@ impl ChunkMap {
             };
 
         if let Some(level) = new_level {
-            let old = chunk_holder.ticket_level.swap(level, Ordering::Relaxed);
-            if old != level {
-                chunk_holder.update_highest_allowed_status(level);
+            let old = chunk_holder.swap_load_level(level);
+            chunk_holder.set_simulation_level(new_simulation_level);
+            if old != Some(level) {
+                chunk_holder.update_highest_allowed_status(Some(level));
             }
             Some(chunk_holder)
         } else {
             //log::info!("Unloading chunk at {pos:?}");
             chunk_holder.cancel_generation_task();
-            chunk_holder.ticket_level.store(u8::MAX, Ordering::Relaxed);
-            chunk_holder.update_highest_allowed_status(u8::MAX);
+            chunk_holder.clear_load_level();
+            chunk_holder.set_simulation_level(None);
+            chunk_holder.update_highest_allowed_status(None);
             // Wake any await_chunk futures so generation tasks holding refs to
             // this chunk can detect the status is disallowed and exit.
             chunk_holder.wake_all_watchers();
@@ -482,8 +477,7 @@ impl ChunkMap {
             let mut tickable_chunks = Vec::with_capacity(last_len);
             self.chunks.iter_sync(|_, holder| {
                 total_chunks += 1;
-                let level = holder.ticket_level.load(Ordering::Relaxed);
-                if is_ticked(level, world.view_distance, world.simulation_distance) {
+                if is_ticked(holder.simulation_level()) {
                     tickable_chunks.push(holder.clone());
                 }
                 true
@@ -547,8 +541,12 @@ impl ChunkMap {
             let result = changes
                 .iter()
                 .filter_map(|change| {
-                    self.update_chunk_level(change.pos, change.new_level)
-                        .map(|holder| (holder, change.new_level))
+                    self.update_chunk_level(
+                        change.pos,
+                        change.new_level,
+                        change.new_simulation_level,
+                    )
+                    .map(|holder| (holder, change.new_level))
                 })
                 .collect();
             timings.holder_creation = start.elapsed();
@@ -740,19 +738,16 @@ impl ChunkMap {
             let mut chunk_tickets = self.chunk_tickets.lock();
 
             let world = self.world_gen_context.world();
+            let new_ticket = ChunkTicket::player(new_view.view_distance, world.simulation_distance);
 
             if let Some(last_view) = last_view_guard.as_ref() {
                 if last_view.center != new_view.center
                     || last_view.view_distance != new_view.view_distance
                 {
-                    chunk_tickets.remove_ticket(
-                        last_view.center,
-                        MAX_VIEW_DISTANCE.saturating_sub(last_view.view_distance),
-                    );
-                    chunk_tickets.add_ticket(
-                        new_view.center,
-                        MAX_VIEW_DISTANCE.saturating_sub(new_view.view_distance),
-                    );
+                    let old_ticket =
+                        ChunkTicket::player(last_view.view_distance, world.simulation_distance);
+                    chunk_tickets.remove_ticket(last_view.center, old_ticket);
+                    chunk_tickets.add_ticket(new_view.center, new_ticket);
 
                     player.send_packet(CSetChunkCenter {
                         x: new_view.center.0.x,
@@ -796,10 +791,7 @@ impl ChunkMap {
                     &removed_chunks,
                 );
             } else {
-                chunk_tickets.add_ticket(
-                    new_view.center,
-                    MAX_VIEW_DISTANCE.saturating_sub(new_view.view_distance),
-                );
+                chunk_tickets.add_ticket(new_view.center, new_ticket);
 
                 // Send initial chunk cache center to client
                 player.send_packet(CSetChunkCenter {
@@ -831,10 +823,9 @@ impl ChunkMap {
         if let Some(last_view) = last_view_guard.take() {
             drop(last_view_guard);
             let mut chunk_tickets = self.chunk_tickets.lock();
-            chunk_tickets.remove_ticket(
-                last_view.center,
-                MAX_VIEW_DISTANCE.saturating_sub(last_view.view_distance),
-            );
+            let world = self.world_gen_context.world();
+            let ticket = ChunkTicket::player(last_view.view_distance, world.simulation_distance);
+            chunk_tickets.remove_ticket(last_view.center, ticket);
         }
     }
 

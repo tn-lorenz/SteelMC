@@ -22,7 +22,7 @@ use std::time::Duration;
 pub static SLOW_CHUNK_GEN: AtomicBool = AtomicBool::new(false);
 
 use crate::chunk::chunk_generation_task::{NeighborReady, StaticCache2D};
-use crate::chunk::chunk_ticket_manager::generation_status;
+use crate::chunk::chunk_ticket_manager::{ChunkTicketLevel, generation_status};
 use crate::world::World;
 use crate::{
     ChunkMap,
@@ -35,6 +35,19 @@ use crate::{
 };
 
 const STATUS_NONE: u8 = u8::MAX;
+const NO_TICKET_LEVEL: u8 = u8::MAX;
+
+fn optional_ticket_level_raw(level: Option<ChunkTicketLevel>) -> u8 {
+    level.map_or(NO_TICKET_LEVEL, ChunkTicketLevel::raw)
+}
+
+fn optional_ticket_level_from_raw(raw: u8) -> Option<ChunkTicketLevel> {
+    if raw == NO_TICKET_LEVEL {
+        None
+    } else {
+        ChunkTicketLevel::new(raw)
+    }
+}
 
 /// The result of a chunk operation.
 pub enum ChunkResult {
@@ -79,8 +92,10 @@ pub struct ChunkHolder {
     sender: watch::Sender<ChunkResult>,
     generation_task: SyncMutex<Option<Arc<ChunkGenerationTask>>>,
     pos: ChunkPos,
-    /// The current ticket level of the chunk.
-    pub ticket_level: AtomicU8,
+    /// The current loading ticket level of the chunk.
+    load_level: AtomicU8,
+    /// The current simulation ticket level of the chunk.
+    simulation_level: AtomicU8,
     /// The highest status that has started work.
     started_work: AtomicUsize,
     /// The highest status that generation is allowed to reach.
@@ -114,10 +129,16 @@ impl ChunkHolder {
 
     /// Creates a new chunk holder.
     #[must_use]
-    pub fn new(pos: ChunkPos, ticket_level: u8, min_y: i32, height: i32) -> Self {
+    pub fn new(
+        pos: ChunkPos,
+        load_level: ChunkTicketLevel,
+        simulation_level: Option<ChunkTicketLevel>,
+        min_y: i32,
+        height: i32,
+    ) -> Self {
         let (sender, receiver) = watch::channel(ChunkResult::Unloaded);
         let highest_allowed_status =
-            generation_status(Some(ticket_level)).map_or(STATUS_NONE, |s| s.get_index() as u8);
+            generation_status(Some(load_level)).map_or(STATUS_NONE, |s| s.get_index() as u8);
 
         let section_count = (height / 16) as usize;
         let changed_blocks_per_section = (0..section_count)
@@ -130,7 +151,8 @@ impl ChunkHolder {
             sender,
             generation_task: SyncMutex::new(None),
             pos,
-            ticket_level: AtomicU8::new(ticket_level),
+            load_level: AtomicU8::new(load_level.raw()),
+            simulation_level: AtomicU8::new(optional_ticket_level_raw(simulation_level)),
             started_work: AtomicUsize::new(usize::MAX),
             highest_allowed_status: AtomicU8::new(highest_allowed_status),
             min_y,
@@ -140,10 +162,36 @@ impl ChunkHolder {
         }
     }
 
+    /// Returns the current load ticket level.
+    pub fn load_level(&self) -> Option<ChunkTicketLevel> {
+        optional_ticket_level_from_raw(self.load_level.load(Ordering::Relaxed))
+    }
+
+    /// Stores the current load ticket level and returns the previous level.
+    pub fn swap_load_level(&self, level: ChunkTicketLevel) -> Option<ChunkTicketLevel> {
+        optional_ticket_level_from_raw(self.load_level.swap(level.raw(), Ordering::Relaxed))
+    }
+
+    /// Clears the current load ticket level.
+    pub fn clear_load_level(&self) {
+        self.load_level.store(NO_TICKET_LEVEL, Ordering::Relaxed);
+    }
+
+    /// Returns the current simulation ticket level.
+    pub fn simulation_level(&self) -> Option<ChunkTicketLevel> {
+        optional_ticket_level_from_raw(self.simulation_level.load(Ordering::Relaxed))
+    }
+
+    /// Stores the current simulation ticket level.
+    pub fn set_simulation_level(&self, level: Option<ChunkTicketLevel>) {
+        self.simulation_level
+            .store(optional_ticket_level_raw(level), Ordering::Relaxed);
+    }
+
     /// Updates the highest allowed generation status based on the ticket level.
-    pub fn update_highest_allowed_status(&self, ticket_level: u8) {
+    pub fn update_highest_allowed_status(&self, ticket_level: Option<ChunkTicketLevel>) {
         let new_status =
-            generation_status(Some(ticket_level)).map_or(STATUS_NONE, |s| s.get_index() as u8);
+            generation_status(ticket_level).map_or(STATUS_NONE, |s| s.get_index() as u8);
         self.highest_allowed_status
             .store(new_status, Ordering::Release);
     }
