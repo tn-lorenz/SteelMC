@@ -548,7 +548,7 @@ pub trait LivingEntity: Entity {
 }
 
 /// A trait containing combat-related functions, based on the `LivingEntity` trait.
-pub trait Attackable: LivingEntity {
+pub trait Attackable: LivingEntity + Sized {
     /// 26.1 Knockback calculation
     fn knock_back(&self, mut power: f64, mut xd: f64, mut zd: f64) {
         // TODO: complete this, once we have Attributes
@@ -583,7 +583,7 @@ pub trait Attackable: LivingEntity {
 
     /// Causes extra knockback under certain conditions (fully charged/sprinting) and alters attacker velocity.
     /// `_old_mv` is equivalent to `final Vec3 oldMovement` but it isn't actually used anywhere.
-    fn cause_extra_knockback(&self, target: &dyn Attackable, kb: f64, _old_mv: DVec3) {
+    fn cause_extra_knockback(&self, target: &Self, kb: f64, _old_mv: DVec3) {
         if kb <= 0.0 {
             return;
         };
@@ -604,15 +604,12 @@ pub trait Attackable: LivingEntity {
     }
 
     /// Blocks an attack
-    fn block_using_item(&self, attacker: &dyn Attackable)
-    where
-        Self: Sized,
-    {
+    fn block_using_item(&self, attacker: &Self) {
         attacker.blocked_by_item(self);
     }
 
     /// Apply blocking knockback to defender
-    fn blocked_by_item(&self, defender: &dyn Attackable) {
+    fn blocked_by_item(&self, defender: &Self) {
         defender.knock_back(
             0.5,
             defender.position().x - self.position().x,
