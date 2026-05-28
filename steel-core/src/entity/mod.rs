@@ -1,5 +1,6 @@
 //! This module contains entity-related traits and types.
 
+use std::f64::consts::PI;
 use std::sync::atomic::{AtomicI32, Ordering};
 use std::sync::{Arc, Weak};
 
@@ -586,10 +587,10 @@ pub trait Attackable: LivingEntity + Sized {
     fn cause_extra_knockback(&self, target: &Self, kb: f64, _old_mv: DVec3) {
         if kb <= 0.0 {
             return;
-        };
+        }
 
         let (yaw, _) = self.rotation();
-        let yaw_rad = yaw as f64 * std::f64::consts::PI / 180.0;
+        let yaw_rad = f64::from(yaw) * PI / 180.0;
 
         let x = yaw_rad.sin();
         let z = -yaw_rad.cos();

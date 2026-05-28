@@ -59,6 +59,7 @@ impl DamageSource {
     }
 
     /// Whether this damage is of a certain type.
+    #[must_use]
     pub fn is(&self, tag: &Identifier) -> bool {
         let reg = &REGISTRY.damage_types;
         reg.is_in_tag(self.damage_type, tag)
