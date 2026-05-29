@@ -110,6 +110,8 @@ pub struct ChunkGenerationTask {
     pub neighbor_ready: SyncMutex<Vec<NeighborReady>>,
     /// Cache of required chunks.
     pub cache: Arc<StaticCache2D<Arc<ChunkHolder>>>,
+    /// Holder for the chunk this task is targeting.
+    pub center_holder: Arc<ChunkHolder>,
     /// Whether generation is required for this task.
     pub needs_generation: AtomicBool,
     /// The thread pool to use for generation.
@@ -143,6 +145,7 @@ impl ChunkGenerationTask {
                 .read_sync(&ChunkPos::new(x, y), |_, chunk_holder| chunk_holder.clone())
                 .expect("The chunkholder should be created by distance manager before the generation task is scheduled. This occurring means there is a bug in the distance manager or you called this yourself.")
         });
+        let center_holder = Arc::clone(cache.get(pos.0.x, pos.0.y));
 
         Self {
             chunk_map,
@@ -152,6 +155,7 @@ impl ChunkGenerationTask {
             cancel_token,
             neighbor_ready: SyncMutex::new(Vec::new()),
             cache: Arc::new(cache),
+            center_holder,
             needs_generation: AtomicBool::new(true),
             thread_pool,
         }
@@ -160,6 +164,11 @@ impl ChunkGenerationTask {
     /// Cancels this task by triggering the cancellation token.
     pub fn cancel(&self) {
         self.cancel_token.cancel();
+    }
+
+    /// Returns the holder for the chunk this task is targeting.
+    pub(crate) fn center_holder(&self) -> &Arc<ChunkHolder> {
+        &self.center_holder
     }
 
     /// Schedules a chunk for a specific layer.

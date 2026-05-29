@@ -1,7 +1,4 @@
-use rayon::{
-    ThreadPool,
-    iter::{IntoParallelIterator, ParallelIterator},
-};
+use rayon::ThreadPool;
 use rustc_hash::FxBuildHasher;
 use std::{
     io, mem,
@@ -440,7 +437,7 @@ impl ChunkMap {
 
                 let task_count = pending.len().min(available_slots);
                 if task_count < pending.len() {
-                    pending.sort_by_cached_key(|task| self.generation_task_priority(task));
+                    pending.sort_by_cached_key(|task| Self::generation_task_priority(task));
                 }
                 task_count
             }
@@ -477,12 +474,9 @@ impl ChunkMap {
         self.generation_pool.current_num_threads().max(1) * GENERATION_THREAD_MULTIPLE
     }
 
-    fn generation_task_priority(&self, task: &ChunkGenerationTask) -> GenerationTaskPriority {
-        self.chunks
-            .read_sync(&task.pos, |_, holder| {
-                GenerationTaskPriority::for_levels(holder.load_level(), holder.simulation_level())
-            })
-            .unwrap_or(GenerationTaskPriority::for_levels(None, None))
+    fn generation_task_priority(task: &ChunkGenerationTask) -> GenerationTaskPriority {
+        let holder = task.center_holder();
+        GenerationTaskPriority::for_levels(holder.load_level(), holder.simulation_level())
     }
 
     /// Updates scheduling for a chunk based on its new level.
@@ -674,27 +668,13 @@ impl ChunkMap {
         {
             let _span = tracing::trace_span!("schedule_generation").entered();
             let start = Instant::now();
-            let scheduled_count = if holders_to_schedule.len() < 100 {
-                holders_to_schedule
-                    .iter()
-                    .filter(|(holder, level)| {
-                        level.is_some_and(is_full)
-                            && holder.schedule_chunk_generation_task_b(ChunkStatus::Full, self)
-                    })
-                    .count()
-            } else {
-                let self_ref = self;
-                self.generation_pool.install(|| {
-                    holders_to_schedule
-                        .into_par_iter()
-                        .filter(|(holder, level)| {
-                            level.is_some_and(is_full)
-                                && holder
-                                    .schedule_chunk_generation_task_b(ChunkStatus::Full, self_ref)
-                        })
-                        .count()
+            let scheduled_count = holders_to_schedule
+                .iter()
+                .filter(|(holder, level)| {
+                    level.is_some_and(is_full)
+                        && holder.schedule_chunk_generation_task_b(ChunkStatus::Full, self)
                 })
-            };
+                .count();
             timings.schedule_generation = start.elapsed();
             timings.scheduled_count = scheduled_count;
         }
