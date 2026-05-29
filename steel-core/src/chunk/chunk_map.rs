@@ -4,7 +4,7 @@ use std::{
     io, mem,
     sync::{
         Arc, Weak,
-        atomic::{AtomicUsize, Ordering},
+        atomic::{AtomicBool, AtomicUsize, Ordering},
     },
     time::{Duration, Instant},
 };
@@ -17,6 +17,7 @@ use steel_registry::blocks::block_state_ext::BlockStateExt;
 use steel_registry::dimension_type::DimensionTypeRef;
 use steel_utils::{BlockPos, ChunkPos, SectionPos, locks::SyncMutex};
 use tokio::runtime::Runtime;
+use tokio::sync::Notify;
 use tokio_util::sync::CancellationToken;
 use tokio_util::task::TaskTracker;
 use tracing::instrument;
@@ -110,6 +111,14 @@ pub struct ChunkMap {
     last_tickable_len: AtomicUsize,
     /// Number of top-level generation tasks currently running.
     running_generation_tasks: AtomicUsize,
+    /// Wakes the generation refill loop when pending/running task state changes.
+    generation_refill_notify: Notify,
+    /// Cancels the generation refill loop without cancelling active generation tasks.
+    generation_refill_cancel_token: CancellationToken,
+    /// Fast shutdown flag for the generation refill loop.
+    generation_refill_stopped: AtomicBool,
+    /// Whether the notify-driven refill loop has been started for this map.
+    generation_refill_started: AtomicBool,
     /// Parent cancellation token for all generation tasks.
     /// Child tokens are created per-task; cancelling this cancels everything.
     pub cancel_token: CancellationToken,
@@ -151,6 +160,7 @@ impl Drop for RunningGenerationTaskPermit {
         self.chunk_map
             .running_generation_tasks
             .fetch_sub(1, Ordering::AcqRel);
+        self.chunk_map.notify_generation_refill();
     }
 }
 
@@ -180,7 +190,53 @@ impl ChunkMap {
             chunks_to_broadcast: SyncMutex::new(Vec::new()),
             last_tickable_len: AtomicUsize::new(0),
             running_generation_tasks: AtomicUsize::new(0),
+            generation_refill_notify: Notify::new(),
+            generation_refill_cancel_token: CancellationToken::new(),
+            generation_refill_stopped: AtomicBool::new(false),
+            generation_refill_started: AtomicBool::new(false),
             cancel_token: CancellationToken::new(),
+        }
+    }
+
+    /// Starts the notify-driven generation refill loop for this chunk map.
+    pub fn start_generation_refill_loop(self: &Arc<Self>) {
+        if self.generation_refill_started.swap(true, Ordering::AcqRel) {
+            return;
+        }
+
+        let chunk_map = Arc::clone(self);
+        self.task_tracker.spawn_on(
+            async move {
+                loop {
+                    tokio::select! {
+                        () = chunk_map.generation_refill_cancel_token.cancelled() => break,
+                        () = chunk_map.generation_refill_notify.notified() => {
+                            chunk_map.run_generation_tasks_b(GenerationTaskCap::RespectMaxCap);
+                        }
+                    }
+                }
+            },
+            self.chunk_runtime.handle(),
+        );
+    }
+
+    /// Stops the generation refill loop. Active generation tasks are left alone.
+    pub fn stop_generation_refill_loop(&self) {
+        self.generation_refill_stopped
+            .store(true, Ordering::Release);
+        self.generation_refill_cancel_token.cancel();
+        self.generation_refill_notify.notify_waiters();
+    }
+
+    pub(crate) fn notify_generation_refill(&self) {
+        self.generation_refill_notify.notify_one();
+    }
+
+    fn run_or_notify_generation_refill(&self) {
+        if self.generation_refill_started.load(Ordering::Acquire) {
+            self.notify_generation_refill();
+        } else {
+            self.run_generation_tasks_b(GenerationTaskCap::RespectMaxCap);
         }
     }
 
@@ -403,19 +459,25 @@ impl ChunkMap {
             self.generation_pool.clone(),
             self.cancel_token.child_token(),
         ));
-        self.pending_generation_tasks.lock().push(task.clone());
+        self.pending_generation_tasks.lock().push(Arc::clone(&task));
         task
     }
 
     /// Runs queued generation tasks.
     #[instrument(level = "trace", skip(self))]
     pub fn run_generation_tasks_b(&self, generation_task_cap: GenerationTaskCap) {
+        if generation_task_cap == GenerationTaskCap::RespectMaxCap
+            && self.generation_refill_stopped.load(Ordering::Acquire)
+        {
+            return;
+        }
+
         let mut pending = self.pending_generation_tasks.lock();
         if pending.is_empty() {
             return;
         }
 
-        pending.retain(|task| !task.cancel_token.is_cancelled());
+        pending.retain(|task| !task.is_cancelled());
         if pending.is_empty() {
             return;
         }
@@ -682,7 +744,10 @@ impl ChunkMap {
         {
             let _span = tracing::trace_span!("run_generation").entered();
             let start = Instant::now();
-            self.run_generation_tasks_b(generation_task_cap);
+            match generation_task_cap {
+                GenerationTaskCap::RespectMaxCap => self.run_or_notify_generation_refill(),
+                GenerationTaskCap::IgnoreMaxCap => self.run_generation_tasks_b(generation_task_cap),
+            }
             timings.run_generation = start.elapsed();
         }
 

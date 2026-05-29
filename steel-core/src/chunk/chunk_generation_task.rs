@@ -106,6 +106,8 @@ pub struct ChunkGenerationTask {
     pub scheduled_status: SyncMutex<Option<ChunkStatus>>,
     /// Cancellation token — cancelled when this task should stop.
     pub cancel_token: CancellationToken,
+    /// Cheap cancellation flag for scheduler-side filtering.
+    cancelled: AtomicBool,
     /// Futures for neighbors. Protected by a mutex.
     pub neighbor_ready: SyncMutex<Vec<NeighborReady>>,
     /// Cache of required chunks.
@@ -153,6 +155,7 @@ impl ChunkGenerationTask {
             target_status,
             scheduled_status: SyncMutex::new(None),
             cancel_token,
+            cancelled: AtomicBool::new(false),
             neighbor_ready: SyncMutex::new(Vec::new()),
             cache: Arc::new(cache),
             center_holder,
@@ -163,7 +166,15 @@ impl ChunkGenerationTask {
 
     /// Cancels this task by triggering the cancellation token.
     pub fn cancel(&self) {
-        self.cancel_token.cancel();
+        if !self.cancelled.swap(true, Ordering::AcqRel) {
+            self.cancel_token.cancel();
+        }
+    }
+
+    /// Returns whether this task has been explicitly cancelled.
+    #[must_use]
+    pub fn is_cancelled(&self) -> bool {
+        self.cancelled.load(Ordering::Acquire)
     }
 
     /// Returns the holder for the chunk this task is targeting.
@@ -223,7 +234,7 @@ impl ChunkGenerationTask {
         for x in (self.pos.0.x - radius)..=(self.pos.0.x + radius) {
             for y in (self.pos.0.y - radius)..=(self.pos.0.y + radius) {
                 let chunk_holder = self.cache.get(x, y);
-                if self.cancel_token.is_cancelled()
+                if self.is_cancelled()
                     || !self.schedule_chunk_in_layer(status, needs_generation, chunk_holder)
                 {
                     return;
@@ -324,7 +335,7 @@ impl ChunkGenerationTask {
             self.schedule_next_layer();
         }
         let center_chunk = self.cache.get(self.pos.0.x, self.pos.0.y);
-        center_chunk.cancel_generation_task();
+        center_chunk.clear_generation_task_if_current(&self);
     }
 
     /// Waits for all scheduled neighbor tasks to complete.
