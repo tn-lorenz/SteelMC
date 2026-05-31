@@ -2945,9 +2945,11 @@ dependencies = [
  "rustc-hash 2.1.2",
  "serde",
  "serde_json",
+ "sha2",
  "steel-math",
  "steel-registry",
  "steel-utils",
+ "tracing",
 ]
 
 [[package]]
