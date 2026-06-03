@@ -7,7 +7,7 @@ use std::mem;
 use std::sync::atomic::{AtomicBool, AtomicU8, AtomicUsize, Ordering};
 use std::sync::{Arc, Weak};
 use steel_utils::locks::SyncRwLock;
-use steel_utils::{BlockPos, ChunkPos, SectionPos, locks::SyncMutex};
+use steel_utils::{BlockPos, ChunkPos, PackedSectionBlockPos, SectionPos, locks::SyncMutex};
 use tokio::sync::{oneshot, watch};
 #[cfg(feature = "slow_chunk_gen")]
 use tokio::time::sleep;
@@ -22,7 +22,7 @@ use std::time::Duration;
 pub static SLOW_CHUNK_GEN: AtomicBool = AtomicBool::new(false);
 
 use crate::chunk::chunk_generation_task::{NeighborReady, StaticCache2D};
-use crate::chunk::chunk_ticket_manager::generation_status;
+use crate::chunk::chunk_ticket_manager::{ChunkTicketLevel, generation_status};
 use crate::world::World;
 use crate::{
     ChunkMap,
@@ -35,6 +35,19 @@ use crate::{
 };
 
 const STATUS_NONE: u8 = u8::MAX;
+const NO_TICKET_LEVEL: u8 = u8::MAX;
+
+fn optional_ticket_level_raw(level: Option<ChunkTicketLevel>) -> u8 {
+    level.map_or(NO_TICKET_LEVEL, ChunkTicketLevel::raw)
+}
+
+const fn optional_ticket_level_from_raw(raw: u8) -> Option<ChunkTicketLevel> {
+    if raw == NO_TICKET_LEVEL {
+        None
+    } else {
+        ChunkTicketLevel::new(raw)
+    }
+}
 
 /// The result of a chunk operation.
 pub enum ChunkResult {
@@ -78,9 +91,12 @@ pub struct ChunkHolder {
     chunk_result: watch::Receiver<ChunkResult>,
     sender: watch::Sender<ChunkResult>,
     generation_task: SyncMutex<Option<Arc<ChunkGenerationTask>>>,
+    generation_task_target: AtomicU8,
     pos: ChunkPos,
-    /// The current ticket level of the chunk.
-    pub ticket_level: AtomicU8,
+    /// The current loading ticket level of the chunk.
+    load_level: AtomicU8,
+    /// The current simulation ticket level of the chunk.
+    simulation_level: AtomicU8,
     /// The highest status that has started work.
     started_work: AtomicUsize,
     /// The highest status that generation is allowed to reach.
@@ -91,9 +107,9 @@ pub struct ChunkHolder {
     height: i32,
     /// Whether any sections have pending block changes.
     has_changed_sections: AtomicBool,
-    /// Per-section sets of changed block positions (section-relative packed shorts).
+    /// Per-section sets of changed block positions.
     /// Index is `(block_y - min_y) / 16`.
-    changed_blocks_per_section: Box<[SyncMutex<FxHashSet<i16>>]>,
+    changed_blocks_per_section: Box<[SyncMutex<FxHashSet<PackedSectionBlockPos>>]>,
 }
 
 impl ChunkHolder {
@@ -114,23 +130,31 @@ impl ChunkHolder {
 
     /// Creates a new chunk holder.
     #[must_use]
-    pub fn new(pos: ChunkPos, ticket_level: u8, min_y: i32, height: i32) -> Self {
+    pub fn new(
+        pos: ChunkPos,
+        load_level: ChunkTicketLevel,
+        simulation_level: Option<ChunkTicketLevel>,
+        min_y: i32,
+        height: i32,
+    ) -> Self {
         let (sender, receiver) = watch::channel(ChunkResult::Unloaded);
         let highest_allowed_status =
-            generation_status(Some(ticket_level)).map_or(STATUS_NONE, |s| s.get_index() as u8);
+            generation_status(Some(load_level)).map_or(STATUS_NONE, |s| s.get_index() as u8);
 
         let section_count = (height / 16) as usize;
-        let changed_blocks_per_section: Box<[SyncMutex<FxHashSet<i16>>]> = (0..section_count)
+        let changed_blocks_per_section = (0..section_count)
             .map(|_| SyncMutex::new(FxHashSet::default()))
-            .collect();
+            .collect::<Box<[_]>>();
 
         Self {
             data: ChunkGuard::new(ChunkAccess::Unloaded),
             chunk_result: receiver,
             sender,
             generation_task: SyncMutex::new(None),
+            generation_task_target: AtomicU8::new(STATUS_NONE),
             pos,
-            ticket_level: AtomicU8::new(ticket_level),
+            load_level: AtomicU8::new(load_level.raw()),
+            simulation_level: AtomicU8::new(optional_ticket_level_raw(simulation_level)),
             started_work: AtomicUsize::new(usize::MAX),
             highest_allowed_status: AtomicU8::new(highest_allowed_status),
             min_y,
@@ -140,10 +164,36 @@ impl ChunkHolder {
         }
     }
 
+    /// Returns the current load ticket level.
+    pub fn load_level(&self) -> Option<ChunkTicketLevel> {
+        optional_ticket_level_from_raw(self.load_level.load(Ordering::Relaxed))
+    }
+
+    /// Stores the current load ticket level and returns the previous level.
+    pub fn swap_load_level(&self, level: ChunkTicketLevel) -> Option<ChunkTicketLevel> {
+        optional_ticket_level_from_raw(self.load_level.swap(level.raw(), Ordering::Relaxed))
+    }
+
+    /// Clears the current load ticket level.
+    pub fn clear_load_level(&self) {
+        self.load_level.store(NO_TICKET_LEVEL, Ordering::Relaxed);
+    }
+
+    /// Returns the current simulation ticket level.
+    pub fn simulation_level(&self) -> Option<ChunkTicketLevel> {
+        optional_ticket_level_from_raw(self.simulation_level.load(Ordering::Relaxed))
+    }
+
+    /// Stores the current simulation ticket level.
+    pub fn set_simulation_level(&self, level: Option<ChunkTicketLevel>) {
+        self.simulation_level
+            .store(optional_ticket_level_raw(level), Ordering::Relaxed);
+    }
+
     /// Updates the highest allowed generation status based on the ticket level.
-    pub fn update_highest_allowed_status(&self, ticket_level: u8) {
+    pub fn update_highest_allowed_status(&self, ticket_level: Option<ChunkTicketLevel>) {
         let new_status =
-            generation_status(Some(ticket_level)).map_or(STATUS_NONE, |s| s.get_index() as u8);
+            generation_status(ticket_level).map_or(STATUS_NONE, |s| s.get_index() as u8);
         self.highest_allowed_status
             .store(new_status, Ordering::Release);
     }
@@ -172,7 +222,7 @@ impl ChunkHolder {
 
     /// Takes all pending block changes, grouped by section index.
     /// Returns a vec of (`section_index`, set of packed positions).
-    pub fn take_changed_blocks(&self) -> Vec<(usize, FxHashSet<i16>)> {
+    pub fn take_changed_blocks(&self) -> Vec<(usize, FxHashSet<PackedSectionBlockPos>)> {
         if !self.has_changed_sections.swap(false, Ordering::AcqRel) {
             return Vec::new();
         }
@@ -219,19 +269,24 @@ impl ChunkHolder {
             return false;
         }
 
+        let status_index = status.get_index() as u8;
+        let current_target = self.generation_task_target.load(Ordering::Acquire);
+        if current_target != STATUS_NONE && status_index <= current_target {
+            return false;
+        }
+
         let task = self.generation_task.lock();
 
-        #[expect(
-            clippy::unwrap_used,
-            reason = "unwrap is safe: guarded by is_none() check on the line above"
-        )]
-        if task.is_none() || status > task.as_ref().unwrap().target_status {
-            drop(task);
-            self.reschedule_chunk_task_b(status, chunk_map);
-            true
-        } else {
-            false
+        if task
+            .as_ref()
+            .is_some_and(|task| status <= task.target_status)
+        {
+            return false;
         }
+
+        drop(task);
+        self.reschedule_chunk_task_b(status, chunk_map);
+        true
     }
 
     /// Reschedules the chunk task to the given status.
@@ -241,20 +296,26 @@ impl ChunkHolder {
         let mut old_task_guard = self.generation_task.lock();
 
         let old_task = old_task_guard.replace(new_task);
+        self.generation_task_target
+            .store(status.get_index() as u8, Ordering::Release);
         drop(old_task_guard);
 
         if let Some(old_task) = old_task {
             old_task.cancel();
         }
+
+        chunk_map.notify_generation_refill();
     }
 
     /// Gets access to the chunk if it has reached the given status.
     #[inline]
     pub fn try_chunk(&self, status: ChunkStatus) -> Option<RwLockReadGuard<'_, ChunkAccess>> {
-        match &*self.chunk_result.borrow() {
-            ChunkResult::Ok(s) if status <= *s => Some(self.data.read()),
-            _ => None,
-        }
+        let ready = {
+            let chunk_result = self.chunk_result.borrow();
+            matches!(&*chunk_result, ChunkResult::Ok(s) if status <= *s)
+        };
+
+        if ready { Some(self.data.read()) } else { None }
     }
 
     /// Waits until the chunk has reached the given status.
@@ -265,9 +326,12 @@ impl ChunkHolder {
         let mut subscriber = self.sender.subscribe();
         async move {
             loop {
-                if let ChunkResult::Ok(s) = &*subscriber.borrow_and_update()
-                    && status <= *s
-                {
+                let ready = {
+                    let chunk_result = subscriber.borrow_and_update();
+                    matches!(&*chunk_result, ChunkResult::Ok(s) if status <= *s)
+                };
+
+                if ready {
                     return Some(self.data.read());
                 }
 
@@ -283,9 +347,44 @@ impl ChunkHolder {
         }
     }
 
+    /// Waits until the chunk has reached the given status without reading chunk data.
+    pub fn await_chunk_status(
+        &self,
+        status: ChunkStatus,
+    ) -> impl Future<Output = Option<ChunkStatus>> + '_ {
+        let mut subscriber = self.sender.subscribe();
+        async move {
+            loop {
+                let ready = {
+                    let chunk_result = subscriber.borrow_and_update();
+                    match &*chunk_result {
+                        ChunkResult::Ok(current_status) if status <= *current_status => {
+                            Some(*current_status)
+                        }
+                        ChunkResult::Ok(_) | ChunkResult::Unloaded => None,
+                    }
+                };
+
+                if ready.is_some() {
+                    return ready;
+                }
+
+                if self.is_status_disallowed(status) {
+                    return None;
+                }
+
+                if subscriber.changed().await.is_err() {
+                    log::error!("Failed to wait for chunk status");
+                    return None;
+                }
+            }
+        }
+    }
+
     /// Gets the persisted status of the chunk.
     pub fn persisted_status(&self) -> Option<ChunkStatus> {
-        match &*self.chunk_result.borrow() {
+        let chunk_result = self.chunk_result.borrow();
+        match &*chunk_result {
             ChunkResult::Ok(s) => Some(*s),
             ChunkResult::Unloaded => None,
         }
@@ -293,7 +392,7 @@ impl ChunkHolder {
 
     /// Applies a step to the chunk.
     ///
-    /// The `cancel_token` is from the owning generation task — `await_chunk`
+    /// The `cancel_token` is from the owning generation task — dependency wait
     /// futures are raced against it so they bail out when the task is cancelled.
     ///
     /// # Panics
@@ -318,12 +417,11 @@ impl ChunkHolder {
             return Some(Box::pin(async move {
                 tokio::select! {
                     () = cancel_token.cancelled() => None,
-                    result = self_clone.await_chunk(target_status) => result.map(|_| ()),
+                    result = self_clone.await_chunk_status(target_status) => result.map(|_| ()),
                 }
             }));
         }
 
-        let sender = self.sender.clone();
         let cache = cache.clone();
         let context = chunk_map.world_gen_context.clone();
         let task = step.task;
@@ -354,7 +452,7 @@ impl ChunkHolder {
                             task(context, step, &cache, self_clone);
                         })
                         .await;
-                        holder_for_notify.notify_status(target_status);
+                        holder_for_notify.finish_generation_status(target_status);
                     }
                 } else {
                     // Chunk doesn't exist - generate fresh
@@ -363,7 +461,7 @@ impl ChunkHolder {
                         task(context, step, &cache, self_clone);
                     })
                     .await;
-                    holder_for_notify.notify_status(target_status);
+                    holder_for_notify.finish_generation_status(target_status);
                 }
                 #[cfg(feature = "slow_chunk_gen")]
                 if SLOW_CHUNK_GEN.load(Ordering::Relaxed) {
@@ -375,7 +473,9 @@ impl ChunkHolder {
                     .parent()
                     .expect("Target status must have parent if not Empty");
 
-                let has_parent = self_clone.try_chunk(parent_status).is_some();
+                let has_parent = self_clone
+                    .persisted_status()
+                    .is_some_and(|status| parent_status <= status);
                 let self_clone2 = self_clone.clone();
 
                 assert!(has_parent, "Parent chunk missing");
@@ -385,16 +485,7 @@ impl ChunkHolder {
                 })
                 .await;
 
-                sender.send_modify(|chunk| {
-                    if let ChunkAccess::Proto(chunk) = &*self_clone2.data.read() {
-                        chunk.set_status(target_status);
-                    }
-                    if let ChunkResult::Ok(s) = chunk
-                        && *s < target_status
-                    {
-                        *s = target_status;
-                    }
-                });
+                self_clone2.finish_generation_status(target_status);
                 #[cfg(feature = "slow_chunk_gen")]
                 if SLOW_CHUNK_GEN.load(Ordering::Relaxed) {
                     sleep(Duration::from_millis(200)).await;
@@ -455,16 +546,66 @@ impl ChunkHolder {
             use std::mem::replace;
             let owned = replace(chunk, ChunkAccess::Unloaded);
 
-            *chunk = match owned {
+            match owned {
                 ChunkAccess::Proto(proto) => {
                     let min_y = proto.min_y();
                     let height = proto.height();
-                    ChunkAccess::Full(LevelChunk::from_proto(proto, min_y, height, level))
+                    *chunk = ChunkAccess::Full(LevelChunk::from_proto(proto, min_y, height, level));
                 }
-                ChunkAccess::Full(full) => ChunkAccess::Full(full),
+                ChunkAccess::Full(full) => {
+                    *chunk = ChunkAccess::Full(full);
+                }
                 ChunkAccess::Unloaded => panic!("Chunk is unloaded, cannot upgrade to full"),
-            };
+            }
         });
+    }
+
+    fn post_process_generation(&self) {
+        let postprocessing = {
+            let chunk = self.data.read();
+            let ChunkAccess::Full(full) = &*chunk else {
+                return;
+            };
+            full.get_level().and_then(|world| {
+                full.take_postprocessing()
+                    .map(|postprocessing| (world, full.pos, full.min_y(), postprocessing))
+            })
+        };
+
+        if let Some((world, pos, min_y, postprocessing)) = postprocessing {
+            LevelChunk::post_process_generation(&world, pos, min_y, postprocessing);
+        }
+    }
+
+    /// Finishes a generated status on the async scheduler after the Rayon task returns.
+    fn finish_generation_status(&self, status: ChunkStatus) {
+        {
+            let stored_chunk = self.data.read();
+            if let ChunkAccess::Proto(proto_chunk) = &*stored_chunk
+                && proto_chunk.status() < status
+            {
+                proto_chunk.set_status(status);
+                stored_chunk.mark_dirty();
+            }
+        }
+
+        self.sender.send_modify(|chunk| match chunk {
+            ChunkResult::Ok(current_status) if *current_status < status => {
+                *current_status = status;
+            }
+            ChunkResult::Unloaded => {
+                *chunk = ChunkResult::Ok(status);
+            }
+            ChunkResult::Ok(_) => {}
+        });
+
+        self.post_publish_status_hooks(status);
+    }
+
+    fn post_publish_status_hooks(&self, status: ChunkStatus) {
+        if status == ChunkStatus::Full {
+            self.post_process_generation();
+        }
     }
 
     /// Inserts a chunk into the holder with a specific status.
@@ -481,12 +622,6 @@ impl ChunkHolder {
         self.data.with_write(|c| *c = chunk);
     }
 
-    /// Notifies watchers that the chunk has reached a status.
-    /// Called by the drainer task after `insert_chunk_no_notify`.
-    pub fn notify_status(&self, status: ChunkStatus) {
-        self.sender.send_replace(ChunkResult::Ok(status));
-    }
-
     /// Wakes all `await_chunk` watchers without changing the chunk result.
     /// This allows futures stuck in `subscriber.changed().await` to re-check
     /// `is_status_disallowed` and bail out during chunk unload.
@@ -497,8 +632,23 @@ impl ChunkHolder {
     /// Cancels the current generation task.
     pub fn cancel_generation_task(&self) {
         let mut task_guard = self.generation_task.lock();
+        self.generation_task_target
+            .store(STATUS_NONE, Ordering::Release);
         if let Some(task) = task_guard.take() {
             task.cancel();
+        }
+    }
+
+    /// Clears the current generation task if it is still the supplied task.
+    pub(crate) fn clear_generation_task_if_current(&self, task: &Arc<ChunkGenerationTask>) {
+        let mut task_guard = self.generation_task.lock();
+        if task_guard
+            .as_ref()
+            .is_some_and(|current_task| Arc::ptr_eq(current_task, task))
+        {
+            task_guard.take();
+            self.generation_task_target
+                .store(STATUS_NONE, Ordering::Release);
         }
     }
 }

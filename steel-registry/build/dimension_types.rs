@@ -1,5 +1,6 @@
 use std::fs;
 
+use crate::generator_functions::generate_option;
 use heck::ToShoutySnakeCase;
 use proc_macro2::{Ident, Span, TokenStream};
 use quote::quote;
@@ -150,19 +151,6 @@ pub enum MonsterSpawnLightLevelJson {
     },
 }
 
-fn generate_option<T, F>(opt: &Option<T>, f: F) -> TokenStream
-where
-    F: FnOnce(&T) -> TokenStream,
-{
-    match opt {
-        Some(val) => {
-            let inner = f(val);
-            quote! { Some(#inner) }
-        }
-        None => quote! { None },
-    }
-}
-
 fn generate_monster_spawn_light_level(level: &MonsterSpawnLightLevelJson) -> TokenStream {
     match level {
         MonsterSpawnLightLevelJson::Simple(value) => {
@@ -248,12 +236,9 @@ fn generate_background_music(bg: &BackgroundMusicJson) -> TokenStream {
 }
 
 pub(crate) fn build() -> TokenStream {
-    println!(
-        "cargo:rerun-if-changed=build_assets/builtin_datapacks/minecraft/data/minecraft/dimension_type/"
-    );
+    println!("cargo:rerun-if-changed=build_assets/builtin_datapacks/minecraft/dimension_type/");
 
-    let dimension_type_dir =
-        "build_assets/builtin_datapacks/minecraft/data/minecraft/dimension_type";
+    let dimension_type_dir = "build_assets/builtin_datapacks/minecraft/dimension_type";
     let mut dimension_types = Vec::new();
 
     // Read all dimension type JSON files
@@ -466,7 +451,7 @@ pub(crate) fn build() -> TokenStream {
         let has_ender_dragon_fight = dimension_type.has_ender_dragon_fight;
 
         stream.extend(quote! {
-            pub static #dimension_type_ident: &DimensionType = &DimensionType {
+            pub static #dimension_type_ident: DimensionType = DimensionType {
                 key: #key,
                 fixed_time: #fixed_time,
                 has_skylight: #has_skylight,
@@ -509,7 +494,7 @@ pub(crate) fn build() -> TokenStream {
         });
 
         register_stream.extend(quote! {
-            registry.register(#dimension_type_ident);
+            registry.register(&#dimension_type_ident);
         });
     }
 

@@ -5,11 +5,9 @@ use quote::quote;
 use super::tag_utils;
 
 pub(crate) fn build() -> TokenStream {
-    println!(
-        "cargo:rerun-if-changed=build_assets/builtin_datapacks/minecraft/data/minecraft/tags/fluid/"
-    );
+    println!("cargo:rerun-if-changed=build_assets/builtin_datapacks/minecraft/tags/fluid/");
 
-    let tag_dir = "build_assets/builtin_datapacks/minecraft/data/minecraft/tags/fluid";
+    let tag_dir = "build_assets/builtin_datapacks/minecraft/tags/fluid";
     let all_tags = tag_utils::read_all_tags(tag_dir);
     let sorted_tags = tag_utils::resolve_all_tags(&all_tags);
 
@@ -28,10 +26,7 @@ pub(crate) fn build() -> TokenStream {
             &format!("{}_TAG_LIST", tag_name.to_shouty_snake_case()),
             Span::call_site(),
         );
-        let tag_ident = Ident::new(
-            &format!("{}_TAG", tag_name.to_shouty_snake_case()),
-            Span::call_site(),
-        );
+        let tag_ident = Ident::new(&tag_name.to_shouty_snake_case(), Span::call_site());
 
         let fluid_strs = fluids.iter().map(|s| s.as_str());
 
@@ -45,17 +40,20 @@ pub(crate) fn build() -> TokenStream {
         });
         register_stream.extend(quote! {
             registry.register_tag(
-                #tag_ident,
+                Self::#tag_ident,
                 #tag_array
             );
         });
     }
 
     stream.extend(quote! {
-        #tag_stream
+        pub struct FluidTag {}
+        impl FluidTag {
+            #tag_stream
+            pub fn register_fluid_tags(registry: &mut FluidRegistry) {
+                #register_stream
+            }
 
-        pub fn register_fluid_tags(registry: &mut FluidRegistry) {
-            #register_stream
         }
     });
 

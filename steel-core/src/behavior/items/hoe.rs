@@ -2,11 +2,14 @@ use steel_macros::item_behavior;
 use steel_registry::{
     blocks::{BlockRef, block_state_ext::BlockStateExt},
     item_stack::ItemStack,
-    sound_events, vanilla_blocks, vanilla_items,
+    sound_events, vanilla_blocks, vanilla_game_events, vanilla_items,
 };
 use steel_utils::{Direction, types::UpdateFlags};
 
-use crate::behavior::{InteractionResult, ItemBehavior, UseOnContext};
+use crate::{
+    behavior::{InteractionResult, ItemBehavior, UseOnContext},
+    world::game_event_context::GameEventContext,
+};
 
 /// Behavior for Hoes
 #[item_behavior]
@@ -15,14 +18,14 @@ pub struct HoeItem;
 impl HoeItem {
     fn get_tilled_variant(block: BlockRef) -> Option<BlockRef> {
         match block {
-            _ if block == vanilla_blocks::GRASS_BLOCK
-                || block == vanilla_blocks::DIRT_PATH
-                || block == vanilla_blocks::DIRT =>
+            _ if block == &vanilla_blocks::GRASS_BLOCK
+                || block == &vanilla_blocks::DIRT_PATH
+                || block == &vanilla_blocks::DIRT =>
             {
-                Some(vanilla_blocks::FARMLAND)
+                Some(&vanilla_blocks::FARMLAND)
             }
-            _ if block == vanilla_blocks::COARSE_DIRT => Some(vanilla_blocks::DIRT),
-            _ if block == vanilla_blocks::ROOTED_DIRT => Some(vanilla_blocks::DIRT),
+            _ if block == &vanilla_blocks::COARSE_DIRT => Some(&vanilla_blocks::DIRT),
+            _ if block == &vanilla_blocks::ROOTED_DIRT => Some(&vanilla_blocks::DIRT),
             _ => None,
         }
     }
@@ -40,19 +43,24 @@ impl ItemBehavior for HoeItem {
                 .world
                 .get_block_state(context.hit_result.block_pos.above())
                 .is_air())
-            && state.get_block() != vanilla_blocks::ROOTED_DIRT
+            && state.get_block() != &vanilla_blocks::ROOTED_DIRT
         {
             return InteractionResult::Pass;
         }
 
+        let new_state = tilled_variant.default_state();
         context.world.set_block(
             context.hit_result.block_pos,
-            tilled_variant.default_state(),
+            new_state,
             UpdateFlags::UPDATE_ALL_IMMEDIATE,
         );
-        // TODO: Emit GameEvent::BLOCK_CHANGE
+        context.world.game_event(
+            &vanilla_game_events::BLOCK_CHANGE,
+            context.hit_result.block_pos,
+            &GameEventContext::new(Some(context.player), Some(new_state)),
+        );
 
-        if state.get_block() == vanilla_blocks::ROOTED_DIRT {
+        if state.get_block() == &vanilla_blocks::ROOTED_DIRT {
             context.world.pop_resource_from_face(
                 context.hit_result.block_pos,
                 context.hit_result.direction,
@@ -69,7 +77,9 @@ impl ItemBehavior for HoeItem {
         );
 
         let has_infinite_materials = context.player.has_infinite_materials();
-        context.inv.item().hurt_and_break(1, has_infinite_materials);
+        context
+            .inv
+            .with_item(|item| item.hurt_and_break(1, has_infinite_materials));
 
         InteractionResult::Success
     }

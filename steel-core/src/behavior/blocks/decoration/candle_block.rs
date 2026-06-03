@@ -2,7 +2,7 @@ use std::sync::Arc;
 
 use steel_macros::block_behavior;
 use steel_registry::{
-    REGISTRY, TaggedRegistryExt,
+    REGISTRY,
     blocks::{
         BlockRef,
         block_state_ext::BlockStateExt,
@@ -10,9 +10,8 @@ use steel_registry::{
         shapes::SupportType,
     },
     entity_data::Direction,
-    item_stack::ItemStack,
     items::item::BlockHitResult,
-    vanilla_blocks, vanilla_item_tags,
+    vanilla_blocks,
 };
 use steel_utils::{
     BlockPos,
@@ -20,9 +19,9 @@ use steel_utils::{
 };
 
 use crate::{
-    behavior::{BlockBehavior, BlockPlaceContext, InteractionResult},
+    behavior::{BlockBehavior, BlockPlaceContext, InteractionResult, InventoryAccess},
     player,
-    world::World,
+    world::{LevelReader, ScheduledTickAccess, World},
 };
 
 const CANDLES_PROPERTY: IntProperty = BlockStateProperties::CANDLES;
@@ -49,7 +48,7 @@ impl BlockBehavior for CandleBlock {
     fn can_survive(
         &self,
         _state: steel_utils::BlockStateId,
-        world: &Arc<World>,
+        world: &dyn LevelReader,
         pos: BlockPos,
     ) -> bool {
         world
@@ -63,16 +62,7 @@ impl BlockBehavior for CandleBlock {
     ) -> Option<steel_utils::BlockStateId> {
         let default_state = self.block.default_state();
         if self.can_survive(default_state, context.world, context.relative_pos) {
-            if context
-                .world
-                .get_block_state(context.relative_pos)
-                .get_block()
-                == vanilla_blocks::WATER
-            {
-                // FIXME: is_water_source()
-                return Some(default_state.set_value(&WATERLOGGED, true));
-            }
-            return Some(default_state);
+            return Some(default_state.set_value(&WATERLOGGED, context.is_water_source()));
         }
         None
     }
@@ -80,29 +70,30 @@ impl BlockBehavior for CandleBlock {
     fn update_shape(
         &self,
         state: steel_utils::BlockStateId,
-        world: &Arc<World>,
+        world: &dyn ScheduledTickAccess,
         pos: BlockPos,
         _direction: Direction,
         _neighbor_pos: BlockPos,
         _neighbor_state: steel_utils::BlockStateId,
     ) -> steel_utils::BlockStateId {
         if !self.can_survive(state, world, pos) {
-            return REGISTRY.blocks.get_default_state_id(vanilla_blocks::AIR);
+            return REGISTRY.blocks.get_default_state_id(&vanilla_blocks::AIR);
         }
         state
     }
 
     fn use_item_on(
         &self,
-        item_stack: &ItemStack,
         state: steel_utils::BlockStateId,
         world: &Arc<World>,
         pos: BlockPos,
         _player: &player::Player,
         _hand: types::InteractionHand,
         _hit_result: &BlockHitResult,
+        inv: &mut InventoryAccess,
     ) -> InteractionResult {
-        if item_stack.is_empty() {
+        let item_is_empty = inv.with_item(|item_stack| item_stack.is_empty());
+        if item_is_empty {
             if !state.get_value(&LIT_PROPERTY) {
                 return InteractionResult::Pass;
             }
@@ -111,21 +102,9 @@ impl BlockBehavior for CandleBlock {
             return InteractionResult::Success;
         }
 
-        if REGISTRY
-            .items
-            .is_in_tag(item_stack.item, &vanilla_item_tags::CREEPER_IGNITERS_TAG)
-        {
-            if state.get_value(&LIT_PROPERTY) || state.get_value(&WATERLOGGED) {
-                return InteractionResult::Pass;
-            }
-            let new_state = state.set_value(&LIT_PROPERTY, true);
-            world.set_block(pos, new_state, UpdateFlags::UPDATE_ALL_IMMEDIATE);
-            return InteractionResult::Success;
-        }
-
         if self
             .get_clone_item_stack(self.block, state, false)
-            .is_some_and(|it| it.is(item_stack.item))
+            .is_some_and(|it| inv.with_item(|item_stack| it.is(item_stack.item)))
         {
             let candles_amount = state.get_value(&CANDLES_PROPERTY);
             if candles_amount < MAX_CANDLES {

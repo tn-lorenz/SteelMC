@@ -1,5 +1,7 @@
 use std::fs;
 
+use crate::generator_functions::generate_text_component;
+use crate::shared_structs::TextComponentJson;
 use heck::ToShoutySnakeCase;
 use proc_macro2::{Ident, Span, TokenStream};
 use quote::quote;
@@ -40,18 +42,6 @@ pub struct ExitActionJson {
     width: i32,
 }
 
-#[derive(Deserialize, Debug)]
-pub struct TextComponentJson {
-    translate: String,
-}
-
-fn generate_text_component(component: &TextComponentJson) -> TokenStream {
-    let translate = component.translate.as_str();
-    quote! {
-        TextComponent::translated(TranslatedMessage::new(#translate, None))
-    }
-}
-
 fn generate_exit_action(action: &ExitActionJson) -> TokenStream {
     let label = generate_text_component(&action.label);
     let width = action.width;
@@ -64,11 +54,9 @@ fn generate_exit_action(action: &ExitActionJson) -> TokenStream {
 }
 
 pub(crate) fn build() -> TokenStream {
-    println!(
-        "cargo:rerun-if-changed=build_assets/builtin_datapacks/minecraft/data/minecraft/dialog/"
-    );
+    println!("cargo:rerun-if-changed=build_assets/builtin_datapacks/minecraft/dialog/");
 
-    let dialog_dir = "build_assets/builtin_datapacks/minecraft/data/minecraft/dialog";
+    let dialog_dir = "build_assets/builtin_datapacks/minecraft/dialog";
     let mut dialogs = Vec::new();
 
     // Read all dialog JSON files
@@ -112,7 +100,7 @@ pub(crate) fn build() -> TokenStream {
                 let title = generate_text_component(&dialog_list.title);
 
                 stream.extend(quote! {
-                    pub static #dialog_ident: &Dialog = &Dialog {
+                    pub static #dialog_ident: Dialog = Dialog {
                         key: #key,
                         button_width: #button_width,
                         columns: #columns,
@@ -131,7 +119,7 @@ pub(crate) fn build() -> TokenStream {
                 let title = generate_text_component(&server_links.title);
 
                 stream.extend(quote! {
-                    pub static #dialog_ident: &Dialog = &Dialog {
+                    pub static #dialog_ident: Dialog = Dialog {
                         key: #key,
                         button_width: #button_width,
                         columns: #columns,
@@ -144,7 +132,7 @@ pub(crate) fn build() -> TokenStream {
             }
         }
         register_stream.extend(quote! {
-            registry.register(#dialog_ident);
+            registry.register(&#dialog_ident);
         });
     }
 

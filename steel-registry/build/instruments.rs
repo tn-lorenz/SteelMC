@@ -1,5 +1,7 @@
 use std::fs;
 
+use crate::generator_functions::{generate_identifier, generate_text_component};
+use crate::shared_structs::TextComponentJson;
 use heck::ToShoutySnakeCase;
 use proc_macro2::{Ident, Span, TokenStream};
 use quote::quote;
@@ -14,30 +16,10 @@ pub struct InstrumentJson {
     description: TextComponentJson,
 }
 
-#[derive(Deserialize, Debug)]
-pub struct TextComponentJson {
-    translate: String,
-}
-
-fn generate_identifier(resource: &Identifier) -> TokenStream {
-    let namespace = resource.namespace.as_ref();
-    let path = resource.path.as_ref();
-    quote! { Identifier { namespace: Cow::Borrowed(#namespace), path: Cow::Borrowed(#path) } }
-}
-
-fn generate_text_component(component: &TextComponentJson) -> TokenStream {
-    let translate = component.translate.as_str();
-    quote! {
-        TextComponent::translated(TranslatedMessage::new(#translate, None))
-    }
-}
-
 pub(crate) fn build() -> TokenStream {
-    println!(
-        "cargo:rerun-if-changed=build_assets/builtin_datapacks/minecraft/data/minecraft/instrument/"
-    );
+    println!("cargo:rerun-if-changed=build_assets/builtin_datapacks/minecraft/instrument/");
 
-    let instrument_dir = "build_assets/builtin_datapacks/minecraft/data/minecraft/instrument";
+    let instrument_dir = "build_assets/builtin_datapacks/minecraft/instrument";
     let mut instruments = Vec::new();
 
     // Read all instrument JSON files
@@ -80,7 +62,7 @@ pub(crate) fn build() -> TokenStream {
         let description = generate_text_component(&instrument.description);
 
         stream.extend(quote! {
-            pub static #instrument_ident: &Instrument = &Instrument {
+            pub static #instrument_ident: Instrument = Instrument {
                 key: #key,
                 sound_event: #sound_event,
                 use_duration: #use_duration,
@@ -91,7 +73,7 @@ pub(crate) fn build() -> TokenStream {
         let instrument_ident =
             Ident::new(&instrument_name.to_shouty_snake_case(), Span::call_site());
         register_stream.extend(quote! {
-            registry.register(#instrument_ident);
+            registry.register(&#instrument_ident);
         });
     }
 

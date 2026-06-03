@@ -10,11 +10,9 @@ use serde::Deserialize;
 pub struct WorldClockJson {}
 
 pub(crate) fn build() -> TokenStream {
-    println!(
-        "cargo:rerun-if-changed=build_assets/builtin_datapacks/minecraft/data/minecraft/world_clock/"
-    );
+    println!("cargo:rerun-if-changed=build_assets/builtin_datapacks/minecraft/world_clock/");
 
-    let world_clock_dir = "build_assets/builtin_datapacks/minecraft/data/minecraft/world_clock";
+    let world_clock_dir = "build_assets/builtin_datapacks/minecraft/world_clock";
     let mut world_clocks = Vec::new();
 
     // Read all world_clock JSON files
@@ -49,13 +47,13 @@ pub(crate) fn build() -> TokenStream {
         let key = quote! { Identifier::vanilla_static(#world_clock_name_str) };
 
         stream.extend(quote! {
-            pub static #world_clock_ident: &WorldClock = &WorldClock {
+            pub static #world_clock_ident: WorldClock = WorldClock {
                 key: #key,
             };
         });
 
         register_stream.extend(quote! {
-            registry.register(#world_clock_ident);
+            registry.register(&#world_clock_ident);
         });
     }
 

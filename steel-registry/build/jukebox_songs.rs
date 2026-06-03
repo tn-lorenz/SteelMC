@@ -1,5 +1,7 @@
 use std::fs;
 
+use crate::generator_functions::{generate_identifier, generate_text_component};
+use crate::shared_structs::TextComponentJson;
 use heck::ToShoutySnakeCase;
 use proc_macro2::{Ident, Span, TokenStream};
 use quote::quote;
@@ -14,30 +16,10 @@ pub struct JukeboxSongJson {
     comparator_output: i32,
 }
 
-#[derive(Deserialize, Debug)]
-pub struct TextComponentJson {
-    translate: String,
-}
-
-fn generate_identifier(resource: &Identifier) -> TokenStream {
-    let namespace = resource.namespace.as_ref();
-    let path = resource.path.as_ref();
-    quote! { Identifier { namespace: Cow::Borrowed(#namespace), path: Cow::Borrowed(#path) } }
-}
-
-fn generate_text_component(component: &TextComponentJson) -> TokenStream {
-    let translate = component.translate.as_str();
-    quote! {
-        TextComponent::translated(TranslatedMessage::new(#translate, None))
-    }
-}
-
 pub(crate) fn build() -> TokenStream {
-    println!(
-        "cargo:rerun-if-changed=build_assets/builtin_datapacks/minecraft/data/minecraft/jukebox_song/"
-    );
+    println!("cargo:rerun-if-changed=build_assets/builtin_datapacks/minecraft/jukebox_song/");
 
-    let jukebox_song_dir = "build_assets/builtin_datapacks/minecraft/data/minecraft/jukebox_song";
+    let jukebox_song_dir = "build_assets/builtin_datapacks/minecraft/jukebox_song";
     let mut jukebox_songs = Vec::new();
 
     // Read all jukebox song JSON files
@@ -87,7 +69,7 @@ pub(crate) fn build() -> TokenStream {
         let comparator_output = jukebox_song.comparator_output;
 
         stream.extend(quote! {
-            pub static #jukebox_song_ident: &JukeboxSong = &JukeboxSong {
+            pub static #jukebox_song_ident: JukeboxSong = JukeboxSong {
                 key: #key,
                 sound_event: #sound_event,
                 description: #description,
@@ -97,7 +79,7 @@ pub(crate) fn build() -> TokenStream {
         });
 
         register_stream.extend(quote! {
-            registry.register(#jukebox_song_ident);
+            registry.register(&#jukebox_song_ident);
         });
     }
 

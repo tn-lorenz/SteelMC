@@ -1,5 +1,4 @@
-use std::fs;
-
+use crate::generator_functions::{generate_identifier, read_variants_from_dir};
 use heck::ToShoutySnakeCase;
 use proc_macro2::{Ident, Span, TokenStream};
 use quote::quote;
@@ -22,34 +21,9 @@ pub struct WolfSoundVariantJson {
     baby_sounds: Age,
 }
 
-fn generate_identifier(resource: &Identifier) -> TokenStream {
-    let path = resource.path.as_ref();
-    quote! { Identifier::vanilla_static(#path) }
-}
-
 pub(crate) fn build() -> TokenStream {
-    println!(
-        "cargo:rerun-if-changed=build_assets/builtin_datapacks/minecraft/data/minecraft/wolf_sound_variant/"
-    );
-
-    let wolf_sound_variant_dir =
-        "build_assets/builtin_datapacks/minecraft/data/minecraft/wolf_sound_variant";
-    let mut wolf_sound_variants = Vec::new();
-
-    // Read all wolf sound variant JSON files
-    for entry in fs::read_dir(wolf_sound_variant_dir).unwrap() {
-        let entry = entry.unwrap();
-        let path = entry.path();
-
-        if path.extension().and_then(|s| s.to_str()) == Some("json") {
-            let wolf_sound_variant_name = path.file_stem().unwrap().to_str().unwrap().to_string();
-            let content = fs::read_to_string(&path).unwrap();
-            let wolf_sound_variant: WolfSoundVariantJson = serde_json::from_str(&content)
-                .unwrap_or_else(|e| panic!("Failed to parse {}: {}", wolf_sound_variant_name, e));
-
-            wolf_sound_variants.push((wolf_sound_variant_name, wolf_sound_variant));
-        }
-    }
+    let wolf_sound_variants: Vec<(String, WolfSoundVariantJson)> =
+        read_variants_from_dir("wolf_sound_variant");
 
     let mut stream = TokenStream::new();
 
@@ -88,7 +62,7 @@ pub(crate) fn build() -> TokenStream {
         let baby_step_sound = generate_identifier(&wolf_sound_variant.baby_sounds.step_sound);
 
         stream.extend(quote! {
-            pub static #wolf_sound_variant_ident: &WolfSoundVariant = &WolfSoundVariant {
+            pub static #wolf_sound_variant_ident: WolfSoundVariant = WolfSoundVariant {
                 key: #key,
                 adult_sounds: WolfAge {
                     ambient_sound: #adult_ambient_sound,
@@ -112,7 +86,7 @@ pub(crate) fn build() -> TokenStream {
         });
 
         register_stream.extend(quote! {
-            registry.register(#wolf_sound_variant_ident);
+            registry.register(&#wolf_sound_variant_ident);
         });
     }
 

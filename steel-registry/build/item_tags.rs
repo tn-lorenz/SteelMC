@@ -26,11 +26,9 @@ fn read_all_fabric_tags(tag_file: &str) -> FxHashMap<String, Vec<String>> {
 }
 
 pub(crate) fn build() -> TokenStream {
-    println!(
-        "cargo:rerun-if-changed=build_assets/builtin_datapacks/minecraft/data/minecraft/tags/item/"
-    );
+    println!("cargo:rerun-if-changed=build_assets/builtin_datapacks/minecraft/tags/item/");
 
-    let tag_dir = "build_assets/builtin_datapacks/minecraft/data/minecraft/tags/item";
+    let tag_dir = "build_assets/builtin_datapacks/minecraft/tags/item";
     let mut all_tags = tag_utils::read_all_tags(tag_dir);
     all_tags.extend(read_all_fabric_tags("build_assets/tags.json"));
 
@@ -52,10 +50,7 @@ pub(crate) fn build() -> TokenStream {
             &format!("{}_TAG_LIST", tag_name.to_shouty_snake_case()),
             Span::call_site(),
         );
-        let tag_ident = Ident::new(
-            &format!("{}_TAG", tag_name.to_shouty_snake_case()),
-            Span::call_site(),
-        );
+        let tag_ident = Ident::new(&tag_name.to_shouty_snake_case(), Span::call_site());
 
         let item_strs = items.iter().map(|s| s.as_str());
 
@@ -75,20 +70,22 @@ pub(crate) fn build() -> TokenStream {
 
         register_stream.extend(quote! {
             registry.register_tag(
-                #tag_ident,
+                Self::#tag_ident,
                 #tag_ident_array
             );
         });
     }
 
     stream.extend(quote! {
-        #static_array
+       #static_array
+       pub struct ItemTag {}
+       impl ItemTag {
+           #const_identifier
+           pub fn register_item_tags(registry: &mut ItemRegistry) {
+               #register_stream
+           }
 
-        #const_identifier
-
-        pub fn register_item_tags(registry: &mut ItemRegistry) {
-            #register_stream
-        }
+       }
     });
 
     stream

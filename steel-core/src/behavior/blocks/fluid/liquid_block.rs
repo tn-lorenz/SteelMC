@@ -26,7 +26,7 @@ use crate::behavior::block::{BlockBehavior, PickupResult};
 use crate::behavior::context::BlockPlaceContext;
 use crate::fluid::{FluidStateExt, is_lava_fluid, is_water_fluid};
 use crate::player::Player;
-use crate::world::World;
+use crate::world::{ScheduledTickAccess, World};
 
 /// Behavior for liquid blocks (water and lava).
 ///
@@ -61,7 +61,7 @@ impl LiquidBlock {
         // Check if there's soul soil below (for basalt generation)
         let below_pos = pos.offset(0, -1, 0);
         let below_state = world.get_block_state(below_pos);
-        let has_soul_soil_below = below_state.get_block() == vanilla_blocks::SOUL_SOIL;
+        let has_soul_soil_below = below_state.get_block() == &vanilla_blocks::SOUL_SOIL;
 
         // Get fluid state to check if this is a source
         let fluid_state = world.get_block_state(pos).get_fluid_state();
@@ -75,9 +75,9 @@ impl LiquidBlock {
             if neighbor_fluid.is_water() {
                 // Lava + Water = Obsidian (if source) or Cobblestone (if flowing)
                 let new_block = if fluid_state.is_source() {
-                    vanilla_blocks::OBSIDIAN
+                    &vanilla_blocks::OBSIDIAN
                 } else {
-                    vanilla_blocks::COBBLESTONE
+                    &vanilla_blocks::COBBLESTONE
                 };
 
                 let new_state = REGISTRY.blocks.get_default_state_id(new_block);
@@ -89,8 +89,10 @@ impl LiquidBlock {
             // Check for basalt generation: soul soil below + blue ice adjacent
             if has_soul_soil_below {
                 let neighbor_state = world.get_block_state(neighbor_pos);
-                if neighbor_state.get_block() == vanilla_blocks::BLUE_ICE {
-                    let new_state = REGISTRY.blocks.get_default_state_id(vanilla_blocks::BASALT);
+                if neighbor_state.get_block() == &vanilla_blocks::BLUE_ICE {
+                    let new_state = REGISTRY
+                        .blocks
+                        .get_default_state_id(&vanilla_blocks::BASALT);
                     world.set_block(pos, new_state, UpdateFlags::UPDATE_ALL);
                     world.level_event(level_events::LAVA_FIZZ, pos, 0, None);
                     return false; // Don't schedule fluid tick - block was converted
@@ -149,7 +151,7 @@ impl BlockBehavior for LiquidBlock {
     fn update_shape(
         &self,
         state: BlockStateId,
-        world: &Arc<World>,
+        world: &dyn ScheduledTickAccess,
         pos: BlockPos,
         _direction: Direction,
         _neighbor_pos: BlockPos,
@@ -160,7 +162,7 @@ impl BlockBehavior for LiquidBlock {
         let neighbor_fluid = neighbor_state.get_fluid_state();
 
         if fluid_state.is_source() || neighbor_fluid.is_source() {
-            let delay = FLUID_BEHAVIORS.get_behavior(self.fluid).tick_delay(world);
+            let delay = world.fluid_tick_delay(self.fluid);
             world.schedule_fluid_tick_default(pos, self.fluid, delay);
         }
 
@@ -192,7 +194,7 @@ impl BlockBehavior for LiquidBlock {
             return None;
         }
 
-        let air = REGISTRY.blocks.get_default_state_id(vanilla_blocks::AIR);
+        let air = REGISTRY.blocks.get_default_state_id(&vanilla_blocks::AIR);
         world.set_block(pos, air, UpdateFlags::UPDATE_ALL_IMMEDIATE);
 
         let bucket = if is_water_fluid(self.fluid) {

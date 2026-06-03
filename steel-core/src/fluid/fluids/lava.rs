@@ -27,7 +27,7 @@ use crate::world::World;
 /// Lava fluid implementation.
 ///
 /// Implements [`FluidBehavior`] with lava-specific parameters and
-/// behaviors (dimension-dependent spread, uphill delay, lava/water chemistry,
+/// behaviors (world-dependent spread, uphill delay, lava/water chemistry,
 /// fizz sounds).
 pub struct LavaFluid;
 
@@ -35,7 +35,7 @@ impl LavaFluid {
     /// Returns true if this world uses fast lava (nether-like).
     // TODO: Vanilla uses EnvironmentAttributes.FAST_LAVA on the dimension type, not a hardcoded check
     fn is_fast_lava(world: &Arc<World>) -> bool {
-        world.dimension.key == vanilla_dimension_types::THE_NETHER.key
+        world.dimension_type.key == vanilla_dimension_types::THE_NETHER.key
     }
 }
 
@@ -70,7 +70,7 @@ impl FluidBehavior for LavaFluid {
     }
 
     fn can_convert_to_source(&self, world: &Arc<World>) -> bool {
-        match world.get_game_rule(LAVA_SOURCE_CONVERSION) {
+        match world.get_game_rule(&LAVA_SOURCE_CONVERSION) {
             GameRuleValue::Bool(val) => val,
             GameRuleValue::Int(_) => false,
         }
@@ -174,10 +174,10 @@ impl FlowingFluid for LavaFluid {
                 // Vanilla: stone only forms when the target is a pure water LiquidBlock,
                 // not a waterlogged block (stairs, slabs, etc.).
                 let below_block = world.get_block_state(pos).get_block();
-                if below_block == vanilla_blocks::WATER {
+                if below_block == &vanilla_blocks::WATER {
                     world.set_block(
                         pos,
-                        REGISTRY.blocks.get_default_state_id(vanilla_blocks::STONE),
+                        REGISTRY.blocks.get_default_state_id(&vanilla_blocks::STONE),
                         UpdateFlags::UPDATE_ALL_IMMEDIATE,
                     );
                 }

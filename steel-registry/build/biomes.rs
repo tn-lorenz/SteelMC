@@ -1,6 +1,7 @@
 use rustc_hash::FxHashMap;
 use std::fs;
 
+use crate::generator_functions::{generate_identifier, generate_option, generate_vec};
 use heck::ToShoutySnakeCase;
 use proc_macro2::{Ident, Span, TokenStream};
 use quote::quote;
@@ -325,33 +326,6 @@ fn generate_grass_color_modifier(modifier: &GrassColorModifier) -> TokenStream {
     }
 }
 
-fn generate_identifier(resource: &Identifier) -> TokenStream {
-    let namespace = resource.namespace.as_ref();
-    let path = resource.path.as_ref();
-    quote! { Identifier { namespace: Cow::Borrowed(#namespace), path: Cow::Borrowed(#path) } }
-}
-
-fn generate_option<T, F>(opt: &Option<T>, f: F) -> TokenStream
-where
-    F: FnOnce(&T) -> TokenStream,
-{
-    match opt {
-        Some(val) => {
-            let inner = f(val);
-            quote! { Some(#inner) }
-        }
-        None => quote! { None },
-    }
-}
-
-fn generate_vec<T, F>(vec: &[T], f: F) -> TokenStream
-where
-    F: Fn(&T) -> TokenStream,
-{
-    let items: Vec<_> = vec.iter().map(f).collect();
-    quote! { vec![#(#items),*] }
-}
-
 fn generate_hashmap_string<T, F>(map: &FxHashMap<String, T>, f: F) -> TokenStream
 where
     F: Fn(&T) -> TokenStream,
@@ -520,11 +494,9 @@ fn generate_biome_effects(effects: &BiomeEffects) -> TokenStream {
 }
 
 pub(crate) fn build() -> TokenStream {
-    println!(
-        "cargo:rerun-if-changed=build_assets/builtin_datapacks/minecraft/data/minecraft/worldgen/biome/"
-    );
+    println!("cargo:rerun-if-changed=build_assets/builtin_datapacks/minecraft/worldgen/biome/");
 
-    let biome_dir = "build_assets/builtin_datapacks/minecraft/data/minecraft/worldgen/biome";
+    let biome_dir = "build_assets/builtin_datapacks/minecraft/worldgen/biome";
     let mut biomes = Vec::new();
 
     // Read all biome JSON files
@@ -555,7 +527,7 @@ pub(crate) fn build() -> TokenStream {
         };
         use steel_utils::Identifier;
         use std::borrow::Cow;
-        use std::sync::LazyLock;
+        use std::sync::{LazyLock, OnceLock};
         use rustc_hash::FxHashMap;
     });
 
@@ -593,11 +565,12 @@ pub(crate) fn build() -> TokenStream {
                 spawn_costs: #spawn_costs,
                 carvers: #carvers,
                 features: #features,
+                id: OnceLock::new(),
             });
         });
         let biome_ident = Ident::new(&biome_name.to_shouty_snake_case(), Span::call_site());
         register_stream.extend(quote! {
-            registry.register(&#biome_ident, #biome_ident.key.clone());
+            registry.register(&#biome_ident);
         });
     }
 

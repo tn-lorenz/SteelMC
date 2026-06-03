@@ -15,7 +15,7 @@ pub struct CommandContext {
     pub sender: CommandSender,
     /// The player targeted by the command.
     pub player: Option<Arc<Player>>,
-    /// The world/dimension of the command.
+    /// The world the command is executing in.
     pub world: Arc<World>,
     /// The server where the command has been run.
     pub server: Arc<Server>,
@@ -44,7 +44,7 @@ impl CommandContext {
         let player = sender.get_player().cloned();
         let world = player
             .as_ref()
-            .map_or(server.overworld().clone(), |p| Arc::clone(&p.world));
+            .map_or(server.overworld().clone(), |p| p.get_world());
         let world_spawn = world.level_data.read().data().spawn.clone();
         let position = player
             .as_ref()

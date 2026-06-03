@@ -12,12 +12,14 @@ use steel_registry::{REGISTRY, RegistryEntry, RegistryExt};
 use steel_utils::types::{InteractionHand, UpdateFlags};
 use steel_utils::{BlockPos, BlockStateId};
 
+use crate::behavior::InventoryAccess;
+use crate::behavior::blocks::vegetation::bonemealable::Bonemealable;
 use crate::behavior::context::{BlockHitResult, BlockPlaceContext, InteractionResult};
 use crate::block_entity::SharedBlockEntity;
 use crate::entity::Entity;
 use crate::fluid::is_water_fluid;
 use crate::player::Player;
-use crate::world::World;
+use crate::world::{LevelReader, ScheduledTickAccess, World};
 use steel_registry::vanilla_fluids;
 
 pub struct PickupResult {
@@ -33,6 +35,14 @@ pub struct PickupResult {
 /// - Player interactions
 /// - State changes
 pub trait BlockBehavior: Send + Sync {
+    /// Returns the Rust type name of the concrete behavior implementation.
+    #[cfg(feature = "flint")]
+    #[must_use]
+    #[expect(clippy::absolute_paths, reason = "easier for features")]
+    fn type_name(&self) -> &'static str {
+        std::any::type_name::<Self>()
+    }
+
     /// Called when a player uses an empty bucket on this block.
     ///
     /// Should:
@@ -58,7 +68,7 @@ pub trait BlockBehavior: Send + Sync {
     fn update_shape(
         &self,
         state: BlockStateId,
-        _world: &Arc<World>,
+        _world: &dyn ScheduledTickAccess,
         _pos: BlockPos,
         _direction: Direction,
         _neighbor_pos: BlockPos,
@@ -79,7 +89,7 @@ pub trait BlockBehavior: Send + Sync {
         unused_variables,
         reason = "default trait implementation ignores all params"
     )]
-    fn can_survive(&self, state: BlockStateId, world: &Arc<World>, pos: BlockPos) -> bool {
+    fn can_survive(&self, state: BlockStateId, world: &dyn LevelReader, pos: BlockPos) -> bool {
         true
     }
 
@@ -107,6 +117,47 @@ pub trait BlockBehavior: Send + Sync {
         moved_by_piston: bool,
     ) {
         // Default: no-op
+    }
+
+    /// Called by block items after this block has been placed by an entity.
+    ///
+    /// Vanilla parity: `Block.setPlacedBy(Level, BlockPos, BlockState, LivingEntity, ItemStack)`.
+    /// Steel passes lazy inventory access instead of a borrowed stack so the
+    /// caller does not hold the inventory lock while dispatching block behavior.
+    /// This is intentionally separate from [`on_place`], which fires for any
+    /// world block mutation.
+    #[expect(
+        unused_variables,
+        reason = "default trait implementation ignores all params"
+    )]
+    fn set_placed_by(
+        &self,
+        state: BlockStateId,
+        world: &Arc<World>,
+        pos: BlockPos,
+        player: Option<&Player>,
+        inv: &InventoryAccess,
+    ) {
+        // Default: no-op
+    }
+
+    /// Called before a player removes this block.
+    ///
+    /// Vanilla parity: `Block.playerWillDestroy(Level, BlockPos, BlockState, Player)`.
+    /// The returned state is the state used for tool damage and loot after the
+    /// block is removed.
+    #[expect(
+        unused_variables,
+        reason = "default trait implementation ignores all params"
+    )]
+    fn player_will_destroy(
+        &self,
+        state: BlockStateId,
+        world: &Arc<World>,
+        pos: BlockPos,
+        player: &Player,
+    ) -> BlockStateId {
+        state
     }
 
     /// Called after this block is removed from the world, to affect neighbors.
@@ -144,13 +195,13 @@ pub trait BlockBehavior: Send + Sync {
     )]
     fn use_item_on(
         &self,
-        item_stack: &ItemStack,
         state: BlockStateId,
         world: &Arc<World>,
         pos: BlockPos,
         player: &Player,
         hand: InteractionHand,
         hit_result: &BlockHitResult,
+        inv: &mut InventoryAccess,
     ) -> InteractionResult {
         InteractionResult::TryEmptyHandInteraction
     }
@@ -171,6 +222,7 @@ pub trait BlockBehavior: Send + Sync {
         pos: BlockPos,
         player: &Player,
         hit_result: &BlockHitResult,
+        inv: &mut InventoryAccess,
     ) -> InteractionResult {
         InteractionResult::Pass
     }
@@ -441,6 +493,11 @@ pub trait BlockBehavior: Send + Sync {
         world.schedule_fluid_tick_default(pos, fluid_state.fluid_id, delay);
         true
     }
+
+    /// Returns the trait object for Blocks that have the Bonemealable trait implemented.
+    fn as_bonemealable(&self) -> Option<&dyn Bonemealable> {
+        None
+    }
 }
 
 /// Default block behavior that returns the block's default state for placement.
@@ -471,6 +528,13 @@ pub struct BlockBehaviorRegistry {
 }
 
 impl BlockBehaviorRegistry {
+    /// Get all behaviors.
+    #[cfg(feature = "flint")]
+    #[must_use]
+    pub fn get_behaviors(&self) -> &[Box<dyn BlockBehavior>] {
+        &self.behaviors
+    }
+
     /// Creates a new behavior registry with default behaviors for all blocks.
     #[must_use]
     pub fn new() -> Self {

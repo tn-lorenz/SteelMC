@@ -128,11 +128,9 @@ fn quote_time_marker(name: &str, v: &Value) -> TokenStream {
 }
 
 pub(crate) fn build() -> TokenStream {
-    println!(
-        "cargo:rerun-if-changed=build_assets/builtin_datapacks/minecraft/data/minecraft/timeline/"
-    );
+    println!("cargo:rerun-if-changed=build_assets/builtin_datapacks/minecraft/timeline/");
 
-    let timeline_dir = "build_assets/builtin_datapacks/minecraft/data/minecraft/timeline";
+    let timeline_dir = "build_assets/builtin_datapacks/minecraft/timeline";
     let mut timelines: Vec<(String, TimelineJson)> = Vec::new();
 
     // Read all timeline JSON files
@@ -233,7 +231,7 @@ pub(crate) fn build() -> TokenStream {
             .collect();
 
         stream.extend(quote! {
-            pub static #timeline_ident: &Timeline = &Timeline {
+            pub static #timeline_ident: Timeline = Timeline {
                 key: #key,
                 clock: #clock_ts,
                 period_ticks: #period_ticks_ts,
@@ -247,7 +245,7 @@ pub(crate) fn build() -> TokenStream {
         });
 
         register_stream.extend(quote! {
-            registry.register(#timeline_ident);
+            registry.register(&#timeline_ident);
         });
     }
 
