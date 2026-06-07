@@ -444,10 +444,8 @@ impl Player {
             // - Updating advancements
             // - Handling falling
 
-            // aiStep in vanilla
-            self.living_base.refresh_speed_from_attributes();
-
             self.update_player_attributes();
+            self.living_base.refresh_speed_from_attributes();
             self.tick_regeneration();
 
             if self.is_sprinting() && !self.food_data.lock().has_enough_food() {
@@ -502,6 +500,15 @@ impl Player {
         }
 
         self.connection.tick();
+    }
+
+    fn refresh_equipment_attribute_modifiers_from_stack(
+        &self,
+        slot: EquipmentSlot,
+        item_stack: &ItemStack,
+    ) {
+        self.living_base
+            .refresh_equipment_attribute_modifiers(slot, item_stack);
     }
 
     /// Ticks the death animation timer.

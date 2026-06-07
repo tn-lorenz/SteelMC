@@ -1,5 +1,9 @@
 use rustc_hash::FxHashMap;
-use steel_utils::{Identifier, codec::VarInt, serial::WriteTo};
+use steel_utils::{
+    Identifier,
+    codec::VarInt,
+    serial::{ReadFrom, WriteTo},
+};
 
 /// The operation type for an attribute modifier.
 ///
@@ -19,9 +23,48 @@ pub enum AttributeModifierOperation {
     AddMultipliedTotal = 2,
 }
 
+impl AttributeModifierOperation {
+    #[must_use]
+    pub const fn from_id(id: i32) -> Option<Self> {
+        match id {
+            0 => Some(Self::AddValue),
+            1 => Some(Self::AddMultipliedBase),
+            2 => Some(Self::AddMultipliedTotal),
+            _ => None,
+        }
+    }
+
+    #[must_use]
+    pub fn by_name(name: &str) -> Option<Self> {
+        match name {
+            "add_value" => Some(Self::AddValue),
+            "add_multiplied_base" => Some(Self::AddMultipliedBase),
+            "add_multiplied_total" => Some(Self::AddMultipliedTotal),
+            _ => None,
+        }
+    }
+
+    #[must_use]
+    pub const fn name(self) -> &'static str {
+        match self {
+            Self::AddValue => "add_value",
+            Self::AddMultipliedBase => "add_multiplied_base",
+            Self::AddMultipliedTotal => "add_multiplied_total",
+        }
+    }
+}
+
 impl WriteTo for AttributeModifierOperation {
     fn write(&self, writer: &mut impl std::io::Write) -> std::io::Result<()> {
         VarInt(*self as i32).write(writer)
+    }
+}
+
+impl ReadFrom for AttributeModifierOperation {
+    fn read(data: &mut std::io::Cursor<&[u8]>) -> std::io::Result<Self> {
+        let id = VarInt::read(data)?.0;
+        Self::from_id(id)
+            .ok_or_else(|| std::io::Error::other(format!("Unknown attribute operation id: {id}")))
     }
 }
 

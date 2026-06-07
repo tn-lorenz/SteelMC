@@ -32,6 +32,10 @@ enum MobEffectCategoryEntry {
 
 #[derive(Deserialize)]
 #[serde(rename_all = "SCREAMING_SNAKE_CASE")]
+#[expect(
+    clippy::enum_variant_names,
+    reason = "build input mirrors vanilla AttributeModifier.Operation names"
+)]
 enum AttributeModifierOperationEntry {
     AddValue,
     AddMultipliedBase,

@@ -68,10 +68,6 @@ pub struct PlayerInventory {
     /// Whether the selected hotbar item must be synced as main-hand equipment.
     dirty_main_hand: bool,
     /// Weak reference to the player.
-    #[expect(
-        dead_code,
-        reason = "held for future use; player reference needed for inventory change notifications"
-    )]
     player: Weak<Player>,
     /// Currently selected hotbar slot (0-8).
     selected: u8,
@@ -131,9 +127,10 @@ impl PlayerInventory {
     pub fn set_selected_slot(&mut self, slot: u8) {
         if Self::is_hotbar_slot(slot as usize) {
             if self.selected != slot {
+                self.selected = slot;
                 self.mark_main_hand_dirty();
+                self.refresh_player_equipment_attribute_modifiers(EquipmentSlot::MainHand);
             }
-            self.selected = slot;
         } else {
             panic!("Invalid hotbar slot: {slot}");
         }
@@ -158,10 +155,14 @@ impl PlayerInventory {
 
     /// Sets the currently selected item (main hand).
     pub fn set_selected_item(&mut self, item: ItemStack) {
-        if self.items[self.selected as usize] != item {
+        let changed = self.items[self.selected as usize] != item;
+        if changed {
             self.mark_main_hand_dirty();
         }
         self.items[self.selected as usize] = item;
+        if changed {
+            self.refresh_player_equipment_attribute_modifiers(EquipmentSlot::MainHand);
+        }
         self.set_changed();
     }
 
@@ -178,7 +179,10 @@ impl PlayerInventory {
 
     /// Sets the offhand item.
     pub fn set_offhand_item(&mut self, item: ItemStack) {
-        self.equipment.set(EquipmentSlot::OffHand, item);
+        let old = self.equipment.set(EquipmentSlot::OffHand, item);
+        if old != *self.equipment.get_ref(EquipmentSlot::OffHand) {
+            self.refresh_player_equipment_attribute_modifiers(EquipmentSlot::OffHand);
+        }
         self.set_changed();
     }
 
@@ -188,6 +192,7 @@ impl PlayerInventory {
         let result = f(&mut self.items[self.selected as usize]);
         if self.items[self.selected as usize] != previous {
             self.mark_main_hand_dirty();
+            self.refresh_player_equipment_attribute_modifiers(EquipmentSlot::MainHand);
         }
         self.set_changed();
         result
@@ -269,7 +274,13 @@ impl PlayerInventory {
             return;
         }
         let selected = self.selected as usize;
+        if selected != slot {
+            self.mark_main_hand_dirty();
+        }
         self.items.swap(selected, slot);
+        if selected != slot {
+            self.refresh_player_equipment_attribute_modifiers(EquipmentSlot::MainHand);
+        }
         self.set_changed();
     }
 
@@ -281,12 +292,16 @@ impl PlayerInventory {
             if self.items[i].is_empty() {
                 self.items[i] = stack;
                 self.selected = i as u8;
+                self.mark_main_hand_dirty();
+                self.refresh_player_equipment_attribute_modifiers(EquipmentSlot::MainHand);
                 self.set_changed();
                 return true;
             }
         }
         // No empty slot, replace current slot
         self.items[self.selected as usize] = stack;
+        self.mark_main_hand_dirty();
+        self.refresh_player_equipment_attribute_modifiers(EquipmentSlot::MainHand);
         self.set_changed();
         true
     }
@@ -396,12 +411,25 @@ impl PlayerInventory {
         }
     }
 
+    fn refresh_player_equipment_attribute_modifiers(&self, slot: EquipmentSlot) {
+        let Some(player) = self.player.upgrade() else {
+            return;
+        };
+        player.refresh_equipment_attribute_modifiers_from_stack(
+            slot,
+            self.get_equipment_slot_item(slot),
+        );
+    }
+
     fn set_equipment_slot_item(&mut self, slot: EquipmentSlot, item: ItemStack) -> ItemStack {
         if slot == EquipmentSlot::MainHand {
             return self.set_selected_equipment_item(item);
         }
 
         let old = self.equipment.set(slot, item);
+        if old != *self.equipment.get_ref(slot) {
+            self.refresh_player_equipment_attribute_modifiers(slot);
+        }
         self.set_changed();
         old
     }
@@ -411,6 +439,7 @@ impl PlayerInventory {
         let old = mem::replace(&mut self.items[selected], item);
         if old != self.items[selected] {
             self.mark_main_hand_dirty();
+            self.refresh_player_equipment_attribute_modifiers(EquipmentSlot::MainHand);
         }
         self.set_changed();
         old
@@ -429,6 +458,7 @@ impl PlayerInventory {
             let old = mem::take(&mut self.items[selected]);
             if !old.is_empty() {
                 self.mark_main_hand_dirty();
+                self.refresh_player_equipment_attribute_modifiers(EquipmentSlot::MainHand);
                 self.set_changed();
             }
             return old;
@@ -436,6 +466,7 @@ impl PlayerInventory {
 
         let old = self.equipment.take(slot);
         if !old.is_empty() {
+            self.refresh_player_equipment_attribute_modifiers(slot);
             self.set_changed();
         }
         old
@@ -967,12 +998,19 @@ impl Container for PlayerInventory {
 
     fn set_item(&mut self, slot: usize, stack: ItemStack) {
         if slot < Self::INVENTORY_SIZE {
-            if slot == self.selected as usize && self.items[slot] != stack {
+            let refresh_main_hand = slot == self.selected as usize && self.items[slot] != stack;
+            if refresh_main_hand {
                 self.mark_main_hand_dirty();
             }
             self.items[slot] = stack;
+            if refresh_main_hand {
+                self.refresh_player_equipment_attribute_modifiers(EquipmentSlot::MainHand);
+            }
         } else if let Some(eq_slot) = slot_to_equipment(slot) {
-            self.equipment.set(eq_slot, stack);
+            let old = self.equipment.set(eq_slot, stack);
+            if old != *self.equipment.get_ref(eq_slot) {
+                self.refresh_player_equipment_attribute_modifiers(eq_slot);
+            }
         }
         self.set_changed();
     }
@@ -1011,6 +1049,12 @@ impl Container for PlayerInventory {
             count += self.equipment.get_ref(slot).count();
         }
         self.equipment.clear();
+        self.refresh_player_equipment_attribute_modifiers(EquipmentSlot::MainHand);
+        for slot in EquipmentSlot::ALL {
+            if slot != EquipmentSlot::MainHand {
+                self.refresh_player_equipment_attribute_modifiers(slot);
+            }
+        }
         if count > 0 {
             self.set_changed();
         }
@@ -1020,14 +1064,16 @@ impl Container for PlayerInventory {
     fn clear_content_matching(&mut self, predicate: &mut dyn FnMut(&mut ItemStack) -> bool) -> i32 {
         let mut count = 0;
         let selected = self.selected as usize;
+        let mut main_hand_changed = false;
+        let mut equipment_changed = [false; 8];
         for slot in 0..Self::INVENTORY_SIZE {
-            if slot == selected {
-                self.mark_main_hand_dirty();
-            }
-            let item = &mut self.items[slot];
-            if predicate(item) {
-                count += item.count();
-                *item = ItemStack::empty();
+            if predicate(&mut self.items[slot]) {
+                if slot == selected {
+                    self.mark_main_hand_dirty();
+                    main_hand_changed = true;
+                }
+                count += self.items[slot].count();
+                self.items[slot] = ItemStack::empty();
             }
         }
         for slot in EquipmentSlot::ALL {
@@ -1035,6 +1081,15 @@ impl Container for PlayerInventory {
             if predicate(item) {
                 count += item.count();
                 *item = ItemStack::empty();
+                equipment_changed[slot.index()] = true;
+            }
+        }
+        if main_hand_changed {
+            self.refresh_player_equipment_attribute_modifiers(EquipmentSlot::MainHand);
+        }
+        for slot in EquipmentSlot::ALL {
+            if equipment_changed[slot.index()] {
+                self.refresh_player_equipment_attribute_modifiers(slot);
             }
         }
         if count > 0 {

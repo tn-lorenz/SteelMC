@@ -8,11 +8,13 @@ use text_components::TextComponent;
 use super::component_data::ComponentData;
 use super::registry::DataComponentRegistry;
 pub use super::registry::DataComponentType;
-pub use crate::equipment::EquipmentSlot;
+pub use crate::attribute::AttributeModifierOperation;
+pub use crate::equipment::{EquipmentSlot, EquipmentSlotGroup};
 
 // Re-export component types for convenience
 pub use super::components::{
-    Equippable, EquippableAllowedEntities, ItemEnchantments, Tool, ToolRule,
+    Equippable, EquippableAllowedEntities, ItemAttributeModifierDisplay,
+    ItemAttributeModifierEntry, ItemAttributeModifiers, ItemEnchantments, Tool, ToolRule,
 };
 
 // ==================== Fully Implemented Components ====================
@@ -92,7 +94,7 @@ pub const CAN_PLACE_ON: DataComponentType<()> =
 pub const CAN_BREAK: DataComponentType<()> =
     DataComponentType::new(Identifier::vanilla_static("can_break"));
 
-pub const ATTRIBUTE_MODIFIERS: DataComponentType<()> =
+pub const ATTRIBUTE_MODIFIERS: DataComponentType<ItemAttributeModifiers> =
     DataComponentType::new(Identifier::vanilla_static("attribute_modifiers"));
 
 pub const CUSTOM_MODEL_DATA: DataComponentType<()> =
@@ -458,7 +460,10 @@ pub fn register_vanilla_data_components(registry: &mut DataComponentRegistry) {
     // 15: can_break
     register_stub!(registry, CAN_BREAK.key.clone());
     // 16: attribute_modifiers
-    register_stub!(registry, ATTRIBUTE_MODIFIERS.key.clone());
+    registry.register(
+        ATTRIBUTE_MODIFIERS,
+        ComponentDataDiscriminant::AttributeModifiers,
+    );
     // 17: custom_model_data
     register_stub!(registry, CUSTOM_MODEL_DATA.key.clone());
     // 18: tooltip_display

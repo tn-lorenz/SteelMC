@@ -5,11 +5,15 @@
 //! embed this struct and expose it via `LivingEntity::living_base()`, just like
 //! `EntityBase` is used for core `Entity` fields.
 
+use std::array;
+
 use rustc_hash::FxHashMap;
 use steel_protocol::packets::game::{CRemoveMobEffect, CUpdateMobEffect, MobEffectPacketFlags};
 use steel_registry::RegistryEntry;
+use steel_registry::attribute::AttributeRef;
 use steel_registry::entity_data::{ParticleData, ParticleList, ParticleOptions};
 use steel_registry::entity_type::EntityTypeRef;
+use steel_registry::item_stack::ItemStack;
 use steel_registry::mob_effect::MobEffectRef;
 use steel_registry::vanilla_attributes;
 use steel_registry::vanilla_entity_data::VanillaLivingEntityData;
@@ -18,7 +22,7 @@ use steel_utils::locks::SyncMutex;
 use steel_utils::{BlockPos, Identifier};
 
 use crate::entity::attribute::{AttributeMap, AttributeModifier, AttributeModifierOperation};
-use crate::inventory::equipment::EntityEquipment;
+use crate::inventory::equipment::{EntityEquipment, EquipmentSlot};
 
 /// Duration in ticks of the death animation before entity removal.
 pub const DEATH_DURATION: i32 = 20;
@@ -26,6 +30,7 @@ const INFINITE_EFFECT_DURATION: i32 = -1;
 const MIN_EFFECT_AMPLIFIER: i32 = 0;
 const MAX_EFFECT_AMPLIFIER: i32 = 255;
 const AMBIENT_EFFECT_ALPHA: i32 = 38;
+const VISIBLE_EFFECT_ALPHA: i32 = 255;
 const SPRINT_SPEED_MODIFIER_AMOUNT: f64 = 0.3;
 
 /// Runtime mob-effect state.
@@ -136,7 +141,7 @@ impl MobEffectInstance {
     }
 
     #[must_use]
-    fn is_shorter_duration_than(&self, other: &Self) -> bool {
+    const fn is_shorter_duration_than(&self, other: &Self) -> bool {
         !self.is_infinite_duration()
             && (self.duration < other.duration || other.is_infinite_duration())
     }
@@ -243,11 +248,11 @@ impl MobEffectInstance {
         true
     }
 
-    fn particle_color(&self) -> i32 {
+    const fn particle_color(&self) -> i32 {
         let alpha = if self.ambient {
             AMBIENT_EFFECT_ALPHA
         } else {
-            u8::MAX as i32
+            VISIBLE_EFFECT_ALPHA
         };
         let color = ((alpha << 24) | (self.effect.color & 0x00ff_ffff)) as u32;
         color as i32
@@ -453,6 +458,14 @@ pub struct LivingEntityBase {
     active_mob_effects: SyncMutex<FxHashMap<MobEffectRef, ActiveMobEffect>>,
     dirty_mob_effects: SyncMutex<Vec<MobEffectSyncChange>>,
     equipment: SyncMutex<EntityEquipment>,
+    equipment_attribute_modifiers:
+        SyncMutex<[Vec<EquipmentAttributeModifierKey>; EquipmentSlot::ALL.len()]>,
+}
+
+#[derive(Debug)]
+struct EquipmentAttributeModifierKey {
+    attribute: AttributeRef,
+    id: Identifier,
 }
 
 impl LivingEntityBase {
@@ -473,6 +486,7 @@ impl LivingEntityBase {
             active_mob_effects: SyncMutex::new(FxHashMap::default()),
             dirty_mob_effects: SyncMutex::new(Vec::new()),
             equipment: SyncMutex::new(EntityEquipment::new()),
+            equipment_attribute_modifiers: SyncMutex::new(array::from_fn(|_| Vec::new())),
         }
     }
 
@@ -498,6 +512,54 @@ impl LivingEntityBase {
     #[inline]
     pub const fn equipment(&self) -> &SyncMutex<EntityEquipment> {
         &self.equipment
+    }
+
+    /// Refreshes transient item attribute modifiers for an equipment slot.
+    pub fn refresh_equipment_attribute_modifiers(
+        &self,
+        slot: EquipmentSlot,
+        item_stack: &ItemStack,
+    ) {
+        let slot_index = slot.index();
+        let mut attributes = self.attributes.lock();
+        let mut installed_modifiers = self.equipment_attribute_modifiers.lock();
+
+        for key in installed_modifiers[slot_index].drain(..) {
+            attributes.remove_modifier(key.attribute, &key.id);
+        }
+
+        if item_stack.is_empty() || item_stack.is_broken() {
+            return;
+        }
+
+        let Some(modifiers) = item_stack.get_attribute_modifiers() else {
+            return;
+        };
+
+        for entry in modifiers.for_slot(slot) {
+            for (index, keys) in installed_modifiers.iter_mut().enumerate() {
+                if index == slot_index {
+                    continue;
+                }
+                keys.retain(|key| key.attribute.key != entry.attribute.key || key.id != entry.id);
+            }
+
+            attributes.remove_modifier(entry.attribute, &entry.id);
+            if attributes.add_modifier(
+                entry.attribute,
+                AttributeModifier {
+                    id: entry.id.clone(),
+                    amount: entry.amount,
+                    operation: entry.operation,
+                },
+                false,
+            ) {
+                installed_modifiers[slot_index].push(EquipmentAttributeModifierKey {
+                    attribute: entry.attribute,
+                    id: entry.id.clone(),
+                });
+            }
+        }
     }
 
     /// Returns whether this living entity has an active vanilla mob effect.

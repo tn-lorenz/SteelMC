@@ -3447,6 +3447,21 @@ pub trait LivingEntity: Entity {
         visitor(equipment.get_mut(slot));
     }
 
+    /// Refreshes transient item attribute modifiers for one equipment slot.
+    fn refresh_equipment_attribute_modifiers(&self, slot: EquipmentSlot) {
+        self.with_equipment_slot(slot, &mut |item_stack| {
+            self.living_base()
+                .refresh_equipment_attribute_modifiers(slot, item_stack);
+        });
+    }
+
+    /// Refreshes transient item attribute modifiers for all equipment slots.
+    fn refresh_all_equipment_attribute_modifiers(&self) {
+        for slot in EquipmentSlot::ALL {
+            self.refresh_equipment_attribute_modifiers(slot);
+        }
+    }
+
     /// Packs non-empty living equipment slots for initial spawn pairing.
     fn pack_living_equipment(&self) -> Vec<EquipmentSlotItem> {
         equipment_items_to_packet_items(self.living_base().equipment().lock().non_empty_items())
@@ -5211,6 +5226,58 @@ mod tests {
 
         let non_living = PushableTestEntity::shared(2, DVec3::ZERO);
         assert!(non_living.as_living_entity().is_none());
+    }
+
+    #[test]
+    fn living_equipment_attribute_modifiers_refresh_for_slot() {
+        init_test_registry();
+        let entity = LivingFluidTestEntity::new(0.0, 0.0, true);
+        let (base_armor, base_toughness) = {
+            let attributes = entity.attributes().lock();
+            (
+                attributes.required_value(vanilla_attributes::ARMOR),
+                attributes.required_value(vanilla_attributes::ARMOR_TOUGHNESS),
+            )
+        };
+
+        entity.equip(
+            EquipmentSlot::Head,
+            ItemStack::new(&vanilla_items::ITEMS.diamond_helmet),
+        );
+        LivingEntity::refresh_equipment_attribute_modifiers(&entity, EquipmentSlot::Head);
+
+        {
+            let attributes = entity.attributes().lock();
+            assert_eq!(
+                attributes
+                    .required_value(vanilla_attributes::ARMOR)
+                    .to_bits(),
+                (base_armor + 3.0).to_bits()
+            );
+            assert_eq!(
+                attributes
+                    .required_value(vanilla_attributes::ARMOR_TOUGHNESS)
+                    .to_bits(),
+                (base_toughness + 2.0).to_bits()
+            );
+        }
+
+        entity.equip(EquipmentSlot::Head, ItemStack::empty());
+        LivingEntity::refresh_equipment_attribute_modifiers(&entity, EquipmentSlot::Head);
+
+        let attributes = entity.attributes().lock();
+        assert_eq!(
+            attributes
+                .required_value(vanilla_attributes::ARMOR)
+                .to_bits(),
+            base_armor.to_bits()
+        );
+        assert_eq!(
+            attributes
+                .required_value(vanilla_attributes::ARMOR_TOUGHNESS)
+                .to_bits(),
+            base_toughness.to_bits()
+        );
     }
 
     #[test]

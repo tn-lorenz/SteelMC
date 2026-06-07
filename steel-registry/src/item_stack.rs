@@ -16,8 +16,9 @@ use crate::{
         Component, ComponentData, ComponentPatchEntry, DataComponentMap, DataComponentPatch,
         DataComponentType,
         vanilla_components::{
-            DAMAGE, ENCHANTMENTS, EQUIPPABLE, Equippable, ItemEnchantments, MAX_DAMAGE,
-            MAX_STACK_SIZE, TOOL, Tool, UNBREAKABLE,
+            ATTRIBUTE_MODIFIERS, DAMAGE, ENCHANTMENTS, EQUIPPABLE, Equippable,
+            ItemAttributeModifiers, ItemEnchantments, MAX_DAMAGE, MAX_STACK_SIZE, TOOL, Tool,
+            UNBREAKABLE,
         },
     },
     equipment::EquipmentSlot,
@@ -289,6 +290,12 @@ impl ItemStack {
     #[must_use]
     pub fn get_equippable(&self) -> Option<&Equippable> {
         self.get(EQUIPPABLE)
+    }
+
+    /// Returns the item attribute modifiers component.
+    #[must_use]
+    pub fn get_attribute_modifiers(&self) -> Option<&ItemAttributeModifiers> {
+        self.get(ATTRIBUTE_MODIFIERS)
     }
 
     /// Returns the equipment slot this item can be equipped to, if any.

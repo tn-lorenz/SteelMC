@@ -33,6 +33,7 @@ use crate::command::commands::gamemode::get_gamemode_translation;
 use crate::entity::attribute::{AttributeModifier, AttributeModifierOperation};
 use crate::entity::damage::DamageSource;
 use crate::entity::{Entity, LivingEntity};
+use crate::inventory::equipment::EquipmentSlot;
 use crate::inventory::menu::Menu;
 use crate::player::Player;
 use crate::player::block_breaking::BlockBreakAction;
@@ -355,6 +356,7 @@ impl Player {
             return false;
         }
 
+        LivingEntity::refresh_equipment_attribute_modifiers(self, EquipmentSlot::MainHand);
         let (attack_damage, attack_speed, attack_knockback) = {
             let attributes = self.attributes().lock();
             (
@@ -500,6 +502,8 @@ impl Player {
     /// Vanilla: `ServerPlayer.updatePlayerAttributes()` — applies creative-mode
     /// range modifiers every tick.
     pub(super) fn update_player_attributes(&self) {
+        LivingEntity::refresh_all_equipment_attribute_modifiers(self);
+
         let is_creative = self.game_mode() == GameType::Creative;
         let mut attrs = self.attributes().lock();
 

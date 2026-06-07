@@ -1,3 +1,4 @@
+pub use crate::equipment::EquipmentSlotGroup;
 use crate::{
     REGISTRY, RegistryExt, TaggedRegistryExt, blocks::block_state_ext::BlockStateExt,
     item_stack::ItemStack,
@@ -22,42 +23,6 @@ pub enum LootContextEntity {
     KillerPlayer,
     /// The entity interacting with a block/entity.
     Interacting,
-}
-
-/// Equipment/attribute slot group for enchantments and attributes.
-///
-/// Vanilla's `EquipmentSlotGroup` — a grouping/predicate over concrete `EquipmentSlot` values.
-/// `Hand` matches both main/offhand, `Armor` matches all armor slots, `Any` matches everything.
-#[derive(Debug, Clone, Copy, PartialEq, Eq)]
-pub enum EquipmentSlotGroup {
-    Any,
-    MainHand,
-    OffHand,
-    Hand,
-    Head,
-    Chest,
-    Legs,
-    Feet,
-    Armor,
-    Body,
-}
-
-impl EquipmentSlotGroup {
-    #[must_use]
-    pub const fn as_str(self) -> &'static str {
-        match self {
-            Self::Any => "any",
-            Self::MainHand => "mainhand",
-            Self::OffHand => "offhand",
-            Self::Hand => "hand",
-            Self::Head => "head",
-            Self::Chest => "chest",
-            Self::Legs => "legs",
-            Self::Feet => "feet",
-            Self::Armor => "armor",
-            Self::Body => "body",
-        }
-    }
 }
 
 /// Dye/banner color.

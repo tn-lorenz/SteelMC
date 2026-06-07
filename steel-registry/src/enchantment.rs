@@ -1,5 +1,5 @@
+pub use crate::equipment::EquipmentSlotGroup;
 use crate::items::ItemRef;
-pub use crate::loot_table::EquipmentSlotGroup;
 use crate::{REGISTRY, RegistryEntry, RegistryExt, TaggedRegistryExt};
 use rustc_hash::FxHashMap;
 use simdnbt::ToNbtTag;

@@ -126,3 +126,131 @@ impl EquipmentSlot {
         }
     }
 }
+
+/// Equipment slot groups used by vanilla item attributes, loot, and enchantments.
+///
+/// Vanilla's `EquipmentSlotGroup` is a predicate over concrete equipment slots:
+/// `Hand` matches both hand slots, `Armor` matches humanoid and animal armor,
+/// and `Any` matches every slot.
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Hash)]
+pub enum EquipmentSlotGroup {
+    Any,
+    MainHand,
+    OffHand,
+    Hand,
+    Feet,
+    Legs,
+    Chest,
+    Head,
+    Armor,
+    Body,
+    Saddle,
+}
+
+impl EquipmentSlotGroup {
+    #[must_use]
+    pub const fn id(self) -> i32 {
+        match self {
+            Self::Any => 0,
+            Self::MainHand => 1,
+            Self::OffHand => 2,
+            Self::Hand => 3,
+            Self::Feet => 4,
+            Self::Legs => 5,
+            Self::Chest => 6,
+            Self::Head => 7,
+            Self::Armor => 8,
+            Self::Body => 9,
+            Self::Saddle => 10,
+        }
+    }
+
+    #[must_use]
+    pub const fn by_id(id: i32) -> Option<Self> {
+        match id {
+            0 => Some(Self::Any),
+            1 => Some(Self::MainHand),
+            2 => Some(Self::OffHand),
+            3 => Some(Self::Hand),
+            4 => Some(Self::Feet),
+            5 => Some(Self::Legs),
+            6 => Some(Self::Chest),
+            7 => Some(Self::Head),
+            8 => Some(Self::Armor),
+            9 => Some(Self::Body),
+            10 => Some(Self::Saddle),
+            _ => None,
+        }
+    }
+
+    #[must_use]
+    pub fn by_name(name: &str) -> Option<Self> {
+        match name {
+            "any" => Some(Self::Any),
+            "mainhand" | "main_hand" => Some(Self::MainHand),
+            "offhand" | "off_hand" => Some(Self::OffHand),
+            "hand" => Some(Self::Hand),
+            "feet" => Some(Self::Feet),
+            "legs" => Some(Self::Legs),
+            "chest" => Some(Self::Chest),
+            "head" => Some(Self::Head),
+            "armor" => Some(Self::Armor),
+            "body" => Some(Self::Body),
+            "saddle" => Some(Self::Saddle),
+            _ => None,
+        }
+    }
+
+    #[must_use]
+    pub const fn name(self) -> &'static str {
+        match self {
+            Self::Any => "any",
+            Self::MainHand => "mainhand",
+            Self::OffHand => "offhand",
+            Self::Hand => "hand",
+            Self::Feet => "feet",
+            Self::Legs => "legs",
+            Self::Chest => "chest",
+            Self::Head => "head",
+            Self::Armor => "armor",
+            Self::Body => "body",
+            Self::Saddle => "saddle",
+        }
+    }
+
+    #[must_use]
+    pub const fn as_str(self) -> &'static str {
+        self.name()
+    }
+
+    #[must_use]
+    pub const fn by_slot(slot: EquipmentSlot) -> Self {
+        match slot {
+            EquipmentSlot::MainHand => Self::MainHand,
+            EquipmentSlot::OffHand => Self::OffHand,
+            EquipmentSlot::Feet => Self::Feet,
+            EquipmentSlot::Legs => Self::Legs,
+            EquipmentSlot::Chest => Self::Chest,
+            EquipmentSlot::Head => Self::Head,
+            EquipmentSlot::Body => Self::Body,
+            EquipmentSlot::Saddle => Self::Saddle,
+        }
+    }
+
+    #[must_use]
+    pub const fn test(self, slot: EquipmentSlot) -> bool {
+        match self {
+            Self::Any => true,
+            Self::MainHand => matches!(slot, EquipmentSlot::MainHand),
+            Self::OffHand => matches!(slot, EquipmentSlot::OffHand),
+            Self::Hand => matches!(slot.slot_type(), EquipmentSlotType::Hand),
+            Self::Feet => matches!(slot, EquipmentSlot::Feet),
+            Self::Legs => matches!(slot, EquipmentSlot::Legs),
+            Self::Chest => matches!(slot, EquipmentSlot::Chest),
+            Self::Head => matches!(slot, EquipmentSlot::Head),
+            Self::Armor => slot.is_armor(),
+            Self::Body => matches!(slot, EquipmentSlot::Body),
+            Self::Saddle => matches!(slot, EquipmentSlot::Saddle),
+        }
+    }
+}
