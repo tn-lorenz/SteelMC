@@ -583,7 +583,8 @@ mod tests {
     use steel_registry::test_support::init_test_registry;
     use steel_registry::vanilla_entities;
 
-    use crate::entity::ai::path::PathType;
+    use crate::entity::ai::node::Node;
+    use crate::entity::ai::path::{Path, PathType};
 
     use super::*;
 
@@ -679,6 +680,29 @@ mod tests {
             pig.mob_base().goal_selector().lock().available_goal_count(),
             1
         );
+    }
+
+    #[test]
+    fn pig_path_target_feeds_move_control_forward_input() {
+        init_test_registry();
+
+        let pig = PigEntity::new(&vanilla_entities::PIG, 1, DVec3::ZERO, Weak::new());
+        let path = Path::new(vec![Node::new(1, 0, 0)], BlockPos::new(1, 0, 0), true);
+
+        assert!(pig.move_to_path(Some(path), 1.0));
+        let target = {
+            let mut navigation = pig.mob_base().navigation().lock();
+            navigation.next_move_target(pig.position(), pig.bounding_box().width())
+        };
+        let Some((target, speed_modifier)) = target else {
+            panic!("navigation should provide a move target");
+        };
+
+        pig.set_wanted_position(target, speed_modifier);
+        Mob::tick_move_control(&pig);
+
+        assert_eq!(pig.get_speed().to_bits(), 0.25_f32.to_bits());
+        assert_eq!(pig.travel_input().forward().to_bits(), 0.25_f32.to_bits());
     }
 
     #[test]

@@ -292,6 +292,17 @@ pub trait Mob: LivingEntity {
         self.mob_base().controls().lock().jump_control.jump();
     }
 
+    /// Mirrors vanilla `Mob.setSpeed`: update cached speed and forward AI input.
+    fn set_mob_speed(&self, speed: f32) {
+        self.set_speed(speed);
+        let input = self.travel_input();
+        self.set_travel_input(LivingTravelInput::new(
+            input.sideways(),
+            input.vertical(),
+            speed,
+        ));
+    }
+
     fn mob_server_ai_step(&self) {
         self.increment_no_action_time();
         self.tick_goal_selectors();
@@ -387,7 +398,7 @@ pub trait Mob: LivingEntity {
             .attributes()
             .lock()
             .required_value(vanilla_attributes::MOVEMENT_SPEED);
-        self.set_speed((speed_modifier * movement_speed) as f32);
+        self.set_mob_speed((speed_modifier * movement_speed) as f32);
 
         if should_jump_to_wanted_position(self, wanted_position, xd, yd, zd) {
             self.jump_control_jump();
@@ -447,7 +458,7 @@ pub trait Mob: LivingEntity {
             .attributes()
             .lock()
             .required_value(vanilla_attributes::MOVEMENT_SPEED);
-        self.set_speed((speed_modifier * movement_speed) as f32);
+        self.set_mob_speed((speed_modifier * movement_speed) as f32);
         if self.on_ground()
             || (self.is_in_water() || self.is_in_lava()) && self.is_affected_by_fluids()
         {
