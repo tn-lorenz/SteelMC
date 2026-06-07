@@ -396,6 +396,14 @@ impl Entity for PigEntity {
         Some(self)
     }
 
+    fn is_pathfinder_mob(&self) -> bool {
+        true
+    }
+
+    fn as_pathfinder_mob(&self) -> Option<&dyn PathfinderMob> {
+        Some(self)
+    }
+
     fn is_alive(&self) -> bool {
         !self.is_removed() && self.get_health() > 0.0
     }
@@ -639,6 +647,20 @@ mod tests {
             panic!("pig should expose living behavior");
         };
         assert_eq!(living.get_health().to_bits(), 10.0_f32.to_bits());
+    }
+
+    #[test]
+    fn pig_exposes_pathfinder_mob_behavior_without_downcasting() {
+        init_test_registry();
+
+        let pig = PigEntity::new(&vanilla_entities::PIG, 1, DVec3::ZERO, Weak::new());
+        let entity = &pig as &dyn Entity;
+
+        assert!(entity.is_pathfinder_mob());
+        let Some(pathfinder) = entity.as_pathfinder_mob() else {
+            panic!("pig should expose pathfinder behavior");
+        };
+        assert!(!pathfinder.is_path_finding());
     }
 
     #[test]

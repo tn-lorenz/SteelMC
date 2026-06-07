@@ -34,7 +34,7 @@ use simdnbt::owned::NbtCompound;
 use steel_registry::biome::{BiomeRef, TemperatureModifier};
 use steel_registry::blocks::block_state_ext::BlockStateExt;
 use steel_registry::blocks::properties::Direction;
-use steel_registry::blocks::shapes::{VoxelShape, is_face_full};
+use steel_registry::blocks::shapes::{BooleanOp, VoxelShape, is_face_full, join_is_not_empty};
 use steel_registry::fluid::{FluidRef, FluidState};
 use steel_registry::game_events::GameEventRef;
 use steel_registry::game_rules::{GameRuleRef, GameRuleValue};
@@ -80,7 +80,7 @@ use tokio::{runtime::Runtime, time::Instant};
 use crate::{
     ChunkMap,
     behavior::BlockStateBehaviorExt,
-    behavior::{BLOCK_BEHAVIORS, FLUID_BEHAVIORS},
+    behavior::{BLOCK_BEHAVIORS, BlockCollisionContext, FLUID_BEHAVIORS},
     block_entity::SharedBlockEntity,
     chunk::heightmap::HeightmapType,
     chunk_saver::{ChunkStorage, RamOnlyStorage, RegionManager},
@@ -1035,6 +1035,7 @@ impl World {
         // Record the block change for broadcasting to clients
         log::debug!("Block changed at {pos:?}: {old_state:?} -> {block_state:?}");
         self.chunk_map.block_changed(pos);
+        self.update_navigating_mobs_after_block_collision_change(pos, old_state, block_state);
 
         // Neighbor updates (when UPDATE_NEIGHBORS is set)
         if flags.contains(UpdateFlags::UPDATE_NEIGHBORS) {
@@ -1065,6 +1066,60 @@ impl World {
             }
         }
         true
+    }
+
+    fn update_navigating_mobs_after_block_collision_change(
+        self: &Arc<Self>,
+        pos: BlockPos,
+        old_state: BlockStateId,
+        new_state: BlockStateId,
+    ) {
+        if !self.block_collision_shape_changed(pos, old_state, new_state) {
+            return;
+        }
+
+        let game_time = self.game_time();
+        for entity in self.entity_manager.live_entities() {
+            let Some(pathfinder) = entity.as_pathfinder_mob() else {
+                continue;
+            };
+            if !pathfinder.is_path_finding() {
+                continue;
+            }
+
+            let should_recompute = {
+                let navigation = pathfinder.mob_base().navigation().lock();
+                navigation.should_recompute_path(pos, pathfinder.position())
+            };
+            if !should_recompute {
+                continue;
+            }
+
+            let request = {
+                let mut navigation = pathfinder.mob_base().navigation().lock();
+                navigation.request_recompute_path(game_time, pathfinder.can_update_path())
+            };
+            if let Some(request) = request {
+                pathfinder.recompute_path(request);
+            }
+        }
+    }
+
+    fn block_collision_shape_changed(
+        &self,
+        pos: BlockPos,
+        old_state: BlockStateId,
+        new_state: BlockStateId,
+    ) -> bool {
+        let old_shape = self.block_collision_shape(pos, old_state);
+        let new_shape = self.block_collision_shape(pos, new_state);
+        join_is_not_empty(old_shape, new_shape, BooleanOp::NotSame)
+    }
+
+    fn block_collision_shape(&self, pos: BlockPos, state: BlockStateId) -> VoxelShape {
+        BLOCK_BEHAVIORS
+            .get_behavior(state.get_block())
+            .get_collision_shape(state, self, pos, BlockCollisionContext::empty())
     }
 
     /// Order in which neighbors are updated (matches vanilla's `NeighborUpdater.UPDATE_ORDER`).

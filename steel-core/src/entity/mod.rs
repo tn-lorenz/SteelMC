@@ -1304,6 +1304,19 @@ pub trait Entity: EntityEventSource + Send + Sync {
         None
     }
 
+    /// Returns true for mobs with pathfinding navigation.
+    fn is_pathfinder_mob(&self) -> bool {
+        false
+    }
+
+    /// Returns this entity as a pathfinder mob when it has pathfinding behavior.
+    ///
+    /// Mirrors vanilla's frequent `instanceof PathfinderMob` branches without
+    /// requiring core code to downcast through `Any`.
+    fn as_pathfinder_mob(&self) -> Option<&dyn PathfinderMob> {
+        None
+    }
+
     /// Returns true when vanilla `ServerEntity` should force velocity sync for fall flying.
     fn forces_fall_flying_velocity_sync(&self) -> bool {
         false

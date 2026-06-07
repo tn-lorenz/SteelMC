@@ -1,8 +1,4 @@
 //! Vanilla-shaped mob foundations.
-#![expect(
-    dead_code,
-    reason = "mob control hooks are foundation code consumed by upcoming goals and pathfinding"
-)]
 
 use std::f32::consts::PI;
 use std::sync::Arc;
