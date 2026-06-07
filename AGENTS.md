@@ -48,7 +48,8 @@ Template: *"This requires [Hack] which risks [Consequence]. Proceed or solve roo
 - `steel-worldgen/src/generated/` → modify `steel-worldgen/build/`
 - `steel-utils/src/generated/` → modify `steel-utils/build/`
 - Block/item behavior registration is generated from `#[block_behavior]` / `#[item_behavior]`; add annotated structs under `steel-core/src/behavior/`, not manual generated registration.
-- If extracted JSON data is missing, tell the user exactly what data is required; they can provide the extractor path.
+- Treat `*/build_assets/*.json` and `*/test_assets/*.json` populated by SteelExtractor as extracted data, not hand-authored source. If extracted JSON data is wrong or missing, update the relevant SteelExtractor extractor, rerun it, and copy only the produced file(s) needed for the change.
+- If extracted JSON data is missing and the extractor path/output is not available, tell the user exactly what data is required; they can provide the extractor path.
 
 ## Build Commands
 

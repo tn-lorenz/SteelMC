@@ -69,7 +69,7 @@ use steel_registry::vanilla_entity_data::PlayerEntityData;
 use steel_registry::vanilla_game_rules::{
     ADVANCE_TIME, IMMEDIATE_RESPAWN, KEEP_INVENTORY, MAX_ENTITY_CRAMMING, SHOW_DEATH_MESSAGES,
 };
-use steel_registry::{sound_events, vanilla_attributes, vanilla_entities};
+use steel_registry::{sound_events, vanilla_attributes, vanilla_entities, vanilla_particle_types};
 use steel_utils::entity_events::EntityStatus;
 
 use arc_swap::ArcSwap;
@@ -85,7 +85,7 @@ use crate::config::RuntimeConfig;
 use crate::entity::damage::DamageSource;
 use crate::entity::{
     DEATH_DURATION, Entity, EntityBase, EntitySyncedData, LivingEntity, LivingEntityBase,
-    RemovalReason, SharedEntity, equipment_items_to_packet_items,
+    MobEffectSyncChange, RemovalReason, SharedEntity, equipment_items_to_packet_items,
 };
 use crate::fluid::get_fluid_state;
 use crate::inventory::{SyncPlayerInv, equipment::EquipmentSlot};
@@ -424,6 +424,7 @@ impl Player {
         world.chunk_map.update_player_status(self);
 
         self.living_base.decrement_invulnerable_time();
+        self.tick_mob_effects();
 
         if self.get_health() <= 0.0 {
             self.tick_death();
@@ -531,6 +532,33 @@ impl Player {
                 .broadcast_to_entity_trackers(self.id(), packet.clone(), None);
             self.send_packet(packet);
         }
+    }
+
+    fn update_dirty_mob_effect_entity_data(&self) {
+        if !self.living_base.take_effects_dirty() {
+            return;
+        }
+
+        let Some(particle_type_id) = vanilla_particle_types::ENTITY_EFFECT.try_id() else {
+            log::error!("vanilla entity_effect particle type is not registered");
+            return;
+        };
+        let Ok(particle_type_id) = i32::try_from(particle_type_id) else {
+            log::error!("vanilla entity_effect particle type id does not fit protocol i32");
+            return;
+        };
+        let display = self.living_base.mob_effect_display_state(particle_type_id);
+
+        {
+            let mut entity_data = self.entity_data.lock();
+            let living = entity_data.living_entity_mut();
+            living.effect_particles.set(display.particles);
+            living.effect_ambience.set(display.ambient);
+        }
+
+        self.entity_data.set_base_invisible_flag(display.invisible);
+        self.entity_data
+            .set_base_glowing_flag(self.has_glowing_tag() || display.glowing);
     }
 
     /// Handles a custom payload packet.
@@ -1486,12 +1514,20 @@ impl Entity for Player {
         Some(&self.entity_data)
     }
 
+    fn update_data_before_sync(&self) {
+        self.update_dirty_mob_effect_entity_data();
+    }
+
     fn pack_syncable_attributes(&self) -> Vec<AttributeSnapshot> {
         self.attributes().lock().syncable_snapshots()
     }
 
     fn drain_dirty_syncable_attributes(&self) -> Vec<AttributeSnapshot> {
         self.attributes().lock().drain_dirty_sync()
+    }
+
+    fn drain_dirty_mob_effects(&self) -> Vec<MobEffectSyncChange> {
+        self.living_base.drain_dirty_mob_effects()
     }
 
     fn pack_all_equipment(&self) -> Vec<EquipmentSlotItem> {

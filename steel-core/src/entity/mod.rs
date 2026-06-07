@@ -599,7 +599,10 @@ pub use fluid_contact::EntityFluidContact;
 pub use inside_block_effects::{
     InsideBlockEffectCallback, InsideBlockEffectCollector, InsideBlockEffectType,
 };
-pub use living_base::{ActiveMobEffect, DEATH_DURATION, LivingEntityBase, LivingTravelInput};
+pub use living_base::{
+    ActiveMobEffect, DEATH_DURATION, LivingEntityBase, LivingTravelInput, MobEffectInstance,
+    MobEffectSyncChange, MobEffectSyncPacket,
+};
 pub use manager::{
     AddEntityError, ChunkEntityLoadResult, EntityMoveError, EntityMoveUpdate, EntityOwnership,
     WorldEntityManager,
@@ -1197,6 +1200,11 @@ pub trait Entity: EntityEventSource + Send + Sync {
         None
     }
 
+    /// Updates synchronized entity data just before tracker sync.
+    ///
+    /// Mirrors vanilla `Entity.updateDataBeforeSync`.
+    fn update_data_before_sync(&self) {}
+
     /// Packs syncable attributes for initial spawn pairing.
     ///
     /// Mirrors vanilla `ServerEntity.sendPairingData`, which sends all syncable
@@ -1210,6 +1218,11 @@ pub trait Entity: EntityEventSource + Send + Sync {
     /// Mirrors vanilla `ServerEntity.sendDirtyEntityData`, which sends dirty
     /// living attributes after dirty entity data.
     fn drain_dirty_syncable_attributes(&self) -> Vec<AttributeSnapshot> {
+        Vec::new()
+    }
+
+    /// Drains dirty mob-effect packet changes for vanilla recipients.
+    fn drain_dirty_mob_effects(&self) -> Vec<MobEffectSyncChange> {
         Vec::new()
     }
 
@@ -3101,12 +3114,34 @@ pub trait LivingEntity: Entity {
 
     /// Sets active vanilla mob-effect state.
     fn set_mob_effect(&self, effect: MobEffectRef, amplifier: i32) {
-        self.living_base().set_mob_effect(effect, amplifier);
+        self.add_mob_effect(MobEffectInstance::new(effect, amplifier));
+    }
+
+    /// Adds or updates active vanilla mob-effect state.
+    fn add_mob_effect(&self, effect: MobEffectInstance) -> bool {
+        if !self.is_affected_by_potions() {
+            return false;
+        }
+        self.living_base().add_mob_effect(effect)
     }
 
     /// Sets the presence of a vanilla mob effect.
     fn set_mob_effect_active(&self, effect: MobEffectRef, active: bool) {
-        self.living_base().set_mob_effect_active(effect, active);
+        if active {
+            self.set_mob_effect(effect, 0);
+        } else {
+            self.remove_mob_effect(effect);
+        }
+    }
+
+    /// Removes active vanilla mob-effect state.
+    fn remove_mob_effect(&self, effect: MobEffectRef) -> bool {
+        self.living_base().remove_mob_effect(effect)
+    }
+
+    /// Ticks vanilla mob-effect durations.
+    fn tick_mob_effects(&self) {
+        self.living_base().tick_mob_effects();
     }
 
     /// Returns vanilla `LivingEntity.isAffectedByFluids()`.

@@ -6,10 +6,14 @@
 //! `EntityBase` is used for core `Entity` fields.
 
 use rustc_hash::FxHashMap;
+use steel_protocol::packets::game::{CRemoveMobEffect, CUpdateMobEffect, MobEffectPacketFlags};
+use steel_registry::RegistryEntry;
+use steel_registry::entity_data::{ParticleData, ParticleList, ParticleOptions};
 use steel_registry::entity_type::EntityTypeRef;
 use steel_registry::mob_effect::MobEffectRef;
 use steel_registry::vanilla_attributes;
 use steel_registry::vanilla_entity_data::VanillaLivingEntityData;
+use steel_registry::vanilla_mob_effects;
 use steel_utils::locks::SyncMutex;
 use steel_utils::{BlockPos, Identifier};
 
@@ -18,36 +22,317 @@ use crate::inventory::equipment::EntityEquipment;
 
 /// Duration in ticks of the death animation before entity removal.
 pub const DEATH_DURATION: i32 = 20;
+const INFINITE_EFFECT_DURATION: i32 = -1;
+const MIN_EFFECT_AMPLIFIER: i32 = 0;
+const MAX_EFFECT_AMPLIFIER: i32 = 255;
+const AMBIENT_EFFECT_ALPHA: i32 = 38;
 const SPRINT_SPEED_MODIFIER_AMOUNT: f64 = 0.3;
 
-/// Runtime mob-effect state currently needed by living physics.
+/// Runtime mob-effect state.
 ///
-/// TODO: Extend this into full vanilla `MobEffectInstance` state with duration,
-/// ambience, visibility, hidden effects, attribute modifiers, ticking, and sync.
-#[derive(Debug, Clone, Copy, PartialEq, Eq)]
-pub struct ActiveMobEffect {
+/// Mirrors vanilla `MobEffectInstance` state that affects server-side living
+/// physics and client synchronization.
+#[derive(Debug, Clone, PartialEq, Eq)]
+pub struct MobEffectInstance {
     effect: MobEffectRef,
+    duration: i32,
     amplifier: i32,
+    ambient: bool,
+    visible: bool,
+    show_icon: bool,
+    hidden_effect: Option<Box<MobEffectInstance>>,
 }
 
-impl ActiveMobEffect {
-    /// Creates active mob-effect state.
+/// Active mob-effect state stored on a living entity.
+pub type ActiveMobEffect = MobEffectInstance;
+
+impl MobEffectInstance {
+    /// Creates infinite active mob-effect state for internal physics tests and hooks.
     #[must_use]
     pub const fn new(effect: MobEffectRef, amplifier: i32) -> Self {
-        Self { effect, amplifier }
+        Self::with_duration(effect, INFINITE_EFFECT_DURATION, amplifier)
+    }
+
+    /// Creates active mob-effect state with vanilla default visibility flags.
+    #[must_use]
+    pub const fn with_duration(effect: MobEffectRef, duration: i32, amplifier: i32) -> Self {
+        Self {
+            effect,
+            duration,
+            amplifier: clamp_effect_amplifier(amplifier),
+            ambient: false,
+            visible: true,
+            show_icon: true,
+            hidden_effect: None,
+        }
+    }
+
+    /// Sets whether this effect is ambient.
+    #[must_use]
+    pub const fn with_ambient(mut self, ambient: bool) -> Self {
+        self.ambient = ambient;
+        self
+    }
+
+    /// Sets whether this effect should show particles.
+    #[must_use]
+    pub const fn with_visible(mut self, visible: bool) -> Self {
+        self.visible = visible;
+        self
+    }
+
+    /// Sets whether this effect should show its inventory icon.
+    #[must_use]
+    pub const fn with_show_icon(mut self, show_icon: bool) -> Self {
+        self.show_icon = show_icon;
+        self
     }
 
     /// Returns the mob effect.
     #[must_use]
-    pub const fn effect(self) -> MobEffectRef {
+    pub const fn effect(&self) -> MobEffectRef {
         self.effect
+    }
+
+    /// Returns vanilla `MobEffectInstance.getDuration()`.
+    #[must_use]
+    pub const fn duration(&self) -> i32 {
+        self.duration
     }
 
     /// Returns vanilla `MobEffectInstance.getAmplifier()`.
     #[must_use]
-    pub const fn amplifier(self) -> i32 {
+    pub const fn amplifier(&self) -> i32 {
         self.amplifier
     }
+
+    /// Returns vanilla `MobEffectInstance.isAmbient()`.
+    #[must_use]
+    pub const fn is_ambient(&self) -> bool {
+        self.ambient
+    }
+
+    /// Returns vanilla `MobEffectInstance.isVisible()`.
+    #[must_use]
+    pub const fn is_visible(&self) -> bool {
+        self.visible
+    }
+
+    /// Returns vanilla `MobEffectInstance.showIcon()`.
+    #[must_use]
+    pub const fn show_icon(&self) -> bool {
+        self.show_icon
+    }
+
+    /// Returns whether this effect uses vanilla's infinite-duration sentinel.
+    #[must_use]
+    pub const fn is_infinite_duration(&self) -> bool {
+        self.duration == INFINITE_EFFECT_DURATION
+    }
+
+    #[must_use]
+    const fn has_remaining_duration(&self) -> bool {
+        self.is_infinite_duration() || self.duration > 0
+    }
+
+    #[must_use]
+    fn is_shorter_duration_than(&self, other: &Self) -> bool {
+        !self.is_infinite_duration()
+            && (self.duration < other.duration || other.is_infinite_duration())
+    }
+
+    /// Merges another instance of the same effect into this instance.
+    ///
+    /// Mirrors vanilla `MobEffectInstance.update`.
+    pub fn update(&mut self, take_over: Self) -> bool {
+        let mut changed = false;
+        let take_over_ambient = take_over.ambient;
+        let take_over_visible = take_over.visible;
+        let take_over_show_icon = take_over.show_icon;
+        if take_over.amplifier > self.amplifier {
+            if take_over.is_shorter_duration_than(self) {
+                let previous_hidden_effect = self.hidden_effect.take();
+                let mut hidden = self.clone();
+                hidden.hidden_effect = previous_hidden_effect;
+                self.hidden_effect = Some(Box::new(hidden));
+            }
+
+            self.amplifier = take_over.amplifier;
+            self.duration = take_over.duration;
+            changed = true;
+        } else if self.is_shorter_duration_than(&take_over) {
+            if take_over.amplifier == self.amplifier {
+                self.duration = take_over.duration;
+                changed = true;
+            } else if let Some(hidden_effect) = &mut self.hidden_effect {
+                hidden_effect.update(take_over);
+            } else {
+                self.hidden_effect = Some(Box::new(take_over));
+            }
+        }
+
+        if (!take_over_ambient && self.ambient) || changed {
+            self.ambient = take_over_ambient;
+            changed = true;
+        }
+
+        if take_over_visible != self.visible {
+            self.visible = take_over_visible;
+            changed = true;
+        }
+
+        if take_over_show_icon != self.show_icon {
+            self.show_icon = take_over_show_icon;
+            changed = true;
+        }
+
+        changed
+    }
+
+    fn tick_duration(&mut self) -> MobEffectTickResult {
+        if !self.has_remaining_duration() {
+            return MobEffectTickResult::Expired;
+        }
+
+        // TODO: Run effect-specific server ticks such as poison, wither, regeneration,
+        // hunger, saturation, and bad omen once those damage/food/raid hooks exist.
+        self.tick_down_duration();
+        if self.downgrade_to_hidden_effect() {
+            return MobEffectTickResult::Active { downgraded: true };
+        }
+        if self.has_remaining_duration() {
+            MobEffectTickResult::Active { downgraded: false }
+        } else {
+            MobEffectTickResult::Expired
+        }
+    }
+
+    fn tick_down_duration(&mut self) {
+        if let Some(hidden_effect) = &mut self.hidden_effect {
+            hidden_effect.tick_down_duration();
+        }
+
+        if !self.is_infinite_duration() && self.duration != 0 {
+            self.duration -= 1;
+        }
+    }
+
+    fn downgrade_to_hidden_effect(&mut self) -> bool {
+        if self.duration != 0 {
+            return false;
+        }
+
+        let Some(hidden_effect) = self.hidden_effect.take() else {
+            return false;
+        };
+        let MobEffectInstance {
+            duration,
+            amplifier,
+            ambient,
+            visible,
+            show_icon,
+            hidden_effect,
+            ..
+        } = *hidden_effect;
+        self.duration = duration;
+        self.amplifier = amplifier;
+        self.ambient = ambient;
+        self.visible = visible;
+        self.show_icon = show_icon;
+        self.hidden_effect = hidden_effect;
+        true
+    }
+
+    fn particle_color(&self) -> i32 {
+        let alpha = if self.ambient {
+            AMBIENT_EFFECT_ALPHA
+        } else {
+            u8::MAX as i32
+        };
+        let color = ((alpha << 24) | (self.effect.color & 0x00ff_ffff)) as u32;
+        color as i32
+    }
+}
+
+const fn clamp_effect_amplifier(amplifier: i32) -> i32 {
+    if amplifier < MIN_EFFECT_AMPLIFIER {
+        MIN_EFFECT_AMPLIFIER
+    } else if amplifier > MAX_EFFECT_AMPLIFIER {
+        MAX_EFFECT_AMPLIFIER
+    } else {
+        amplifier
+    }
+}
+
+enum MobEffectTickResult {
+    Active { downgraded: bool },
+    Expired,
+}
+
+/// A queued mob-effect packet change produced by living effect state.
+#[derive(Debug, Clone, PartialEq, Eq)]
+pub enum MobEffectSyncChange {
+    /// Add or update a mob effect.
+    Update {
+        /// The active effect instance to encode.
+        effect: MobEffectInstance,
+        /// Whether the owner-client packet should use vanilla's blend flag.
+        blend_for_self: bool,
+    },
+    /// Remove a mob effect.
+    Remove {
+        /// The effect type to remove.
+        effect: MobEffectRef,
+    },
+}
+
+impl MobEffectSyncChange {
+    /// Builds the clientbound packet for a concrete recipient.
+    #[must_use]
+    pub fn packet(&self, entity_id: i32, is_self_recipient: bool) -> MobEffectSyncPacket {
+        match self {
+            Self::Update {
+                effect,
+                blend_for_self,
+            } => MobEffectSyncPacket::Update(CUpdateMobEffect::new(
+                entity_id,
+                effect.effect,
+                effect.amplifier,
+                effect.duration,
+                MobEffectPacketFlags {
+                    ambient: effect.ambient,
+                    visible: effect.visible,
+                    show_icon: effect.show_icon,
+                    blend: *blend_for_self && is_self_recipient,
+                },
+            )),
+            Self::Remove { effect } => {
+                MobEffectSyncPacket::Remove(CRemoveMobEffect::new(entity_id, effect))
+            }
+        }
+    }
+}
+
+/// Concrete mob-effect packet ready to send to a player connection.
+#[derive(Debug, Clone)]
+pub enum MobEffectSyncPacket {
+    /// Add/update mob-effect packet.
+    Update(CUpdateMobEffect),
+    /// Remove mob-effect packet.
+    Remove(CRemoveMobEffect),
+}
+
+/// Synchronized living entity-data values derived from active mob effects.
+#[derive(Debug, Clone, PartialEq)]
+pub struct MobEffectDisplayState {
+    /// Visible effect particles for `LivingEntity.DATA_EFFECT_PARTICLES`.
+    pub particles: ParticleList,
+    /// Whether all active effects are ambient.
+    pub ambient: bool,
+    /// Whether the shared invisible flag should be set by active effects.
+    pub invisible: bool,
+    /// Whether the shared glowing flag should be set by active effects.
+    pub glowing: bool,
 }
 
 /// Movement input stored on vanilla `LivingEntity`.
@@ -106,6 +391,7 @@ impl LivingTravelInput {
 
 #[derive(Debug, Clone, Copy, PartialEq)]
 struct LivingEntityState {
+    effects_dirty: bool,
     death_processed: bool,
     invulnerable_time: i32,
     last_hurt: f32,
@@ -126,6 +412,7 @@ struct LivingEntityState {
 impl LivingEntityState {
     const fn new(speed: f32) -> Self {
         Self {
+            effects_dirty: false,
             death_processed: false,
             invulnerable_time: 0,
             last_hurt: 0.0,
@@ -164,6 +451,7 @@ pub struct LivingEntityBase {
     state: SyncMutex<LivingEntityState>,
     attributes: SyncMutex<AttributeMap>,
     active_mob_effects: SyncMutex<FxHashMap<MobEffectRef, ActiveMobEffect>>,
+    dirty_mob_effects: SyncMutex<Vec<MobEffectSyncChange>>,
     equipment: SyncMutex<EntityEquipment>,
 }
 
@@ -183,6 +471,7 @@ impl LivingEntityBase {
             state: SyncMutex::new(LivingEntityState::new(speed)),
             attributes: SyncMutex::new(attributes),
             active_mob_effects: SyncMutex::new(FxHashMap::default()),
+            dirty_mob_effects: SyncMutex::new(Vec::new()),
             equipment: SyncMutex::new(EntityEquipment::new()),
         }
     }
@@ -220,24 +509,205 @@ impl LivingEntityBase {
     /// Returns active vanilla mob-effect state.
     #[must_use]
     pub fn mob_effect(&self, effect: MobEffectRef) -> Option<ActiveMobEffect> {
-        self.active_mob_effects.lock().get(&effect).copied()
+        self.active_mob_effects.lock().get(&effect).cloned()
+    }
+
+    /// Adds or updates active vanilla mob-effect state.
+    pub fn add_mob_effect(&self, effect: MobEffectInstance) -> bool {
+        let effect_key = effect.effect;
+        let mut existing_effect = None;
+        let mut changed_effect = None;
+        {
+            let mut effects = self.active_mob_effects.lock();
+            if let Some(current) = effects.get_mut(&effect_key) {
+                if current.update(effect) {
+                    changed_effect = Some(current.clone());
+                }
+            } else {
+                effects.insert(effect_key, effect.clone());
+                existing_effect = Some(effect);
+            }
+        }
+
+        if let Some(effect) = existing_effect {
+            self.add_effect_attribute_modifiers(&effect);
+            self.mark_effects_dirty();
+            self.queue_mob_effect_sync(MobEffectSyncChange::Update {
+                effect,
+                blend_for_self: true,
+            });
+            return true;
+        }
+
+        if let Some(effect) = changed_effect {
+            self.refresh_effect_attribute_modifiers(&effect);
+            self.mark_effects_dirty();
+            self.queue_mob_effect_sync(MobEffectSyncChange::Update {
+                effect,
+                blend_for_self: false,
+            });
+            return true;
+        }
+
+        false
     }
 
     /// Sets active vanilla mob-effect state.
     pub fn set_mob_effect(&self, effect: MobEffectRef, amplifier: i32) {
-        self.active_mob_effects
-            .lock()
-            .insert(effect, ActiveMobEffect::new(effect, amplifier));
+        self.add_mob_effect(MobEffectInstance::new(effect, amplifier));
     }
 
     /// Sets the presence of a vanilla mob effect.
     pub fn set_mob_effect_active(&self, effect: MobEffectRef, active: bool) {
-        let mut effects = self.active_mob_effects.lock();
         if active {
-            effects.insert(effect, ActiveMobEffect::new(effect, 0));
+            self.set_mob_effect(effect, 0);
         } else {
-            effects.remove(&effect);
+            self.remove_mob_effect(effect);
         }
+    }
+
+    /// Removes active vanilla mob-effect state.
+    pub fn remove_mob_effect(&self, effect: MobEffectRef) -> bool {
+        let removed = self.active_mob_effects.lock().remove(&effect);
+        let Some(removed) = removed else {
+            return false;
+        };
+
+        self.remove_effect_attribute_modifiers(removed.effect);
+        self.mark_effects_dirty();
+        self.queue_mob_effect_sync(MobEffectSyncChange::Remove { effect });
+        true
+    }
+
+    /// Ticks active mob-effect durations and queues vanilla sync changes.
+    pub fn tick_mob_effects(&self) {
+        let mut removed = Vec::new();
+        let mut updated = Vec::new();
+        {
+            let mut effects = self.active_mob_effects.lock();
+            let effect_keys = effects.keys().copied().collect::<Vec<_>>();
+            for effect_key in effect_keys {
+                let Some(effect) = effects.get_mut(&effect_key) else {
+                    continue;
+                };
+                match effect.tick_duration() {
+                    MobEffectTickResult::Active { downgraded } => {
+                        if downgraded || effect.duration() % 600 == 0 {
+                            updated.push(effect.clone());
+                        }
+                    }
+                    MobEffectTickResult::Expired => {
+                        if let Some(effect) = effects.remove(&effect_key) {
+                            removed.push(effect);
+                        }
+                    }
+                }
+            }
+        }
+
+        for effect in updated {
+            self.refresh_effect_attribute_modifiers(&effect);
+            self.mark_effects_dirty();
+            self.queue_mob_effect_sync(MobEffectSyncChange::Update {
+                effect,
+                blend_for_self: false,
+            });
+        }
+
+        for effect in removed {
+            self.remove_effect_attribute_modifiers(effect.effect);
+            self.mark_effects_dirty();
+            self.queue_mob_effect_sync(MobEffectSyncChange::Remove {
+                effect: effect.effect,
+            });
+        }
+    }
+
+    /// Drains pending mob-effect packet changes.
+    pub fn drain_dirty_mob_effects(&self) -> Vec<MobEffectSyncChange> {
+        self.dirty_mob_effects.lock().drain(..).collect()
+    }
+
+    /// Returns whether synchronized effect entity data should be recomputed.
+    pub fn take_effects_dirty(&self) -> bool {
+        let mut state = self.state.lock();
+        let dirty = state.effects_dirty;
+        state.effects_dirty = false;
+        dirty
+    }
+
+    /// Builds the synchronized living effect particle/glow/invisibility state.
+    pub fn mob_effect_display_state(
+        &self,
+        entity_effect_particle_type: i32,
+    ) -> MobEffectDisplayState {
+        let mut effects = self
+            .active_mob_effects
+            .lock()
+            .values()
+            .cloned()
+            .collect::<Vec<_>>();
+        effects.sort_by_key(|effect| effect.effect.try_id().unwrap_or(usize::MAX));
+
+        let particles = effects
+            .iter()
+            .filter(|effect| effect.is_visible())
+            .map(|effect| {
+                ParticleData::new(
+                    entity_effect_particle_type,
+                    ParticleOptions::Color {
+                        color: effect.particle_color(),
+                    },
+                )
+            })
+            .collect();
+
+        MobEffectDisplayState {
+            particles: ParticleList { particles },
+            ambient: !effects.is_empty() && effects.iter().all(MobEffectInstance::is_ambient),
+            invisible: effects
+                .iter()
+                .any(|effect| effect.effect == vanilla_mob_effects::INVISIBILITY),
+            glowing: effects
+                .iter()
+                .any(|effect| effect.effect == vanilla_mob_effects::GLOWING),
+        }
+    }
+
+    fn add_effect_attribute_modifiers(&self, effect: &MobEffectInstance) {
+        let mut attributes = self.attributes.lock();
+        for modifier in effect.effect.attribute_modifiers {
+            attributes.remove_modifier(modifier.attribute, &modifier.id);
+            attributes.add_modifier(
+                modifier.attribute,
+                AttributeModifier {
+                    id: modifier.id.clone(),
+                    amount: modifier.amount * f64::from(effect.amplifier + 1),
+                    operation: modifier.operation,
+                },
+                true,
+            );
+        }
+    }
+
+    fn refresh_effect_attribute_modifiers(&self, effect: &MobEffectInstance) {
+        self.remove_effect_attribute_modifiers(effect.effect);
+        self.add_effect_attribute_modifiers(effect);
+    }
+
+    fn remove_effect_attribute_modifiers(&self, effect: MobEffectRef) {
+        let mut attributes = self.attributes.lock();
+        for modifier in effect.attribute_modifiers {
+            attributes.remove_modifier(modifier.attribute, &modifier.id);
+        }
+    }
+
+    fn queue_mob_effect_sync(&self, change: MobEffectSyncChange) {
+        self.dirty_mob_effects.lock().push(change);
+    }
+
+    fn mark_effects_dirty(&self) {
+        self.state.lock().effects_dirty = true;
     }
 
     /// Gets the cached movement speed used by living movement code.
@@ -519,7 +989,10 @@ mod tests {
 
     use crate::inventory::equipment::EquipmentSlot;
 
-    use super::{ActiveMobEffect, LivingEntityBase, LivingTravelInput};
+    use super::{
+        ActiveMobEffect, LivingEntityBase, LivingTravelInput, MobEffectInstance,
+        MobEffectSyncChange,
+    };
 
     #[test]
     fn living_constructor_initializes_health_from_max_health() {
@@ -700,6 +1173,101 @@ mod tests {
         assert_eq!(
             base.mob_effect(vanilla_mob_effects::JUMP_BOOST),
             Some(ActiveMobEffect::new(vanilla_mob_effects::JUMP_BOOST, 2))
+        );
+    }
+
+    #[test]
+    fn mob_effect_attribute_modifiers_use_extracted_vanilla_data() {
+        init_test_registry();
+        let base = LivingEntityBase::new(&vanilla_entities::PLAYER);
+        let movement_speed = vanilla_attributes::MOVEMENT_SPEED;
+        let base_speed = base
+            .attributes()
+            .lock()
+            .get_value(movement_speed)
+            .expect("player should have movement speed");
+        let speed_modifier = &vanilla_mob_effects::SPEED.attribute_modifiers[0];
+
+        assert_eq!(speed_modifier.attribute.key, movement_speed.key);
+        assert!(base.add_mob_effect(MobEffectInstance::with_duration(
+            vanilla_mob_effects::SPEED,
+            200,
+            1
+        )));
+
+        let boosted_speed = base
+            .attributes()
+            .lock()
+            .get_value(movement_speed)
+            .expect("player should have movement speed");
+        let expected = base_speed * (1.0 + speed_modifier.amount * 2.0);
+        assert!((boosted_speed - expected).abs() < f64::EPSILON);
+
+        assert!(base.remove_mob_effect(vanilla_mob_effects::SPEED));
+        assert_eq!(
+            base.attributes()
+                .lock()
+                .get_value(movement_speed)
+                .expect("player should have movement speed")
+                .to_bits(),
+            base_speed.to_bits()
+        );
+    }
+
+    #[test]
+    fn mob_effect_duration_tick_removes_expired_effect() {
+        init_test_registry();
+        let base = LivingEntityBase::new(&vanilla_entities::PLAYER);
+
+        base.add_mob_effect(MobEffectInstance::with_duration(
+            vanilla_mob_effects::DOLPHINS_GRACE,
+            1,
+            0,
+        ));
+        base.drain_dirty_mob_effects();
+
+        base.tick_mob_effects();
+
+        assert!(!base.has_mob_effect(vanilla_mob_effects::DOLPHINS_GRACE));
+        assert_eq!(
+            base.drain_dirty_mob_effects(),
+            vec![MobEffectSyncChange::Remove {
+                effect: vanilla_mob_effects::DOLPHINS_GRACE
+            }]
+        );
+    }
+
+    #[test]
+    fn stronger_shorter_effect_downgrades_to_hidden_effect() {
+        init_test_registry();
+        let base = LivingEntityBase::new(&vanilla_entities::PLAYER);
+
+        base.add_mob_effect(MobEffectInstance::with_duration(
+            vanilla_mob_effects::SPEED,
+            10,
+            0,
+        ));
+        base.add_mob_effect(MobEffectInstance::with_duration(
+            vanilla_mob_effects::SPEED,
+            2,
+            1,
+        ));
+        base.drain_dirty_mob_effects();
+
+        base.tick_mob_effects();
+        base.tick_mob_effects();
+
+        let effect = base
+            .mob_effect(vanilla_mob_effects::SPEED)
+            .expect("speed should downgrade to hidden effect");
+        assert_eq!(effect.amplifier(), 0);
+        assert_eq!(effect.duration(), 8);
+        assert_eq!(
+            base.drain_dirty_mob_effects(),
+            vec![MobEffectSyncChange::Update {
+                effect,
+                blend_for_self: false,
+            }]
         );
     }
 

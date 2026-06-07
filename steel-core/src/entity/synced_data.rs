@@ -51,6 +51,9 @@ pub trait EntitySyncedData: Send + Sync {
     /// Sets the shared vanilla on-fire flag.
     fn set_base_on_fire_flag(&self, on_fire: bool);
 
+    /// Sets the shared vanilla invisible flag.
+    fn set_base_invisible_flag(&self, invisible: bool);
+
     /// Sets the shared vanilla glowing flag.
     fn set_base_glowing_flag(&self, glowing: bool);
 
@@ -136,6 +139,10 @@ where
 
     fn set_base_on_fire_flag(&self, on_fire: bool) {
         self.set_shared_flag(EntitySharedFlags::ON_FIRE, on_fire);
+    }
+
+    fn set_base_invisible_flag(&self, invisible: bool) {
+        self.set_shared_flag(EntitySharedFlags::INVISIBLE, invisible);
     }
 
     fn set_base_glowing_flag(&self, glowing: bool) {

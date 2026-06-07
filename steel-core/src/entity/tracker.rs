@@ -12,14 +12,14 @@ use steel_protocol::packets::game::{
     AttributeSnapshot, CAddEntity, CRemoveEntities, CSetEntityData, CSetEquipment, CSetPassengers,
     CUpdateAttributes, EquipmentSlotItem, to_angle_byte,
 };
-use steel_registry::RegistryEntry;
 use steel_registry::entity_data::DataValue;
+use steel_registry::{RegistryEntry, vanilla_entities};
 use steel_utils::ChunkPos;
 use steel_utils::locks::{SyncMutex, SyncRwLock};
 
 use crate::chunk::player_chunk_view::PlayerChunkView;
 use crate::entity::{
-    Entity, EntityMovementSyncPacket, ServerEntityMovementSyncState,
+    Entity, EntityMovementSyncPacket, MobEffectSyncPacket, ServerEntityMovementSyncState,
     ServerEntityMovementSyncUpdate, SharedEntity, WeakEntity,
 };
 use crate::player::Player;
@@ -33,13 +33,16 @@ pub struct EntityTracker {
 }
 
 /// Packet sinks used by [`EntityTracker::send_changes`].
-pub struct EntityChangeSenders<Movement, EntityData, Attributes, Equipment, Passengers> {
+pub struct EntityChangeSenders<Movement, EntityData, Attributes, MobEffects, Equipment, Passengers>
+{
     /// Broadcasts movement and velocity sync packets.
     pub movement: Movement,
     /// Broadcasts entity data watcher changes.
     pub entity_data: EntityData,
     /// Broadcasts dirty syncable attributes.
     pub attributes: Attributes,
+    /// Sends mob-effect add/remove packets to a specific player.
+    pub mob_effects: MobEffects,
     /// Broadcasts dirty equipment slots.
     pub equipment: Equipment,
     /// Sends passenger updates to a specific player.
@@ -269,15 +272,23 @@ impl EntityTracker {
         clippy::too_many_lines,
         reason = "entity tracker fanout mirrors vanilla sendChanges ordering"
     )]
-    pub fn send_changes<Movement, EntityData, Attributes, Equipment, Passengers>(
+    pub fn send_changes<Movement, EntityData, Attributes, MobEffects, Equipment, Passengers>(
         &self,
         get_players_in_chunk: impl Fn(ChunkPos) -> Vec<i32>,
         get_player: impl Fn(i32) -> Option<Arc<Player>>,
-        mut senders: EntityChangeSenders<Movement, EntityData, Attributes, Equipment, Passengers>,
+        mut senders: EntityChangeSenders<
+            Movement,
+            EntityData,
+            Attributes,
+            MobEffects,
+            Equipment,
+            Passengers,
+        >,
     ) where
         Movement: FnMut(i32, EntityMovementSyncPacket),
         EntityData: FnMut(i32, Vec<DataValue>),
         Attributes: FnMut(i32, Vec<AttributeSnapshot>),
+        MobEffects: FnMut(i32, MobEffectSyncPacket),
         Equipment: FnMut(i32, CSetEquipment),
         Passengers: FnMut(i32, CSetPassengers),
     {
@@ -287,6 +298,7 @@ impl EntityTracker {
         let mut packets_to_broadcast = Vec::new();
         let mut entity_data_to_broadcast = Vec::new();
         let mut attributes_to_broadcast = Vec::new();
+        let mut mob_effect_packets_to_send = Vec::new();
         let mut equipment_to_broadcast = Vec::new();
 
         self.entities.iter_sync(|entity_id, tracked| {
@@ -299,6 +311,8 @@ impl EntityTracker {
             if entity.is_removed() {
                 return true;
             }
+
+            entity.update_data_before_sync();
 
             let passenger_ids = self.direct_tracked_passenger_ids(entity.as_ref());
             {
@@ -359,6 +373,31 @@ impl EntityTracker {
             if !dirty_attributes.is_empty() {
                 attributes_to_broadcast.push((entity_id, dirty_attributes));
             }
+            let dirty_mob_effects = entity.drain_dirty_mob_effects();
+            if !dirty_mob_effects.is_empty() {
+                let mut recipient_ids = FxHashSet::default();
+                if entity.entity_type() == &vanilla_entities::PLAYER
+                    && get_player(entity_id).is_some()
+                {
+                    recipient_ids.insert(entity_id);
+                }
+                for passenger in entity.passengers() {
+                    let passenger_id = passenger.id();
+                    if passenger.entity_type() == &vanilla_entities::PLAYER
+                        && get_player(passenger_id).is_some()
+                    {
+                        recipient_ids.insert(passenger_id);
+                    }
+                }
+                for recipient_id in recipient_ids {
+                    for change in &dirty_mob_effects {
+                        mob_effect_packets_to_send.push((
+                            recipient_id,
+                            change.packet(entity_id, recipient_id == entity_id),
+                        ));
+                    }
+                }
+            }
             let dirty_equipment = entity.drain_dirty_equipment();
             if !dirty_equipment.is_empty() {
                 equipment_to_broadcast.push((entity_id, dirty_equipment));
@@ -389,6 +428,10 @@ impl EntityTracker {
 
         for (entity_id, dirty_attributes) in attributes_to_broadcast {
             (senders.attributes)(entity_id, dirty_attributes);
+        }
+
+        for (player_id, packet) in mob_effect_packets_to_send {
+            (senders.mob_effects)(player_id, packet);
         }
 
         for (entity_id, dirty_equipment) in equipment_to_broadcast {
@@ -727,6 +770,8 @@ struct EntitySpawnPairing {
 
 impl EntitySpawnPairing {
     fn from_entity(entity: &SharedEntity, passenger_packets: Vec<CSetPassengers>) -> Self {
+        entity.update_data_before_sync();
+
         let pos = entity.position();
         let vel = entity.velocity();
         let (yaw, pitch) = entity.rotation();
@@ -1106,6 +1151,7 @@ mod tests {
                 movement: |_, _| {},
                 entity_data: |_, _| {},
                 attributes: |entity_id, attributes| updates.push((entity_id, attributes)),
+                mob_effects: |_, _| {},
                 equipment: |_, _| {},
                 passengers: |_, _| {},
             },
@@ -1125,6 +1171,7 @@ mod tests {
                 movement: |_, _| {},
                 entity_data: |_, _| {},
                 attributes: |entity_id, attributes| updates.push((entity_id, attributes)),
+                mob_effects: |_, _| {},
                 equipment: |_, _| {},
                 passengers: |_, _| {},
             },
@@ -1155,6 +1202,7 @@ mod tests {
                 movement: |_, _| {},
                 entity_data: |_, _| {},
                 attributes: |_, _| {},
+                mob_effects: |_, _| {},
                 equipment: |entity_id, packet| updates.push((entity_id, packet)),
                 passengers: |_, _| {},
             },
@@ -1175,6 +1223,7 @@ mod tests {
                 movement: |_, _| {},
                 entity_data: |_, _| {},
                 attributes: |_, _| {},
+                mob_effects: |_, _| {},
                 equipment: |entity_id, packet| updates.push((entity_id, packet)),
                 passengers: |_, _| {},
             },
@@ -1275,6 +1324,7 @@ mod tests {
                 movement: |_, _| {},
                 entity_data: |_, _| {},
                 attributes: |_, _| {},
+                mob_effects: |_, _| {},
                 equipment: |_, _| {},
                 passengers: |player_id, packet| {
                     updates.push((player_id, packet));
@@ -1291,6 +1341,7 @@ mod tests {
                 movement: |_, _| {},
                 entity_data: |_, _| {},
                 attributes: |_, _| {},
+                mob_effects: |_, _| {},
                 equipment: |_, _| {},
                 passengers: |player_id, packet| {
                     updates.push((player_id, packet));
@@ -1310,6 +1361,7 @@ mod tests {
                 movement: |_, _| {},
                 entity_data: |_, _| {},
                 attributes: |_, _| {},
+                mob_effects: |_, _| {},
                 equipment: |_, _| {},
                 passengers: |player_id, packet| {
                     updates.push((player_id, packet));
@@ -1327,6 +1379,7 @@ mod tests {
                 movement: |_, _| {},
                 entity_data: |_, _| {},
                 attributes: |_, _| {},
+                mob_effects: |_, _| {},
                 equipment: |_, _| {},
                 passengers: |player_id, packet| {
                     updates.push((player_id, packet));
@@ -1362,6 +1415,7 @@ mod tests {
                 movement: |_, _| {},
                 entity_data: |_, _| {},
                 attributes: |_, _| {},
+                mob_effects: |_, _| {},
                 equipment: |_, _| {},
                 passengers: |player_id, packet| {
                     updates.push((player_id, packet));

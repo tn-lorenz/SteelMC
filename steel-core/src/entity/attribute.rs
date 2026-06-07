@@ -2,8 +2,8 @@
 //!
 use core::iter;
 
-pub use steel_protocol::packets::game::AttributeModifierOperation;
 use steel_protocol::packets::game::{AttributeModifierData, AttributeSnapshot};
+pub use steel_registry::attribute::AttributeModifierOperation;
 use steel_registry::attribute::AttributeRef;
 use steel_registry::entity_type::EntityTypeRef;
 use steel_registry::{REGISTRY, RegistryEntry, RegistryExt};

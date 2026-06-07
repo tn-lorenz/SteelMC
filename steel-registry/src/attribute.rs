@@ -1,5 +1,29 @@
 use rustc_hash::FxHashMap;
-use steel_utils::Identifier;
+use steel_utils::{Identifier, codec::VarInt, serial::WriteTo};
+
+/// The operation type for an attribute modifier.
+///
+/// Matches vanilla `AttributeModifier.Operation`:
+/// - `AddValue` (0): `total += amount`
+/// - `AddMultipliedBase` (1): `total += base * amount`
+/// - `AddMultipliedTotal` (2): `total *= 1 + amount`
+#[derive(Clone, Copy, Debug, PartialEq, Eq, Hash)]
+#[repr(u8)]
+#[expect(
+    clippy::enum_variant_names,
+    reason = "matches vanilla `AttributeModifier.Operation` names"
+)]
+pub enum AttributeModifierOperation {
+    AddValue = 0,
+    AddMultipliedBase = 1,
+    AddMultipliedTotal = 2,
+}
+
+impl WriteTo for AttributeModifierOperation {
+    fn write(&self, writer: &mut impl std::io::Write) -> std::io::Result<()> {
+        VarInt(*self as i32).write(writer)
+    }
+}
 
 /// Vanilla entity attribute definition
 ///

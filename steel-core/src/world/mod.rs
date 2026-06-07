@@ -86,8 +86,8 @@ use crate::{
     chunk_saver::{ChunkStorage, RamOnlyStorage, RegionManager},
     entity::{
         AddEntityError, Entity, EntityChangeSenders, EntityChunkCallback, EntityMovementSyncPacket,
-        EntityOwnership, EntityTracker, InactiveEntityCallback, RemovalReason, SharedEntity,
-        WorldEntityManager, entities::ItemEntity,
+        EntityOwnership, EntityTracker, InactiveEntityCallback, MobEffectSyncPacket, RemovalReason,
+        SharedEntity, WorldEntityManager, entities::ItemEntity,
     },
     fluid::{FluidStateExt as _, fluid_state_to_block},
     level_data::{LevelDataManager, WorldBorderData, WorldGenerationSettings},
@@ -1309,6 +1309,15 @@ impl World {
                         self.broadcast_to_entity_trackers_encoded(entity_id, encoded.clone(), None);
                         if let Some(player) = self.players.get_by_entity_id(entity_id) {
                             player.connection.send_encoded(encoded);
+                        }
+                    },
+                    mob_effects: |player_id, packet| {
+                        let Some(player) = self.players.get_by_entity_id(player_id) else {
+                            return;
+                        };
+                        match packet {
+                            MobEffectSyncPacket::Update(packet) => player.send_packet(packet),
+                            MobEffectSyncPacket::Remove(packet) => player.send_packet(packet),
                         }
                     },
                     equipment: |entity_id, packet: CSetEquipment| {
