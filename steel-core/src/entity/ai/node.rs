@@ -93,6 +93,13 @@ impl Node {
     }
 
     #[must_use]
+    pub fn distance_manhattan_to_pos(&self, pos: BlockPos) -> f32 {
+        (pos.x() - self.x).abs() as f32
+            + (pos.y() - self.y).abs() as f32
+            + (pos.z() - self.z).abs() as f32
+    }
+
+    #[must_use]
     pub fn distance_to_sqr(&self, to: &Self) -> f32 {
         let xd = (to.x - self.x) as f32;
         let yd = (to.y - self.y) as f32;
@@ -182,6 +189,18 @@ impl NodeStore {
         self.nodes.clear();
     }
 
+    pub fn reset_search_state(&mut self) {
+        for node in self.nodes.values_mut() {
+            node.heap_idx = -1;
+            node.g = 0.0;
+            node.h = 0.0;
+            node.f = 0.0;
+            node.came_from = None;
+            node.closed = false;
+            node.walked_distance = 0.0;
+        }
+    }
+
     pub fn get_node(&mut self, x: i32, y: i32, z: i32) -> &mut Node {
         let hash = Node::create_hash(x, y, z);
         self.nodes.entry(hash).or_insert_with(|| Node::new(x, y, z))
@@ -190,6 +209,10 @@ impl NodeStore {
     #[must_use]
     pub fn get(&self, hash: i32) -> Option<&Node> {
         self.nodes.get(&hash)
+    }
+
+    pub fn get_mut(&mut self, hash: i32) -> Option<&mut Node> {
+        self.nodes.get_mut(&hash)
     }
 
     #[must_use]
@@ -203,9 +226,197 @@ impl NodeStore {
     }
 }
 
+#[derive(Debug, Clone, PartialEq, Eq)]
+pub struct NodeHeap {
+    heap: Vec<i32>,
+}
+
+impl NodeHeap {
+    #[must_use]
+    pub const fn new() -> Self {
+        Self { heap: Vec::new() }
+    }
+
+    pub fn clear(&mut self, nodes: &mut NodeStore) {
+        for hash in self.heap.drain(..) {
+            if let Some(node) = nodes.get_mut(hash) {
+                node.heap_idx = -1;
+            }
+        }
+    }
+
+    #[must_use]
+    pub fn peek(&self) -> Option<i32> {
+        self.heap.first().copied()
+    }
+
+    pub fn insert(&mut self, nodes: &mut NodeStore, hash: i32) -> bool {
+        let Some(node) = nodes.get(hash) else {
+            return false;
+        };
+        if node.in_open_set() {
+            return false;
+        }
+
+        self.heap.push(hash);
+        let index = self.heap.len() - 1;
+        Self::set_heap_idx(nodes, hash, index) && self.up_heap(nodes, index)
+    }
+
+    pub fn pop(&mut self, nodes: &mut NodeStore) -> Option<i32> {
+        let popped = self.heap.first().copied()?;
+        let last = self.heap.pop()?;
+        if !self.heap.is_empty() {
+            self.heap[0] = last;
+            if !Self::set_heap_idx(nodes, last, 0) || !self.down_heap(nodes, 0) {
+                return None;
+            }
+        }
+
+        Self::set_heap_idx_to_removed(nodes, popped);
+        Some(popped)
+    }
+
+    pub fn change_cost(&mut self, nodes: &mut NodeStore, hash: i32, new_cost: f32) -> bool {
+        let Some(node) = nodes.get_mut(hash) else {
+            return false;
+        };
+        let old_cost = node.f;
+        let heap_idx = node.heap_idx;
+        node.f = new_cost;
+        if heap_idx < 0 {
+            return false;
+        }
+
+        let index = heap_idx as usize;
+        if self.heap.get(index).copied() != Some(hash) {
+            return false;
+        }
+
+        if new_cost < old_cost {
+            self.up_heap(nodes, index)
+        } else {
+            self.down_heap(nodes, index)
+        }
+    }
+
+    #[must_use]
+    pub const fn len(&self) -> usize {
+        self.heap.len()
+    }
+
+    #[must_use]
+    pub const fn is_empty(&self) -> bool {
+        self.heap.is_empty()
+    }
+
+    fn up_heap(&mut self, nodes: &mut NodeStore, mut index: usize) -> bool {
+        let Some(node_hash) = self.heap.get(index).copied() else {
+            return false;
+        };
+        let Some(cost) = nodes.get(node_hash).map(|node| node.f) else {
+            return false;
+        };
+
+        while index > 0 {
+            let parent_index = (index - 1) >> 1;
+            let Some(parent_hash) = self.heap.get(parent_index).copied() else {
+                return false;
+            };
+            let Some(parent_cost) = nodes.get(parent_hash).map(|node| node.f) else {
+                return false;
+            };
+            if cost >= parent_cost {
+                break;
+            }
+
+            self.heap[index] = parent_hash;
+            if !Self::set_heap_idx(nodes, parent_hash, index) {
+                return false;
+            }
+            index = parent_index;
+        }
+
+        self.heap[index] = node_hash;
+        Self::set_heap_idx(nodes, node_hash, index)
+    }
+
+    fn down_heap(&mut self, nodes: &mut NodeStore, mut index: usize) -> bool {
+        let Some(node_hash) = self.heap.get(index).copied() else {
+            return false;
+        };
+        let Some(cost) = nodes.get(node_hash).map(|node| node.f) else {
+            return false;
+        };
+
+        loop {
+            let left_index = 1 + (index << 1);
+            let right_index = left_index + 1;
+            if left_index >= self.heap.len() {
+                break;
+            }
+
+            let Some(left_hash) = self.heap.get(left_index).copied() else {
+                return false;
+            };
+            let Some(left_cost) = nodes.get(left_hash).map(|node| node.f) else {
+                return false;
+            };
+            let right = self
+                .heap
+                .get(right_index)
+                .and_then(|hash| nodes.get(*hash).map(|node| (*hash, node.f)));
+
+            let (child_index, child_hash, child_cost) = match right {
+                Some((right_hash, right_cost)) if right_cost <= left_cost => {
+                    (right_index, right_hash, right_cost)
+                }
+                _ => (left_index, left_hash, left_cost),
+            };
+
+            if child_cost >= cost {
+                break;
+            }
+
+            self.heap[index] = child_hash;
+            if !Self::set_heap_idx(nodes, child_hash, index) {
+                return false;
+            }
+            index = child_index;
+        }
+
+        self.heap[index] = node_hash;
+        Self::set_heap_idx(nodes, node_hash, index)
+    }
+
+    fn set_heap_idx(nodes: &mut NodeStore, hash: i32, index: usize) -> bool {
+        let Ok(heap_idx) = i32::try_from(index) else {
+            return false;
+        };
+        let Some(node) = nodes.get_mut(hash) else {
+            return false;
+        };
+        node.heap_idx = heap_idx;
+        true
+    }
+
+    fn set_heap_idx_to_removed(nodes: &mut NodeStore, hash: i32) {
+        if let Some(node) = nodes.get_mut(hash) {
+            node.heap_idx = -1;
+        }
+    }
+}
+
+impl Default for NodeHeap {
+    fn default() -> Self {
+        Self::new()
+    }
+}
+
 #[cfg(test)]
 mod tests {
-    use super::{Node, NodeStore, Target};
+    use super::{Node, NodeHeap, NodeStore, Target};
+    use crate::entity::ai::path::PathType;
 
     #[test]
     fn node_hash_matches_vanilla_packing_shape() {
@@ -226,6 +437,76 @@ mod tests {
     }
 
     #[test]
+    fn node_store_resets_search_state_without_losing_path_type_cost() {
+        let mut store = NodeStore::new();
+        let hash = store.get_node(1, 64, 2).hash();
+        let Some(node) = store.get_mut(hash) else {
+            panic!("node should exist");
+        };
+        node.heap_idx = 3;
+        node.g = 1.0;
+        node.h = 2.0;
+        node.f = 3.0;
+        node.came_from = Some(Node::create_hash(0, 64, 2));
+        node.closed = true;
+        node.walked_distance = 4.0;
+        node.cost_malus = 8.0;
+        node.path_type = PathType::Water;
+
+        store.reset_search_state();
+
+        let Some(node) = store.get(hash) else {
+            panic!("node should still exist");
+        };
+        assert_eq!(node.heap_idx, -1);
+        assert_eq!(node.g.to_bits(), 0.0_f32.to_bits());
+        assert_eq!(node.h.to_bits(), 0.0_f32.to_bits());
+        assert_eq!(node.f.to_bits(), 0.0_f32.to_bits());
+        assert_eq!(node.came_from, None);
+        assert!(!node.closed);
+        assert_eq!(node.walked_distance.to_bits(), 0.0_f32.to_bits());
+        assert_eq!(node.cost_malus.to_bits(), 8.0_f32.to_bits());
+        assert_eq!(node.path_type, PathType::Water);
+    }
+
+    #[test]
+    fn node_heap_pops_lowest_f_cost_first() {
+        let mut store = NodeStore::new();
+        let high = node_with_cost(&mut store, 0, 64, 0, 5.0);
+        let low = node_with_cost(&mut store, 1, 64, 0, 1.0);
+        let middle = node_with_cost(&mut store, 2, 64, 0, 3.0);
+        let mut heap = NodeHeap::new();
+
+        assert!(heap.insert(&mut store, high));
+        assert!(heap.insert(&mut store, low));
+        assert!(heap.insert(&mut store, middle));
+
+        assert_eq!(heap.peek(), Some(low));
+        assert_eq!(heap.pop(&mut store), Some(low));
+        assert_eq!(store.get(low).map(|node| node.heap_idx), Some(-1));
+        assert_eq!(heap.pop(&mut store), Some(middle));
+        assert_eq!(heap.pop(&mut store), Some(high));
+        assert!(heap.is_empty());
+    }
+
+    #[test]
+    fn node_heap_change_cost_reorders_existing_node() {
+        let mut store = NodeStore::new();
+        let high = node_with_cost(&mut store, 0, 64, 0, 5.0);
+        let low = node_with_cost(&mut store, 1, 64, 0, 1.0);
+        let mut heap = NodeHeap::new();
+
+        assert!(heap.insert(&mut store, high));
+        assert!(heap.insert(&mut store, low));
+        assert_eq!(heap.peek(), Some(low));
+
+        assert!(heap.change_cost(&mut store, high, 0.5));
+
+        assert_eq!(heap.peek(), Some(high));
+        assert_eq!(heap.pop(&mut store), Some(high));
+    }
+
+    #[test]
     fn target_tracks_best_node_hash() {
         let from = Node::new(0, 64, 0);
         let better = Node::new(1, 64, 0);
@@ -240,5 +521,11 @@ mod tests {
         assert!(!target.is_reached());
         target.set_reached();
         assert!(target.is_reached());
+    }
+
+    fn node_with_cost(store: &mut NodeStore, x: i32, y: i32, z: i32, cost: f32) -> i32 {
+        let node = store.get_node(x, y, z);
+        node.f = cost;
+        node.hash()
     }
 }

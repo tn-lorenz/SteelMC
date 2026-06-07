@@ -2,6 +2,7 @@
 
 use steel_utils::{BlockPos, BlockStateId, PackedBlockPos};
 
+use crate::entity::ai::node::Node;
 use crate::entity::ai::walk::WalkPathEvaluator;
 use crate::world::LevelReader;
 
@@ -51,6 +52,135 @@ pub enum PathComputationType {
     Land,
     Water,
     Air,
+}
+
+#[derive(Debug, Clone, PartialEq)]
+pub struct Path {
+    nodes: Vec<Node>,
+    next_node_index: usize,
+    target: BlockPos,
+    dist_to_target: f32,
+    reached: bool,
+}
+
+impl Path {
+    #[must_use]
+    pub fn new(nodes: Vec<Node>, target: BlockPos, reached: bool) -> Self {
+        let dist_to_target = nodes
+            .last()
+            .map_or(f32::MAX, |node| node.distance_manhattan_to_pos(target));
+        Self {
+            nodes,
+            next_node_index: 0,
+            target,
+            dist_to_target,
+            reached,
+        }
+    }
+
+    pub const fn advance(&mut self) {
+        self.next_node_index += 1;
+    }
+
+    #[must_use]
+    pub const fn not_started(&self) -> bool {
+        self.next_node_index == 0
+    }
+
+    #[must_use]
+    pub const fn is_done(&self) -> bool {
+        self.next_node_index >= self.nodes.len()
+    }
+
+    #[must_use]
+    pub fn end_node(&self) -> Option<&Node> {
+        self.nodes.last()
+    }
+
+    #[must_use]
+    pub fn node(&self, index: usize) -> Option<&Node> {
+        self.nodes.get(index)
+    }
+
+    pub fn truncate_nodes(&mut self, index: usize) {
+        if self.nodes.len() > index {
+            self.nodes.truncate(index);
+        }
+    }
+
+    pub fn replace_node(&mut self, index: usize, replace_with: Node) -> bool {
+        let Some(node) = self.nodes.get_mut(index) else {
+            return false;
+        };
+        *node = replace_with;
+        true
+    }
+
+    #[must_use]
+    pub const fn node_count(&self) -> usize {
+        self.nodes.len()
+    }
+
+    #[must_use]
+    pub const fn next_node_index(&self) -> usize {
+        self.next_node_index
+    }
+
+    pub const fn set_next_node_index(&mut self, next_node_index: usize) {
+        self.next_node_index = next_node_index;
+    }
+
+    #[must_use]
+    pub fn node_pos(&self, index: usize) -> Option<BlockPos> {
+        self.node(index).map(Node::as_block_pos)
+    }
+
+    #[must_use]
+    pub fn next_node_pos(&self) -> Option<BlockPos> {
+        self.node_pos(self.next_node_index)
+    }
+
+    #[must_use]
+    pub fn next_node(&self) -> Option<&Node> {
+        self.node(self.next_node_index)
+    }
+
+    #[must_use]
+    pub fn previous_node(&self) -> Option<&Node> {
+        self.next_node_index
+            .checked_sub(1)
+            .and_then(|index| self.node(index))
+    }
+
+    #[must_use]
+    pub fn same_as(&self, path: &Self) -> bool {
+        self.nodes.len() == path.nodes.len()
+            && self
+                .nodes
+                .iter()
+                .zip(path.nodes.iter())
+                .all(|(left, right)| left.hash() == right.hash())
+    }
+
+    #[must_use]
+    pub const fn can_reach(&self) -> bool {
+        self.reached
+    }
+
+    #[must_use]
+    pub const fn target(&self) -> BlockPos {
+        self.target
+    }
+
+    #[must_use]
+    pub const fn dist_to_target(&self) -> f32 {
+        self.dist_to_target
+    }
+
+    #[must_use]
+    pub fn nodes(&self) -> &[Node] {
+        &self.nodes
+    }
 }
 
 impl PathType {
@@ -327,12 +457,13 @@ const fn fastutil_mix(value: u64) -> u64 {
 #[cfg(test)]
 mod tests {
     use steel_registry::{REGISTRY, test_support::init_test_registry, vanilla_blocks};
-    use steel_utils::BlockStateId;
+    use steel_utils::{BlockPos, BlockStateId};
 
     use super::{
-        PATH_TYPE_CACHE_MASK, PathType, PathTypeCache, PathTypeSet, PathfindingContext,
+        PATH_TYPE_CACHE_MASK, Path, PathType, PathTypeCache, PathTypeSet, PathfindingContext,
         PathfindingMalus,
     };
+    use crate::entity::ai::node::Node;
     use crate::world::LevelReader;
 
     struct SingleBlockLevel {
@@ -410,6 +541,40 @@ mod tests {
     #[test]
     fn path_type_cache_uses_vanilla_direct_mapped_size() {
         assert_eq!(PATH_TYPE_CACHE_MASK, 4095);
+    }
+
+    #[test]
+    fn path_tracks_progress_and_target_distance() {
+        let mut path = Path::new(
+            vec![Node::new(0, 64, 0), Node::new(2, 64, 1)],
+            BlockPos::new(4, 64, 1),
+            false,
+        );
+
+        assert!(path.not_started());
+        assert!(!path.is_done());
+        assert_eq!(path.node_count(), 2);
+        assert_eq!(path.next_node_pos(), Some(BlockPos::new(0, 64, 0)));
+        assert_eq!(path.dist_to_target().to_bits(), 2.0_f32.to_bits());
+        assert!(!path.can_reach());
+
+        path.advance();
+
+        assert_eq!(
+            path.previous_node().map(Node::as_block_pos),
+            Some(BlockPos::new(0, 64, 0))
+        );
+        assert_eq!(path.next_node_pos(), Some(BlockPos::new(2, 64, 1)));
+    }
+
+    #[test]
+    fn path_same_as_compares_vanilla_node_identity() {
+        let left = Path::new(vec![Node::new(0, 64, 0)], BlockPos::new(1, 64, 0), false);
+        let mut right_node = Node::new(0, 64, 0);
+        right_node.cost_malus = 8.0;
+        let right = Path::new(vec![right_node], BlockPos::new(2, 64, 0), true);
+
+        assert!(left.same_as(&right));
     }
 
     #[test]

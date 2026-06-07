@@ -290,6 +290,18 @@ impl WalkNodeEvaluator {
         self.nodes.get(hash)
     }
 
+    pub(crate) fn node_mut(&mut self, hash: i32) -> Option<&mut Node> {
+        self.nodes.get_mut(hash)
+    }
+
+    pub(crate) const fn nodes_mut(&mut self) -> &mut NodeStore {
+        &mut self.nodes
+    }
+
+    pub(crate) fn reset_search_state(&mut self) {
+        self.nodes.reset_search_state();
+    }
+
     #[must_use]
     pub fn get_neighbors(
         &mut self,
