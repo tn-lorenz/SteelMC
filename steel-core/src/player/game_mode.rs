@@ -13,7 +13,6 @@ use steel_protocol::packets::game::{
 };
 use steel_registry::blocks::block_state_ext::BlockStateExt;
 use steel_registry::blocks::properties::Direction;
-use steel_registry::enchantment_effect::EnchantmentEffectComponent;
 use steel_registry::item_stack::ItemStack;
 use steel_registry::{REGISTRY, vanilla_attributes, vanilla_damage_types, vanilla_entities};
 use steel_utils::Identifier;
@@ -31,6 +30,7 @@ use crate::behavior::{
 use crate::block_entity::BlockEntity;
 use crate::block_entity::entities::SignBlockEntity;
 use crate::command::commands::gamemode::get_gamemode_translation;
+use crate::enchantment_helper::{self, EnchantmentDamageContext};
 use crate::entity::attribute::{AttributeModifier, AttributeModifierOperation};
 use crate::entity::damage::DamageSource;
 use crate::entity::{Entity, LivingEntity};
@@ -281,13 +281,13 @@ impl Player {
     }
 
     fn get_knockback(
-        _target: &dyn Entity,
-        _damage_source: &DamageSource,
         attack_knockback: f64,
         weapon: &ItemStack,
+        enchantment_context: &EnchantmentDamageContext<'_>,
     ) -> f64 {
-        let modified = weapon.apply_unconditional_enchantment_value_effects(
-            EnchantmentEffectComponent::Knockback,
+        let modified = enchantment_helper::modify_knockback(
+            weapon,
+            enchantment_context,
             attack_knockback as f32,
         );
         f64::from(modified) / 2.0
@@ -378,10 +378,15 @@ impl Player {
         let attack_strength_delay = Self::attack_strength_delay_from_speed(attack_speed);
         let attack_strength_scale =
             self.attack_strength_scale_for_delay(0.5, attack_strength_delay);
-        let enchanted_damage = attacking_item.apply_unconditional_enchantment_value_effects(
-            EnchantmentEffectComponent::Damage,
-            attack_damage,
+        let damage_source = self.attack_damage_source();
+        let enchantment_context = EnchantmentDamageContext::new(
+            entity.entity_type(),
+            Some(self.entity_type()),
+            Some(self.entity_type()),
+            &damage_source,
         );
+        let enchanted_damage =
+            enchantment_helper::modify_damage(&attacking_item, &enchantment_context, attack_damage);
         let magic_boost = attack_strength_scale * (enchanted_damage - attack_damage);
         let base_damage = attack_damage * Self::base_damage_scale_factor(attack_strength_scale);
         let total_damage = base_damage + magic_boost;
@@ -393,15 +398,14 @@ impl Player {
             return false;
         }
 
-        // TODO: Apply item damage bonuses, conditional enchantments, crits, sweep attacks, exhaustion, and sounds.
-        let damage_source = self.attack_damage_source();
+        // TODO: Apply item damage bonuses, crits, sweep attacks, exhaustion, and sounds.
         let old_movement = entity.velocity();
         let was_hurt = entity.hurt(&damage_source, total_damage);
         if was_hurt {
             let sprint_knockback = if knockback_attack { 0.5 } else { 0.0 };
             self.cause_extra_knockback(
                 entity,
-                Self::get_knockback(entity, &damage_source, attack_knockback, &attacking_item)
+                Self::get_knockback(attack_knockback, &attacking_item, &enchantment_context)
                     + sprint_knockback,
                 old_movement,
             );

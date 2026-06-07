@@ -4,7 +4,7 @@ use crate::generator_functions::generate_sound_event_ref;
 use heck::ToShoutySnakeCase;
 use proc_macro2::{Ident, Literal, Span, TokenStream};
 use quote::quote;
-use serde::Deserialize;
+use serde::{Deserialize, de};
 use steel_utils::Identifier;
 
 #[derive(Deserialize, Debug)]
@@ -101,9 +101,59 @@ struct ConditionalValueEffectJson {
     requirements: Option<RequirementsJson>,
 }
 
-#[derive(Deserialize, Debug)]
-struct RequirementsJson {
-    condition: Identifier,
+#[derive(Debug)]
+enum RequirementsJson {
+    AllOf(Vec<RequirementsJson>),
+    AnyOf(Vec<RequirementsJson>),
+    Inverted(Box<RequirementsJson>),
+    EntityProperties {
+        entity: EntityTargetJson,
+        predicate: EntityPredicateJson,
+    },
+    DamageSourceProperties(DamageSourcePredicateJson),
+    Unsupported {
+        condition: Identifier,
+    },
+}
+
+impl<'de> Deserialize<'de> for RequirementsJson {
+    fn deserialize<D>(deserializer: D) -> Result<Self, D::Error>
+    where
+        D: serde::Deserializer<'de>,
+    {
+        let value = serde_json::Value::deserialize(deserializer)?;
+        parse_requirements_json(&value).map_err(de::Error::custom)
+    }
+}
+
+#[derive(Debug)]
+enum EntityTargetJson {
+    This,
+    Attacker,
+    DirectAttacker,
+}
+
+#[derive(Debug)]
+struct EntityPredicateJson {
+    entity_type: EntityTypePredicateJson,
+}
+
+#[derive(Debug)]
+enum EntityTypePredicateJson {
+    Any,
+    Type(Identifier),
+    Tag(Identifier),
+}
+
+#[derive(Debug)]
+struct DamageSourcePredicateJson {
+    tags: Vec<DamageSourceTagPredicateJson>,
+}
+
+#[derive(Debug)]
+struct DamageSourceTagPredicateJson {
+    tag: Identifier,
+    expected: bool,
 }
 
 #[derive(Deserialize, Debug)]
@@ -194,6 +244,160 @@ fn identifier_token(identifier: &Identifier) -> TokenStream {
     let namespace = identifier.namespace.as_ref();
     let path = identifier.path.as_ref();
     quote! { Identifier::new_static(#namespace, #path) }
+}
+
+fn parse_identifier(raw: &str) -> Result<Identifier, String> {
+    raw.parse::<Identifier>()
+        .map_err(|error| format!("invalid identifier {raw}: {error}"))
+}
+
+fn object_field<'a>(
+    object: &'a serde_json::Map<String, serde_json::Value>,
+    field: &str,
+) -> Result<&'a serde_json::Value, String> {
+    object
+        .get(field)
+        .ok_or_else(|| format!("missing enchantment requirement field `{field}`"))
+}
+
+fn string_field(
+    object: &serde_json::Map<String, serde_json::Value>,
+    field: &str,
+) -> Result<String, String> {
+    object_field(object, field)?
+        .as_str()
+        .map(ToOwned::to_owned)
+        .ok_or_else(|| format!("enchantment requirement field `{field}` must be a string"))
+}
+
+fn parse_entity_target(raw: &str) -> Result<EntityTargetJson, String> {
+    match raw {
+        "this" => Ok(EntityTargetJson::This),
+        "attacker" => Ok(EntityTargetJson::Attacker),
+        "direct_attacker" => Ok(EntityTargetJson::DirectAttacker),
+        other => Err(format!("unsupported enchantment entity target `{other}`")),
+    }
+}
+
+fn parse_entity_type_predicate(raw: &str) -> Result<EntityTypePredicateJson, String> {
+    let Some(tag) = raw.strip_prefix('#') else {
+        return Ok(EntityTypePredicateJson::Type(parse_identifier(raw)?));
+    };
+
+    Ok(EntityTypePredicateJson::Tag(parse_identifier(tag)?))
+}
+
+fn parse_entity_predicate_json(value: &serde_json::Value) -> Result<EntityPredicateJson, String> {
+    let Some(object) = value.as_object() else {
+        return Err("entity_properties predicate must be an object".to_owned());
+    };
+    for key in object.keys() {
+        if key != "type" {
+            return Err(format!(
+                "unsupported entity_properties predicate field `{key}`"
+            ));
+        }
+    }
+    let entity_type = match object.get("type") {
+        Some(serde_json::Value::String(raw)) => parse_entity_type_predicate(raw)?,
+        Some(_) => return Err("entity_properties predicate `type` must be a string".to_owned()),
+        None => EntityTypePredicateJson::Any,
+    };
+
+    Ok(EntityPredicateJson { entity_type })
+}
+
+fn parse_damage_source_predicate_json(
+    value: &serde_json::Value,
+) -> Result<DamageSourcePredicateJson, String> {
+    let Some(object) = value.as_object() else {
+        return Err("damage_source_properties predicate must be an object".to_owned());
+    };
+    for key in object.keys() {
+        if key != "tags" {
+            return Err(format!(
+                "unsupported damage_source_properties predicate field `{key}`"
+            ));
+        }
+    }
+    let tags = match object.get("tags") {
+        Some(serde_json::Value::Array(tags)) => tags
+            .iter()
+            .map(parse_damage_source_tag_predicate_json)
+            .collect::<Result<Vec<_>, _>>()?,
+        Some(_) => {
+            return Err("damage_source_properties predicate `tags` must be an array".to_owned());
+        }
+        None => Vec::new(),
+    };
+
+    Ok(DamageSourcePredicateJson { tags })
+}
+
+fn parse_damage_source_tag_predicate_json(
+    value: &serde_json::Value,
+) -> Result<DamageSourceTagPredicateJson, String> {
+    let Some(object) = value.as_object() else {
+        return Err("damage source tag predicate must be an object".to_owned());
+    };
+    let id = string_field(object, "id")?;
+    let expected = object_field(object, "expected")?
+        .as_bool()
+        .ok_or_else(|| "damage source tag predicate `expected` must be a bool".to_owned())?;
+    for key in object.keys() {
+        if key != "id" && key != "expected" {
+            return Err(format!("unsupported damage source tag field `{key}`"));
+        }
+    }
+
+    Ok(DamageSourceTagPredicateJson {
+        tag: parse_identifier(&id)?,
+        expected,
+    })
+}
+
+fn parse_requirements_json(value: &serde_json::Value) -> Result<RequirementsJson, String> {
+    let Some(object) = value.as_object() else {
+        return Err("enchantment effect requirements must be an object".to_owned());
+    };
+    let condition = string_field(object, "condition")?;
+
+    match condition.as_str() {
+        "minecraft:all_of" => {
+            let terms = object_field(object, "terms")?
+                .as_array()
+                .ok_or_else(|| "all_of requirements `terms` must be an array".to_owned())?
+                .iter()
+                .map(parse_requirements_json)
+                .collect::<Result<Vec<_>, _>>()?;
+            Ok(RequirementsJson::AllOf(terms))
+        }
+        "minecraft:any_of" => {
+            let terms = object_field(object, "terms")?
+                .as_array()
+                .ok_or_else(|| "any_of requirements `terms` must be an array".to_owned())?
+                .iter()
+                .map(parse_requirements_json)
+                .collect::<Result<Vec<_>, _>>()?;
+            Ok(RequirementsJson::AnyOf(terms))
+        }
+        "minecraft:inverted" => {
+            let term = parse_requirements_json(object_field(object, "term")?)?;
+            Ok(RequirementsJson::Inverted(Box::new(term)))
+        }
+        "minecraft:entity_properties" => {
+            let entity = parse_entity_target(&string_field(object, "entity")?)?;
+            let predicate = parse_entity_predicate_json(object_field(object, "predicate")?)?;
+            Ok(RequirementsJson::EntityProperties { entity, predicate })
+        }
+        "minecraft:damage_source_properties" => {
+            let predicate = parse_damage_source_predicate_json(object_field(object, "predicate")?)?;
+            Ok(RequirementsJson::DamageSourceProperties(predicate))
+        }
+        _ => Ok(RequirementsJson::Unsupported {
+            condition: parse_identifier(&condition)?,
+        }),
+    }
 }
 
 fn attribute_ref_token(attribute: &Identifier) -> TokenStream {
@@ -315,11 +519,122 @@ fn generate_value_effect(
     }
 }
 
-fn generate_requirements(requirements: &Option<RequirementsJson>) -> TokenStream {
+fn entity_target_token(entity: &EntityTargetJson) -> TokenStream {
+    match entity {
+        EntityTargetJson::This => quote! { EnchantmentEntityTarget::This },
+        EntityTargetJson::Attacker => quote! { EnchantmentEntityTarget::Attacker },
+        EntityTargetJson::DirectAttacker => quote! { EnchantmentEntityTarget::DirectAttacker },
+    }
+}
+
+fn entity_type_predicate_token(predicate: &EntityTypePredicateJson) -> TokenStream {
+    match predicate {
+        EntityTypePredicateJson::Any => quote! { EntityTypePredicate::Any },
+        EntityTypePredicateJson::Type(entity_type) => {
+            let entity_type = identifier_token(entity_type);
+            quote! { EntityTypePredicate::Type(#entity_type) }
+        }
+        EntityTypePredicateJson::Tag(tag) => {
+            let tag = identifier_token(tag);
+            quote! { EntityTypePredicate::Tag(#tag) }
+        }
+    }
+}
+
+fn entity_predicate_token(predicate: &EntityPredicateJson) -> TokenStream {
+    let entity_type = entity_type_predicate_token(&predicate.entity_type);
+    quote! { EntityPredicate { entity_type: #entity_type } }
+}
+
+fn damage_source_predicate_token(predicate: &DamageSourcePredicateJson) -> TokenStream {
+    let tags = predicate.tags.iter().map(|tag| {
+        let tag_id = identifier_token(&tag.tag);
+        let expected = tag.expected;
+        quote! {
+            DamageSourceTagPredicate {
+                tag: #tag_id,
+                expected: #expected,
+            }
+        }
+    });
+
+    quote! { DamageSourcePredicate { tags: &[#(#tags),*] } }
+}
+
+fn generate_requirements_ref(
+    prefix: &str,
+    requirements: &RequirementsJson,
+    statics: &mut TokenStream,
+    counter: &mut usize,
+) -> TokenStream {
+    let ident = Ident::new(
+        &format!("{prefix}_REQUIREMENTS_{}", *counter),
+        Span::call_site(),
+    );
+    *counter += 1;
+    let requirements = generate_requirements_value(prefix, requirements, statics, counter);
+
+    statics.extend(quote! {
+        static #ident: EnchantmentEffectRequirements = #requirements;
+    });
+
+    quote! { &#ident }
+}
+
+fn generate_requirements_value(
+    prefix: &str,
+    requirements: &RequirementsJson,
+    statics: &mut TokenStream,
+    counter: &mut usize,
+) -> TokenStream {
+    match requirements {
+        RequirementsJson::AllOf(terms) => {
+            let terms = terms
+                .iter()
+                .map(|term| generate_requirements_ref(prefix, term, statics, counter));
+            quote! { EnchantmentEffectRequirements::AllOf(&[#(#terms),*]) }
+        }
+        RequirementsJson::AnyOf(terms) => {
+            let terms = terms
+                .iter()
+                .map(|term| generate_requirements_ref(prefix, term, statics, counter));
+            quote! { EnchantmentEffectRequirements::AnyOf(&[#(#terms),*]) }
+        }
+        RequirementsJson::Inverted(term) => {
+            let term = generate_requirements_ref(prefix, term, statics, counter);
+            quote! { EnchantmentEffectRequirements::Inverted(#term) }
+        }
+        RequirementsJson::EntityProperties { entity, predicate } => {
+            let entity = entity_target_token(entity);
+            let predicate = entity_predicate_token(predicate);
+            quote! {
+                EnchantmentEffectRequirements::EntityProperties {
+                    entity: #entity,
+                    predicate: #predicate,
+                }
+            }
+        }
+        RequirementsJson::DamageSourceProperties(predicate) => {
+            let predicate = damage_source_predicate_token(predicate);
+            quote! { EnchantmentEffectRequirements::DamageSourceProperties(#predicate) }
+        }
+        RequirementsJson::Unsupported { condition } => {
+            let condition = identifier_token(condition);
+            quote! { EnchantmentEffectRequirements::Unsupported { condition: #condition } }
+        }
+    }
+}
+
+fn generate_optional_requirements(
+    prefix: &str,
+    requirements: &Option<RequirementsJson>,
+    statics: &mut TokenStream,
+    counter: &mut usize,
+) -> TokenStream {
     match requirements {
         Some(requirements) => {
-            let condition = identifier_token(&requirements.condition);
-            quote! { Some(EnchantmentEffectRequirements { condition: #condition }) }
+            let requirements = generate_requirements_ref(prefix, requirements, statics, counter);
+            quote! { Some(#requirements) }
         }
         None => quote! { None },
     }
@@ -334,7 +649,8 @@ fn generate_conditional_value_effects(
     let entries = effects.iter().enumerate().map(|(index, effect)| {
         let entry_prefix = format!("{prefix}_{index}");
         let effect_token = generate_value_effect(&entry_prefix, &effect.effect, statics, counter);
-        let requirements = generate_requirements(&effect.requirements);
+        let requirements =
+            generate_optional_requirements(&entry_prefix, &effect.requirements, statics, counter);
         quote! {
             ConditionalEnchantmentEffect {
                 effect: #effect_token,
@@ -622,9 +938,10 @@ pub(crate) fn build() -> TokenStream {
     stream.extend(quote! {
         use crate::attribute::AttributeModifierOperation;
         use crate::enchantment_effect::{
-            ConditionalEnchantmentEffect, CrossbowChargingSounds, EnchantmentAttributeEffect,
-            EnchantmentEffectRequirements, EnchantmentEffects, EnchantmentValueEffect,
-            LevelBasedValue,
+            ConditionalEnchantmentEffect, CrossbowChargingSounds, DamageSourcePredicate,
+            DamageSourceTagPredicate, EnchantmentAttributeEffect, EnchantmentEffectRequirements,
+            EnchantmentEffects, EnchantmentEntityTarget, EnchantmentValueEffect,
+            EntityPredicate, EntityTypePredicate, LevelBasedValue,
         };
         use crate::enchantment::{Enchantment, EnchantmentCost, EnchantmentRegistry};
         use crate::equipment::EquipmentSlotGroup;

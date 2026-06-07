@@ -169,19 +169,56 @@ impl EnchantmentValueEffect {
     }
 }
 
-/// Minimal loot-condition handle for enchantment effects.
-///
-/// The full condition tree is applied later, once the matching enchanted item,
-/// damage, entity, and location context objects exist in Steel.
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+pub enum EnchantmentEntityTarget {
+    This,
+    Attacker,
+    DirectAttacker,
+}
+
 #[derive(Debug, PartialEq, Eq)]
-pub struct EnchantmentEffectRequirements {
-    pub condition: Identifier,
+pub enum EntityTypePredicate {
+    Any,
+    Type(Identifier),
+    Tag(Identifier),
+}
+
+#[derive(Debug, PartialEq, Eq)]
+pub struct EntityPredicate {
+    pub entity_type: EntityTypePredicate,
+}
+
+#[derive(Debug, PartialEq, Eq)]
+pub struct DamageSourceTagPredicate {
+    pub tag: Identifier,
+    pub expected: bool,
+}
+
+#[derive(Debug, PartialEq, Eq)]
+pub struct DamageSourcePredicate {
+    pub tags: &'static [DamageSourceTagPredicate],
+}
+
+/// Vanilla loot condition subset used by generated enchantment effects.
+#[derive(Debug, PartialEq, Eq)]
+pub enum EnchantmentEffectRequirements {
+    AllOf(&'static [&'static EnchantmentEffectRequirements]),
+    AnyOf(&'static [&'static EnchantmentEffectRequirements]),
+    Inverted(&'static EnchantmentEffectRequirements),
+    EntityProperties {
+        entity: EnchantmentEntityTarget,
+        predicate: EntityPredicate,
+    },
+    DamageSourceProperties(DamageSourcePredicate),
+    Unsupported {
+        condition: Identifier,
+    },
 }
 
 #[derive(Debug, PartialEq)]
 pub struct ConditionalEnchantmentEffect<T> {
     pub effect: T,
-    pub requirements: Option<EnchantmentEffectRequirements>,
+    pub requirements: Option<&'static EnchantmentEffectRequirements>,
 }
 
 impl<T> ConditionalEnchantmentEffect<T> {
