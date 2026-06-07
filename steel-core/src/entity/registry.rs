@@ -278,7 +278,7 @@ mod tests {
         init_test_registry();
         let registry = EntityRegistry::new();
         let mut nbt = NbtCompound::new();
-        nbt.insert("CustomName", "raw");
+        nbt.insert("SteelRawMarker", "raw");
         let mut bytes = Vec::new();
         nbt.write(&mut bytes);
         let borrowed =
@@ -316,7 +316,7 @@ mod tests {
         let mut saved = NbtCompound::new();
         entity.save_additional(&mut saved);
         assert_eq!(
-            saved.string("CustomName").map(ToString::to_string),
+            saved.string("SteelRawMarker").map(ToString::to_string),
             Some("raw".to_owned())
         );
     }

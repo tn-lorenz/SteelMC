@@ -56,6 +56,9 @@ use steel_worldgen::structure::{
     TemplatePlacementClip, TemplatePostProcess, TemplateProcessorList,
 };
 
+const ENTITY_LOAD_MAX_HORIZONTAL_POSITION: f64 = 3.000_051_2E7;
+const ENTITY_LOAD_MAX_VERTICAL_POSITION: f64 = 2.0E7;
+
 /// Converts `Option<Direction>` to the vanilla 2D data value encoding for persistence.
 /// -1 = none, 0 = south, 1 = west, 2 = north, 3 = east.
 const fn direction_to_2d(dir: Option<Direction>) -> i8 {
@@ -849,6 +852,23 @@ impl ChunkStorage {
         })
     }
 
+    fn clamp_loaded_entity_position(pos: DVec3) -> DVec3 {
+        DVec3::new(
+            pos.x.clamp(
+                -ENTITY_LOAD_MAX_HORIZONTAL_POSITION,
+                ENTITY_LOAD_MAX_HORIZONTAL_POSITION,
+            ),
+            pos.y.clamp(
+                -ENTITY_LOAD_MAX_VERTICAL_POSITION,
+                ENTITY_LOAD_MAX_VERTICAL_POSITION,
+            ),
+            pos.z.clamp(
+                -ENTITY_LOAD_MAX_HORIZONTAL_POSITION,
+                ENTITY_LOAD_MAX_HORIZONTAL_POSITION,
+            ),
+        )
+    }
+
     fn entity_to_persistent(
         entity: &SharedEntity,
         visited: &mut FxHashSet<i32>,
@@ -1286,7 +1306,7 @@ impl ChunkStorage {
         use uuid::Uuid;
 
         // Reconstruct base fields
-        let pos = DVec3::new(persistent.pos[0], persistent.pos[1], persistent.pos[2]);
+        let stored_pos = DVec3::new(persistent.pos[0], persistent.pos[1], persistent.pos[2]);
         let mut velocity = DVec3::new(
             persistent.motion[0],
             persistent.motion[1],
@@ -1296,14 +1316,24 @@ impl ChunkStorage {
         let uuid = Uuid::from_bytes(persistent.uuid);
 
         // Validate position is finite
-        if !pos.x.is_finite() || !pos.y.is_finite() || !pos.z.is_finite() {
+        if !stored_pos.x.is_finite() || !stored_pos.y.is_finite() || !stored_pos.z.is_finite() {
             tracing::warn!(
                 ?uuid,
                 "Entity has non-finite position {:?}, skipping load",
-                pos
+                stored_pos
             );
             return None;
         }
+
+        if !rotation.0.is_finite() || !rotation.1.is_finite() {
+            tracing::warn!(
+                ?uuid,
+                "Entity has non-finite rotation {rotation:?}, skipping load"
+            );
+            return None;
+        }
+
+        let pos = Self::clamp_loaded_entity_position(stored_pos);
 
         // Validate position is within expected chunk (sanity check)
         let expected_chunk = ChunkPos::from_entity_pos(pos);
@@ -1333,8 +1363,8 @@ impl ChunkStorage {
 
         // Parse NBT from bytes (or use empty compound data)
         let nbt_bytes = if persistent.nbt_data.is_empty() {
-            // Empty NBT compound: type byte (10 = compound), empty name (2 zero bytes), end tag (0)
-            &[0x0a, 0x00, 0x00, 0x00][..]
+            // Empty compound body for `simdnbt::borrow::read_compound`.
+            &[0x00][..]
         } else {
             &persistent.nbt_data[..]
         };
@@ -2678,7 +2708,7 @@ mod tests {
     use crate::behavior::init_behaviors;
     use crate::block_entity::init_block_entities;
     use crate::entity::{
-        Entity, SharedEntity,
+        DEFAULT_MAX_AIR_SUPPLY, Entity, SharedEntity,
         entities::{EndCrystalEntity, RawEntity},
         init_entities, next_entity_id,
     };
@@ -2718,6 +2748,35 @@ mod tests {
 
     fn single_empty_section() -> Sections {
         Sections::from_owned(vec![ChunkSection::new_empty()].into_boxed_slice())
+    }
+
+    fn test_persistent_end_crystal(pos: DVec3) -> PersistentEntity {
+        PersistentEntity {
+            entity_type: vanilla_entities::END_CRYSTAL.key.clone(),
+            uuid: [9; 16],
+            pos: [pos.x, pos.y, pos.z],
+            motion: [0.0, 0.0, 0.0],
+            rotation: [0.0, 0.0],
+            fall_distance: 0.0,
+            remaining_fire_ticks: 0,
+            ticks_frozen: 0,
+            is_in_powder_snow: false,
+            was_in_powder_snow: false,
+            has_visual_fire: false,
+            on_ground: false,
+            no_gravity: false,
+            invulnerable: false,
+            air_supply: DEFAULT_MAX_AIR_SUPPLY,
+            portal_cooldown: 0,
+            custom_name_nbt: Vec::new(),
+            custom_name_visible: false,
+            silent: false,
+            glowing: false,
+            tags: Vec::new(),
+            custom_data_nbt: Vec::new(),
+            nbt_data: Vec::new(),
+            passengers: Vec::new(),
+        }
     }
 
     #[test]
@@ -2825,6 +2884,47 @@ mod tests {
         };
 
         assert_eq!(loaded_proto.postprocessing.read()[0], vec![packed]);
+    }
+
+    #[test]
+    fn persistent_entity_load_clamps_position_like_vanilla() {
+        init_runtime_registries();
+
+        let persistent =
+            test_persistent_end_crystal(DVec3::new(100_000_000.0, -100_000_000.0, -100_000_000.0));
+        let Some(entity) = ChunkStorage::persistent_to_entity_at_level(
+            &persistent,
+            ChunkPos::new(0, 0),
+            &Weak::new(),
+        ) else {
+            panic!("entity should load with clamped position");
+        };
+
+        assert_eq!(
+            entity.position(),
+            DVec3::new(
+                ENTITY_LOAD_MAX_HORIZONTAL_POSITION,
+                -ENTITY_LOAD_MAX_VERTICAL_POSITION,
+                -ENTITY_LOAD_MAX_HORIZONTAL_POSITION,
+            )
+        );
+    }
+
+    #[test]
+    fn persistent_entity_load_rejects_non_finite_rotation_like_vanilla() {
+        init_runtime_registries();
+
+        let mut persistent = test_persistent_end_crystal(DVec3::new(1.0, 2.0, 3.0));
+        persistent.rotation = [f32::NAN, 0.0];
+
+        assert!(
+            ChunkStorage::persistent_to_entity_at_level(
+                &persistent,
+                ChunkPos::new(0, 0),
+                &Weak::new(),
+            )
+            .is_none()
+        );
     }
 
     #[test]
