@@ -130,6 +130,7 @@ pub trait CollisionWorld {
 pub struct WorldCollisionProvider<'a> {
     world: &'a Arc<World>,
     source: Option<&'a dyn Entity>,
+    include_entity_collisions: bool,
 }
 
 #[derive(Clone, Copy, Debug, PartialEq, Eq)]
@@ -198,6 +199,7 @@ impl<'a> WorldCollisionProvider<'a> {
         Self {
             world,
             source: None,
+            include_entity_collisions: true,
         }
     }
 
@@ -206,6 +208,16 @@ impl<'a> WorldCollisionProvider<'a> {
         Self {
             world,
             source: Some(source),
+            include_entity_collisions: true,
+        }
+    }
+
+    /// Creates a collision provider matching vanilla `PathNavigationRegion`.
+    pub const fn for_path_navigation(world: &'a Arc<World>, source: &'a dyn Entity) -> Self {
+        Self {
+            world,
+            source: Some(source),
+            include_entity_collisions: false,
         }
     }
 
@@ -503,6 +515,9 @@ impl CollisionWorld for WorldCollisionProvider<'_> {
     }
 
     fn get_entity_collisions(&self, aabb: &WorldAabb) -> Vec<WorldAabb> {
+        if !self.include_entity_collisions {
+            return Vec::new();
+        }
         if aabb.size() < ENTITY_COLLISION_EPSILON {
             return Vec::new();
         }
@@ -525,6 +540,9 @@ impl CollisionWorld for WorldCollisionProvider<'_> {
     }
 
     fn has_entity_collision(&self, aabb: &WorldAabb) -> bool {
+        if !self.include_entity_collisions {
+            return false;
+        }
         if aabb.size() < ENTITY_COLLISION_EPSILON {
             return false;
         }

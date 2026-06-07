@@ -3273,7 +3273,7 @@ impl World {
         }
     }
 
-    fn has_full_chunk(&self, chunk_pos: ChunkPos) -> bool {
+    pub(crate) fn has_full_chunk(&self, chunk_pos: ChunkPos) -> bool {
         self.chunk_map
             .with_full_chunk(chunk_pos, |chunk| chunk.as_full().is_some())
             .unwrap_or(false)

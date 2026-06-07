@@ -5,6 +5,7 @@
 )]
 
 use std::f32::consts::PI;
+use std::sync::Arc;
 
 use glam::DVec3;
 use steel_math::floor;
@@ -12,14 +13,16 @@ use steel_registry::blocks::block_state_ext::BlockStateExt as _;
 use steel_registry::vanilla_attributes;
 use steel_registry::vanilla_block_tags::BlockTag;
 use steel_utils::locks::SyncMutex;
-use steel_utils::{BlockPos, axis::Axis};
+use steel_utils::{BlockPos, ChunkPos, axis::Axis};
 
 use crate::behavior::{BLOCK_BEHAVIORS, BlockCollisionContext};
 use crate::entity::ai::control::{MobControls, MoveControlOperation};
-use crate::entity::ai::navigation::PathNavigation;
-use crate::entity::ai::path::{PathType, PathfindingContext, PathfindingMalus};
-use crate::entity::ai::walk::WalkPathEvaluator;
+use crate::entity::ai::navigation::{NavigationPathRequest, PathNavigation};
+use crate::entity::ai::path::{Path, PathType, PathfindingContext, PathfindingMalus};
+use crate::entity::ai::walk::{MobPathSettings, WalkNodeEvaluator, WalkPathEvaluator};
 use crate::entity::{LivingEntity, LivingTravelInput};
+use crate::physics::WorldCollisionProvider;
+use crate::world::{LevelReader, World};
 
 const MOB_FLAG_NO_AI: i8 = 1;
 const MOB_FLAG_LEFT_HANDED: i8 = 2;
@@ -36,7 +39,7 @@ pub struct MobBase {
 
 impl MobBase {
     #[must_use]
-    pub const fn new() -> Self {
+    pub fn new() -> Self {
         let mut pathfinding_malus = PathfindingMalus::new();
         pathfinding_malus.set(PathType::FireInNeighbor, 16.0);
         pathfinding_malus.set(PathType::Fire, -1.0);
@@ -138,11 +141,35 @@ pub trait Mob: LivingEntity {
     }
 
     fn mob_server_ai_step(&self) {
-        self.mob_base().navigation().lock().tick();
+        self.tick_path_navigation();
         self.custom_server_ai_step();
         self.tick_move_control();
         self.tick_look_control();
         self.tick_jump_control();
+    }
+
+    fn tick_path_navigation(&self) {
+        let (target, speed_modifier) = {
+            let mut navigation = self.mob_base().navigation().lock();
+            navigation.tick();
+            let Some(target) =
+                navigation.next_move_target(self.position(), self.bounding_box().width())
+            else {
+                return;
+            };
+            target
+        };
+
+        let Some(world) = self.level() else {
+            return;
+        };
+        let target_pos = BlockPos::containing(target.x, target.y, target.z);
+        let ground_y = if world.get_block_state(target_pos.below()).is_air() {
+            target.y
+        } else {
+            WalkNodeEvaluator::floor_level(world.as_ref(), target_pos)
+        };
+        self.set_wanted_position(DVec3::new(target.x, ground_y, target.z), speed_modifier);
     }
 
     fn tick_move_control(&self) {
@@ -319,9 +346,132 @@ pub trait PathfinderMob: Mob {
         0.0
     }
 
+    fn can_update_path(&self) -> bool {
+        self.on_ground() || self.is_in_water() || self.is_in_lava() || self.is_passenger()
+    }
+
+    fn can_path_to_targets_below_surface(&self) -> bool {
+        false
+    }
+
+    fn create_path_to(&self, target: BlockPos, reach_range: i32) -> Option<Path> {
+        let world = self.level()?;
+        if !world.has_full_chunk(ChunkPos::from_block_pos(target)) {
+            return None;
+        }
+
+        let target = if self.can_path_to_targets_below_surface() {
+            target
+        } else {
+            find_ground_path_target_surface(world.as_ref(), target)
+        };
+        let targets = [target];
+        self.create_path_to_targets(&world, &targets, reach_range)
+    }
+
+    fn move_to_pos(&self, target: DVec3, speed_modifier: f64) -> bool {
+        self.move_to_pos_with_reach(target, 1, speed_modifier)
+    }
+
+    fn move_to_pos_with_reach(&self, target: DVec3, reach_range: i32, speed_modifier: f64) -> bool {
+        let path = self.create_path_to(
+            BlockPos::containing(target.x, target.y, target.z),
+            reach_range,
+        );
+        self.move_to_path(path, speed_modifier)
+    }
+
+    fn move_to_path(&self, path: Option<Path>, speed_modifier: f64) -> bool {
+        let mut navigation = self.mob_base().navigation().lock();
+        let Some(path) = path else {
+            navigation.stop();
+            return false;
+        };
+
+        navigation.move_to(path, speed_modifier)
+    }
+
     fn is_path_finding(&self) -> bool {
         !self.mob_base().navigation().lock().is_done()
     }
+
+    fn create_path_to_targets(
+        &self,
+        world: &Arc<World>,
+        targets: &[BlockPos],
+        reach_range: i32,
+    ) -> Option<Path> {
+        if targets.is_empty()
+            || self.position().y < f64::from(world.min_y())
+            || !self.can_update_path()
+        {
+            return None;
+        }
+
+        let follow_range = self
+            .attributes()
+            .lock()
+            .required_value(vanilla_attributes::FOLLOW_RANGE);
+        let max_path_length = {
+            let mut navigation = self.mob_base().navigation().lock();
+            navigation.update_pathfinder_max_visited_nodes(follow_range);
+            navigation.max_path_length(follow_range)
+        };
+
+        let mob_position = self.block_position();
+        let settings = MobPathSettings::from_mob(self);
+        let mut evaluator = WalkNodeEvaluator::new(settings);
+        let collision_world =
+            WorldCollisionProvider::for_path_navigation(world, self.as_entity_event_source());
+        let mut collision = |aabb| {
+            collision_world.has_entity_context_collision(
+                aabb,
+                self.position().y,
+                self.is_descending(),
+            )
+        };
+
+        self.mob_base().navigation().lock().create_path(
+            &mut evaluator,
+            world.as_ref(),
+            &mut collision,
+            NavigationPathRequest {
+                mob_position,
+                targets,
+                max_path_length,
+                reach_range,
+            },
+        )
+    }
+}
+
+fn find_ground_path_target_surface(level: &dyn LevelReader, mut pos: BlockPos) -> BlockPos {
+    if level.get_block_state(pos).is_air() {
+        let mut column_pos = pos.below();
+        while column_pos.y() >= level.min_y() && level.get_block_state(column_pos).is_air() {
+            column_pos = column_pos.below();
+        }
+        if column_pos.y() >= level.min_y() {
+            return column_pos.above();
+        }
+
+        column_pos = pos.at_y(pos.y() + 1);
+        while column_pos.y() < level.max_y_exclusive() && level.get_block_state(column_pos).is_air()
+        {
+            column_pos = column_pos.above();
+        }
+        pos = column_pos;
+    }
+
+    if !level.get_block_state(pos).is_solid() {
+        return pos;
+    }
+
+    let mut column_pos = pos.above();
+    while column_pos.y() < level.max_y_exclusive() && level.get_block_state(column_pos).is_solid() {
+        column_pos = column_pos.above();
+    }
+    column_pos
 }
 
 fn should_jump_to_wanted_position<M: Mob + ?Sized>(
@@ -392,8 +542,53 @@ fn wrap_degrees(mut degrees: f32) -> f32 {
 
 #[cfg(test)]
 mod tests {
+    use steel_registry::{REGISTRY, test_support::init_test_registry, vanilla_blocks};
+    use steel_utils::{BlockPos, BlockStateId};
+
+    use super::find_ground_path_target_surface;
     use crate::entity::ai::path::PathType;
     use crate::entity::mob::MobBase;
+    use crate::world::LevelReader;
+
+    struct SurfaceLevel {
+        default_state: BlockStateId,
+        states: Vec<(BlockPos, BlockStateId)>,
+    }
+
+    impl SurfaceLevel {
+        fn new(default_state: BlockStateId) -> Self {
+            Self {
+                default_state,
+                states: Vec::new(),
+            }
+        }
+
+        fn with(mut self, pos: BlockPos, state: BlockStateId) -> Self {
+            self.states.push((pos, state));
+            self
+        }
+    }
+
+    impl LevelReader for SurfaceLevel {
+        fn get_block_state(&self, pos: BlockPos) -> BlockStateId {
+            self.states
+                .iter()
+                .find_map(|(state_pos, state)| (*state_pos == pos).then_some(*state))
+                .unwrap_or(self.default_state)
+        }
+
+        fn raw_brightness(&self, _pos: BlockPos, _sky_darkening: u8) -> u8 {
+            0
+        }
+
+        fn min_y(&self) -> i32 {
+            -64
+        }
+
+        fn height(&self) -> i32 {
+            384
+        }
+    }
 
     #[test]
     fn mob_base_uses_vanilla_fire_path_malus_overrides() {
@@ -406,5 +601,35 @@ mod tests {
         );
         assert_eq!(malus.get(PathType::Fire).to_bits(), (-1.0_f32).to_bits());
         assert_eq!(malus.get(PathType::Water).to_bits(), 8.0_f32.to_bits());
+    }
+
+    #[test]
+    fn ground_path_target_air_rewrites_to_surface_above_ground() {
+        init_test_registry();
+
+        let air = REGISTRY.blocks.get_default_state_id(&vanilla_blocks::AIR);
+        let stone = REGISTRY.blocks.get_default_state_id(&vanilla_blocks::STONE);
+        let level = SurfaceLevel::new(air).with(BlockPos::new(4, 63, 4), stone);
+
+        assert_eq!(
+            find_ground_path_target_surface(&level, BlockPos::new(4, 70, 4)),
+            BlockPos::new(4, 64, 4)
+        );
+    }
+
+    #[test]
+    fn ground_path_target_solid_rewrites_to_first_open_block_above() {
+        init_test_registry();
+
+        let air = REGISTRY.blocks.get_default_state_id(&vanilla_blocks::AIR);
+        let stone = REGISTRY.blocks.get_default_state_id(&vanilla_blocks::STONE);
+        let level = SurfaceLevel::new(air)
+            .with(BlockPos::new(4, 64, 4), stone)
+            .with(BlockPos::new(4, 65, 4), stone);
+
+        assert_eq!(
+            find_ground_path_target_surface(&level, BlockPos::new(4, 64, 4)),
+            BlockPos::new(4, 66, 4)
+        );
     }
 }
