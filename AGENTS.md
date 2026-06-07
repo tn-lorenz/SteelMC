@@ -13,7 +13,7 @@
 
 Template: *"This requires [Hack] which risks [Consequence]. Proceed or solve root cause?"*
 
-**CONSTRUCTIVE DISSENT** — Treat user claims as hypotheses. Verify against local code/vanilla, call out mismatches, and challenge XY problems. Before building a complex system, state the simplest vanilla-compatible design and ask when a simpler architecture would change scope.
+**CONSTRUCTIVE DISSENT** — Treat user claims as hypotheses. Verify against local code/vanilla, call out mismatches, and challenge XY problems. Before building a complex system, identify the required vanilla-compatible foundations and ask when architecture is unclear.
 
 **Registries**
  - We should only generate what is needed. Does minecraft use a hardcoded transform? Then we do as well.
