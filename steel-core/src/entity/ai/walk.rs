@@ -219,6 +219,54 @@ pub struct AcceptedNodeRequest {
     pub current_path_type: PathType,
 }
 
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+pub struct WalkNeighbors {
+    nodes: [Option<i32>; 8],
+    len: usize,
+}
+
+impl WalkNeighbors {
+    #[must_use]
+    pub const fn new() -> Self {
+        Self {
+            nodes: [None; 8],
+            len: 0,
+        }
+    }
+
+    #[must_use]
+    pub const fn len(&self) -> usize {
+        self.len
+    }
+
+    #[must_use]
+    pub const fn is_empty(&self) -> bool {
+        self.len == 0
+    }
+
+    pub fn iter(&self) -> impl Iterator<Item = i32> + '_ {
+        self.nodes[..self.len].iter().copied().flatten()
+    }
+
+    const fn push(&mut self, node: i32) {
+        self.nodes[self.len] = Some(node);
+        self.len += 1;
+    }
+}
+
+impl Default for WalkNeighbors {
+    fn default() -> Self {
+        Self::new()
+    }
+}
+
+const VANILLA_HORIZONTAL_DIRECTIONS: [Direction; 4] = [
+    Direction::North,
+    Direction::East,
+    Direction::South,
+    Direction::West,
+];
+
 impl WalkNodeEvaluator {
     #[must_use]
     pub fn new(settings: MobPathSettings) -> Self {
@@ -240,6 +288,94 @@ impl WalkNodeEvaluator {
     #[must_use]
     pub fn node(&self, hash: i32) -> Option<&Node> {
         self.nodes.get(hash)
+    }
+
+    #[must_use]
+    pub fn get_neighbors(
+        &mut self,
+        context: &mut PathfindingContext<'_>,
+        collision: &mut impl WalkNodeCollision,
+        pos_hash: i32,
+    ) -> WalkNeighbors {
+        let Some(pos) = self.node(pos_hash) else {
+            return WalkNeighbors::new();
+        };
+        let pos_x = pos.x;
+        let pos_y = pos.y;
+        let pos_z = pos.z;
+        let pos_cost_malus = pos.cost_malus;
+        let pos_block = BlockPos::new(pos_x, pos_y, pos_z);
+
+        let path_type_above = self.get_path_type_of_mob(context, pos_x, pos_y + 1, pos_z);
+        let current_path_type = self.get_path_type_of_mob(context, pos_x, pos_y, pos_z);
+        let jump_size = if self.settings.pathfinding_malus(path_type_above) >= 0.0
+            && current_path_type != PathType::StickyHoney
+        {
+            floor(f64::from(self.settings.max_up_step()).max(1.0))
+        } else {
+            0
+        };
+        let pos_height = self.get_floor_level(context, pos_block);
+
+        let mut neighbors = WalkNeighbors::new();
+        let mut reusable_neighbors = [None; 4];
+        for (index, direction) in VANILLA_HORIZONTAL_DIRECTIONS.iter().copied().enumerate() {
+            let (step_x, _, step_z) = direction.offset();
+            let node = self.find_accepted_node(
+                context,
+                collision,
+                AcceptedNodeRequest {
+                    pos: BlockPos::new(pos_x + step_x, pos_y, pos_z + step_z),
+                    jump_size,
+                    node_height: pos_height,
+                    travel_direction: direction,
+                    current_path_type,
+                },
+            );
+            reusable_neighbors[index] = node;
+            if self.is_neighbor_valid(node, pos_cost_malus)
+                && let Some(node) = node
+            {
+                neighbors.push(node);
+            }
+        }
+
+        for (index, direction) in VANILLA_HORIZONTAL_DIRECTIONS.iter().copied().enumerate() {
+            let second_index = clockwise_direction_index(index);
+            let second_direction = VANILLA_HORIZONTAL_DIRECTIONS[second_index];
+            if !self.is_diagonal_corner_valid(
+                pos_y,
+                reusable_neighbors[index],
+                reusable_neighbors[second_index],
+            ) {
+                continue;
+            }
+
+            let (step_x, _, step_z) = direction.offset();
+            let (second_step_x, _, second_step_z) = second_direction.offset();
+            let node = self.find_accepted_node(
+                context,
+                collision,
+                AcceptedNodeRequest {
+                    pos: BlockPos::new(
+                        pos_x + step_x + second_step_x,
+                        pos_y,
+                        pos_z + step_z + second_step_z,
+                    ),
+                    jump_size,
+                    node_height: pos_height,
+                    travel_direction: direction,
+                    current_path_type,
+                },
+            );
+            if self.is_diagonal_node_valid(node)
+                && let Some(node) = node
+            {
+                neighbors.push(node);
+            }
+        }
+
+        neighbors
     }
 
     #[must_use]
@@ -462,6 +598,54 @@ impl WalkNodeEvaluator {
         }
     }
 
+    fn is_neighbor_valid(&self, node: Option<i32>, current_cost_malus: f32) -> bool {
+        let Some(node) = node.and_then(|hash| self.node(hash)) else {
+            return false;
+        };
+
+        !node.closed && (node.cost_malus >= 0.0 || current_cost_malus < 0.0)
+    }
+
+    fn is_diagonal_corner_valid(
+        &self,
+        current_y: i32,
+        first: Option<i32>,
+        second: Option<i32>,
+    ) -> bool {
+        let Some(first) = first.and_then(|hash| self.node(hash)) else {
+            return false;
+        };
+        let Some(second) = second.and_then(|hash| self.node(hash)) else {
+            return false;
+        };
+
+        if first.y > current_y || second.y > current_y {
+            return false;
+        }
+        if first.path_type == PathType::WalkableDoor || second.path_type == PathType::WalkableDoor {
+            return false;
+        }
+        if self.settings.bounding_box().width() > 1.0
+            && (first.cost_malus > 0.0 || second.cost_malus > 0.0)
+        {
+            return false;
+        }
+
+        let can_pass_between_fence_posts = first.path_type == PathType::Fence
+            && second.path_type == PathType::Fence
+            && self.settings.bounding_box().width() < 0.5;
+        (first.y < current_y || first.cost_malus >= 0.0 || can_pass_between_fence_posts)
+            && (second.y < current_y || second.cost_malus >= 0.0 || can_pass_between_fence_posts)
+    }
+
+    fn is_diagonal_node_valid(&self, node: Option<i32>) -> bool {
+        let Some(node) = node.and_then(|hash| self.node(hash)) else {
+            return false;
+        };
+
+        !node.closed && node.path_type != PathType::WalkableDoor && node.cost_malus >= 0.0
+    }
+
     fn try_jump_on(
         &mut self,
         context: &mut PathfindingContext<'_>,
@@ -630,6 +814,10 @@ impl WalkNodeEvaluator {
         node.cost_malus = path_type.default_malus();
         node.hash()
     }
+}
+
+const fn clockwise_direction_index(index: usize) -> usize {
+    (index + 1) % VANILLA_HORIZONTAL_DIRECTIONS.len()
 }
 
 pub trait WalkNodeCollision {
@@ -1167,6 +1355,85 @@ mod tests {
     }
 
     #[test]
+    fn get_neighbors_expands_all_cardinal_and_diagonal_nodes_on_flat_ground() {
+        init_test_registry();
+        init_behaviors();
+
+        let air = REGISTRY.blocks.get_default_state_id(&vanilla_blocks::AIR);
+        let stone = REGISTRY.blocks.get_default_state_id(&vanilla_blocks::STONE);
+        let mut level = GridLevel::new(air);
+        for x in -1..=1 {
+            for z in -1..=1 {
+                level = level.with(BlockPos::new(x, 63, z), stone);
+            }
+        }
+        let mut context = PathfindingContext::new(&level, BlockPos::new(0, 64, 0));
+        let mut evaluator = WalkNodeEvaluator::new(test_settings(1, 1, 1));
+        let mut no_collision = |_aabb: WorldAabb| false;
+        let Some(current) = evaluator.find_accepted_node(
+            &mut context,
+            &mut no_collision,
+            accepted_request(BlockPos::new(0, 64, 0), 0, 64.0, PathType::Walkable),
+        ) else {
+            panic!("current walkable node should be accepted");
+        };
+
+        let neighbors = evaluator.get_neighbors(&mut context, &mut no_collision, current);
+
+        assert_eq!(neighbors.len(), 8);
+        let positions = neighbor_positions(&evaluator, &neighbors);
+        assert!(positions.contains(&(0, 64, -1)));
+        assert!(positions.contains(&(1, 64, 0)));
+        assert!(positions.contains(&(0, 64, 1)));
+        assert!(positions.contains(&(-1, 64, 0)));
+        assert!(positions.contains(&(1, 64, -1)));
+        assert!(positions.contains(&(1, 64, 1)));
+        assert!(positions.contains(&(-1, 64, 1)));
+        assert!(positions.contains(&(-1, 64, -1)));
+    }
+
+    #[test]
+    fn get_neighbors_rejects_diagonals_through_walkable_doors() {
+        init_test_registry();
+        init_behaviors();
+
+        let air = REGISTRY.blocks.get_default_state_id(&vanilla_blocks::AIR);
+        let stone = REGISTRY.blocks.get_default_state_id(&vanilla_blocks::STONE);
+        let oak_closed = vanilla_blocks::OAK_DOOR
+            .default_state()
+            .set_value(&BlockStateProperties::OPEN, false);
+        let mut level = GridLevel::new(air).with(BlockPos::new(0, 64, -1), oak_closed);
+        for x in -1..=1 {
+            for z in -1..=1 {
+                level = level.with(BlockPos::new(x, 63, z), stone);
+            }
+        }
+        let mut context = PathfindingContext::new(&level, BlockPos::new(0, 64, 0));
+        let mut evaluator = WalkNodeEvaluator::new(
+            test_settings(1, 1, 1)
+                .with_can_open_doors(true)
+                .with_can_pass_doors(true),
+        );
+        let mut no_collision = |_aabb: WorldAabb| false;
+        let Some(current) = evaluator.find_accepted_node(
+            &mut context,
+            &mut no_collision,
+            accepted_request(BlockPos::new(0, 64, 0), 0, 64.0, PathType::Walkable),
+        ) else {
+            panic!("current walkable node should be accepted");
+        };
+
+        let neighbors = evaluator.get_neighbors(&mut context, &mut no_collision, current);
+
+        let positions = neighbor_positions(&evaluator, &neighbors);
+        assert!(positions.contains(&(0, 64, -1)));
+        assert!(positions.contains(&(1, 64, 0)));
+        assert!(positions.contains(&(-1, 64, 0)));
+        assert!(!positions.contains(&(1, 64, -1)));
+        assert!(!positions.contains(&(-1, 64, -1)));
+    }
+
+    #[test]
     fn open_air_above_solid_ground_becomes_walkable() {
         init_test_registry();
         init_behaviors();
@@ -1229,5 +1496,15 @@ mod tests {
             travel_direction: Direction::North,
             current_path_type,
         }
+    }
+
+    fn neighbor_positions(
+        evaluator: &WalkNodeEvaluator,
+        neighbors: &super::WalkNeighbors,
+    ) -> Vec<(i32, i32, i32)> {
+        neighbors
+            .iter()
+            .filter_map(|hash| evaluator.node(hash).map(|node| (node.x, node.y, node.z)))
+            .collect()
     }
 }
