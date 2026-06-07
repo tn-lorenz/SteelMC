@@ -568,6 +568,7 @@ fn apply_effects_from_block_movements(entity: &dyn Entity, movements: &[EntityMo
     finish_inside_block_effects(entity, &mut effect_collector, before_effects);
 }
 
+pub(crate) mod ai;
 pub mod attribute;
 mod base;
 mod block_effects;
@@ -580,6 +581,7 @@ mod generated_entities;
 mod inside_block_effects;
 mod living_base;
 mod manager;
+mod mob;
 mod movement_sync;
 mod registry;
 mod shared_flags;
@@ -611,6 +613,7 @@ pub use manager::{
     AddEntityError, ChunkEntityLoadResult, EntityMoveError, EntityMoveUpdate, EntityOwnership,
     WorldEntityManager,
 };
+pub(crate) use mob::{Mob, MobBase, PathfinderMob};
 pub use movement_sync::{
     EntityMovementSyncPacket, EntityMovementSyncPackets, EntityMovementSyncState,
     EntityMovementSyncUpdate, EntityPositionRotSyncPacket, EntityPositionSyncDecision,
@@ -3312,10 +3315,14 @@ pub trait LivingEntity: Entity {
     }
 
     /// Gets the absorption amount (extra health from effects like absorption).
-    fn get_absorption_amount(&self) -> f32;
+    fn get_absorption_amount(&self) -> f32 {
+        self.living_base().absorption_amount()
+    }
 
     /// Sets the absorption amount.
-    fn set_absorption_amount(&self, amount: f32);
+    fn set_absorption_amount(&self, amount: f32) {
+        self.living_base().set_absorption_amount(amount);
+    }
 
     /// Returns vanilla `LivingEntity.getFallDamageSound()`.
     fn fall_damage_sound(&self, damage: i32) -> SoundEventRef {

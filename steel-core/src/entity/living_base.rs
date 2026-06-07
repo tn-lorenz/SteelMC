@@ -400,6 +400,7 @@ struct LivingEntityState {
     death_processed: bool,
     invulnerable_time: i32,
     last_hurt: f32,
+    absorption_amount: f32,
     death_time: i32,
     speed: f32,
     current_impulse_context_reset_grace_time: i32,
@@ -421,6 +422,7 @@ impl LivingEntityState {
             death_processed: false,
             invulnerable_time: 0,
             last_hurt: 0.0,
+            absorption_amount: 0.0,
             death_time: 0,
             speed,
             current_impulse_context_reset_grace_time: 0,
@@ -441,6 +443,7 @@ impl LivingEntityState {
         self.death_time = 0;
         self.invulnerable_time = 0;
         self.last_hurt = 0.0;
+        self.absorption_amount = 0.0;
     }
 }
 
@@ -512,6 +515,17 @@ impl LivingEntityBase {
     #[inline]
     pub const fn equipment(&self) -> &SyncMutex<EntityEquipment> {
         &self.equipment
+    }
+
+    /// Returns vanilla `LivingEntity.absorptionAmount` for non-player living entities.
+    #[must_use]
+    pub fn absorption_amount(&self) -> f32 {
+        self.state.lock().absorption_amount
+    }
+
+    /// Sets vanilla `LivingEntity.absorptionAmount` for non-player living entities.
+    pub fn set_absorption_amount(&self, amount: f32) {
+        self.state.lock().absorption_amount = amount.max(0.0);
     }
 
     /// Refreshes transient item attribute modifiers for an equipment slot.
