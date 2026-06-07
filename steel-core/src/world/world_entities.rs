@@ -74,8 +74,7 @@ impl World {
 
     pub(crate) fn unregister_player_entity(&self, player: &Player) {
         let entity_id = player.id();
-        self.entity_tracker
-            .remove(entity_id, |id| self.players.get_by_entity_id(id));
+        self.remove_entity_from_tracker(entity_id);
 
         self.entity_manager()
             .remove_live_entity(entity_id, RemovalReason::ChangedWorld);

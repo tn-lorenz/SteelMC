@@ -751,18 +751,6 @@ impl WorldEntityManager {
     }
 
     #[must_use]
-    /// Gets all live entities that are accessible from the active world.
-    pub fn live_entities(&self) -> Vec<SharedEntity> {
-        let state = self.state.read();
-        state
-            .live_by_id
-            .values()
-            .filter(|entry| Self::is_accessible(&state, entry))
-            .map(|entry| entry.entity.clone())
-            .collect()
-    }
-
-    #[must_use]
     /// Gets live entities whose bounding boxes intersect `aabb`.
     pub fn get_entities_in_aabb(&self, aabb: &WorldAabb) -> Vec<SharedEntity> {
         let min_section = SectionPos::from_entity_pos(DVec3::new(
@@ -1271,44 +1259,6 @@ mod tests {
             panic!("entity in unloaded chunk should be live");
         };
         assert!(Arc::ptr_eq(&entity, &live_entity));
-    }
-
-    #[test]
-    fn live_entities_returns_accessible_live_entities() {
-        let manager = WorldEntityManager::new();
-        load_chunk(&manager, ChunkPos::new(0, 0));
-
-        let manager_owned = entity(1, 1, DVec3::new(1.0, 64.0, 1.0));
-        let external = entity(2, 2, DVec3::new(32.0, 64.0, 1.0));
-
-        assert!(
-            manager
-                .add_live_entity(manager_owned, EntityOwnership::ManagerOwned)
-                .is_ok()
-        );
-        assert!(
-            manager
-                .add_live_entity(external, EntityOwnership::External)
-                .is_ok()
-        );
-
-        let mut live_entity_ids = manager
-            .live_entities()
-            .iter()
-            .map(|entity| entity.id())
-            .collect::<Vec<_>>();
-        live_entity_ids.sort_unstable();
-        assert_eq!(live_entity_ids, [1, 2]);
-
-        let unload = manager.begin_chunk_unload(ChunkPos::new(0, 0));
-        assert_eq!(unload.retained.len(), 1);
-
-        let live_entity_ids = manager
-            .live_entities()
-            .iter()
-            .map(|entity| entity.id())
-            .collect::<Vec<_>>();
-        assert_eq!(live_entity_ids, [2]);
     }
 
     #[test]

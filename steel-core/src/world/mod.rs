@@ -261,6 +261,32 @@ pub struct WorldConfig {
     pub difficulty: Difficulty,
 }
 
+struct NavigatingMobTracker {
+    ids: SyncMutex<FxHashSet<i32>>,
+}
+
+impl NavigatingMobTracker {
+    fn new() -> Self {
+        Self {
+            ids: SyncMutex::new(FxHashSet::default()),
+        }
+    }
+
+    fn track(&self, entity: &SharedEntity) {
+        if entity.as_pathfinder_mob().is_some() {
+            self.ids.lock().insert(entity.id());
+        }
+    }
+
+    fn untrack(&self, entity_id: i32) {
+        self.ids.lock().remove(&entity_id);
+    }
+
+    fn ids(&self) -> Vec<i32> {
+        self.ids.lock().iter().copied().collect()
+    }
+}
+
 /// A struct that represents a world.
 pub struct World {
     /// The chunk map of the world.
@@ -300,6 +326,8 @@ pub struct World {
     entity_manager: WorldEntityManager,
     /// Entity tracker for managing which players can see which entities.
     entity_tracker: EntityTracker,
+    /// Runtime IDs for pathfinder mobs currently visible to the active world.
+    navigating_mobs: NavigatingMobTracker,
     /// Weather Data needed for animating starting and stopping of rain clientside
     pub weather: SyncMutex<Weather>,
     /// Vanilla `Level.random` runtime random source.
@@ -407,6 +435,7 @@ impl World {
                 tick_runs_normally: AtomicBool::new(true),
                 entity_manager: WorldEntityManager::new(),
                 entity_tracker: EntityTracker::new(),
+                navigating_mobs: NavigatingMobTracker::new(),
                 weather: SyncMutex::new(weather),
                 random: SyncMutex::new(LegacyRandom::from_seed(rand::random())),
                 sub_tick_count: AtomicI64::new(0),
@@ -1079,8 +1108,13 @@ impl World {
         }
 
         let game_time = self.game_time();
-        for entity in self.entity_manager.live_entities() {
+        for entity_id in self.navigating_mob_ids() {
+            let Some(entity) = self.entity_manager.get_by_id(entity_id) else {
+                self.untrack_navigating_mob(entity_id);
+                continue;
+            };
             let Some(pathfinder) = entity.as_pathfinder_mob() else {
+                self.untrack_navigating_mob(entity_id);
                 continue;
             };
             if !pathfinder.is_path_finding() {
@@ -1103,6 +1137,10 @@ impl World {
                 pathfinder.recompute_path(request);
             }
         }
+    }
+
+    fn navigating_mob_ids(&self) -> Vec<i32> {
+        self.navigating_mobs.ids()
     }
 
     fn block_collision_shape_changed(
@@ -3209,6 +3247,22 @@ impl World {
             |chunk| self.player_area_map.get_tracking_players(chunk),
             |id| self.players.get_by_entity_id(id),
         );
+        self.track_navigating_mob(entity);
+    }
+
+    pub(crate) fn remove_entity_from_tracker(&self, entity_id: i32) {
+        self.entity_tracker.remove(entity_id, |player_id| {
+            self.players.get_by_entity_id(player_id)
+        });
+        self.untrack_navigating_mob(entity_id);
+    }
+
+    fn track_navigating_mob(&self, entity: &SharedEntity) {
+        self.navigating_mobs.track(entity);
+    }
+
+    fn untrack_navigating_mob(&self, entity_id: i32) {
+        self.navigating_mobs.untrack(entity_id);
     }
 
     pub(crate) fn register_loaded_entity(
@@ -3374,9 +3428,7 @@ impl World {
     pub(crate) fn on_entity_chunk_unload_start(self: &Arc<Self>, pos: ChunkPos) {
         let result = self.entity_manager.begin_chunk_unload(pos);
         for entity in result.tracking_stopped {
-            self.entity_tracker.remove(entity.id(), |player_id| {
-                self.players.get_by_entity_id(player_id)
-            });
+            self.remove_entity_from_tracker(entity.id());
         }
         for entity in result.retained {
             let entity_id = entity.id();
@@ -3689,10 +3741,45 @@ impl ScheduledTickAccess for Arc<World> {
 #[cfg(test)]
 mod tests {
     use super::*;
+    use std::sync::{Arc, Weak};
+
+    use steel_registry::entity_type::EntityTypeRef;
+    use steel_registry::{test_support::init_test_registry, vanilla_entities};
+    use uuid::Uuid;
+
+    use crate::entity::{EntityBase, entities::PigEntity};
 
     const FIRST_HALF: BlockLocalAabb = BlockLocalAabb::new(0.0, 0.0, 0.0, 0.5, 1.0, 1.0);
     const SECOND_HALF: BlockLocalAabb = BlockLocalAabb::new(0.5, 0.0, 0.0, 1.0, 1.0, 1.0);
     static SPLIT_BLOCK: &[BlockLocalAabb] = &[FIRST_HALF, SECOND_HALF];
+
+    struct TrackerTestEntity {
+        base: EntityBase,
+    }
+
+    impl TrackerTestEntity {
+        fn shared(id: i32) -> SharedEntity {
+            Arc::new(Self {
+                base: EntityBase::with_uuid(
+                    id,
+                    Uuid::from_u128(id as u128),
+                    DVec3::ZERO,
+                    vanilla_entities::ITEM.dimensions,
+                    Weak::new(),
+                ),
+            })
+        }
+    }
+
+    impl Entity for TrackerTestEntity {
+        fn base(&self) -> &EntityBase {
+            &self.base
+        }
+
+        fn entity_type(&self) -> EntityTypeRef {
+            &vanilla_entities::ITEM
+        }
+    }
 
     fn assert_vec3_close(left: DVec3, right: DVec3) {
         let diff = left - right;
@@ -3721,6 +3808,30 @@ mod tests {
         assert!(!World::is_in_spawnable_bounds(BlockPos::new(
             0, 20_000_000, 0
         )));
+    }
+
+    #[test]
+    fn navigating_mob_tracker_tracks_only_pathfinder_mobs() {
+        init_test_registry();
+
+        let tracker = NavigatingMobTracker::new();
+        let non_pathfinder = TrackerTestEntity::shared(1);
+        let pig: SharedEntity = Arc::new(PigEntity::new(
+            &vanilla_entities::PIG,
+            2,
+            DVec3::ZERO,
+            Weak::new(),
+        ));
+
+        tracker.track(&non_pathfinder);
+        assert!(tracker.ids().is_empty());
+
+        tracker.track(&pig);
+        tracker.track(&pig);
+        assert_eq!(tracker.ids(), [2]);
+
+        tracker.untrack(2);
+        assert!(tracker.ids().is_empty());
     }
 
     #[test]
