@@ -378,6 +378,10 @@ impl Entity for PigEntity {
         self.tick_living_state();
     }
 
+    fn check_despawn(&self) {
+        Mob::check_mob_despawn(self);
+    }
+
     fn is_living_entity(&self) -> bool {
         true
     }
@@ -545,6 +549,10 @@ impl Mob for PigEntity {
         &self.mob_base
     }
 
+    fn remove_when_far_away(&self, _dist_sqr: f64) -> bool {
+        false
+    }
+
     fn mob_flags(&self) -> i8 {
         *self.entity_data.lock().mob().mob_flags.get()
     }
@@ -615,6 +623,40 @@ mod tests {
             panic!("pig should expose living behavior");
         };
         assert_eq!(living.get_health().to_bits(), 10.0_f32.to_bits());
+    }
+
+    #[test]
+    fn pig_mob_ai_increments_no_action_time() {
+        init_test_registry();
+
+        let pig = PigEntity::new(&vanilla_entities::PIG, 1, DVec3::ZERO, Weak::new());
+
+        pig.set_no_action_time(12);
+        Mob::mob_server_ai_step(&pig);
+
+        assert_eq!(pig.no_action_time(), 13);
+    }
+
+    #[test]
+    fn pig_damage_resets_no_action_time() {
+        init_test_registry();
+
+        let pig = PigEntity::new(&vanilla_entities::PIG, 1, DVec3::ZERO, Weak::new());
+        let source = DamageSource::environment(&vanilla_damage_types::GENERIC);
+
+        pig.set_no_action_time(42);
+        assert!(pig.hurt_server(&source, 1.0));
+
+        assert_eq!(pig.no_action_time(), 0);
+    }
+
+    #[test]
+    fn pig_keeps_vanilla_animal_far_away_persistence() {
+        init_test_registry();
+
+        let pig = PigEntity::new(&vanilla_entities::PIG, 1, DVec3::ZERO, Weak::new());
+
+        assert!(!pig.remove_when_far_away(f64::MAX));
     }
 
     #[test]

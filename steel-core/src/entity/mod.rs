@@ -1175,6 +1175,9 @@ pub trait Entity: EntityEventSource + Send + Sync {
         self.set_removed(RemovalReason::Discarded);
     }
 
+    /// Runs vanilla pre-tick despawn checks.
+    fn check_despawn(&self) {}
+
     /// Applies an inside-block effect queued by vanilla's step-based collector.
     fn apply_inside_block_effect(&self, effect_type: InsideBlockEffectType) {
         let fire_ignite_extra_ticks = if matches!(effect_type, InsideBlockEffectType::FireIgnite) {
@@ -3101,6 +3104,21 @@ pub trait LivingEntity: Entity {
             .required_value(vanilla_attributes::MAX_HEALTH) as f32
     }
 
+    /// Returns vanilla `LivingEntity.noActionTime`.
+    fn no_action_time(&self) -> i32 {
+        self.living_base().no_action_time()
+    }
+
+    /// Sets vanilla `LivingEntity.noActionTime`.
+    fn set_no_action_time(&self, no_action_time: i32) {
+        self.living_base().set_no_action_time(no_action_time);
+    }
+
+    /// Increments vanilla `LivingEntity.noActionTime`.
+    fn increment_no_action_time(&self) {
+        self.living_base().increment_no_action_time();
+    }
+
     /// Heals the entity by the specified amount.
     fn heal(&self, amount: f32) {
         let current_health = self.get_health();
@@ -3150,7 +3168,8 @@ pub trait LivingEntity: Entity {
             self.stop_sleeping();
         }
 
-        // TODO: reset LivingEntity.noActionTime when mob despawn counters exist.
+        self.set_no_action_time(0);
+
         let mut damage = amount;
         if damage < 0.0 {
             damage = 0.0;

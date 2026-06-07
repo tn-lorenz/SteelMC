@@ -15,6 +15,27 @@ pub enum MobCategory {
     Misc,
 }
 
+impl MobCategory {
+    #[must_use]
+    pub const fn despawn_distance(self) -> i32 {
+        match self {
+            Self::WaterAmbient => 64,
+            Self::Monster
+            | Self::Creature
+            | Self::Ambient
+            | Self::Axolotls
+            | Self::UndergroundWaterCreature
+            | Self::WaterCreature
+            | Self::Misc => 128,
+        }
+    }
+
+    #[must_use]
+    pub const fn no_despawn_distance(self) -> i32 {
+        32
+    }
+}
+
 /// Vanilla attachment point kind used by `EntityDimensions`.
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Hash)]
 pub enum EntityAttachment {

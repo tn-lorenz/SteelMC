@@ -413,6 +413,7 @@ struct LivingEntityState {
     jumping: bool,
     travel_input: LivingTravelInput,
     no_jump_delay: i32,
+    no_action_time: i32,
 }
 
 impl LivingEntityState {
@@ -435,6 +436,7 @@ impl LivingEntityState {
             jumping: false,
             travel_input: LivingTravelInput::ZERO,
             no_jump_delay: 0,
+            no_action_time: 0,
         }
     }
 
@@ -526,6 +528,22 @@ impl LivingEntityBase {
     /// Sets vanilla `LivingEntity.absorptionAmount` for non-player living entities.
     pub fn set_absorption_amount(&self, amount: f32) {
         self.state.lock().absorption_amount = amount.max(0.0);
+    }
+
+    /// Returns vanilla `LivingEntity.noActionTime`.
+    #[must_use]
+    pub fn no_action_time(&self) -> i32 {
+        self.state.lock().no_action_time
+    }
+
+    /// Sets vanilla `LivingEntity.noActionTime`.
+    pub fn set_no_action_time(&self, no_action_time: i32) {
+        self.state.lock().no_action_time = no_action_time;
+    }
+
+    /// Increments vanilla `LivingEntity.noActionTime` by one tick.
+    pub fn increment_no_action_time(&self) {
+        self.state.lock().no_action_time += 1;
     }
 
     /// Refreshes transient item attribute modifiers for an equipment slot.

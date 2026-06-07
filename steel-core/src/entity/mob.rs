@@ -13,6 +13,7 @@ use steel_registry::blocks::block_state_ext::BlockStateExt as _;
 use steel_registry::vanilla_attributes;
 use steel_registry::vanilla_block_tags::BlockTag;
 use steel_utils::locks::SyncMutex;
+use steel_utils::random::Random as _;
 use steel_utils::{BlockPos, ChunkPos, axis::Axis};
 
 use crate::behavior::{BLOCK_BEHAVIORS, BlockCollisionContext};
@@ -20,7 +21,7 @@ use crate::entity::ai::control::{MobControls, MoveControlOperation};
 use crate::entity::ai::navigation::{NavigationPathRequest, PathNavigation};
 use crate::entity::ai::path::{Path, PathType, PathfindingContext, PathfindingMalus};
 use crate::entity::ai::walk::{MobPathSettings, WalkNodeEvaluator, WalkPathEvaluator};
-use crate::entity::{LivingEntity, LivingTravelInput};
+use crate::entity::{Entity, LivingEntity, LivingTravelInput, RemovalReason};
 use crate::physics::WorldCollisionProvider;
 use crate::world::{LevelReader, World};
 
@@ -35,6 +36,7 @@ pub struct MobBase {
     controls: SyncMutex<MobControls>,
     navigation: SyncMutex<PathNavigation>,
     pathfinding_malus: SyncMutex<PathfindingMalus>,
+    persistence_required: SyncMutex<bool>,
 }
 
 impl MobBase {
@@ -48,6 +50,7 @@ impl MobBase {
             controls: SyncMutex::new(MobControls::new()),
             navigation: SyncMutex::new(PathNavigation::new()),
             pathfinding_malus: SyncMutex::new(pathfinding_malus),
+            persistence_required: SyncMutex::new(false),
         }
     }
 
@@ -65,6 +68,11 @@ impl MobBase {
     pub const fn pathfinding_malus(&self) -> &SyncMutex<PathfindingMalus> {
         &self.pathfinding_malus
     }
+
+    #[must_use]
+    pub const fn persistence_required(&self) -> &SyncMutex<bool> {
+        &self.persistence_required
+    }
 }
 
 impl Default for MobBase {
@@ -81,6 +89,76 @@ pub trait Mob: LivingEntity {
     fn set_mob_flags(&self, flags: i8);
 
     fn custom_server_ai_step(&self) {}
+
+    fn remove_when_far_away(&self, _dist_sqr: f64) -> bool {
+        true
+    }
+
+    fn requires_custom_persistence(&self) -> bool {
+        // TODO: Include leash persistence once leash runtime exists.
+        self.is_passenger()
+    }
+
+    fn is_persistence_required(&self) -> bool {
+        *self.mob_base().persistence_required().lock()
+    }
+
+    fn set_persistence_required(&self) {
+        *self.mob_base().persistence_required().lock() = true;
+    }
+
+    fn check_mob_despawn(&self) {
+        // TODO: Apply peaceful hostile removal once EntityType.allowedInPeaceful is in registry data.
+        if self.is_persistence_required() || self.requires_custom_persistence() {
+            self.set_no_action_time(0);
+            return;
+        }
+
+        let Some(nearest_player_dist_sqr) = self.nearest_player_distance_sqr() else {
+            return;
+        };
+
+        let mob_category = self.entity_type().mob_category;
+        let despawn_distance = mob_category.despawn_distance();
+        let despawn_distance_sqr = despawn_distance * despawn_distance;
+        if nearest_player_dist_sqr > f64::from(despawn_distance_sqr)
+            && self.remove_when_far_away(nearest_player_dist_sqr)
+        {
+            self.set_removed(RemovalReason::Discarded);
+            return;
+        }
+
+        let no_despawn_distance = mob_category.no_despawn_distance();
+        let no_despawn_distance_sqr = no_despawn_distance * no_despawn_distance;
+        if self.no_action_time() > 600
+            && nearest_player_dist_sqr > f64::from(no_despawn_distance_sqr)
+            && self.remove_when_far_away(nearest_player_dist_sqr)
+        {
+            let should_discard = {
+                let mut random = self.base().random().lock();
+                random.next_i32_bounded(800) == 0
+            };
+            if should_discard {
+                self.set_removed(RemovalReason::Discarded);
+            }
+        } else if nearest_player_dist_sqr < f64::from(no_despawn_distance_sqr) {
+            self.set_no_action_time(0);
+        }
+    }
+
+    fn nearest_player_distance_sqr(&self) -> Option<f64> {
+        let world = self.level()?;
+        let position = self.position();
+        let mut nearest = None;
+        world.players.iter_players(|_, player| {
+            let distance_sqr = player.position().distance_squared(position);
+            if nearest.is_none_or(|current| distance_sqr < current) {
+                nearest = Some(distance_sqr);
+            }
+            true
+        });
+        nearest
+    }
 
     fn get_pathfinding_malus(&self, path_type: PathType) -> f32 {
         self.mob_base().pathfinding_malus().lock().get(path_type)
@@ -141,6 +219,7 @@ pub trait Mob: LivingEntity {
     }
 
     fn mob_server_ai_step(&self) {
+        self.increment_no_action_time();
         self.tick_path_navigation();
         self.custom_server_ai_step();
         self.tick_move_control();
@@ -542,12 +621,19 @@ fn wrap_degrees(mut degrees: f32) -> f32 {
 
 #[cfg(test)]
 mod tests {
+    use std::sync::Weak;
+
+    use glam::DVec3;
+    use steel_registry::entity_type::EntityTypeRef;
+    use steel_registry::vanilla_entities;
     use steel_registry::{REGISTRY, test_support::init_test_registry, vanilla_blocks};
+    use steel_utils::locks::SyncMutex;
     use steel_utils::{BlockPos, BlockStateId};
 
     use super::find_ground_path_target_surface;
     use crate::entity::ai::path::PathType;
-    use crate::entity::mob::MobBase;
+    use crate::entity::mob::{Mob, MobBase};
+    use crate::entity::{Entity, EntityBase, LivingEntity, LivingEntityBase};
     use crate::world::LevelReader;
 
     struct SurfaceLevel {
@@ -590,6 +676,83 @@ mod tests {
         }
     }
 
+    struct DespawnTestMob {
+        base: EntityBase,
+        living_base: LivingEntityBase,
+        mob_base: MobBase,
+        flags: SyncMutex<i8>,
+        health: SyncMutex<f32>,
+        nearest_player_distance_sqr: Option<f64>,
+        remove_when_far_away: bool,
+    }
+
+    impl DespawnTestMob {
+        fn new(nearest_player_distance_sqr: Option<f64>, remove_when_far_away: bool) -> Self {
+            init_test_registry();
+
+            Self {
+                base: EntityBase::new(
+                    1,
+                    DVec3::ZERO,
+                    vanilla_entities::PIG.dimensions,
+                    Weak::new(),
+                ),
+                living_base: LivingEntityBase::new(&vanilla_entities::PIG),
+                mob_base: MobBase::new(),
+                flags: SyncMutex::new(0),
+                health: SyncMutex::new(10.0),
+                nearest_player_distance_sqr,
+                remove_when_far_away,
+            }
+        }
+    }
+
+    impl Entity for DespawnTestMob {
+        fn base(&self) -> &EntityBase {
+            &self.base
+        }
+
+        fn entity_type(&self) -> EntityTypeRef {
+            &vanilla_entities::PIG
+        }
+    }
+
+    impl LivingEntity for DespawnTestMob {
+        fn living_base(&self) -> &LivingEntityBase {
+            &self.living_base
+        }
+
+        fn get_health(&self) -> f32 {
+            *self.health.lock()
+        }
+
+        fn set_health(&self, health: f32) {
+            *self.health.lock() = health;
+        }
+    }
+
+    impl Mob for DespawnTestMob {
+        fn mob_base(&self) -> &MobBase {
+            &self.mob_base
+        }
+
+        fn mob_flags(&self) -> i8 {
+            *self.flags.lock()
+        }
+
+        fn set_mob_flags(&self, flags: i8) {
+            *self.flags.lock() = flags;
+        }
+
+        fn remove_when_far_away(&self, _dist_sqr: f64) -> bool {
+            self.remove_when_far_away
+        }
+
+        fn nearest_player_distance_sqr(&self) -> Option<f64> {
+            self.nearest_player_distance_sqr
+        }
+    }
+
     #[test]
     fn mob_base_uses_vanilla_fire_path_malus_overrides() {
         let base = MobBase::new();
@@ -601,6 +764,48 @@ mod tests {
         );
         assert_eq!(malus.get(PathType::Fire).to_bits(), (-1.0_f32).to_bits());
         assert_eq!(malus.get(PathType::Water).to_bits(), 8.0_f32.to_bits());
+    }
+
+    #[test]
+    fn mob_server_ai_step_increments_no_action_time() {
+        let mob = DespawnTestMob::new(None, false);
+
+        mob.set_no_action_time(12);
+        mob.mob_server_ai_step();
+
+        assert_eq!(mob.no_action_time(), 13);
+    }
+
+    #[test]
+    fn mob_despawn_resets_no_action_time_near_player() {
+        let mob = DespawnTestMob::new(Some(31.0 * 31.0), false);
+
+        mob.set_no_action_time(42);
+        mob.check_mob_despawn();
+
+        assert_eq!(mob.no_action_time(), 0);
+        assert!(!mob.is_removed());
+    }
+
+    #[test]
+    fn mob_despawn_discards_far_removable_mob() {
+        let mob = DespawnTestMob::new(Some(129.0 * 129.0), true);
+
+        mob.check_mob_despawn();
+
+        assert!(mob.is_removed());
+    }
+
+    #[test]
+    fn mob_persistence_resets_no_action_time_and_blocks_removal() {
+        let mob = DespawnTestMob::new(Some(129.0 * 129.0), true);
+
+        mob.set_no_action_time(42);
+        mob.set_persistence_required();
+        mob.check_mob_despawn();
+
+        assert_eq!(mob.no_action_time(), 0);
+        assert!(!mob.is_removed());
     }
 
     #[test]

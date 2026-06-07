@@ -897,6 +897,11 @@ impl WorldEntityManager {
                     continue;
                 }
 
+                entity.check_despawn();
+                if entity.is_removed() {
+                    continue;
+                }
+
                 if Self::is_valid_passenger_or_stop_riding(&entity) {
                     continue;
                 }
