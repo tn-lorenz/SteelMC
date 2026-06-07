@@ -9,8 +9,8 @@ use std::sync::Arc;
 use glam::DVec3;
 use rustc_hash::FxHashSet;
 use steel_protocol::packets::game::{
-    AttributeSnapshot, CAddEntity, CRemoveEntities, CSetEntityData, CSetEquipment, CSetPassengers,
-    CUpdateAttributes, EquipmentSlotItem, to_angle_byte,
+    AttributeSnapshot, CAddEntity, CRemoveEntities, CSetEntityData, CSetEntityMotion,
+    CSetEquipment, CSetPassengers, CUpdateAttributes, EquipmentSlotItem, to_angle_byte,
 };
 use steel_registry::entity_data::DataValue;
 use steel_registry::{RegistryEntry, vanilla_entities};
@@ -33,10 +33,19 @@ pub struct EntityTracker {
 }
 
 /// Packet sinks used by [`EntityTracker::send_changes`].
-pub struct EntityChangeSenders<Movement, EntityData, Attributes, MobEffects, Equipment, Passengers>
-{
+pub struct EntityChangeSenders<
+    Movement,
+    SelfMovement,
+    EntityData,
+    Attributes,
+    MobEffects,
+    Equipment,
+    Passengers,
+> {
     /// Broadcasts movement and velocity sync packets.
     pub movement: Movement,
+    /// Sends vanilla self-inclusive hurt motion sync to one player.
+    pub self_movement: SelfMovement,
     /// Broadcasts entity data watcher changes.
     pub entity_data: EntityData,
     /// Broadcasts dirty syncable attributes.
@@ -272,12 +281,21 @@ impl EntityTracker {
         clippy::too_many_lines,
         reason = "entity tracker fanout mirrors vanilla sendChanges ordering"
     )]
-    pub fn send_changes<Movement, EntityData, Attributes, MobEffects, Equipment, Passengers>(
+    pub fn send_changes<
+        Movement,
+        SelfMovement,
+        EntityData,
+        Attributes,
+        MobEffects,
+        Equipment,
+        Passengers,
+    >(
         &self,
         get_players_in_chunk: impl Fn(ChunkPos) -> Vec<i32>,
         get_player: impl Fn(i32) -> Option<Arc<Player>>,
         mut senders: EntityChangeSenders<
             Movement,
+            SelfMovement,
             EntityData,
             Attributes,
             MobEffects,
@@ -286,6 +304,7 @@ impl EntityTracker {
         >,
     ) where
         Movement: FnMut(i32, EntityMovementSyncPacket),
+        SelfMovement: FnMut(i32, EntityMovementSyncPacket),
         EntityData: FnMut(i32, Vec<DataValue>),
         Attributes: FnMut(i32, Vec<AttributeSnapshot>),
         MobEffects: FnMut(i32, MobEffectSyncPacket),
@@ -296,6 +315,7 @@ impl EntityTracker {
         let mut entities_to_refresh = Vec::new();
         let mut passenger_packets_to_send = Vec::new();
         let mut packets_to_broadcast = Vec::new();
+        let mut self_movement_packets = Vec::new();
         let mut entity_data_to_broadcast = Vec::new();
         let mut attributes_to_broadcast = Vec::new();
         let mut mob_effect_packets_to_send = Vec::new();
@@ -366,6 +386,18 @@ impl EntityTracker {
                 entity.clear_velocity_sync();
             }
             result.for_each_packet(|packet| packets_to_broadcast.push((entity_id, packet)));
+            if entity.hurt_marked() {
+                if entity.entity_type() == &vanilla_entities::PLAYER {
+                    let velocity = entity.velocity();
+                    self_movement_packets.push((
+                        entity_id,
+                        EntityMovementSyncPacket::from(CSetEntityMotion::new(
+                            entity_id, velocity.x, velocity.y, velocity.z,
+                        )),
+                    ));
+                }
+                entity.clear_hurt_mark();
+            }
             if let Some(dirty_entity_data) = dirty_entity_data {
                 entity_data_to_broadcast.push((entity_id, dirty_entity_data));
             }
@@ -420,6 +452,10 @@ impl EntityTracker {
 
         for (entity_id, packet) in packets_to_broadcast {
             (senders.movement)(entity_id, packet);
+        }
+
+        for (player_id, packet) in self_movement_packets {
+            (senders.self_movement)(player_id, packet);
         }
 
         for (entity_id, dirty_entity_data) in entity_data_to_broadcast {
@@ -1149,6 +1185,7 @@ mod tests {
             |_| None,
             EntityChangeSenders {
                 movement: |_, _| {},
+                self_movement: |_, _| {},
                 entity_data: |_, _| {},
                 attributes: |entity_id, attributes| updates.push((entity_id, attributes)),
                 mob_effects: |_, _| {},
@@ -1169,6 +1206,7 @@ mod tests {
             |_| None,
             EntityChangeSenders {
                 movement: |_, _| {},
+                self_movement: |_, _| {},
                 entity_data: |_, _| {},
                 attributes: |entity_id, attributes| updates.push((entity_id, attributes)),
                 mob_effects: |_, _| {},
@@ -1200,6 +1238,7 @@ mod tests {
             |_| None,
             EntityChangeSenders {
                 movement: |_, _| {},
+                self_movement: |_, _| {},
                 entity_data: |_, _| {},
                 attributes: |_, _| {},
                 mob_effects: |_, _| {},
@@ -1221,6 +1260,7 @@ mod tests {
             |_| None,
             EntityChangeSenders {
                 movement: |_, _| {},
+                self_movement: |_, _| {},
                 entity_data: |_, _| {},
                 attributes: |_, _| {},
                 mob_effects: |_, _| {},
@@ -1229,6 +1269,49 @@ mod tests {
             },
         );
         assert!(updates.is_empty());
+    }
+
+    #[test]
+    fn send_changes_syncs_hurt_marked_player_motion_to_self() {
+        test_support::init_test_registry();
+
+        let tracker = EntityTracker::new();
+        let entity_typed =
+            PairingTestEntity::new_with_type(1, &vanilla_entities::PLAYER, Vec::new());
+        let entity: SharedEntity = entity_typed.clone();
+        track_entity_for_player(&tracker, &entity, 99);
+
+        entity_typed.set_velocity(DVec3::new(0.25, 0.4, -0.125));
+        entity_typed.mark_hurt();
+
+        let mut updates = Vec::new();
+        tracker.send_changes(
+            |_| Vec::new(),
+            |_| None,
+            EntityChangeSenders {
+                movement: |_, _| {},
+                self_movement: |player_id, packet| updates.push((player_id, packet)),
+                entity_data: |_, _| {},
+                attributes: |_, _| {},
+                mob_effects: |_, _| {},
+                equipment: |_, _| {},
+                passengers: |_, _| {},
+            },
+        );
+
+        assert_eq!(updates.len(), 1);
+        assert_eq!(updates[0].0, 1);
+        let EntityMovementSyncPacket::Velocity(packet) = &updates[0].1 else {
+            panic!(
+                "expected velocity self-motion packet, got {:?}",
+                updates[0].1
+            );
+        };
+        assert_eq!(packet.entity_id, 1);
+        assert_eq!(packet.velocity_x.to_bits(), 0.25_f64.to_bits());
+        assert_eq!(packet.velocity_y.to_bits(), 0.4_f64.to_bits());
+        assert_eq!(packet.velocity_z.to_bits(), (-0.125_f64).to_bits());
+        assert!(!entity_typed.hurt_marked());
     }
 
     #[test]
@@ -1322,6 +1405,7 @@ mod tests {
             |_| None,
             EntityChangeSenders {
                 movement: |_, _| {},
+                self_movement: |_, _| {},
                 entity_data: |_, _| {},
                 attributes: |_, _| {},
                 mob_effects: |_, _| {},
@@ -1339,6 +1423,7 @@ mod tests {
             |_| None,
             EntityChangeSenders {
                 movement: |_, _| {},
+                self_movement: |_, _| {},
                 entity_data: |_, _| {},
                 attributes: |_, _| {},
                 mob_effects: |_, _| {},
@@ -1359,6 +1444,7 @@ mod tests {
             |_| None,
             EntityChangeSenders {
                 movement: |_, _| {},
+                self_movement: |_, _| {},
                 entity_data: |_, _| {},
                 attributes: |_, _| {},
                 mob_effects: |_, _| {},
@@ -1377,6 +1463,7 @@ mod tests {
             |_| None,
             EntityChangeSenders {
                 movement: |_, _| {},
+                self_movement: |_, _| {},
                 entity_data: |_, _| {},
                 attributes: |_, _| {},
                 mob_effects: |_, _| {},
@@ -1413,6 +1500,7 @@ mod tests {
             |_| None,
             EntityChangeSenders {
                 movement: |_, _| {},
+                self_movement: |_, _| {},
                 entity_data: |_, _| {},
                 attributes: |_, _| {},
                 mob_effects: |_, _| {},

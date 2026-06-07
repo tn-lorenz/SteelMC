@@ -639,6 +639,7 @@ pub struct EntityBaseState {
     stuck_speed_multiplier: DVec3,
     no_physics: bool,
     needs_velocity_sync: bool,
+    hurt_marked: bool,
 }
 
 impl EntityBaseState {
@@ -669,6 +670,7 @@ impl EntityBaseState {
             stuck_speed_multiplier: DVec3::ZERO,
             no_physics: false,
             needs_velocity_sync: false,
+            hurt_marked: false,
         }
     }
 
@@ -1322,6 +1324,12 @@ impl EntityBase {
         self.state.lock().needs_velocity_sync
     }
 
+    /// Returns true when vanilla hurt-marked velocity sync is pending.
+    #[inline]
+    pub fn hurt_marked(&self) -> bool {
+        self.state.lock().hurt_marked
+    }
+
     /// Gets the world this entity is in.
     ///
     /// Returns `None` if the world has been dropped.
@@ -1780,6 +1788,16 @@ impl EntityBase {
     /// Clears the vanilla velocity sync marker after send processing.
     pub fn clear_velocity_sync(&self) {
         self.state.lock().needs_velocity_sync = false;
+    }
+
+    /// Marks this entity as hurt for vanilla self-inclusive motion sync.
+    pub fn mark_hurt(&self) {
+        self.state.lock().hurt_marked = true;
+    }
+
+    /// Clears the vanilla hurt-marked motion sync flag.
+    pub fn clear_hurt_mark(&self) {
+        self.state.lock().hurt_marked = false;
     }
 
     /// Sets accumulated vanilla fall distance.

@@ -218,6 +218,9 @@ pub struct Player {
     /// The player's inventory container (shared with `inventory_menu`).
     pub inventory: SyncPlayerInv,
 
+    /// Last main-hand stack used for vanilla attack-strength reset checks.
+    last_item_in_main_hand: SyncMutex<ItemStack>,
+
     /// The player's inventory menu (always open, even when `container_id` is 0).
     inventory_menu: SyncMutex<InventoryMenu>,
 
@@ -354,6 +357,7 @@ impl Player {
             chat: SyncMutex::new(ChatState::new()),
             game_modes: SyncMutex::new(PlayerGameModeState::new(GameType::Survival)),
             inventory: inventory.clone(),
+            last_item_in_main_hand: SyncMutex::new(ItemStack::empty()),
             inventory_menu: SyncMutex::new(InventoryMenu::new(inventory)),
             open_menu: SyncMutex::new(None),
             container_counter: SyncMutex::new(ContainerCounter::new()),
@@ -382,6 +386,7 @@ impl Player {
     )]
     pub fn tick(&self) {
         self.advance_tick();
+        self.tick_attack_strength();
         self.tick_client_load_timeout();
         if !self.is_passenger() {
             self.advance_tick_count();
@@ -1300,6 +1305,10 @@ impl Entity for Player {
 
     fn is_living_entity(&self) -> bool {
         true
+    }
+
+    fn as_living_entity(&self) -> Option<&dyn LivingEntity> {
+        Some(self)
     }
 
     fn is_alive(&self) -> bool {

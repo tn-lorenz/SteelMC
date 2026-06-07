@@ -778,6 +778,21 @@ pub trait Entity: EntityEventSource + Send + Sync {
         false
     }
 
+    /// Returns whether this entity can be attacked.
+    ///
+    /// Mirrors vanilla `Entity.isAttackable`. Concrete entities that override
+    /// vanilla to reject player attacks should override this method.
+    fn attackable(&self) -> bool {
+        true
+    }
+
+    /// Returns whether this entity handles and consumes an attack before normal damage.
+    ///
+    /// Mirrors vanilla `Entity.skipAttackInteraction`.
+    fn skip_attack_interaction(&self, _source: &dyn Entity) -> bool {
+        false
+    }
+
     /// Returns whether this entity participates in vanilla push separation.
     ///
     /// Mirrors vanilla `Entity.isPushable`. Base entities are not pushable unless
@@ -1275,6 +1290,14 @@ pub trait Entity: EntityEventSource + Send + Sync {
         false
     }
 
+    /// Returns this entity as a living entity when it has living behavior.
+    ///
+    /// Mirrors vanilla's frequent `instanceof LivingEntity` branches without
+    /// requiring core code to downcast through `Any`.
+    fn as_living_entity(&self) -> Option<&dyn LivingEntity> {
+        None
+    }
+
     /// Returns true when vanilla `ServerEntity` should force velocity sync for fall flying.
     fn forces_fall_flying_velocity_sync(&self) -> bool {
         false
@@ -1503,6 +1526,21 @@ pub trait Entity: EntityEventSource + Send + Sync {
     /// Clears the vanilla velocity sync marker after send processing.
     fn clear_velocity_sync(&self) {
         self.base().clear_velocity_sync();
+    }
+
+    /// Returns true when vanilla hurt-marked velocity sync is pending.
+    fn hurt_marked(&self) -> bool {
+        self.base().hurt_marked()
+    }
+
+    /// Marks this entity as hurt for vanilla self-inclusive motion sync.
+    fn mark_hurt(&self) {
+        self.base().mark_hurt();
+    }
+
+    /// Clears the vanilla hurt-marked motion sync flag.
+    fn clear_hurt_mark(&self) {
+        self.base().clear_hurt_mark();
     }
 
     /// Returns accumulated vanilla fall distance.
@@ -3133,6 +3171,7 @@ pub trait LivingEntity: Entity {
         if took_full_damage {
             self.broadcast_damage_event(source);
             if !source.is(&vanilla_damage_type_tags::DamageTypeTag::NO_IMPACT) {
+                self.mark_hurt();
                 self.broadcast_hurt_animation();
             }
             self.apply_damage_knockback(source);
@@ -3364,11 +3403,6 @@ pub trait LivingEntity: Entity {
     /// Returns vanilla `LivingEntity.canStandOnFluid()`.
     fn can_stand_on_fluid(&self, _fluid_state: FluidState) -> bool {
         false
-    }
-
-    /// Checks if the entity is attackable.
-    fn attackable(&self) -> bool {
-        true
     }
 
     /// Checks if the entity is currently using an item.
@@ -4545,6 +4579,10 @@ mod tests {
             true
         }
 
+        fn as_living_entity(&self) -> Option<&dyn LivingEntity> {
+            Some(self)
+        }
+
         fn is_vehicle(&self) -> bool {
             self.vehicle
         }
@@ -5158,6 +5196,21 @@ mod tests {
             DVec3::new(-DAMAGE_KNOCKBACK_POWER, 0.4, 0.0),
         );
         assert!(entity.needs_velocity_sync());
+    }
+
+    #[test]
+    fn as_living_entity_exposes_living_behavior_without_downcasting() {
+        init_test_registry();
+        let entity = LivingFluidTestEntity::new(0.0, 0.0, true);
+        let entity_ref: &dyn Entity = &entity;
+        let Some(living) = entity_ref.as_living_entity() else {
+            panic!("living test entity did not expose LivingEntity behavior");
+        };
+
+        assert_f32_close(living.get_health(), 20.0);
+
+        let non_living = PushableTestEntity::shared(2, DVec3::ZERO);
+        assert!(non_living.as_living_entity().is_none());
     }
 
     #[test]

@@ -680,6 +680,10 @@ impl Entity for ItemEntity {
         self.on_pos(0.999_999)
     }
 
+    fn attackable(&self) -> bool {
+        false
+    }
+
     fn should_play_lava_hurt_sound(&self) -> bool {
         self.get_health() <= 0 || self.tick_count() % 10 == 0
     }

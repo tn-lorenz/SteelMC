@@ -68,6 +68,7 @@ mod c_update_attributes;
 mod c_update_mob_effect;
 mod chat_session_data;
 mod s_accept_teleportation;
+mod s_attack;
 mod s_change_difficulty;
 mod s_change_game_mode;
 mod s_chat;
@@ -180,6 +181,7 @@ pub use c_update_attributes::{
 pub use c_update_mob_effect::{CUpdateMobEffect, MobEffectPacketFlags};
 pub use chat_session_data::ProtocolRemoteChatSessionData;
 pub use s_accept_teleportation::SAcceptTeleportation;
+pub use s_attack::SAttack;
 pub use s_change_difficulty::SChangeDifficulty;
 pub use s_change_game_mode::SChangeGameMode;
 pub use s_chat::SChat;

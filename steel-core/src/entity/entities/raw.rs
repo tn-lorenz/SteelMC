@@ -78,6 +78,10 @@ impl Entity for RawEntity {
         // TODO: Replace raw entity ticking with full vanilla behavior for this entity type.
     }
 
+    fn attackable(&self) -> bool {
+        false
+    }
+
     fn load_additional(&self, nbt: BorrowedNbtCompoundView<'_, '_>) {
         *self.data.lock() = nbt.to_owned();
     }

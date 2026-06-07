@@ -5,20 +5,23 @@
 
 use std::sync::Arc;
 
+use glam::DVec3;
 use steel_protocol::packets::game::{
     AnimateAction, CAnimate, CBlockChangedAck, CBlockUpdate, CChangeDifficulty, CGameEvent,
-    COpenSignEditor, CPlayerInfoUpdate, CSetHeldSlot, GameEventType, PlayerAction,
-    SPickItemFromBlock, SPlayerAction, SSignUpdate, SUseItem, SUseItemOn,
+    COpenSignEditor, CPlayerInfoUpdate, CSetEntityMotion, CSetHeldSlot, GameEventType,
+    PlayerAction, SAttack, SPickItemFromBlock, SPlayerAction, SSignUpdate, SUseItem, SUseItemOn,
 };
 use steel_registry::blocks::block_state_ext::BlockStateExt;
 use steel_registry::blocks::properties::Direction;
-use steel_registry::{REGISTRY, vanilla_attributes};
-use steel_utils::BlockPos;
+use steel_registry::item_stack::ItemStack;
+use steel_registry::{REGISTRY, vanilla_attributes, vanilla_damage_types, vanilla_entities};
 use steel_utils::Identifier;
 use steel_utils::entity_events::EntityStatus;
 use steel_utils::translations;
 use steel_utils::types::{Difficulty, GameType, InteractionHand};
+use steel_utils::{BlockPos, WorldAabb};
 use text_components::TextComponent;
+use text_components::translation::TranslatedMessage;
 
 use crate::behavior::{
     BLOCK_BEHAVIORS, BlockHitResult, ITEM_BEHAVIORS, InteractionResult, InventoryAccess,
@@ -28,6 +31,7 @@ use crate::block_entity::BlockEntity;
 use crate::block_entity::entities::SignBlockEntity;
 use crate::command::commands::gamemode::get_gamemode_translation;
 use crate::entity::attribute::{AttributeModifier, AttributeModifierOperation};
+use crate::entity::damage::DamageSource;
 use crate::entity::{Entity, LivingEntity};
 use crate::inventory::menu::Menu;
 use crate::player::Player;
@@ -37,6 +41,7 @@ use crate::world::World;
 
 const CREATIVE_BLOCK_RANGE_MODIFIER_AMOUNT: f64 = 0.5;
 const CREATIVE_ENTITY_RANGE_MODIFIER_AMOUNT: f64 = 2.0;
+const ATTACK_RANGE_BUFFER: f64 = 3.0;
 
 /// Handles using an item on a block.
 ///
@@ -194,6 +199,234 @@ pub fn use_item(player: &Player, world: &Arc<World>, hand: InteractionHand) -> I
 }
 
 impl Player {
+    fn invalid_entity_attacked_message() -> TextComponent {
+        TranslatedMessage {
+            key: "multiplayer.disconnect.invalid_entity_attacked".into(),
+            fallback: None,
+            args: None,
+        }
+        .component()
+    }
+
+    fn eye_position(&self) -> DVec3 {
+        let position = self.position();
+        DVec3::new(position.x, self.get_eye_y(), position.z)
+    }
+
+    fn attack_damage_source(&self) -> DamageSource {
+        DamageSource::environment(&vanilla_damage_types::PLAYER_ATTACK)
+            .with_causing_entity(self.id())
+            .with_direct_entity(self.id())
+            .with_source_position(self.position())
+    }
+
+    /// Ticks vanilla attack-strength recovery and resets it on main-hand item changes.
+    pub(super) fn tick_attack_strength(&self) {
+        self.tick_state.lock().advance_attack_strength_ticker();
+
+        let main_hand_item = {
+            let inventory = self.inventory.lock();
+            let stack = inventory.get_item_in_hand(InteractionHand::MainHand);
+            stack.copy_with_count(stack.count())
+        };
+
+        let mut last_item = self.last_item_in_main_hand.lock();
+        if ItemStack::matches(&last_item, &main_hand_item) {
+            return;
+        }
+
+        if !ItemStack::is_same_item(&last_item, &main_hand_item) {
+            self.reset_attack_strength_ticker();
+        }
+
+        *last_item = main_hand_item;
+    }
+
+    fn reset_attack_strength_ticker(&self) {
+        self.tick_state.lock().reset_attack_strength_ticker();
+    }
+
+    fn current_item_attack_strength_delay(&self) -> f32 {
+        let attack_speed = self
+            .attributes()
+            .lock()
+            .required_value(vanilla_attributes::ATTACK_SPEED);
+        Self::attack_strength_delay_from_speed(attack_speed)
+    }
+
+    fn attack_strength_delay_from_speed(attack_speed: f64) -> f32 {
+        (1.0 / attack_speed * 20.0) as f32
+    }
+
+    /// Returns vanilla `Player.getAttackStrengthScale`.
+    #[must_use]
+    pub fn attack_strength_scale(&self, partial_tick: f32) -> f32 {
+        let attack_strength_delay = self.current_item_attack_strength_delay();
+        self.attack_strength_scale_for_delay(partial_tick, attack_strength_delay)
+    }
+
+    fn attack_strength_scale_for_delay(
+        &self,
+        partial_tick: f32,
+        attack_strength_delay: f32,
+    ) -> f32 {
+        let ticker = self.tick_state.lock().attack_strength_ticker() as f32;
+        ((ticker + partial_tick) / attack_strength_delay).clamp(0.0, 1.0)
+    }
+
+    fn base_damage_scale_factor(attack_strength_scale: f32) -> f32 {
+        0.2 + attack_strength_scale * attack_strength_scale * 0.8
+    }
+
+    fn get_knockback(
+        _target: &dyn Entity,
+        _damage_source: &DamageSource,
+        attack_knockback: f64,
+    ) -> f64 {
+        // TODO: Apply enchantment knockback modifiers once enchantment effects exist.
+        attack_knockback / 2.0
+    }
+
+    fn cause_extra_knockback(
+        &self,
+        entity: &dyn Entity,
+        knockback_amount: f64,
+        old_movement: DVec3,
+    ) {
+        if knockback_amount > 0.0 {
+            let yaw_radians = self.rotation().0.to_radians();
+            let yaw_sin = f64::from(yaw_radians.sin());
+            let yaw_cos = f64::from(yaw_radians.cos());
+            if let Some(living_target) = entity.as_living_entity() {
+                living_target.knockback(knockback_amount, yaw_sin, -yaw_cos);
+            } else {
+                entity.push_impulse(DVec3::new(
+                    -yaw_sin * knockback_amount,
+                    0.1,
+                    yaw_cos * knockback_amount,
+                ));
+            }
+
+            let velocity = self.velocity();
+            self.set_velocity(DVec3::new(velocity.x * 0.6, velocity.y, velocity.z * 0.6));
+            self.set_sprinting(false);
+        }
+
+        if entity.entity_type() == &vanilla_entities::PLAYER
+            && entity.hurt_marked()
+            && let Some(player) = self.get_world().players.get_by_entity_id(entity.id())
+        {
+            let velocity = entity.velocity();
+            player.send_packet(CSetEntityMotion::new(
+                entity.id(),
+                velocity.x,
+                velocity.y,
+                velocity.z,
+            ));
+            entity.clear_hurt_mark();
+            entity.set_velocity(old_movement);
+        }
+    }
+
+    fn entity_interaction_range(&self) -> f64 {
+        self.attributes()
+            .lock()
+            .required_value(vanilla_attributes::ENTITY_INTERACTION_RANGE)
+    }
+
+    /// Returns true if the target box is within the player's default attack range.
+    #[must_use]
+    pub fn is_within_attack_range_with_buffer(&self, aabb: WorldAabb, buffer: f64) -> bool {
+        // TODO: Use the held item's ATTACK_RANGE component once it has typed component data.
+        let max_range = self.entity_interaction_range() + buffer;
+        aabb.distance_to_sqr(self.eye_position()) <= max_range * max_range
+    }
+
+    fn cannot_attack(&self, entity: &dyn Entity) -> bool {
+        !entity.attackable() || entity.skip_attack_interaction(self)
+    }
+
+    /// Attacks an entity with the player's main-hand base damage.
+    ///
+    /// Returns `true` if the target accepted damage.
+    #[must_use]
+    pub fn attack(&self, entity: &dyn Entity) -> bool {
+        if self.cannot_attack(entity) {
+            return false;
+        }
+
+        let (attack_damage, attack_speed, attack_knockback) = {
+            let attributes = self.attributes().lock();
+            (
+                attributes.required_value(vanilla_attributes::ATTACK_DAMAGE) as f32,
+                attributes.required_value(vanilla_attributes::ATTACK_SPEED),
+                attributes.required_value(vanilla_attributes::ATTACK_KNOCKBACK),
+            )
+        };
+        let attack_strength_delay = Self::attack_strength_delay_from_speed(attack_speed);
+        let attack_strength_scale =
+            self.attack_strength_scale_for_delay(0.5, attack_strength_delay);
+        let base_damage = attack_damage * Self::base_damage_scale_factor(attack_strength_scale);
+        let full_strength_attack = attack_strength_scale > 0.9;
+        let knockback_attack = self.is_sprinting() && full_strength_attack;
+        self.reset_attack_strength_ticker();
+
+        if base_damage <= 0.0 {
+            return false;
+        }
+
+        // TODO: Apply item damage bonuses, enchantments, crits, sweep attacks, exhaustion, and sounds.
+        let damage_source = self.attack_damage_source();
+        let old_movement = entity.velocity();
+        let was_hurt = entity.hurt(&damage_source, base_damage);
+        if was_hurt {
+            let sprint_knockback = if knockback_attack { 0.5 } else { 0.0 };
+            self.cause_extra_knockback(
+                entity,
+                Self::get_knockback(entity, &damage_source, attack_knockback) + sprint_knockback,
+                old_movement,
+            );
+        }
+
+        was_hurt
+    }
+
+    /// Handles a client request to attack an entity.
+    pub fn handle_attack(&self, packet: SAttack) {
+        if !self.has_client_loaded() || self.is_spectator() {
+            return;
+        }
+
+        let world = self.get_world();
+        let Some(target) = world.get_entity_by_id(packet.entity_id) else {
+            return;
+        };
+
+        let target_pos = target.block_position();
+        if !world.world_border_snapshot().is_within_bounds_with_margin(
+            f64::from(target_pos.x()),
+            f64::from(target_pos.z()),
+            0.0,
+        ) {
+            return;
+        }
+
+        if !self.is_within_attack_range_with_buffer(target.bounding_box(), ATTACK_RANGE_BUFFER) {
+            return;
+        }
+
+        if target.id() == self.id() || target.entity_type() == &vanilla_entities::ITEM {
+            self.disconnect(Self::invalid_entity_attacked_message());
+            log::warn!(
+                "Player {} tried to attack an invalid entity",
+                self.gameprofile.name
+            );
+            return;
+        }
+
+        let _ = self.attack(&*target);
+    }
+
     /// Sets the player's game mode and notifies the client.
     ///
     /// Returns `true` if the game mode was changed, `false` if the player was already in the requested game mode.

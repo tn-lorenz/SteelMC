@@ -1283,6 +1283,15 @@ impl World {
                     movement: |entity_id, packet| {
                         self.broadcast_movement_sync_to_entity_trackers(entity_id, packet, None);
                     },
+                    self_movement: |player_id, packet| {
+                        let Some(encoded) = self.encode_movement_sync_packet(packet) else {
+                            return;
+                        };
+                        let Some(player) = self.players.get_by_entity_id(player_id) else {
+                            return;
+                        };
+                        player.connection.send_encoded(encoded);
+                    },
                     entity_data: |entity_id, dirty_entity_data| {
                         let packet = CSetEntityData::new(entity_id, dirty_entity_data);
                         let Ok(encoded) = EncodedPacket::from_bare(
