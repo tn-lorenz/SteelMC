@@ -74,6 +74,7 @@ pub mod data_components;
 pub mod dialog;
 pub mod dimension_type;
 pub mod enchantment;
+pub mod enchantment_effect;
 pub mod entity_data;
 pub mod entity_type;
 pub mod equipment;

@@ -21,6 +21,7 @@ use crate::{
             UNBREAKABLE,
         },
     },
+    enchantment_effect::EnchantmentEffectComponent,
     equipment::EquipmentSlot,
     items::ItemRef,
     vanilla_items::ITEMS,
@@ -408,6 +409,67 @@ impl ItemStack {
     #[must_use]
     pub fn get_enchantments(&self) -> Option<&ItemEnchantments> {
         self.get(ENCHANTMENTS)
+    }
+
+    #[must_use]
+    pub fn has_enchantment_effect(&self, component: EnchantmentEffectComponent) -> bool {
+        let Some(enchantments) = self.get_enchantments() else {
+            return false;
+        };
+
+        for (key, level) in enchantments.iter() {
+            if *level == 0 {
+                continue;
+            }
+            let Some(enchantment) = REGISTRY.enchantments.by_key(key) else {
+                continue;
+            };
+            if enchantment.effects.has(component) {
+                return true;
+            }
+        }
+
+        false
+    }
+
+    #[must_use]
+    pub fn apply_unconditional_enchantment_value_effects(
+        &self,
+        component: EnchantmentEffectComponent,
+        input: f32,
+    ) -> f32 {
+        let Some(enchantments) = self.get_enchantments() else {
+            return input;
+        };
+
+        let mut value = input;
+        for (key, level) in enchantments.iter() {
+            if *level == 0 {
+                continue;
+            }
+            let Some(enchantment) = REGISTRY.enchantments.by_key(key) else {
+                continue;
+            };
+            let level = *level as i32;
+
+            for effect in enchantment.effects.value_effects(component) {
+                if !effect.is_unconditional() {
+                    continue;
+                }
+                if let Some(updated) = effect.effect.process_without_random(level, value) {
+                    value = updated;
+                }
+            }
+
+            let Some(effect) = enchantment.effects.single_value_effect(component) else {
+                continue;
+            };
+            if let Some(updated) = effect.process_without_random(level, value) {
+                value = updated;
+            }
+        }
+
+        value
     }
 
     /// Sets the damage/durability as a fraction (0.0 = broken, 1.0 = full).

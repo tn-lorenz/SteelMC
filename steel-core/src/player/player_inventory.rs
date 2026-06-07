@@ -12,6 +12,7 @@ use steel_protocol::packets::game::{
     CContainerClose, COpenScreen, SContainerButtonClick, SContainerClick, SContainerClose,
     SContainerSlotStateChanged, SSetCarriedItem, SSetCreativeModeSlot,
 };
+use steel_registry::enchantment_effect::EnchantmentEffectComponent;
 use steel_registry::item_stack::ItemStack;
 use steel_utils::types::{GameType, InteractionHand};
 
@@ -364,7 +365,13 @@ impl PlayerInventory {
             return EquipmentSwapResult::Fail;
         }
 
-        // TODO: Honor PREVENT_ARMOR_CHANGE once enchantment effects are implemented.
+        if !has_infinite_materials
+            && in_equipment_slot
+                .has_enchantment_effect(EnchantmentEffectComponent::PreventArmorChange)
+        {
+            return EquipmentSwapResult::Fail;
+        }
+
         if in_hand.count() <= 1 {
             self.swap_single_item_with_equipment_slot(hand, slot, has_infinite_materials);
             return EquipmentSwapResult::Success(ItemStack::empty());
@@ -1111,6 +1118,7 @@ mod tests {
 
     use steel_registry::test_support::init_test_registry;
     use steel_registry::vanilla_items::ITEMS;
+    use steel_utils::Identifier;
 
     use super::*;
 
@@ -1217,6 +1225,35 @@ mod tests {
         assert_eq!(
             inventory.equipment().get_ref(EquipmentSlot::Head),
             &ItemStack::new(&ITEMS.diamond_helmet)
+        );
+    }
+
+    #[test]
+    fn equippable_swap_respects_prevent_armor_change_effect() {
+        init_test_registry();
+
+        let mut inventory = PlayerInventory::new(Weak::new());
+        let mut bound_helmet = ItemStack::new(&ITEMS.diamond_helmet);
+        bound_helmet.set_enchantments(&[(Identifier::vanilla_static("binding_curse"), 1)], false);
+        inventory.set_selected_item(ItemStack::new(&ITEMS.carved_pumpkin));
+        inventory
+            .equipment_mut()
+            .set(EquipmentSlot::Head, bound_helmet.copy_with_count(1));
+
+        let result = inventory.try_swap_with_equipment_slot(
+            InteractionHand::MainHand,
+            EquipmentSlot::Head,
+            false,
+        );
+
+        assert_eq!(result, EquipmentSwapResult::Fail);
+        assert_eq!(
+            inventory.get_selected_item(),
+            &ItemStack::new(&ITEMS.carved_pumpkin)
+        );
+        assert_eq!(
+            inventory.equipment().get_ref(EquipmentSlot::Head),
+            &bound_helmet
         );
     }
 

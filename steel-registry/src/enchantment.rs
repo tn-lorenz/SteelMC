@@ -1,3 +1,4 @@
+use crate::enchantment_effect::EnchantmentEffects;
 pub use crate::equipment::EquipmentSlotGroup;
 use crate::items::ItemRef;
 use crate::{REGISTRY, RegistryEntry, RegistryExt, TaggedRegistryExt};
@@ -25,7 +26,7 @@ pub struct Enchantment {
     pub supported_items: &'static str,
     pub primary_items: Option<&'static str>,
     pub exclusive_set: Option<&'static str>,
-    // TODO: effects (data-driven, complex nested JSON structures)
+    pub effects: EnchantmentEffects,
 }
 
 impl RegistryEntry for Enchantment {
@@ -77,7 +78,7 @@ impl ToNbtTag for &Enchantment {
             compound.insert("exclusive_set", exclusive);
         }
 
-        // TODO: effects (data-driven, complex nested JSON structures)
+        // TODO: Serialize enchantment effect payloads once the full effect AST exists.
 
         NbtTag::Compound(compound)
     }
@@ -191,3 +192,51 @@ crate::impl_standard_methods!(
 );
 
 crate::impl_tagged_registry!(EnchantmentRegistry, enchantments_by_key, "enchantment");
+
+#[cfg(test)]
+mod tests {
+    use crate::enchantment_effect::EnchantmentEffectComponent;
+    use crate::vanilla_enchantments;
+
+    #[test]
+    fn binding_curse_has_prevent_armor_change_effect() {
+        assert!(
+            vanilla_enchantments::BINDING_CURSE
+                .effects
+                .has(EnchantmentEffectComponent::PreventArmorChange)
+        );
+    }
+
+    #[test]
+    fn unconditional_value_effects_modify_values() {
+        assert_eq!(vanilla_enchantments::KNOCKBACK.effects.knockback.len(), 1);
+        let knockback = &vanilla_enchantments::KNOCKBACK.effects.knockback[0];
+
+        assert!(knockback.is_unconditional());
+        assert_eq!(
+            knockback
+                .effect
+                .process_without_random(2, 0.0)
+                .map(f32::to_bits),
+            Some(2.0_f32.to_bits())
+        );
+
+        assert_eq!(vanilla_enchantments::SHARPNESS.effects.damage.len(), 1);
+        let damage = &vanilla_enchantments::SHARPNESS.effects.damage[0];
+
+        assert!(damage.is_unconditional());
+        assert_eq!(
+            damage
+                .effect
+                .process_without_random(5, 7.0)
+                .map(f32::to_bits),
+            Some(10.0_f32.to_bits())
+        );
+    }
+
+    #[test]
+    fn conditional_value_effects_are_not_applied_without_context() {
+        assert_eq!(vanilla_enchantments::PUNCH.effects.knockback.len(), 1);
+        assert!(!vanilla_enchantments::PUNCH.effects.knockback[0].is_unconditional());
+    }
+}

@@ -9,8 +9,8 @@
 use std::{mem, sync::Arc};
 
 use enum_dispatch::enum_dispatch;
+use steel_registry::enchantment_effect::EnchantmentEffectComponent;
 use steel_registry::item_stack::ItemStack;
-use steel_registry::vanilla_enchantments::BINDING_CURSE;
 use steel_utils::locks::SyncMutex;
 
 use crate::inventory::SyncPlayerInv;
@@ -330,12 +330,12 @@ impl Slot for ArmorSlot {
         stack.is_equippable_in_slot(self.slot)
     }
 
-    /// Prevents picking up armor with Curse of Binding unless in creative mode.
+    /// Prevents picking up armor with `prevent_armor_change` unless in creative mode.
     fn may_pickup(&self, guard: &ContainerLockGuard, player: &Player) -> bool {
         let item = self.get_item(guard);
         if !item.is_empty()
             && !player.has_infinite_materials()
-            && item.get_enchantment_level(&BINDING_CURSE.key) > 0
+            && item.has_enchantment_effect(EnchantmentEffectComponent::PreventArmorChange)
         {
             return false;
         }
