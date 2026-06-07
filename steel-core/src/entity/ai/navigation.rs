@@ -11,6 +11,7 @@ use crate::world::LevelReader;
 
 const DIRECT_TARGET_REACHED_DISTANCE_SQR: f64 = 2.500_000_3e-7;
 const DEFAULT_REQUIRED_PATH_LENGTH: f32 = 16.0;
+const MAX_TIME_RECOMPUTE: i64 = 20;
 const MAX_VISITED_NODES_SCALE: f32 = 16.0;
 const STUCK_CHECK_INTERVAL: i32 = 100;
 const STUCK_THRESHOLD_DISTANCE_FACTOR: f32 = 0.25;
@@ -28,6 +29,13 @@ pub struct NavigationTickContext {
     pub mob_position: DVec3,
     pub mob_bounding_box_width: f64,
     pub mob_speed: f32,
+    pub game_time: i64,
+}
+
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+pub struct NavigationRecomputeRequest {
+    pub target_pos: BlockPos,
+    pub reach_range: i32,
     pub game_time: i64,
 }
 
@@ -49,6 +57,8 @@ pub struct PathNavigation {
     timeout_timer: i64,
     last_timeout_check: i64,
     timeout_limit: f64,
+    has_delayed_recomputation: bool,
+    time_last_recompute: i64,
     stuck: bool,
     done: bool,
 }
@@ -73,6 +83,8 @@ impl PathNavigation {
             timeout_timer: 0,
             last_timeout_check: 0,
             timeout_limit: 0.0,
+            has_delayed_recomputation: false,
+            time_last_recompute: 0,
             stuck: false,
             done: true,
         }
@@ -134,6 +146,11 @@ impl PathNavigation {
     #[must_use]
     pub const fn is_stuck(&self) -> bool {
         self.stuck
+    }
+
+    #[must_use]
+    pub const fn has_delayed_recomputation(&self) -> bool {
+        self.has_delayed_recomputation
     }
 
     pub const fn tick(&mut self) {
@@ -242,6 +259,70 @@ impl PathNavigation {
         }
 
         Some((target, self.speed_modifier))
+    }
+
+    pub fn request_recompute_path(
+        &mut self,
+        game_time: i64,
+        can_update_path: bool,
+    ) -> Option<NavigationRecomputeRequest> {
+        if game_time - self.time_last_recompute <= MAX_TIME_RECOMPUTE || !can_update_path {
+            self.has_delayed_recomputation = true;
+            return None;
+        }
+
+        let target_pos = self.target_pos?;
+        self.path = None;
+        Some(NavigationRecomputeRequest {
+            target_pos,
+            reach_range: self.reach_range,
+            game_time,
+        })
+    }
+
+    pub fn take_delayed_recompute_request(
+        &mut self,
+        game_time: i64,
+        can_update_path: bool,
+    ) -> Option<NavigationRecomputeRequest> {
+        if !self.has_delayed_recomputation {
+            return None;
+        }
+
+        self.request_recompute_path(game_time, can_update_path)
+    }
+
+    pub fn complete_recompute_path(&mut self, path: Option<Path>, game_time: i64) {
+        self.direct_target = None;
+        self.path = path;
+        self.done = self.path.as_ref().is_none_or(Path::is_done);
+        self.time_last_recompute = game_time;
+        self.has_delayed_recomputation = false;
+    }
+
+    #[must_use]
+    pub fn should_recompute_path(&self, pos: BlockPos, mob_position: DVec3) -> bool {
+        if self.has_delayed_recomputation {
+            return false;
+        }
+
+        let Some(path) = self.path.as_ref() else {
+            return false;
+        };
+        if path.is_done() || path.node_count() == 0 {
+            return false;
+        }
+
+        let Some(target) = path.end_node() else {
+            return false;
+        };
+        let middle_pos = DVec3::new(
+            f64::midpoint(f64::from(target.x), mob_position.x),
+            f64::midpoint(f64::from(target.y), mob_position.y),
+            f64::midpoint(f64::from(target.z), mob_position.z),
+        );
+        let distance = (path.node_count() - path.next_node_index()) as f64;
+        block_center(pos).distance_squared(middle_pos) < distance * distance
     }
 
     fn next_path_move_target(&mut self, context: NavigationTickContext) -> Option<(DVec3, f64)> {
@@ -398,6 +479,11 @@ fn should_target_next_node_in_direction(path: &Path, mob_position: DVec3) -> boo
 
 fn block_bottom_center(pos: BlockPos) -> DVec3 {
     let (x, y, z) = pos.get_bottom_center();
+    DVec3::new(x, y, z)
+}
+
+fn block_center(pos: BlockPos) -> DVec3 {
+    let (x, y, z) = pos.get_center();
     DVec3::new(x, y, z)
 }
 
@@ -612,6 +698,73 @@ mod tests {
 
         assert!(!navigation.is_stuck());
         assert!(navigation.is_done());
+    }
+
+    #[test]
+    fn path_recompute_request_delays_during_vanilla_cooldown() {
+        let path = Path::new(vec![Node::new(2, 64, 0)], BlockPos::new(2, 64, 0), true);
+        let mut navigation = PathNavigation::new();
+
+        assert!(navigation.move_to(path, 1.0, DVec3::new(0.5, 64.0, 0.5)));
+
+        assert_eq!(navigation.request_recompute_path(20, true), None);
+        assert!(navigation.has_delayed_recomputation());
+        assert!(navigation.path().is_some());
+
+        let Some(request) = navigation.take_delayed_recompute_request(21, true) else {
+            panic!("recompute should be allowed after vanilla cooldown");
+        };
+        assert_eq!(request.target_pos, BlockPos::new(2, 64, 0));
+        assert_eq!(request.reach_range, 0);
+        assert_eq!(request.game_time, 21);
+        assert!(navigation.path().is_none());
+
+        navigation.complete_recompute_path(
+            Some(Path::new(
+                vec![Node::new(1, 64, 0), Node::new(2, 64, 0)],
+                BlockPos::new(2, 64, 0),
+                true,
+            )),
+            request.game_time,
+        );
+        assert!(!navigation.has_delayed_recomputation());
+        assert!(!navigation.is_done());
+    }
+
+    #[test]
+    fn path_recompute_request_waits_until_path_can_update() {
+        let path = Path::new(vec![Node::new(2, 64, 0)], BlockPos::new(2, 64, 0), true);
+        let mut navigation = PathNavigation::new();
+
+        assert!(navigation.move_to(path, 1.0, DVec3::new(0.5, 64.0, 0.5)));
+
+        assert_eq!(navigation.request_recompute_path(30, false), None);
+        assert!(navigation.has_delayed_recomputation());
+        assert_eq!(navigation.take_delayed_recompute_request(40, false), None);
+        assert!(navigation.has_delayed_recomputation());
+
+        let Some(request) = navigation.take_delayed_recompute_request(40, true) else {
+            panic!("recompute should run once path updates are allowed");
+        };
+        assert_eq!(request.target_pos, BlockPos::new(2, 64, 0));
+    }
+
+    #[test]
+    fn path_should_recompute_uses_vanilla_midpoint_window() {
+        let path = Path::new(
+            vec![Node::new(0, 64, 0), Node::new(4, 64, 0)],
+            BlockPos::new(4, 64, 0),
+            true,
+        );
+        let mut navigation = PathNavigation::new();
+        let mob_position = DVec3::new(0.5, 64.0, 0.5);
+
+        assert!(navigation.move_to(path, 1.0, mob_position));
+        assert!(navigation.should_recompute_path(BlockPos::new(2, 64, 0), mob_position));
+        assert!(!navigation.should_recompute_path(BlockPos::new(20, 64, 0), mob_position));
+
+        assert_eq!(navigation.request_recompute_path(1, true), None);
+        assert!(!navigation.should_recompute_path(BlockPos::new(2, 64, 0), mob_position));
     }
 
     #[test]

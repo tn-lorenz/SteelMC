@@ -19,7 +19,9 @@ use steel_utils::{BlockPos, ChunkPos, axis::Axis};
 use crate::behavior::{BLOCK_BEHAVIORS, BlockCollisionContext};
 use crate::entity::ai::control::{MobControls, MoveControlOperation};
 use crate::entity::ai::goal::GoalSelector;
-use crate::entity::ai::navigation::{NavigationPathRequest, NavigationTickContext, PathNavigation};
+use crate::entity::ai::navigation::{
+    NavigationPathRequest, NavigationRecomputeRequest, NavigationTickContext, PathNavigation,
+};
 use crate::entity::ai::path::{Path, PathType, PathfindingContext, PathfindingMalus};
 use crate::entity::ai::walk::{MobPathSettings, WalkNodeEvaluator, WalkPathEvaluator};
 use crate::entity::{Entity, LivingEntity, LivingTravelInput, RemovalReason};
@@ -317,27 +319,9 @@ pub trait Mob: LivingEntity {
         let Some(world) = self.level() else {
             return;
         };
-        let (target, speed_modifier) = {
-            let mut navigation = self.mob_base().navigation().lock();
-            navigation.tick();
-            let Some(target) = navigation.next_move_target(NavigationTickContext {
-                mob_position: self.position(),
-                mob_bounding_box_width: self.bounding_box().width(),
-                mob_speed: self.get_speed(),
-                game_time: world.game_time(),
-            }) else {
-                return;
-            };
-            target
-        };
-
-        let target_pos = BlockPos::containing(target.x, target.y, target.z);
-        let ground_y = if world.get_block_state(target_pos.below()).is_air() {
-            target.y
-        } else {
-            WalkNodeEvaluator::floor_level(world.as_ref(), target_pos)
-        };
-        self.set_wanted_position(DVec3::new(target.x, ground_y, target.z), speed_modifier);
+        let game_time = world.game_time();
+        self.mob_base().navigation().lock().tick();
+        tick_path_navigation_target(self, &world, game_time);
     }
 
     fn tick_move_control(&self) {
@@ -509,6 +493,29 @@ pub trait Mob: LivingEntity {
     }
 }
 
+fn tick_path_navigation_target<M: Mob + ?Sized>(mob: &M, world: &Arc<World>, game_time: i64) {
+    let (target, speed_modifier) = {
+        let mut navigation = mob.mob_base().navigation().lock();
+        let Some(target) = navigation.next_move_target(NavigationTickContext {
+            mob_position: mob.position(),
+            mob_bounding_box_width: mob.bounding_box().width(),
+            mob_speed: mob.get_speed(),
+            game_time,
+        }) else {
+            return;
+        };
+        target
+    };
+
+    let target_pos = BlockPos::containing(target.x, target.y, target.z);
+    let ground_y = if world.get_block_state(target_pos.below()).is_air() {
+        target.y
+    } else {
+        WalkNodeEvaluator::floor_level(world.as_ref(), target_pos)
+    };
+    mob.set_wanted_position(DVec3::new(target.x, ground_y, target.z), speed_modifier);
+}
+
 pub trait PathfinderMob: Mob {
     fn get_walk_target_value(&self, _pos: BlockPos) -> f32 {
         0.0
@@ -520,6 +527,23 @@ pub trait PathfinderMob: Mob {
 
     fn can_path_to_targets_below_surface(&self) -> bool {
         false
+    }
+
+    fn tick_pathfinder_path_navigation(&self) {
+        let Some(world) = self.level() else {
+            return;
+        };
+        let game_time = world.game_time();
+        let recompute_request = {
+            let mut navigation = self.mob_base().navigation().lock();
+            navigation.tick();
+            navigation.take_delayed_recompute_request(game_time, self.can_update_path())
+        };
+        if let Some(request) = recompute_request {
+            self.recompute_path(request);
+        }
+
+        tick_path_navigation_target(self, &world, game_time);
     }
 
     fn tick_pathfinder_goal_selectors(&self)
@@ -560,6 +584,14 @@ pub trait PathfinderMob: Mob {
         };
         let targets = [target];
         self.create_path_to_targets(&world, &targets, reach_range)
+    }
+
+    fn recompute_path(&self, request: NavigationRecomputeRequest) {
+        let path = self.create_path_to(request.target_pos, request.reach_range);
+        self.mob_base()
+            .navigation()
+            .lock()
+            .complete_recompute_path(path, request.game_time);
     }
 
     fn move_to_pos(&self, target: DVec3, speed_modifier: f64) -> bool {

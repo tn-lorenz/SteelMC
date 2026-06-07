@@ -559,6 +559,10 @@ impl Mob for PigEntity {
         PathfinderMob::tick_pathfinder_goal_selectors(self);
     }
 
+    fn tick_path_navigation(&self) {
+        PathfinderMob::tick_pathfinder_path_navigation(self);
+    }
+
     fn remove_when_far_away(&self, _dist_sqr: f64) -> bool {
         false
     }
