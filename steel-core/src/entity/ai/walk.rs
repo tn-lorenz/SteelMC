@@ -5,10 +5,11 @@ use steel_registry::blocks::block_state_ext::BlockStateExt as _;
 use steel_registry::blocks::properties::BlockStateProperties;
 use steel_registry::vanilla_block_tags::BlockTag;
 use steel_registry::vanilla_blocks;
-use steel_utils::BlockPos;
+use steel_utils::{BlockPos, Direction, WorldAabb, axis::Axis};
 
-use crate::behavior::BlockStateBehaviorExt as _;
+use crate::behavior::{BLOCK_BEHAVIORS, BlockCollisionContext, BlockStateBehaviorExt as _};
 use crate::entity::Mob;
+use crate::entity::ai::node::{Node, NodeStore};
 use crate::entity::ai::path::{
     PathComputationType, PathType, PathTypeSet, PathfindingContext, PathfindingMalus,
 };
@@ -20,7 +21,11 @@ pub struct MobPathSettings {
     entity_width: i32,
     entity_height: i32,
     entity_depth: i32,
+    mob_position_vec: glam::DVec3,
     mob_position: BlockPos,
+    bounding_box: WorldAabb,
+    max_up_step: f32,
+    max_fall_distance: i32,
     malus: [f32; PathType::COUNT],
     can_pass_doors: bool,
     can_open_doors: bool,
@@ -41,7 +46,11 @@ impl MobPathSettings {
             entity_width: floor(bounding_box.width() + 1.0),
             entity_height: floor(bounding_box.height() + 1.0),
             entity_depth: floor(bounding_box.width() + 1.0),
+            mob_position_vec: mob.position(),
             mob_position: mob.block_position(),
+            bounding_box,
+            max_up_step: mob.max_up_step(),
+            max_fall_distance: mob.max_fall_distance(),
             malus,
             can_pass_doors: true,
             can_open_doors: false,
@@ -58,16 +67,33 @@ impl MobPathSettings {
         mob_position: BlockPos,
         pathfinding_malus: &PathfindingMalus,
     ) -> Self {
+        let width = entity_width.max(1);
+        let height = entity_height.max(1);
+        let depth = entity_depth.max(1);
+        let center_x = f64::from(mob_position.x()) + 0.5;
+        let center_z = f64::from(mob_position.z()) + 0.5;
+        let bounding_box = WorldAabb::new(
+            center_x - f64::from(width) * 0.5,
+            f64::from(mob_position.y()),
+            center_z - f64::from(depth) * 0.5,
+            center_x + f64::from(width) * 0.5,
+            f64::from(mob_position.y()) + f64::from(height),
+            center_z + f64::from(depth) * 0.5,
+        );
         let mut malus = [0.0; PathType::COUNT];
         for path_type in PathType::ALL {
             malus[path_type.index()] = pathfinding_malus.get(path_type);
         }
 
         Self {
-            entity_width: entity_width.max(1),
-            entity_height: entity_height.max(1),
-            entity_depth: entity_depth.max(1),
+            entity_width: width,
+            entity_height: height,
+            entity_depth: depth,
+            mob_position_vec: glam::DVec3::new(center_x, f64::from(mob_position.y()), center_z),
             mob_position,
+            bounding_box,
+            max_up_step: 0.6,
+            max_fall_distance: 3,
             malus,
             can_pass_doors: true,
             can_open_doors: false,
@@ -101,6 +127,18 @@ impl MobPathSettings {
     }
 
     #[must_use]
+    pub const fn with_max_up_step(mut self, max_up_step: f32) -> Self {
+        self.max_up_step = max_up_step;
+        self
+    }
+
+    #[must_use]
+    pub const fn with_max_fall_distance(mut self, max_fall_distance: i32) -> Self {
+        self.max_fall_distance = max_fall_distance;
+        self
+    }
+
+    #[must_use]
     pub const fn entity_width(&self) -> i32 {
         self.entity_width
     }
@@ -118,6 +156,26 @@ impl MobPathSettings {
     #[must_use]
     pub const fn mob_position(&self) -> BlockPos {
         self.mob_position
+    }
+
+    #[must_use]
+    pub const fn mob_position_vec(&self) -> glam::DVec3 {
+        self.mob_position_vec
+    }
+
+    #[must_use]
+    pub const fn bounding_box(&self) -> WorldAabb {
+        self.bounding_box
+    }
+
+    #[must_use]
+    pub const fn max_up_step(&self) -> f32 {
+        self.max_up_step
+    }
+
+    #[must_use]
+    pub const fn max_fall_distance(&self) -> i32 {
+        self.max_fall_distance
     }
 
     #[must_use]
@@ -149,17 +207,63 @@ impl MobPathSettings {
 #[derive(Debug, Clone)]
 pub struct WalkNodeEvaluator {
     settings: MobPathSettings,
+    nodes: NodeStore,
+}
+
+#[derive(Debug, Clone, Copy, PartialEq)]
+pub struct AcceptedNodeRequest {
+    pub pos: BlockPos,
+    pub jump_size: i32,
+    pub node_height: f64,
+    pub travel_direction: Direction,
+    pub current_path_type: PathType,
 }
 
 impl WalkNodeEvaluator {
     #[must_use]
-    pub const fn new(settings: MobPathSettings) -> Self {
-        Self { settings }
+    pub fn new(settings: MobPathSettings) -> Self {
+        Self {
+            settings,
+            nodes: NodeStore::new(),
+        }
     }
 
     #[must_use]
     pub const fn settings(&self) -> &MobPathSettings {
         &self.settings
+    }
+
+    pub fn clear_nodes(&mut self) {
+        self.nodes.clear();
+    }
+
+    #[must_use]
+    pub fn node(&self, hash: i32) -> Option<&Node> {
+        self.nodes.get(hash)
+    }
+
+    #[must_use]
+    pub fn get_floor_level(&self, context: &PathfindingContext<'_>, pos: BlockPos) -> f64 {
+        if self.settings.can_float() && context.get_block_state(pos).get_fluid_state().is_water() {
+            return f64::from(pos.y()) + 0.5;
+        }
+
+        Self::floor_level(context.level(), pos)
+    }
+
+    #[must_use]
+    pub fn floor_level(level: &dyn LevelReader, pos: BlockPos) -> f64 {
+        let target = pos.offset(0, -1, 0);
+        let state = level.get_block_state(target);
+        let behavior = BLOCK_BEHAVIORS.get_behavior(state.get_block());
+        let shape =
+            behavior.get_collision_shape(state, level, target, BlockCollisionContext::empty());
+        f64::from(target.y())
+            + if shape.is_empty() {
+                0.0
+            } else {
+                shape.max(Axis::Y)
+            }
     }
 
     #[must_use]
@@ -218,6 +322,72 @@ impl WalkNodeEvaluator {
         } else {
             highest_malus_path_type
         }
+    }
+
+    pub fn find_accepted_node(
+        &mut self,
+        context: &mut PathfindingContext<'_>,
+        collision: &mut impl WalkNodeCollision,
+        request: AcceptedNodeRequest,
+    ) -> Option<i32> {
+        let x = request.pos.x();
+        let y = request.pos.y();
+        let z = request.pos.z();
+        let max_y_target = self.get_floor_level(context, request.pos);
+        if max_y_target - request.node_height > self.mob_jump_height() {
+            return None;
+        }
+
+        let path_type = self.get_path_type_of_mob(context, x, y, z);
+        let path_cost = self.settings.pathfinding_malus(path_type);
+        let mut best = if path_cost >= 0.0 {
+            Some(self.get_node_and_update_cost_to_max(x, y, z, path_type, path_cost))
+        } else {
+            None
+        };
+
+        if let Some(best_hash) = best {
+            let needs_collision_check =
+                does_block_have_partial_collision(request.current_path_type)
+                    && self
+                        .node(best_hash)
+                        .is_some_and(|node| node.cost_malus >= 0.0);
+            if needs_collision_check && !self.can_reach_without_collision(collision, best_hash) {
+                best = None;
+            }
+        }
+
+        if path_type == PathType::Walkable {
+            return best;
+        }
+
+        let needs_jump = best.is_none_or(|best_hash| {
+            self.node(best_hash)
+                .is_none_or(|node| node.cost_malus < 0.0)
+        });
+        if needs_jump
+            && request.jump_size > 0
+            && (path_type != PathType::Fence || self.settings.can_walk_over_fences())
+            && path_type != PathType::UnpassableRail
+            && path_type != PathType::Trapdoor
+            && path_type != PathType::PowderSnow
+        {
+            return self.try_jump_on(context, collision, request);
+        }
+
+        if path_type == PathType::Water && !self.settings.can_float() {
+            return self.try_find_first_non_water_below(context, x, y, z, best);
+        }
+
+        if path_type == PathType::Open {
+            return Some(self.try_find_first_ground_node_below(context, x, y, z));
+        }
+
+        if does_block_have_partial_collision(path_type) && best.is_none() {
+            return Some(self.get_closed_node(x, y, z, path_type));
+        }
+
+        best
     }
 
     #[must_use]
@@ -291,6 +461,195 @@ impl WalkNodeEvaluator {
             PathType::UnpassableRail
         }
     }
+
+    fn try_jump_on(
+        &mut self,
+        context: &mut PathfindingContext<'_>,
+        collision: &mut impl WalkNodeCollision,
+        request: AcceptedNodeRequest,
+    ) -> Option<i32> {
+        let x = request.pos.x();
+        let y = request.pos.y();
+        let z = request.pos.z();
+        let node_above = self.find_accepted_node(
+            context,
+            collision,
+            AcceptedNodeRequest {
+                pos: request.pos.offset(0, 1, 0),
+                jump_size: request.jump_size - 1,
+                ..request
+            },
+        )?;
+
+        if self.settings.bounding_box().width() >= 1.0 {
+            return Some(node_above);
+        }
+
+        let node = self.node(node_above)?;
+        if node.path_type != PathType::Open && node.path_type != PathType::Walkable {
+            return Some(node_above);
+        }
+
+        let (step_x, _, step_z) = request.travel_direction.offset();
+        let center_x = f64::from(x - step_x) + 0.5;
+        let center_z = f64::from(z - step_z) + 0.5;
+        let half_width = self.settings.bounding_box().width() / 2.0;
+        let min_y = self.get_floor_level(
+            context,
+            BlockPos::new(floor(center_x), y + 1, floor(center_z)),
+        ) + 0.001;
+        let max_y = self.get_floor_level(context, BlockPos::new(node.x, node.y, node.z))
+            + self.settings.bounding_box().height()
+            - 0.002;
+        let collision_box = WorldAabb::new(
+            center_x - half_width,
+            min_y,
+            center_z - half_width,
+            center_x + half_width,
+            max_y,
+            center_z + half_width,
+        );
+
+        if collision.has_collision(collision_box) {
+            None
+        } else {
+            Some(node_above)
+        }
+    }
+
+    fn try_find_first_non_water_below(
+        &mut self,
+        context: &mut PathfindingContext<'_>,
+        x: i32,
+        mut y: i32,
+        z: i32,
+        mut best: Option<i32>,
+    ) -> Option<i32> {
+        y -= 1;
+
+        while y > context.level().min_y() {
+            let path_type = self.get_path_type_of_mob(context, x, y, z);
+            if path_type != PathType::Water {
+                return best;
+            }
+
+            let path_cost = self.settings.pathfinding_malus(path_type);
+            best = Some(self.get_node_and_update_cost_to_max(x, y, z, path_type, path_cost));
+            y -= 1;
+        }
+
+        best
+    }
+
+    fn try_find_first_ground_node_below(
+        &mut self,
+        context: &mut PathfindingContext<'_>,
+        x: i32,
+        y: i32,
+        z: i32,
+    ) -> i32 {
+        for current_y in (context.level().min_y()..y).rev() {
+            if y - current_y > self.settings.max_fall_distance() {
+                return self.get_blocked_node(x, current_y, z);
+            }
+
+            let path_type = self.get_path_type_of_mob(context, x, current_y, z);
+            let path_cost = self.settings.pathfinding_malus(path_type);
+            if path_type != PathType::Open {
+                if path_cost >= 0.0 {
+                    return self
+                        .get_node_and_update_cost_to_max(x, current_y, z, path_type, path_cost);
+                }
+
+                return self.get_blocked_node(x, current_y, z);
+            }
+        }
+
+        self.get_blocked_node(x, y, z)
+    }
+
+    fn can_reach_without_collision(
+        &self,
+        collision: &mut impl WalkNodeCollision,
+        target: i32,
+    ) -> bool {
+        let Some(node) = self.node(target) else {
+            return false;
+        };
+        let mut bounding_box = self.settings.bounding_box();
+        let delta = glam::DVec3::new(
+            f64::from(node.x) - self.settings.mob_position_vec().x + bounding_box.width() / 2.0,
+            f64::from(node.y) - self.settings.mob_position_vec().y + bounding_box.height() / 2.0,
+            f64::from(node.z) - self.settings.mob_position_vec().z + bounding_box.depth() / 2.0,
+        );
+        let steps = (delta.length() / bounding_box.size()).ceil() as i32;
+        if steps <= 0 {
+            return true;
+        }
+        let step_delta = delta / f64::from(steps);
+
+        for _ in 1..=steps {
+            bounding_box = bounding_box.move_vec(step_delta);
+            if collision.has_collision(bounding_box) {
+                return false;
+            }
+        }
+
+        true
+    }
+
+    fn mob_jump_height(&self) -> f64 {
+        f64::from(self.settings.max_up_step()).max(1.125)
+    }
+
+    fn get_node_and_update_cost_to_max(
+        &mut self,
+        x: i32,
+        y: i32,
+        z: i32,
+        path_type: PathType,
+        cost: f32,
+    ) -> i32 {
+        let node = self.nodes.get_node(x, y, z);
+        node.path_type = path_type;
+        node.cost_malus = node.cost_malus.max(cost);
+        node.hash()
+    }
+
+    fn get_blocked_node(&mut self, x: i32, y: i32, z: i32) -> i32 {
+        let node = self.nodes.get_node(x, y, z);
+        node.path_type = PathType::Blocked;
+        node.cost_malus = -1.0;
+        node.hash()
+    }
+
+    fn get_closed_node(&mut self, x: i32, y: i32, z: i32, path_type: PathType) -> i32 {
+        let node = self.nodes.get_node(x, y, z);
+        node.closed = true;
+        node.path_type = path_type;
+        node.cost_malus = path_type.default_malus();
+        node.hash()
+    }
+}
+
+pub trait WalkNodeCollision {
+    fn has_collision(&mut self, aabb: WorldAabb) -> bool;
+}
+
+impl<F> WalkNodeCollision for F
+where
+    F: FnMut(WorldAabb) -> bool,
+{
+    fn has_collision(&mut self, aabb: WorldAabb) -> bool {
+        self(aabb)
+    }
+}
+
+const fn does_block_have_partial_collision(path_type: PathType) -> bool {
+    matches!(
+        path_type,
+        PathType::Fence | PathType::DoorWoodClosed | PathType::DoorIronClosed
+    )
 }
 
 pub struct WalkPathEvaluator;
@@ -457,11 +816,11 @@ impl WalkPathEvaluator {
 #[cfg(test)]
 mod tests {
     use steel_registry::blocks::block_state_ext::BlockStateExt as _;
-    use steel_registry::blocks::properties::BlockStateProperties;
+    use steel_registry::blocks::properties::{BlockStateProperties, SlabType};
     use steel_registry::{REGISTRY, test_support::init_test_registry, vanilla_blocks};
-    use steel_utils::{BlockPos, BlockStateId};
+    use steel_utils::{BlockPos, BlockStateId, Direction, WorldAabb};
 
-    use super::{MobPathSettings, WalkNodeEvaluator, WalkPathEvaluator};
+    use super::{AcceptedNodeRequest, MobPathSettings, WalkNodeEvaluator, WalkPathEvaluator};
     use crate::behavior::{BlockStateBehaviorExt as _, init_behaviors};
     use crate::entity::ai::path::{
         PathComputationType, PathType, PathfindingContext, PathfindingMalus,
@@ -654,6 +1013,160 @@ mod tests {
     }
 
     #[test]
+    fn walk_node_evaluator_floor_level_uses_collision_shape_below_node() {
+        init_test_registry();
+        init_behaviors();
+
+        let air = REGISTRY.blocks.get_default_state_id(&vanilla_blocks::AIR);
+        let bottom_slab = vanilla_blocks::SMOOTH_STONE_SLAB
+            .default_state()
+            .set_value(&BlockStateProperties::SLAB_TYPE, SlabType::Bottom);
+        let level = GridLevel::new(air).with(BlockPos::new(0, 63, 0), bottom_slab);
+        let context = PathfindingContext::new(&level, BlockPos::new(0, 64, 0));
+        let evaluator = WalkNodeEvaluator::new(test_settings(1, 1, 1));
+
+        assert_eq!(
+            evaluator
+                .get_floor_level(&context, BlockPos::new(0, 64, 0))
+                .to_bits(),
+            63.5_f64.to_bits()
+        );
+    }
+
+    #[test]
+    fn find_accepted_node_records_walkable_node_cost() {
+        init_test_registry();
+        init_behaviors();
+
+        let air = REGISTRY.blocks.get_default_state_id(&vanilla_blocks::AIR);
+        let stone = REGISTRY.blocks.get_default_state_id(&vanilla_blocks::STONE);
+        let level = GridLevel::new(air).with(BlockPos::new(0, 63, 0), stone);
+        let mut context = PathfindingContext::new(&level, BlockPos::new(0, 64, 0));
+        let mut evaluator = WalkNodeEvaluator::new(test_settings(1, 1, 1));
+        let mut no_collision = |_aabb: WorldAabb| false;
+
+        let accepted = evaluator.find_accepted_node(
+            &mut context,
+            &mut no_collision,
+            accepted_request(BlockPos::new(0, 64, 0), 0, 64.0, PathType::Walkable),
+        );
+
+        let Some(node) = accepted.and_then(|hash| evaluator.node(hash)) else {
+            panic!("walkable node should be accepted");
+        };
+        assert_eq!(node.path_type, PathType::Walkable);
+        assert_eq!(node.cost_malus.to_bits(), 0.0_f32.to_bits());
+    }
+
+    #[test]
+    fn find_accepted_node_falls_to_ground_when_within_max_fall_distance() {
+        init_test_registry();
+        init_behaviors();
+
+        let air = REGISTRY.blocks.get_default_state_id(&vanilla_blocks::AIR);
+        let stone = REGISTRY.blocks.get_default_state_id(&vanilla_blocks::STONE);
+        let level = GridLevel::new(air).with(BlockPos::new(0, 64, 0), stone);
+        let mut context = PathfindingContext::new(&level, BlockPos::new(0, 67, 0));
+        let mut evaluator =
+            WalkNodeEvaluator::new(test_settings(1, 1, 1).with_max_fall_distance(3));
+        let mut no_collision = |_aabb: WorldAabb| false;
+
+        let accepted = evaluator.find_accepted_node(
+            &mut context,
+            &mut no_collision,
+            accepted_request(BlockPos::new(0, 67, 0), 0, 66.0, PathType::Open),
+        );
+
+        let Some(node) = accepted.and_then(|hash| evaluator.node(hash)) else {
+            panic!("open node should fall to ground");
+        };
+        assert_eq!((node.x, node.y, node.z), (0, 65, 0));
+        assert_eq!(node.path_type, PathType::Walkable);
+    }
+
+    #[test]
+    fn find_accepted_node_blocks_falls_past_max_fall_distance() {
+        init_test_registry();
+        init_behaviors();
+
+        let air = REGISTRY.blocks.get_default_state_id(&vanilla_blocks::AIR);
+        let stone = REGISTRY.blocks.get_default_state_id(&vanilla_blocks::STONE);
+        let level = GridLevel::new(air).with(BlockPos::new(0, 64, 0), stone);
+        let mut context = PathfindingContext::new(&level, BlockPos::new(0, 67, 0));
+        let mut evaluator =
+            WalkNodeEvaluator::new(test_settings(1, 1, 1).with_max_fall_distance(1));
+        let mut no_collision = |_aabb: WorldAabb| false;
+
+        let accepted = evaluator.find_accepted_node(
+            &mut context,
+            &mut no_collision,
+            accepted_request(BlockPos::new(0, 67, 0), 0, 66.0, PathType::Open),
+        );
+
+        let Some(node) = accepted.and_then(|hash| evaluator.node(hash)) else {
+            panic!("excessive fall should produce a blocked node");
+        };
+        assert_eq!((node.x, node.y, node.z), (0, 65, 0));
+        assert_eq!(node.path_type, PathType::Blocked);
+        assert_eq!(node.cost_malus.to_bits(), (-1.0_f32).to_bits());
+    }
+
+    #[test]
+    fn find_accepted_node_keeps_last_water_node_before_non_water() {
+        init_test_registry();
+        init_behaviors();
+
+        let air = REGISTRY.blocks.get_default_state_id(&vanilla_blocks::AIR);
+        let water = REGISTRY.blocks.get_default_state_id(&vanilla_blocks::WATER);
+        let stone = REGISTRY.blocks.get_default_state_id(&vanilla_blocks::STONE);
+        let level = GridLevel::new(air)
+            .with(BlockPos::new(0, 64, 0), water)
+            .with(BlockPos::new(0, 63, 0), water)
+            .with(BlockPos::new(0, 62, 0), stone);
+        let mut context = PathfindingContext::new(&level, BlockPos::new(0, 64, 0));
+        let mut evaluator = WalkNodeEvaluator::new(test_settings(1, 1, 1));
+        let mut no_collision = |_aabb: WorldAabb| false;
+
+        let accepted = evaluator.find_accepted_node(
+            &mut context,
+            &mut no_collision,
+            accepted_request(BlockPos::new(0, 64, 0), 0, 64.0, PathType::Water),
+        );
+
+        let Some(node) = accepted.and_then(|hash| evaluator.node(hash)) else {
+            panic!("water scan should keep the deepest water node");
+        };
+        assert_eq!((node.x, node.y, node.z), (0, 63, 0));
+        assert_eq!(node.path_type, PathType::Water);
+    }
+
+    #[test]
+    fn find_accepted_node_rejects_partial_collision_when_reach_is_blocked() {
+        init_test_registry();
+        init_behaviors();
+
+        let air = REGISTRY.blocks.get_default_state_id(&vanilla_blocks::AIR);
+        let stone = REGISTRY.blocks.get_default_state_id(&vanilla_blocks::STONE);
+        let level = GridLevel::new(air).with(BlockPos::new(0, 63, 0), stone);
+        let mut context = PathfindingContext::new(&level, BlockPos::new(0, 64, 0));
+        let mut evaluator = WalkNodeEvaluator::new(test_settings(1, 1, 1));
+        let mut collision_checked = false;
+        let mut blocked = |_aabb: WorldAabb| {
+            collision_checked = true;
+            true
+        };
+
+        let accepted = evaluator.find_accepted_node(
+            &mut context,
+            &mut blocked,
+            accepted_request(BlockPos::new(0, 64, 0), 0, 64.0, PathType::DoorWoodClosed),
+        );
+
+        assert!(accepted.is_none());
+        assert!(collision_checked);
+    }
+
+    #[test]
     fn open_air_above_solid_ground_becomes_walkable() {
         init_test_registry();
         init_behaviors();
@@ -701,5 +1214,20 @@ mod tests {
             BlockPos::new(0, 64, 0),
             &PathfindingMalus::new(),
         )
+    }
+
+    const fn accepted_request(
+        pos: BlockPos,
+        jump_size: i32,
+        node_height: f64,
+        current_path_type: PathType,
+    ) -> AcceptedNodeRequest {
+        AcceptedNodeRequest {
+            pos,
+            jump_size,
+            node_height,
+            travel_direction: Direction::North,
+            current_path_type,
+        }
     }
 }

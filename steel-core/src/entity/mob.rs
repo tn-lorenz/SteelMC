@@ -83,6 +83,11 @@ pub trait Mob: LivingEntity {
         self.mob_base().pathfinding_malus().lock().get(path_type)
     }
 
+    /// Vanilla `Entity.getMaxFallDistance` baseline.
+    fn max_fall_distance(&self) -> i32 {
+        3
+    }
+
     fn set_pathfinding_malus(&self, path_type: PathType, malus: f32) {
         self.mob_base()
             .pathfinding_malus()
