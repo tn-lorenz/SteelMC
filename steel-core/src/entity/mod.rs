@@ -1842,7 +1842,6 @@ pub trait Entity: EntityEventSource + Send + Sync {
 
         let collision_world =
             WorldCollisionProvider::for_entity(&world, self.as_entity_event_source());
-        // TODO: Include world-border collision once Steel has world-border physics.
         let colliding = collision_world.has_collision_with_context(
             &self.bounding_box().deflate(NO_PHYSICS_COLLISION_EPSILON),
             BlockCollisionContext::empty(),

@@ -71,20 +71,34 @@ pub trait CollisionWorld {
         !self.get_entity_collisions(aabb).is_empty()
     }
 
-    /// Queries entity collisions followed by block collisions with a vanilla context.
+    /// Queries world-border collision shapes intersecting the given AABB.
+    fn get_world_border_collisions(&self, aabb: &WorldAabb) -> Vec<WorldAabb> {
+        let _ = aabb;
+        Vec::new()
+    }
+
+    /// Returns whether any world-border collision shape intersects with the given AABB.
+    fn has_world_border_collision(&self, aabb: &WorldAabb) -> bool {
+        !self.get_world_border_collisions(aabb).is_empty()
+    }
+
+    /// Queries entity, world-border, then block collisions with a vanilla context.
     fn get_collisions_with_context(
         &self,
         aabb: &WorldAabb,
         context: BlockCollisionContext,
     ) -> Vec<WorldAabb> {
         let mut collisions = self.get_entity_collisions(aabb);
+        collisions.extend(self.get_world_border_collisions(aabb));
         collisions.extend(self.get_block_collisions_with_context(aabb, context));
         collisions
     }
 
-    /// Returns whether any entity or block collision shape intersects with the given AABB.
+    /// Returns whether any entity, world-border, or block collision shape intersects the AABB.
     fn has_collision_with_context(&self, aabb: &WorldAabb, context: BlockCollisionContext) -> bool {
-        self.has_entity_collision(aabb) || self.has_block_collision_with_context(aabb, context)
+        self.has_entity_collision(aabb)
+            || self.has_world_border_collision(aabb)
+            || self.has_block_collision_with_context(aabb, context)
     }
 
     /// Gets collision shapes for vanilla pre-move checks.
@@ -530,6 +544,31 @@ impl CollisionWorld for WorldCollisionProvider<'_> {
                         None => !entity.is_spectator() && entity.can_be_collided_with(None),
                     }
             })
+    }
+
+    fn get_world_border_collisions(&self, aabb: &WorldAabb) -> Vec<WorldAabb> {
+        let Some(source) = self.source else {
+            return Vec::new();
+        };
+
+        let border = self.world.world_border_snapshot();
+        let source_position = source.position();
+        if !border.is_inside_close_to_border(source_position.x, source_position.z, *aabb) {
+            return Vec::new();
+        }
+
+        border.collision_shapes_for(*aabb)
+    }
+
+    fn has_world_border_collision(&self, aabb: &WorldAabb) -> bool {
+        let Some(source) = self.source else {
+            return false;
+        };
+
+        let border = self.world.world_border_snapshot();
+        let source_position = source.position();
+        border.is_inside_close_to_border(source_position.x, source_position.z, *aabb)
+            && !border.collision_shapes_for(*aabb).is_empty()
     }
 }
 

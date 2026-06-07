@@ -400,6 +400,8 @@ impl Player {
         self.reset_vehicle_movement_for_tick();
 
         self.default_tick();
+        let world = self.get_world();
+        self.apply_world_border_damage(&world);
         self.update_swimming();
         self.ai_step();
 
@@ -601,6 +603,25 @@ impl Player {
 
         let threshold = (max_cramming - 1) as usize;
         pushable_count > threshold && non_passenger_count > threshold
+    }
+
+    fn apply_world_border_damage(&self, world: &World) {
+        if !world.tick_runs_normally() || self.get_health() <= 0.0 {
+            return;
+        }
+
+        let border = world.world_border_snapshot();
+        let position = self.position();
+        let Some(damage) =
+            border.outside_damage_amount(position.x, position.z, self.bounding_box())
+        else {
+            return;
+        };
+
+        self.hurt(
+            &DamageSource::environment(&vanilla_damage_types::OUTSIDE_BORDER),
+            damage,
+        );
     }
 
     /// Main entry point for dealing damage. Returns `true` if damage was applied.
@@ -891,7 +912,6 @@ impl Player {
         }
 
         // TODO: send mob effect packets once effects are implemented
-        // TODO: send CInitializeBorder once world border is implemented
 
         // Shared spawn (teleport, abilities, weather, time, chunk tracking reset)
         let _ = player_arc.spawn(spawn, (0.0, 0.0), ResetReason::Respawn);
@@ -1216,6 +1236,8 @@ impl Player {
             let rate = if advance_time { 1.0 } else { 0.0 };
             self.send_packet(CSetTime::new(game_time, day_time, 0.0, rate));
         }
+
+        self.send_packet(world.initialize_border_packet());
 
         // Weather sync
         if world.can_have_weather() && world.is_raining() {

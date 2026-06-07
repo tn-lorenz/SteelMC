@@ -17,6 +17,46 @@ use steel_utils::types::Difficulty;
 use steel_utils::{BlockPos, Identifier};
 use tokio::fs;
 
+/// Persistent world border data stored with Steel level data.
+#[derive(Debug, Clone, Copy, PartialEq, Serialize, Deserialize)]
+#[serde(default)]
+pub struct WorldBorderData {
+    /// Border center X coordinate.
+    pub center_x: f64,
+    /// Border center Z coordinate.
+    pub center_z: f64,
+    /// Damage dealt per block outside the safe zone.
+    pub damage_per_block: f64,
+    /// Distance outside the border before damage starts.
+    pub safe_zone: f64,
+    /// Client warning distance in blocks.
+    pub warning_blocks: i32,
+    /// Client warning time in seconds.
+    pub warning_time: i32,
+    /// Current border size.
+    pub size: f64,
+    /// Remaining lerp time in ticks.
+    pub lerp_time: i64,
+    /// Target size for a moving border.
+    pub lerp_target: f64,
+}
+
+impl Default for WorldBorderData {
+    fn default() -> Self {
+        Self {
+            center_x: 0.0,
+            center_z: 0.0,
+            damage_per_block: 0.2,
+            safe_zone: 5.0,
+            warning_blocks: 5,
+            warning_time: 300,
+            size: f64::from(5.999_997E7_f32),
+            lerp_time: 0,
+            lerp_target: 0.0,
+        }
+    }
+}
+
 /// Persistent level data that gets saved to disk.
 #[derive(Debug, Clone, Serialize, Deserialize)]
 pub struct LevelData {
@@ -30,6 +70,9 @@ pub struct LevelData {
     pub spawn: SpawnPoint,
     /// Weather state.
     pub weather: WeatherState,
+    /// Persistent world border state.
+    #[serde(default)]
+    pub world_border: WorldBorderData,
     /// World difficulty.
     #[serde(default)]
     pub difficulty: Difficulty,
@@ -167,6 +210,7 @@ impl LevelData {
             day_time: 0,
             spawn: SpawnPoint::default(),
             weather: WeatherState::default(),
+            world_border: WorldBorderData::default(),
             difficulty,
             difficulty_locked: false,
             game_rules: FxHashMap::default(),

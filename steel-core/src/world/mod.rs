@@ -18,8 +18,10 @@ use crate::{chunk::chunk_map::ChunkMapGameTickTimings, world::weather::Weather};
 use glam::DVec3;
 use sha2::{Digest, Sha256};
 use steel_protocol::packets::game::{
-    CBlockDestruction, CBlockEvent, CGameEvent, CLevelEvent, CPlayerChat, CPlayerInfoUpdate,
-    CSetEntityData, CSound, CSystemChat, CUpdateAttributes, GameEventType, SoundSource,
+    CBlockDestruction, CBlockEvent, CGameEvent, CInitializeBorder, CLevelEvent, CPlayerChat,
+    CPlayerInfoUpdate, CSetBorderCenter, CSetBorderLerpSize, CSetBorderSize,
+    CSetBorderWarningDelay, CSetBorderWarningDistance, CSetEntityData, CSound, CSystemChat,
+    CUpdateAttributes, GameEventType, SoundSource,
 };
 use steel_protocol::utils::ConnectionProtocol;
 use steel_protocol::{
@@ -88,7 +90,7 @@ use crate::{
         entities::ItemEntity,
     },
     fluid::{FluidStateExt as _, fluid_state_to_block},
-    level_data::{LevelDataManager, WorldGenerationSettings},
+    level_data::{LevelDataManager, WorldBorderData, WorldGenerationSettings},
     player::{LastSeen, Player, connection::NetworkConnection},
     poi::PointOfInterestStorage,
 };
@@ -160,6 +162,7 @@ impl ClipHitResult {
     }
 }
 
+mod border;
 pub mod game_event_context;
 pub mod game_event_listener;
 mod level_reader;
@@ -172,6 +175,8 @@ mod world_entities;
 pub use crate::config::WorldStorageConfig;
 use crate::worldgen::generators::vanilla::fuzzed_biome_at_block;
 use crate::worldgen::{ChunkGenerator, ChunkGeneratorType};
+pub use border::WorldBorderError;
+use border::{WorldBorder, WorldBorderSnapshot};
 pub use level_reader::{LevelReader, ScheduledTickAccess};
 pub use player_area_map::PlayerAreaMap;
 pub use player_map::PlayerMap;
@@ -183,6 +188,19 @@ pub use tick_scheduler::ScheduledTick;
 /// Produces values centered around `mode` with a spread of `deviation`.
 fn triangle_random(mode: f64, deviation: f64) -> f64 {
     mode + deviation * (rand::random::<f64>() - rand::random::<f64>())
+}
+
+const fn initialize_border_packet(snapshot: WorldBorderSnapshot) -> CInitializeBorder {
+    CInitializeBorder {
+        new_center_x: snapshot.center_x,
+        new_center_z: snapshot.center_z,
+        old_size: snapshot.old_size,
+        new_size: snapshot.new_size,
+        lerp_time: snapshot.lerp_time,
+        new_absolute_max_size: snapshot.absolute_max_size,
+        warning_blocks: snapshot.warning_blocks,
+        warning_time: snapshot.warning_time,
+    }
 }
 
 const fn chunk_min_block_x(pos: ChunkPos) -> i32 {
@@ -261,6 +279,8 @@ pub struct World {
     pub dimension_type: DimensionTypeRef,
     /// Level data manager for persistent world state.
     pub level_data: SyncRwLock<LevelDataManager>,
+    /// Runtime world border state.
+    world_border: SyncMutex<WorldBorder>,
     /// Server view distance (maximum chunk radius).
     pub view_distance: u8,
     /// Server simulation distance.
@@ -339,6 +359,8 @@ impl World {
         if level_data.is_dirty() {
             level_data.save().await?;
         }
+        let world_border = WorldBorder::new(level_data.data().world_border)
+            .map_err(|error| io::Error::new(io::ErrorKind::InvalidData, error))?;
         // let generator = Arc::new(ChunkGeneratorType::Flat(FlatChunkGenerator::new(
         //     REGISTRY
         //         .blocks
@@ -375,6 +397,7 @@ impl World {
                 key,
                 dimension_type,
                 level_data: SyncRwLock::new(level_data),
+                world_border: SyncMutex::new(world_border),
                 view_distance,
                 simulation_distance,
                 compression,
@@ -399,6 +422,7 @@ impl World {
         reason = "holding the write lock across await is safe here because it only happens during shutdown"
     )]
     pub async fn cleanup(&self, total_saved: &mut usize) {
+        self.sync_world_border_to_level_data();
         match self.level_data.write().save().await {
             Ok(()) => log::info!("World {} level data saved successfully", self.key),
             Err(e) => log::error!("Failed to save world level data: {e}"),
@@ -414,6 +438,141 @@ impl World {
     #[must_use]
     pub fn domain(&self) -> &str {
         self.key.namespace.as_ref()
+    }
+
+    #[must_use]
+    pub(crate) fn world_border_snapshot(&self) -> WorldBorderSnapshot {
+        self.world_border.lock().snapshot()
+    }
+
+    #[must_use]
+    pub(crate) fn initialize_border_packet(&self) -> CInitializeBorder {
+        initialize_border_packet(self.world_border_snapshot())
+    }
+
+    /// Sets the world border center and broadcasts the vanilla center update packet.
+    pub fn set_world_border_center(&self, x: f64, z: f64) -> Result<(), WorldBorderError> {
+        let (snapshot, data) = {
+            let mut border = self.world_border.lock();
+            border.set_center(x, z)?;
+            (border.snapshot(), border.to_data())
+        };
+        self.store_world_border_data_if_changed(data);
+        self.broadcast_to_all(CSetBorderCenter {
+            new_center_x: snapshot.center_x,
+            new_center_z: snapshot.center_z,
+        });
+        Ok(())
+    }
+
+    /// Sets a static world border size and broadcasts the vanilla size update packet.
+    pub fn set_world_border_size(&self, size: f64) -> Result<(), WorldBorderError> {
+        let (snapshot, data) = {
+            let mut border = self.world_border.lock();
+            border.set_size(size)?;
+            (border.snapshot(), border.to_data())
+        };
+        self.store_world_border_data_if_changed(data);
+        self.broadcast_to_all(CSetBorderSize {
+            size: snapshot.new_size,
+        });
+        Ok(())
+    }
+
+    /// Starts a vanilla world border size lerp and broadcasts the lerp update packet.
+    pub fn lerp_world_border_size_between(
+        &self,
+        from: f64,
+        to: f64,
+        ticks: i64,
+    ) -> Result<(), WorldBorderError> {
+        let (snapshot, data) = {
+            let mut border = self.world_border.lock();
+            border.lerp_size_between(from, to, ticks)?;
+            (border.snapshot(), border.to_data())
+        };
+        self.store_world_border_data_if_changed(data);
+        self.broadcast_to_all(CSetBorderLerpSize {
+            old_size: snapshot.old_size,
+            new_size: snapshot.new_size,
+            lerp_time: snapshot.lerp_time,
+        });
+        Ok(())
+    }
+
+    /// Sets the client warning time and broadcasts the vanilla warning-delay packet.
+    pub fn set_world_border_warning_time(&self, warning_time: i32) {
+        let data = {
+            let mut border = self.world_border.lock();
+            border.set_warning_time(warning_time);
+            border.to_data()
+        };
+        self.store_world_border_data_if_changed(data);
+        self.broadcast_to_all(CSetBorderWarningDelay {
+            warning_delay: warning_time,
+        });
+    }
+
+    /// Sets the client warning distance and broadcasts the vanilla warning-distance packet.
+    pub fn set_world_border_warning_blocks(&self, warning_blocks: i32) {
+        let data = {
+            let mut border = self.world_border.lock();
+            border.set_warning_blocks(warning_blocks);
+            border.to_data()
+        };
+        self.store_world_border_data_if_changed(data);
+        self.broadcast_to_all(CSetBorderWarningDistance { warning_blocks });
+    }
+
+    /// Sets world border damage per block outside the safe zone.
+    pub fn set_world_border_damage_per_block(
+        &self,
+        damage_per_block: f64,
+    ) -> Result<(), WorldBorderError> {
+        let data = {
+            let mut border = self.world_border.lock();
+            border.set_damage_per_block(damage_per_block)?;
+            border.to_data()
+        };
+        self.store_world_border_data_if_changed(data);
+        Ok(())
+    }
+
+    /// Sets the safe distance outside the world border before damage starts.
+    pub fn set_world_border_safe_zone(&self, safe_zone: f64) -> Result<(), WorldBorderError> {
+        let data = {
+            let mut border = self.world_border.lock();
+            border.set_safe_zone(safe_zone)?;
+            border.to_data()
+        };
+        self.store_world_border_data_if_changed(data);
+        Ok(())
+    }
+
+    fn tick_world_border(&self) {
+        let data = {
+            let mut border = self.world_border.lock();
+            border.tick();
+            border.to_data()
+        };
+        self.store_world_border_data_if_changed(data);
+    }
+
+    fn sync_world_border_to_level_data(&self) {
+        let data = self.world_border.lock().to_data();
+        self.store_world_border_data_if_changed(data);
+    }
+
+    fn store_world_border_data_if_changed(&self, data: WorldBorderData) {
+        let mut level_data = self.level_data.write();
+        if level_data.data().world_border != data {
+            level_data.data_mut().world_border = data;
+        }
+    }
+
+    fn set_game_time(&self, tick_count: u64) {
+        let mut level_data = self.level_data.write();
+        level_data.data_mut().game_time = tick_count as i64;
     }
 
     /// Returns the total height of the world in blocks.
@@ -1060,11 +1219,9 @@ impl World {
         runs_normally: bool,
     ) -> WorldGameTickTimings {
         let world_start = Instant::now();
-        {
-            let mut level_data = self.level_data.write();
-            level_data.data_mut().game_time = tick_count as i64;
-        }
+        self.set_game_time(tick_count);
         if runs_normally {
+            self.tick_world_border();
             self.tick_weather();
             self.tick_time();
         }
