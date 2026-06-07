@@ -4,17 +4,19 @@
 //! Entities embed this struct and delegate common `Entity` trait methods to it.
 
 use std::{
-    collections::VecDeque,
+    collections::{BTreeSet, VecDeque},
     sync::{Arc, Weak},
 };
 
 use glam::DVec3;
+use simdnbt::owned::NbtCompound;
 use steel_registry::entity_data::EntityPose;
 use steel_registry::entity_type::EntityDimensions;
 use steel_registry::vanilla_entities;
 use steel_utils::locks::SyncMutex;
 use steel_utils::random::{Random as _, legacy_random::LegacyRandom};
 use steel_utils::{BlockPos, BlockStateId, WorldAabb};
+use text_components::TextComponent;
 use uuid::Uuid;
 
 use crate::entity::fluid_contact::EntityFluidContact;
@@ -33,6 +35,10 @@ const MOVEMENT_TRACE_LIMIT: usize = 100;
 const MOVEMENT_TRACE_POSITION_EPSILON_SQ: f64 = 9.999_999_4e-11;
 /// Default vanilla `Entity.getTicksRequiredToFreeze` value.
 pub const DEFAULT_TICKS_REQUIRED_TO_FREEZE: i32 = 140;
+/// Default vanilla `Entity.getMaxAirSupply` value.
+pub const DEFAULT_MAX_AIR_SUPPLY: i32 = 300;
+/// Vanilla scoreboard tag limit for a single entity.
+pub const MAX_ENTITY_TAGS: usize = 1024;
 const FIRE_IGNITE_TICKS: i32 = 8 * 20;
 const LAVA_IGNITE_TICKS: i32 = 15 * 20;
 
@@ -625,7 +631,6 @@ pub struct EntityBaseState {
     ground_contact: EntityGroundContact,
     movement_progress: EntityMovementProgress,
     fire_freeze: EntityFireFreezeState,
-    no_gravity: bool,
     in_block_state: Option<BlockStateId>,
     fluid_contact: EntityFluidContact,
     was_eye_in_water: bool,
@@ -656,7 +661,6 @@ impl EntityBaseState {
             ground_contact: EntityGroundContact::airborne(),
             movement_progress: EntityMovementProgress::new(),
             fire_freeze: EntityFireFreezeState::new(),
-            no_gravity: false,
             in_block_state: None,
             fluid_contact: EntityFluidContact::default(),
             was_eye_in_water: false,
@@ -733,13 +737,6 @@ impl EntityBaseState {
         self
     }
 
-    /// Sets the shared vanilla `NoGravity` flag on this construction snapshot.
-    #[must_use]
-    pub const fn with_no_gravity(mut self, no_gravity: bool) -> Self {
-        self.no_gravity = no_gravity;
-        self
-    }
-
     /// Sets the ground-contact flag on this state snapshot.
     #[must_use]
     pub const fn with_on_ground(mut self, on_ground: bool) -> Self {
@@ -766,6 +763,64 @@ impl EntityBaseState {
     }
 }
 
+/// Shared vanilla entity save data that is not part of the movement snapshot.
+#[derive(Debug, Clone, PartialEq)]
+pub struct EntityBaseSaveData {
+    /// Synchronized vanilla `Air`/air supply value.
+    pub air_supply: i32,
+    /// Vanilla dimension-change portal cooldown.
+    pub portal_cooldown: i32,
+    /// Shared vanilla `NoGravity` flag.
+    pub no_gravity: bool,
+    /// Shared vanilla `Invulnerable` flag.
+    pub invulnerable: bool,
+    /// Optional synchronized vanilla custom name.
+    pub custom_name: Option<TextComponent>,
+    /// Synchronized vanilla custom-name visibility flag.
+    pub custom_name_visible: bool,
+    /// Synchronized vanilla silent flag.
+    pub silent: bool,
+    /// Server-owned vanilla glowing tag, projected into the shared flags byte.
+    pub glowing: bool,
+    /// Vanilla scoreboard tags.
+    pub tags: BTreeSet<String>,
+    /// Vanilla custom data component payload.
+    pub custom_data: NbtCompound,
+}
+
+impl EntityBaseSaveData {
+    /// Creates default vanilla base save data.
+    #[must_use]
+    pub fn new() -> Self {
+        Self {
+            air_supply: DEFAULT_MAX_AIR_SUPPLY,
+            portal_cooldown: 0,
+            no_gravity: false,
+            invulnerable: false,
+            custom_name: None,
+            custom_name_visible: false,
+            silent: false,
+            glowing: false,
+            tags: BTreeSet::new(),
+            custom_data: NbtCompound::new(),
+        }
+    }
+
+    /// Adds a scoreboard tag, respecting vanilla's per-entity tag limit.
+    pub fn add_tag(&mut self, tag: String) -> bool {
+        if self.tags.len() >= MAX_ENTITY_TAGS && !self.tags.contains(&tag) {
+            return false;
+        }
+        self.tags.insert(tag)
+    }
+}
+
+impl Default for EntityBaseSaveData {
+    fn default() -> Self {
+        Self::new()
+    }
+}
+
 /// Base fields restored from persistent entity data.
 ///
 /// Vanilla loads these fields through `Entity.load` before type-specific
@@ -789,8 +844,8 @@ pub struct EntityBaseLoad {
     pub fire_freeze: EntityFireFreezeState,
     /// Restored ground-contact flag.
     pub on_ground: bool,
-    /// Restored shared vanilla `NoGravity` flag.
-    pub no_gravity: bool,
+    /// Restored shared vanilla save data.
+    pub save_data: EntityBaseSaveData,
     /// World reference for the loaded entity.
     pub world: Weak<World>,
 }
@@ -910,6 +965,8 @@ pub struct EntityBase {
     world: SyncMutex<Weak<World>>,
     /// Current vanilla movement state.
     state: SyncMutex<EntityBaseState>,
+    /// Shared vanilla save data outside the movement snapshot.
+    save_data: SyncMutex<EntityBaseSaveData>,
     /// Per-tick movement segments used by vanilla block-contact effects.
     movement_trace: SyncMutex<EntityMovementTrace>,
     /// Removal and tick bookkeeping.
@@ -973,6 +1030,7 @@ impl EntityBase {
             uuid,
             world: SyncMutex::new(world),
             state: SyncMutex::new(state),
+            save_data: SyncMutex::new(EntityBaseSaveData::new()),
             movement_trace: SyncMutex::new(EntityMovementTrace::default()),
             lifecycle: SyncMutex::new(EntityLifecycleState::new()),
             relationships: SyncMutex::new(EntityRelationshipState::default()),
@@ -984,7 +1042,7 @@ impl EntityBase {
     /// Creates a base from persistent vanilla entity fields.
     #[must_use]
     pub fn from_load(load: EntityBaseLoad, dimensions: EntityDimensions) -> Self {
-        Self::with_uuid_and_state(
+        let base = Self::with_uuid_and_state(
             load.id,
             load.uuid,
             EntityBaseState::new(load.position, dimensions)
@@ -992,10 +1050,11 @@ impl EntityBase {
                 .with_rotation(load.rotation)
                 .with_fall_distance(load.fall_distance)
                 .with_fire_freeze_state(load.fire_freeze)
-                .with_no_gravity(load.no_gravity)
                 .with_on_ground(load.on_ground),
             load.world,
-        )
+        );
+        base.replace_save_data(load.save_data);
+        base
     }
 
     // === Accessors for Entity trait delegation ===
@@ -1114,6 +1173,16 @@ impl EntityBase {
         self.state.lock().fire_freeze
     }
 
+    /// Returns a snapshot of shared vanilla save data.
+    pub fn save_data(&self) -> EntityBaseSaveData {
+        self.save_data.lock().clone()
+    }
+
+    /// Replaces shared vanilla save data.
+    pub fn replace_save_data(&self, save_data: EntityBaseSaveData) {
+        *self.save_data.lock() = save_data;
+    }
+
     /// Returns vanilla `Entity.getInBlockState`, cached until base tick or block-position change.
     pub fn in_block_state(&self, world: &World) -> BlockStateId {
         let mut state = self.state.lock();
@@ -1183,10 +1252,68 @@ impl EntityBase {
         self.state.lock().no_physics
     }
 
-    /// Returns the shared vanilla `NoGravity` state stored on the base snapshot.
+    /// Returns the synchronized vanilla `Air` value.
+    #[inline]
+    pub fn air_supply(&self) -> i32 {
+        self.save_data.lock().air_supply
+    }
+
+    /// Returns the vanilla portal cooldown in ticks.
+    #[inline]
+    pub fn portal_cooldown(&self) -> i32 {
+        self.save_data.lock().portal_cooldown
+    }
+
+    /// Returns whether the entity is on vanilla portal cooldown.
+    #[inline]
+    pub fn is_on_portal_cooldown(&self) -> bool {
+        self.portal_cooldown() > 0
+    }
+
+    /// Returns the shared vanilla `NoGravity` flag.
     #[inline]
     pub fn no_gravity(&self) -> bool {
-        self.state.lock().no_gravity
+        self.save_data.lock().no_gravity
+    }
+
+    /// Returns the shared vanilla `Invulnerable` flag.
+    #[inline]
+    pub fn invulnerable(&self) -> bool {
+        self.save_data.lock().invulnerable
+    }
+
+    /// Returns the optional vanilla custom name.
+    #[inline]
+    pub fn custom_name(&self) -> Option<TextComponent> {
+        self.save_data.lock().custom_name.clone()
+    }
+
+    /// Returns the vanilla custom-name visibility flag.
+    #[inline]
+    pub fn custom_name_visible(&self) -> bool {
+        self.save_data.lock().custom_name_visible
+    }
+
+    /// Returns the synchronized vanilla silent flag.
+    #[inline]
+    pub fn silent(&self) -> bool {
+        self.save_data.lock().silent
+    }
+
+    /// Returns the server-owned vanilla glowing tag flag.
+    #[inline]
+    pub fn glowing(&self) -> bool {
+        self.save_data.lock().glowing
+    }
+
+    /// Returns a sorted snapshot of vanilla scoreboard tags.
+    pub fn tags(&self) -> Vec<String> {
+        self.save_data.lock().tags.iter().cloned().collect()
+    }
+
+    /// Returns a snapshot of vanilla custom data.
+    pub fn custom_data(&self) -> NbtCompound {
+        self.save_data.lock().custom_data.clone()
     }
 
     /// Returns true when vanilla `ServerEntity` should consider a velocity sync.
@@ -1273,6 +1400,7 @@ impl EntityBase {
         self.clear_in_block_state_for_base_tick();
         self.compute_known_speed();
         self.decrement_boarding_cooldown();
+        self.process_portal_cooldown();
     }
 
     /// Clears vanilla `inBlockState` at the start of base tick.
@@ -1295,6 +1423,13 @@ impl EntityBase {
         let mut relationships = self.relationships.lock();
         if relationships.boarding_cooldown > 0 {
             relationships.boarding_cooldown -= 1;
+        }
+    }
+
+    fn process_portal_cooldown(&self) {
+        let mut save_data = self.save_data.lock();
+        if save_data.portal_cooldown > 0 {
+            save_data.portal_cooldown -= 1;
         }
     }
 
@@ -1582,9 +1717,59 @@ impl EntityBase {
         self.state.lock().no_physics = no_physics;
     }
 
-    /// Sets the shared vanilla `NoGravity` state stored on the base snapshot.
+    /// Sets the synchronized vanilla `Air` value.
+    pub fn set_air_supply(&self, air_supply: i32) {
+        self.save_data.lock().air_supply = air_supply;
+    }
+
+    /// Sets the vanilla portal cooldown in ticks.
+    pub fn set_portal_cooldown(&self, portal_cooldown: i32) {
+        self.save_data.lock().portal_cooldown = portal_cooldown;
+    }
+
+    /// Sets the shared vanilla `NoGravity` flag.
     pub fn set_no_gravity(&self, no_gravity: bool) {
-        self.state.lock().no_gravity = no_gravity;
+        self.save_data.lock().no_gravity = no_gravity;
+    }
+
+    /// Sets the shared vanilla `Invulnerable` flag.
+    pub fn set_invulnerable(&self, invulnerable: bool) {
+        self.save_data.lock().invulnerable = invulnerable;
+    }
+
+    /// Sets the optional vanilla custom name.
+    pub fn set_custom_name(&self, custom_name: Option<TextComponent>) {
+        self.save_data.lock().custom_name = custom_name;
+    }
+
+    /// Sets the vanilla custom-name visibility flag.
+    pub fn set_custom_name_visible(&self, visible: bool) {
+        self.save_data.lock().custom_name_visible = visible;
+    }
+
+    /// Sets the synchronized vanilla silent flag.
+    pub fn set_silent(&self, silent: bool) {
+        self.save_data.lock().silent = silent;
+    }
+
+    /// Sets the server-owned vanilla glowing tag flag.
+    pub fn set_glowing(&self, glowing: bool) {
+        self.save_data.lock().glowing = glowing;
+    }
+
+    /// Adds a vanilla scoreboard tag.
+    pub fn add_tag(&self, tag: String) -> bool {
+        self.save_data.lock().add_tag(tag)
+    }
+
+    /// Removes a vanilla scoreboard tag.
+    pub fn remove_tag(&self, tag: &str) -> bool {
+        self.save_data.lock().tags.remove(tag)
+    }
+
+    /// Replaces vanilla custom data.
+    pub fn set_custom_data(&self, custom_data: NbtCompound) {
+        self.save_data.lock().custom_data = custom_data;
     }
 
     /// Marks velocity for vanilla `ServerEntity` synchronization.
@@ -1945,7 +2130,7 @@ mod tests {
         DEFAULT_TICKS_REQUIRED_TO_FREEZE, EntityBase, EntityBaseState, EntityFireFreezeState,
         EntityFluidContact, EntityMoveError, EntityMovement, EntityMovementEmission,
         EntityMovementFlags, EntityMovementProgress, EntityPhysicsStateInput, EntityPistonMovement,
-        EntityVerticalMovementStateUpdate,
+        EntityVerticalMovementStateUpdate, MAX_ENTITY_TAGS,
     };
     use std::sync::{Arc, Weak};
 
@@ -2485,7 +2670,11 @@ mod tests {
             fall_distance: 0.0,
             fire_freeze: EntityFireFreezeState::from_parts(12, 34, true, false, true),
             on_ground: false,
-            no_gravity: true,
+            save_data: super::EntityBaseSaveData {
+                no_gravity: true,
+                invulnerable: true,
+                ..super::EntityBaseSaveData::new()
+            },
             world: Weak::<World>::new(),
         };
 
@@ -2497,6 +2686,7 @@ mod tests {
         assert!(state.is_in_powder_snow());
         assert!(state.has_visual_fire());
         assert!(base.no_gravity());
+        assert!(base.invulnerable());
     }
 
     #[test]
@@ -2752,6 +2942,44 @@ mod tests {
         assert_eq!(base.boarding_cooldown(), 0);
         base.advance_base_tick_state();
         assert_eq!(base.boarding_cooldown(), 0);
+    }
+
+    #[test]
+    fn base_tick_state_decrements_portal_cooldown() {
+        let base = EntityBase::new(
+            1,
+            DVec3::ZERO,
+            EntityDimensions::new(0.25, 0.25, 0.125),
+            Weak::<World>::new(),
+        );
+
+        base.set_portal_cooldown(2);
+        base.advance_base_tick_state();
+        assert_eq!(base.portal_cooldown(), 1);
+        base.advance_base_tick_state();
+        assert_eq!(base.portal_cooldown(), 0);
+        base.advance_base_tick_state();
+        assert_eq!(base.portal_cooldown(), 0);
+    }
+
+    #[test]
+    fn entity_tags_respect_vanilla_limit() {
+        let base = EntityBase::new(
+            1,
+            DVec3::ZERO,
+            EntityDimensions::new(0.25, 0.25, 0.125),
+            Weak::<World>::new(),
+        );
+
+        for index in 0..MAX_ENTITY_TAGS {
+            assert!(base.add_tag(format!("tag_{index}")));
+        }
+
+        assert!(!base.add_tag("overflow".to_owned()));
+        assert_eq!(base.tags().len(), MAX_ENTITY_TAGS);
+        assert!(base.remove_tag("tag_0"));
+        assert!(base.add_tag("replacement".to_owned()));
+        assert!(base.tags().iter().any(|tag| tag == "replacement"));
     }
 
     #[test]

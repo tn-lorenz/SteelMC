@@ -4,7 +4,7 @@ use std::str::FromStr;
 use std::sync::Weak;
 
 use glam::DVec3;
-use simdnbt::borrow::{BaseNbtCompound as BorrowedNbtCompound, NbtCompound as NbtCompoundView};
+use simdnbt::borrow::NbtCompound as BorrowedNbtCompoundView;
 use simdnbt::owned::{NbtCompound, NbtTag};
 use steel_macros::entity_behavior;
 use steel_registry::entity_type::EntityTypeRef;
@@ -110,9 +110,7 @@ impl Entity for ChestMinecartEntity {
         }
     }
 
-    fn load_additional(&self, nbt: &BorrowedNbtCompound<'_>) {
-        let nbt: NbtCompoundView<'_, '_> = nbt.into();
-
+    fn load_additional(&self, nbt: BorrowedNbtCompoundView<'_, '_>) {
         let loot_table = nbt
             .string("LootTable")
             .and_then(|value| Identifier::from_str(&value.to_string()).ok());

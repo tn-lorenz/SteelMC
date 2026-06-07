@@ -26,7 +26,7 @@ use crate::player::Player;
 use crate::world::World;
 
 use simdnbt::ToNbtTag;
-use simdnbt::borrow::{BaseNbtCompound as BorrowedNbtCompound, NbtCompound as NbtCompoundView};
+use simdnbt::borrow::NbtCompound as BorrowedNbtCompoundView;
 use simdnbt::owned::{NbtCompound, NbtTag};
 use steel_protocol::packets::game::CTakeItemEntity;
 use steel_registry::blocks::block_state_ext::BlockStateExt;
@@ -723,10 +723,7 @@ impl Entity for ItemEntity {
         }
     }
 
-    fn load_additional(&self, nbt: &BorrowedNbtCompound<'_>) {
-        // Convert to view type to access accessor methods
-        let nbt: NbtCompoundView<'_, '_> = nbt.into();
-
+    fn load_additional(&self, nbt: BorrowedNbtCompoundView<'_, '_>) {
         // Match vanilla's ItemEntity.readAdditionalSaveData
         let mut state = self.item_state.lock();
         if let Some(health) = nbt.short("Health") {

@@ -4,7 +4,9 @@ use std::ops::Deref;
 use std::sync::{Arc, OnceLock, Weak};
 
 use glam::DVec3;
-use simdnbt::borrow::BaseNbtCompound as BorrowedNbtCompound;
+use simdnbt::borrow::{
+    BaseNbtCompound as BorrowedNbtCompound, NbtCompound as BorrowedNbtCompoundView,
+};
 use steel_registry::RegistryExt;
 use steel_registry::entity_type::EntityTypeRef;
 use steel_registry::{REGISTRY, RegistryEntry};
@@ -12,7 +14,9 @@ use uuid::Uuid;
 
 use super::entities::RawEntity;
 use super::generated_entities::register_entity_factories;
-use super::{EntityBaseLoad, EntityFireFreezeState, SharedEntity, next_entity_id};
+use super::{
+    EntityBaseLoad, EntityBaseSaveData, EntityFireFreezeState, SharedEntity, next_entity_id,
+};
 use crate::world::World;
 
 /// Factory function type for creating entities.
@@ -45,8 +49,8 @@ pub struct EntityLoadRequest {
     pub fire_freeze: EntityFireFreezeState,
     /// Restored ground-contact flag.
     pub on_ground: bool,
-    /// Restored shared vanilla `NoGravity` flag.
-    pub no_gravity: bool,
+    /// Restored shared vanilla save data.
+    pub save_data: EntityBaseSaveData,
     /// World reference for the loaded entity.
     pub world: Weak<World>,
 }
@@ -64,7 +68,7 @@ impl EntityLoadRequest {
                 fall_distance: self.fall_distance,
                 fire_freeze: self.fire_freeze,
                 on_ground: self.on_ground,
-                no_gravity: self.no_gravity,
+                save_data: self.save_data,
                 world: self.world,
             },
         )
@@ -103,6 +107,10 @@ impl EntityRegistry {
     }
 
     /// Registers a factory function for an entity type.
+    ///
+    /// # Panics
+    ///
+    /// Panics if a factory is already registered for the entity type.
     pub fn register(&mut self, entity_type: EntityTypeRef, factory: EntityFactory) {
         let id = entity_type.id();
         assert!(
@@ -116,6 +124,10 @@ impl EntityRegistry {
     /// Registers a load factory function for an entity type.
     ///
     /// The load factory is used when loading entities from disk.
+    ///
+    /// # Panics
+    ///
+    /// Panics if a load factory is already registered for the entity type.
     pub fn register_load(&mut self, entity_type: EntityTypeRef, factory: EntityLoadFactory) {
         let id = entity_type.id();
         assert!(
@@ -156,12 +168,11 @@ impl EntityRegistry {
         let (entity_type, load) = request.into_base_load();
         let id = entity_type.id();
         let load_factory = self.entries.get(id)?.load_factory?;
-        let no_gravity = load.no_gravity;
 
         let entity = load_factory(entity_type, load);
-        entity.set_no_gravity(no_gravity);
+        let nbt: BorrowedNbtCompoundView<'_, '_> = nbt.into();
         entity.load_additional(nbt);
-        entity.sync_base_fire_freeze_entity_data();
+        entity.sync_base_entity_data();
         Some(entity)
     }
 
@@ -174,17 +185,16 @@ impl EntityRegistry {
     ) -> SharedEntity {
         let (entity_type, load) = request.into_base_load();
         let id = entity_type.id();
-        let no_gravity = load.no_gravity;
         if let Some(load_factory) = self.entries.get(id).and_then(|entry| entry.load_factory) {
             let entity = load_factory(entity_type, load);
-            entity.set_no_gravity(no_gravity);
+            let nbt: BorrowedNbtCompoundView<'_, '_> = nbt.into();
             entity.load_additional(nbt);
-            entity.sync_base_fire_freeze_entity_data();
+            entity.sync_base_entity_data();
             return entity;
         }
 
         let entity: SharedEntity = Arc::new(RawEntity::from_saved(load, entity_type));
-        entity.set_no_gravity(no_gravity);
+        let nbt: BorrowedNbtCompoundView<'_, '_> = nbt.into();
         entity.load_additional(nbt);
         entity
     }
@@ -284,7 +294,11 @@ mod tests {
                 fall_distance: 2.25,
                 fire_freeze: EntityFireFreezeState::new(),
                 on_ground: true,
-                no_gravity: true,
+                save_data: EntityBaseSaveData {
+                    no_gravity: true,
+                    invulnerable: true,
+                    ..EntityBaseSaveData::new()
+                },
                 world: Weak::new(),
             },
             &borrowed,
@@ -297,6 +311,7 @@ mod tests {
         assert!((entity.fall_distance() - 2.25).abs() <= f64::EPSILON);
         assert!(entity.on_ground());
         assert!(entity.is_no_gravity());
+        assert!(entity.is_invulnerable());
 
         let mut saved = NbtCompound::new();
         entity.save_additional(&mut saved);

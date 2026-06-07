@@ -6,7 +6,7 @@
 use std::sync::Weak;
 
 use glam::DVec3;
-use simdnbt::borrow::{BaseNbtCompound as BorrowedNbtCompound, NbtCompound as NbtCompoundView};
+use simdnbt::borrow::NbtCompound as BorrowedNbtCompoundView;
 use simdnbt::owned::NbtCompound;
 use steel_macros::entity_behavior;
 use steel_registry::entity_type::EntityTypeRef;
@@ -107,10 +107,7 @@ impl Entity for BlockDisplayEntity {
         nbt.insert("block_state", i32::from(block_state_id.0));
     }
 
-    fn load_additional(&self, nbt: &BorrowedNbtCompound<'_>) {
-        // Convert to view type to access accessor methods
-        let nbt: NbtCompoundView<'_, '_> = nbt.into();
-
+    fn load_additional(&self, nbt: BorrowedNbtCompoundView<'_, '_>) {
         // Load block state ID
         if let Some(state_id) = nbt.int("block_state") {
             self.entity_data

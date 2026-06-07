@@ -4,7 +4,7 @@ use std::sync::{Arc, LazyLock, Weak};
 
 use glam::DVec3;
 use rustc_hash::FxHashSet;
-use simdnbt::borrow::BaseNbtCompound;
+use simdnbt::borrow::NbtCompound as BorrowedNbtCompoundView;
 use simdnbt::owned::NbtCompound;
 use steel_protocol::packets::game::{AttributeSnapshot, CEntityEvent, SoundSource};
 use steel_registry::blocks::{
@@ -31,6 +31,7 @@ use steel_utils::entity_events::EntityStatus;
 use steel_utils::locks::SyncMutex;
 use steel_utils::random::Random as _;
 use steel_utils::{BlockPos, BlockStateId, ChunkPos, Direction, Identifier, WorldAabb, axis::Axis};
+use text_components::TextComponent;
 use uuid::Uuid;
 
 use crate::behavior::{
@@ -591,10 +592,10 @@ mod tracker;
 
 use crate::portal::TeleportTransition;
 pub use base::{
-    DEFAULT_TICKS_REQUIRED_TO_FREEZE, EntityAmethystStepSound, EntityBase, EntityBaseLoad,
-    EntityBaseState, EntityFireFreezeState, EntityGroundContact, EntityMovement,
-    EntityMovementEmission, EntityMovementFlags, EntityMovementProgress,
-    EntityVerticalMovementStateUpdate,
+    DEFAULT_MAX_AIR_SUPPLY, DEFAULT_TICKS_REQUIRED_TO_FREEZE, EntityAmethystStepSound, EntityBase,
+    EntityBaseLoad, EntityBaseSaveData, EntityBaseState, EntityFireFreezeState,
+    EntityGroundContact, EntityMovement, EntityMovementEmission, EntityMovementFlags,
+    EntityMovementProgress, EntityVerticalMovementStateUpdate, MAX_ENTITY_TAGS,
 };
 pub use callback::{
     EntityChunkCallback, EntityLevelCallback, InactiveEntityCallback, NullEntityCallback,
@@ -1654,6 +1655,23 @@ pub trait Entity: EntityEventSource + Send + Sync {
         synced_data.set_base_on_fire_flag(self.is_on_fire() || self.has_visual_fire());
     }
 
+    /// Projects all base-owned synchronized fields into generated entity data.
+    fn sync_base_entity_data(&self) {
+        let Some(synced_data) = self.synced_data() else {
+            return;
+        };
+
+        let save_data = self.base().save_data();
+        synced_data.set_air_supply(save_data.air_supply);
+        synced_data.set_custom_name(save_data.custom_name);
+        synced_data.set_custom_name_visible(save_data.custom_name_visible);
+        synced_data.set_silent(save_data.silent);
+        synced_data.set_no_gravity(save_data.no_gravity);
+        synced_data.set_base_glowing_flag(save_data.glowing);
+        synced_data.set_base_ticks_frozen(self.ticks_frozen());
+        synced_data.set_base_on_fire_flag(self.is_on_fire() || self.has_visual_fire());
+    }
+
     /// Returns true if this entity is currently touching water.
     fn is_in_water(&self) -> bool {
         self.fluid_contact().water_height() > 0.0
@@ -2146,6 +2164,103 @@ pub trait Entity: EntityEventSource + Send + Sync {
         true
     }
 
+    /// Returns the synchronized vanilla `Air` value.
+    fn air_supply(&self) -> i32 {
+        self.base().air_supply()
+    }
+
+    /// Sets the synchronized vanilla `Air` value.
+    fn set_air_supply(&self, air_supply: i32) {
+        self.base().set_air_supply(air_supply);
+        if let Some(synced_data) = self.synced_data() {
+            synced_data.set_air_supply(air_supply);
+        }
+    }
+
+    /// Returns this entity's maximum vanilla air supply.
+    fn max_air_supply(&self) -> i32 {
+        DEFAULT_MAX_AIR_SUPPLY
+    }
+
+    /// Returns the vanilla portal cooldown in ticks.
+    fn portal_cooldown(&self) -> i32 {
+        self.base().portal_cooldown()
+    }
+
+    /// Sets the vanilla portal cooldown in ticks.
+    fn set_portal_cooldown(&self, portal_cooldown: i32) {
+        self.base().set_portal_cooldown(portal_cooldown);
+    }
+
+    /// Returns whether the entity is on vanilla portal cooldown.
+    fn is_on_portal_cooldown(&self) -> bool {
+        self.base().is_on_portal_cooldown()
+    }
+
+    /// Returns this entity's optional vanilla custom name.
+    fn custom_name(&self) -> Option<TextComponent> {
+        self.base().custom_name()
+    }
+
+    /// Sets this entity's optional vanilla custom name.
+    fn set_custom_name(&self, custom_name: Option<TextComponent>) {
+        self.base().set_custom_name(custom_name.clone());
+        if let Some(synced_data) = self.synced_data() {
+            synced_data.set_custom_name(custom_name);
+        }
+    }
+
+    /// Returns whether vanilla renders this entity's custom name.
+    fn is_custom_name_visible(&self) -> bool {
+        self.base().custom_name_visible()
+    }
+
+    /// Sets whether vanilla renders this entity's custom name.
+    fn set_custom_name_visible(&self, visible: bool) {
+        self.base().set_custom_name_visible(visible);
+        if let Some(synced_data) = self.synced_data() {
+            synced_data.set_custom_name_visible(visible);
+        }
+    }
+
+    /// Returns whether this entity has the server-owned vanilla glowing tag.
+    fn has_glowing_tag(&self) -> bool {
+        self.base().glowing()
+    }
+
+    /// Sets this entity's server-owned vanilla glowing tag.
+    fn set_glowing_tag(&self, glowing: bool) {
+        self.base().set_glowing(glowing);
+        if let Some(synced_data) = self.synced_data() {
+            synced_data.set_base_glowing_flag(glowing);
+        }
+    }
+
+    /// Returns a snapshot of this entity's vanilla scoreboard tags.
+    fn tags(&self) -> Vec<String> {
+        self.base().tags()
+    }
+
+    /// Adds a vanilla scoreboard tag.
+    fn add_tag(&self, tag: String) -> bool {
+        self.base().add_tag(tag)
+    }
+
+    /// Removes a vanilla scoreboard tag.
+    fn remove_tag(&self, tag: &str) -> bool {
+        self.base().remove_tag(tag)
+    }
+
+    /// Returns a snapshot of this entity's vanilla custom data.
+    fn custom_data(&self) -> NbtCompound {
+        self.base().custom_data()
+    }
+
+    /// Replaces this entity's vanilla custom data.
+    fn set_custom_data(&self, custom_data: NbtCompound) {
+        self.base().set_custom_data(custom_data);
+    }
+
     /// Returns this entity's vanilla sound source category.
     fn sound_source(&self) -> SoundSource {
         SoundSource::Neutral
@@ -2158,7 +2273,15 @@ pub trait Entity: EntityEventSource + Send + Sync {
 
     /// Returns whether sounds from this entity are suppressed.
     fn is_silent(&self) -> bool {
-        false
+        self.base().silent()
+    }
+
+    /// Sets whether sounds from this entity are suppressed.
+    fn set_silent(&self, silent: bool) {
+        self.base().set_silent(silent);
+        if let Some(synced_data) = self.synced_data() {
+            synced_data.set_silent(silent);
+        }
     }
 
     /// Broadcasts a vanilla entity event/status packet near this entity.
@@ -2453,8 +2576,7 @@ pub trait Entity: EntityEventSource + Send + Sync {
 
     /// Returns true if gravity is disabled for this entity.
     fn is_no_gravity(&self) -> bool {
-        self.synced_data()
-            .map_or_else(|| self.base().no_gravity(), EntitySyncedData::is_no_gravity)
+        self.base().no_gravity()
     }
 
     /// Sets the shared vanilla `NoGravity` flag.
@@ -2463,6 +2585,16 @@ pub trait Entity: EntityEventSource + Send + Sync {
         if let Some(synced_data) = self.synced_data() {
             synced_data.set_no_gravity(no_gravity);
         }
+    }
+
+    /// Returns the shared vanilla `Invulnerable` flag.
+    fn is_invulnerable(&self) -> bool {
+        self.base().invulnerable()
+    }
+
+    /// Sets the shared vanilla `Invulnerable` flag.
+    fn set_invulnerable(&self, invulnerable: bool) {
+        self.base().set_invulnerable(invulnerable);
     }
 
     /// Gets the current gravity value.
@@ -2836,7 +2968,7 @@ pub trait Entity: EntityEventSource + Send + Sync {
     /// are already restored; this handles type-specific data.
     ///
     /// Mirrors vanilla's `Entity.readAdditionalSaveData()`.
-    fn load_additional(&self, _nbt: &BaseNbtCompound<'_>) {}
+    fn load_additional(&self, _nbt: BorrowedNbtCompoundView<'_, '_>) {}
 
     /// Applies damage to this entity.
     ///

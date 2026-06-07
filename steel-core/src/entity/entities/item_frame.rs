@@ -3,7 +3,7 @@
 use std::sync::Weak;
 
 use glam::DVec3;
-use simdnbt::borrow::{BaseNbtCompound as BorrowedNbtCompound, NbtCompound as NbtCompoundView};
+use simdnbt::borrow::NbtCompound as BorrowedNbtCompoundView;
 use simdnbt::owned::{NbtCompound, NbtTag};
 use steel_macros::entity_behavior;
 use steel_registry::data_components::vanilla_components::MAP_ID;
@@ -234,9 +234,7 @@ impl Entity for ItemFrameEntity {
         nbt.insert("Fixed", 0_i8);
     }
 
-    fn load_additional(&self, nbt: &BorrowedNbtCompound<'_>) {
-        let nbt: NbtCompoundView<'_, '_> = nbt.into();
-
+    fn load_additional(&self, nbt: BorrowedNbtCompoundView<'_, '_>) {
         if let Some(block_pos) = nbt.int_array("block_pos")
             && block_pos.len() == 3
         {

@@ -25,7 +25,7 @@ use steel_utils::locks::{AsyncMutex, SyncMutex};
 
 const PLAYER_MAGIC: [u8; 4] = *b"STLP";
 const GLOBAL_MAGIC: [u8; 4] = *b"STLG";
-const PLAYER_STORAGE_VERSION: u16 = 3;
+const PLAYER_STORAGE_VERSION: u16 = 5;
 const GLOBAL_STORAGE_VERSION: u16 = 1;
 const GLOBAL_PLAYER_DATA_VERSION: i32 = 1;
 
@@ -529,6 +529,7 @@ fn decode_file(
 #[cfg(test)]
 mod tests {
     use super::*;
+    use crate::entity::DEFAULT_MAX_AIR_SUPPLY;
 
     fn sample_player_file(data_version: i32) -> PlayerDataFile {
         PlayerDataFile {
@@ -585,6 +586,15 @@ mod tests {
             has_visual_fire: false,
             on_ground: true,
             no_gravity: false,
+            invulnerable: false,
+            air_supply: DEFAULT_MAX_AIR_SUPPLY,
+            portal_cooldown: 0,
+            custom_name_nbt: Vec::new(),
+            custom_name_visible: false,
+            silent: false,
+            glowing: false,
+            tags: Vec::new(),
+            custom_data_nbt: Vec::new(),
             nbt_data: Vec::new(),
             passengers: Vec::new(),
         }
