@@ -43,7 +43,7 @@ struct EnchantmentEffectsJson {
     #[serde(rename = "minecraft:armor_effectiveness", default)]
     armor_effectiveness: Vec<ConditionalValueEffectJson>,
     #[serde(rename = "minecraft:post_attack", default)]
-    post_attack: Vec<serde_json::Value>,
+    post_attack: Vec<TargetedConditionalEntityEffectJson>,
     #[serde(rename = "minecraft:post_piercing_attack", default)]
     post_piercing_attack: Vec<serde_json::Value>,
     #[serde(rename = "minecraft:hit_block", default)]
@@ -101,6 +101,66 @@ struct ConditionalValueEffectJson {
     requirements: Option<RequirementsJson>,
 }
 
+#[derive(Deserialize, Debug)]
+struct TargetedConditionalEntityEffectJson {
+    effect: EntityEffectJson,
+    enchanted: EnchantmentTargetJson,
+    affected: EnchantmentTargetJson,
+    #[serde(default)]
+    requirements: Option<RequirementsJson>,
+}
+
+#[derive(Debug)]
+enum EnchantmentTargetJson {
+    Attacker,
+    DamagingEntity,
+    Victim,
+}
+
+impl<'de> Deserialize<'de> for EnchantmentTargetJson {
+    fn deserialize<D>(deserializer: D) -> Result<Self, D::Error>
+    where
+        D: serde::Deserializer<'de>,
+    {
+        let raw = String::deserialize(deserializer)?;
+        parse_enchantment_target(&raw).map_err(de::Error::custom)
+    }
+}
+
+#[derive(Debug)]
+enum EntityEffectJson {
+    AllOf(Vec<EntityEffectJson>),
+    Ignite {
+        duration: LevelBasedValueJson,
+    },
+    ApplyMobEffect {
+        to_apply: MobEffectSelectionJson,
+        min_duration: LevelBasedValueJson,
+        max_duration: LevelBasedValueJson,
+        min_amplifier: LevelBasedValueJson,
+        max_amplifier: LevelBasedValueJson,
+    },
+    Unsupported {
+        effect_type: Identifier,
+    },
+}
+
+impl<'de> Deserialize<'de> for EntityEffectJson {
+    fn deserialize<D>(deserializer: D) -> Result<Self, D::Error>
+    where
+        D: serde::Deserializer<'de>,
+    {
+        let value = serde_json::Value::deserialize(deserializer)?;
+        parse_entity_effect_json(&value).map_err(de::Error::custom)
+    }
+}
+
+#[derive(Debug)]
+enum MobEffectSelectionJson {
+    Single(Identifier),
+    UnsupportedTag(Identifier),
+}
+
 #[derive(Debug)]
 enum RequirementsJson {
     AllOf(Vec<RequirementsJson>),
@@ -143,11 +203,13 @@ enum EntityTypePredicateJson {
     Any,
     Type(Identifier),
     Tag(Identifier),
+    Unsupported,
 }
 
 #[derive(Debug)]
 struct DamageSourcePredicateJson {
     tags: Vec<DamageSourceTagPredicateJson>,
+    is_direct: Option<bool>,
 }
 
 #[derive(Debug)]
@@ -279,6 +341,97 @@ fn parse_entity_target(raw: &str) -> Result<EntityTargetJson, String> {
     }
 }
 
+fn parse_enchantment_target(raw: &str) -> Result<EnchantmentTargetJson, String> {
+    match raw {
+        "attacker" => Ok(EnchantmentTargetJson::Attacker),
+        "damaging_entity" => Ok(EnchantmentTargetJson::DamagingEntity),
+        "victim" => Ok(EnchantmentTargetJson::Victim),
+        other => Err(format!(
+            "unsupported enchantment post-attack target `{other}`"
+        )),
+    }
+}
+
+fn parse_level_based_value_json(value: &serde_json::Value) -> Result<LevelBasedValueJson, String> {
+    serde_json::from_value(value.to_owned())
+        .map_err(|error| format!("invalid level-based value: {error}"))
+}
+
+fn parse_mob_effect_selection_json(
+    value: &serde_json::Value,
+) -> Result<MobEffectSelectionJson, String> {
+    let raw = value
+        .as_str()
+        .ok_or_else(|| "mob effect selection must be a string".to_owned())?;
+    let Some(tag) = raw.strip_prefix('#') else {
+        return Ok(MobEffectSelectionJson::Single(parse_identifier(raw)?));
+    };
+
+    Ok(MobEffectSelectionJson::UnsupportedTag(parse_identifier(
+        tag,
+    )?))
+}
+
+fn parse_entity_effect_json(value: &serde_json::Value) -> Result<EntityEffectJson, String> {
+    let Some(object) = value.as_object() else {
+        return Err("enchantment entity effect must be an object".to_owned());
+    };
+    let effect_type = string_field(object, "type")?;
+
+    match effect_type.as_str() {
+        "minecraft:all_of" => {
+            let effects = object_field(object, "effects")?
+                .as_array()
+                .ok_or_else(|| "all_of entity effect `effects` must be an array".to_owned())?
+                .iter()
+                .map(parse_entity_effect_json)
+                .collect::<Result<Vec<_>, _>>()?;
+            Ok(EntityEffectJson::AllOf(effects))
+        }
+        "minecraft:ignite" => {
+            for key in object.keys() {
+                if key != "type" && key != "duration" {
+                    return Err(format!("unsupported ignite effect field `{key}`"));
+                }
+            }
+            Ok(EntityEffectJson::Ignite {
+                duration: parse_level_based_value_json(object_field(object, "duration")?)?,
+            })
+        }
+        "minecraft:apply_mob_effect" => {
+            for key in object.keys() {
+                if !matches!(
+                    key.as_str(),
+                    "type"
+                        | "to_apply"
+                        | "min_duration"
+                        | "max_duration"
+                        | "min_amplifier"
+                        | "max_amplifier"
+                ) {
+                    return Err(format!("unsupported apply_mob_effect field `{key}`"));
+                }
+            }
+            Ok(EntityEffectJson::ApplyMobEffect {
+                to_apply: parse_mob_effect_selection_json(object_field(object, "to_apply")?)?,
+                min_duration: parse_level_based_value_json(object_field(object, "min_duration")?)?,
+                max_duration: parse_level_based_value_json(object_field(object, "max_duration")?)?,
+                min_amplifier: parse_level_based_value_json(object_field(
+                    object,
+                    "min_amplifier",
+                )?)?,
+                max_amplifier: parse_level_based_value_json(object_field(
+                    object,
+                    "max_amplifier",
+                )?)?,
+            })
+        }
+        _ => Ok(EntityEffectJson::Unsupported {
+            effect_type: parse_identifier(&effect_type)?,
+        }),
+    }
+}
+
 fn parse_entity_type_predicate(raw: &str) -> Result<EntityTypePredicateJson, String> {
     let Some(tag) = raw.strip_prefix('#') else {
         return Ok(EntityTypePredicateJson::Type(parse_identifier(raw)?));
@@ -291,16 +444,17 @@ fn parse_entity_predicate_json(value: &serde_json::Value) -> Result<EntityPredic
     let Some(object) = value.as_object() else {
         return Err("entity_properties predicate must be an object".to_owned());
     };
-    for key in object.keys() {
-        if key != "type" {
-            return Err(format!(
-                "unsupported entity_properties predicate field `{key}`"
-            ));
-        }
-    }
+    let has_unsupported_fields = object.keys().any(|key| key != "type");
     let entity_type = match object.get("type") {
-        Some(serde_json::Value::String(raw)) => parse_entity_type_predicate(raw)?,
+        Some(serde_json::Value::String(raw)) => {
+            if has_unsupported_fields {
+                EntityTypePredicateJson::Unsupported
+            } else {
+                parse_entity_type_predicate(raw)?
+            }
+        }
         Some(_) => return Err("entity_properties predicate `type` must be a string".to_owned()),
+        None if has_unsupported_fields => EntityTypePredicateJson::Unsupported,
         None => EntityTypePredicateJson::Any,
     };
 
@@ -314,7 +468,7 @@ fn parse_damage_source_predicate_json(
         return Err("damage_source_properties predicate must be an object".to_owned());
     };
     for key in object.keys() {
-        if key != "tags" {
+        if key != "tags" && key != "is_direct" {
             return Err(format!(
                 "unsupported damage_source_properties predicate field `{key}`"
             ));
@@ -330,8 +484,15 @@ fn parse_damage_source_predicate_json(
         }
         None => Vec::new(),
     };
+    let is_direct = match object.get("is_direct") {
+        Some(serde_json::Value::Bool(is_direct)) => Some(*is_direct),
+        Some(_) => {
+            return Err("damage_source_properties predicate `is_direct` must be a bool".to_owned());
+        }
+        None => None,
+    };
 
-    Ok(DamageSourcePredicateJson { tags })
+    Ok(DamageSourcePredicateJson { tags, is_direct })
 }
 
 fn parse_damage_source_tag_predicate_json(
@@ -408,6 +569,16 @@ fn attribute_ref_token(attribute: &Identifier) -> TokenStream {
     );
     let ident = Ident::new(&attribute.path.to_shouty_snake_case(), Span::call_site());
     quote! { vanilla_attributes::#ident }
+}
+
+fn mob_effect_ref_token(effect: &Identifier) -> TokenStream {
+    assert_eq!(
+        effect.namespace.as_ref(),
+        "minecraft",
+        "vanilla enchantment mob effect references must use the minecraft namespace: {effect}"
+    );
+    let ident = Ident::new(&effect.path.to_shouty_snake_case(), Span::call_site());
+    quote! { vanilla_mob_effects::#ident }
 }
 
 fn attribute_modifier_operation_token(operation: &str) -> TokenStream {
@@ -538,6 +709,7 @@ fn entity_type_predicate_token(predicate: &EntityTypePredicateJson) -> TokenStre
             let tag = identifier_token(tag);
             quote! { EntityTypePredicate::Tag(#tag) }
         }
+        EntityTypePredicateJson::Unsupported => quote! { EntityTypePredicate::Unsupported },
     }
 }
 
@@ -557,8 +729,103 @@ fn damage_source_predicate_token(predicate: &DamageSourcePredicateJson) -> Token
             }
         }
     });
+    let is_direct = match predicate.is_direct {
+        Some(is_direct) => quote! { Some(#is_direct) },
+        None => quote! { None },
+    };
 
-    quote! { DamageSourcePredicate { tags: &[#(#tags),*] } }
+    quote! { DamageSourcePredicate { tags: &[#(#tags),*], is_direct: #is_direct } }
+}
+
+fn enchantment_target_token(target: &EnchantmentTargetJson) -> TokenStream {
+    match target {
+        EnchantmentTargetJson::Attacker => quote! { EnchantmentTarget::Attacker },
+        EnchantmentTargetJson::DamagingEntity => quote! { EnchantmentTarget::DamagingEntity },
+        EnchantmentTargetJson::Victim => quote! { EnchantmentTarget::Victim },
+    }
+}
+
+fn mob_effect_selection_token(selection: &MobEffectSelectionJson) -> TokenStream {
+    match selection {
+        MobEffectSelectionJson::Single(effect) => {
+            let effect = mob_effect_ref_token(effect);
+            quote! { MobEffectSelection::Single(#effect) }
+        }
+        MobEffectSelectionJson::UnsupportedTag(tag) => {
+            let tag = identifier_token(tag);
+            quote! { MobEffectSelection::UnsupportedTag(#tag) }
+        }
+    }
+}
+
+fn generate_entity_effect_ref(
+    prefix: &str,
+    effect: &EntityEffectJson,
+    statics: &mut TokenStream,
+    counter: &mut usize,
+) -> TokenStream {
+    let ident = Ident::new(
+        &format!("{prefix}_ENTITY_EFFECT_{}", *counter),
+        Span::call_site(),
+    );
+    *counter += 1;
+    let effect = generate_entity_effect(prefix, effect, statics, counter);
+
+    statics.extend(quote! {
+        static #ident: EnchantmentEntityEffect = #effect;
+    });
+
+    quote! { &#ident }
+}
+
+fn generate_entity_effect(
+    prefix: &str,
+    effect: &EntityEffectJson,
+    statics: &mut TokenStream,
+    counter: &mut usize,
+) -> TokenStream {
+    match effect {
+        EntityEffectJson::AllOf(effects) => {
+            let effects = effects
+                .iter()
+                .map(|effect| generate_entity_effect_ref(prefix, effect, statics, counter));
+            quote! { EnchantmentEntityEffect::AllOf(&[#(#effects),*]) }
+        }
+        EntityEffectJson::Ignite { duration } => {
+            let duration = generate_level_based_value_ref(prefix, duration, statics, counter);
+            quote! { EnchantmentEntityEffect::Ignite { duration: #duration } }
+        }
+        EntityEffectJson::ApplyMobEffect {
+            to_apply,
+            min_duration,
+            max_duration,
+            min_amplifier,
+            max_amplifier,
+        } => {
+            let to_apply = mob_effect_selection_token(to_apply);
+            let min_duration =
+                generate_level_based_value_ref(prefix, min_duration, statics, counter);
+            let max_duration =
+                generate_level_based_value_ref(prefix, max_duration, statics, counter);
+            let min_amplifier =
+                generate_level_based_value_ref(prefix, min_amplifier, statics, counter);
+            let max_amplifier =
+                generate_level_based_value_ref(prefix, max_amplifier, statics, counter);
+            quote! {
+                EnchantmentEntityEffect::ApplyMobEffect {
+                    to_apply: #to_apply,
+                    min_duration: #min_duration,
+                    max_duration: #max_duration,
+                    min_amplifier: #min_amplifier,
+                    max_amplifier: #max_amplifier,
+                }
+            }
+        }
+        EntityEffectJson::Unsupported { effect_type } => {
+            let effect_type = identifier_token(effect_type);
+            quote! { EnchantmentEntityEffect::Unsupported { effect_type: #effect_type } }
+        }
+    }
 }
 
 fn generate_requirements_ref(
@@ -654,6 +921,32 @@ fn generate_conditional_value_effects(
         quote! {
             ConditionalEnchantmentEffect {
                 effect: #effect_token,
+                requirements: #requirements,
+            }
+        }
+    });
+
+    quote! { &[#(#entries),*] }
+}
+
+fn generate_targeted_entity_effects(
+    prefix: &str,
+    effects: &[TargetedConditionalEntityEffectJson],
+    statics: &mut TokenStream,
+    counter: &mut usize,
+) -> TokenStream {
+    let entries = effects.iter().enumerate().map(|(index, effect)| {
+        let entry_prefix = format!("{prefix}_{index}");
+        let effect_token = generate_entity_effect(&entry_prefix, &effect.effect, statics, counter);
+        let enchanted = enchantment_target_token(&effect.enchanted);
+        let affected = enchantment_target_token(&effect.affected);
+        let requirements =
+            generate_optional_requirements(&entry_prefix, &effect.requirements, statics, counter);
+        quote! {
+            TargetedConditionalEnchantmentEffect {
+                effect: #effect_token,
+                enchanted: #enchanted,
+                affected: #affected,
                 requirements: #requirements,
             }
         }
@@ -762,6 +1055,12 @@ fn generate_enchantment_effects(
         statics,
         counter,
     );
+    let post_attack = generate_targeted_entity_effects(
+        &format!("{prefix}_POST_ATTACK"),
+        &effects.post_attack,
+        statics,
+        counter,
+    );
     let item_damage = generate_conditional_value_effects(
         &format!("{prefix}_ITEM_DAMAGE"),
         &effects.item_damage,
@@ -857,7 +1156,6 @@ fn generate_enchantment_effects(
     );
 
     let damage_immunity = !effects.damage_immunity.is_empty();
-    let post_attack = !effects.post_attack.is_empty();
     let post_piercing_attack = !effects.post_piercing_attack.is_empty();
     let hit_block = !effects.hit_block.is_empty();
     let location_changed = !effects.location_changed.is_empty();
@@ -940,12 +1238,14 @@ pub(crate) fn build() -> TokenStream {
         use crate::enchantment_effect::{
             ConditionalEnchantmentEffect, CrossbowChargingSounds, DamageSourcePredicate,
             DamageSourceTagPredicate, EnchantmentAttributeEffect, EnchantmentEffectRequirements,
-            EnchantmentEffects, EnchantmentEntityTarget, EnchantmentValueEffect,
-            EntityPredicate, EntityTypePredicate, LevelBasedValue,
+            EnchantmentEffects, EnchantmentEntityEffect, EnchantmentEntityTarget,
+            EnchantmentTarget, EnchantmentValueEffect, EntityPredicate, EntityTypePredicate,
+            LevelBasedValue, MobEffectSelection, TargetedConditionalEnchantmentEffect,
         };
         use crate::enchantment::{Enchantment, EnchantmentCost, EnchantmentRegistry};
         use crate::equipment::EquipmentSlotGroup;
         use crate::vanilla_attributes;
+        use crate::vanilla_mob_effects;
         use steel_utils::Identifier;
     });
 

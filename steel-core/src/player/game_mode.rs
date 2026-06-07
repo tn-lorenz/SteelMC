@@ -30,7 +30,7 @@ use crate::behavior::{
 use crate::block_entity::BlockEntity;
 use crate::block_entity::entities::SignBlockEntity;
 use crate::command::commands::gamemode::get_gamemode_translation;
-use crate::enchantment_helper::{self, EnchantmentDamageContext};
+use crate::enchantment_helper::{self, EnchantmentDamageContext, EnchantmentPostAttackContext};
 use crate::entity::attribute::{AttributeModifier, AttributeModifierOperation};
 use crate::entity::damage::DamageSource;
 use crate::entity::{Entity, LivingEntity};
@@ -408,6 +408,12 @@ impl Player {
                 Self::get_knockback(attack_knockback, &attacking_item, &enchantment_context)
                     + sprint_knockback,
                 old_movement,
+            );
+            let post_attack_context =
+                EnchantmentPostAttackContext::new(entity, Some(self), Some(self), &damage_source);
+            enchantment_helper::do_post_attack_effects_from_item(
+                &attacking_item,
+                &post_attack_context,
             );
         }
 

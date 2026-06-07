@@ -1,12 +1,15 @@
 use steel_registry::enchantment_effect::{
     DamageSourcePredicate, EnchantmentEffectComponent, EnchantmentEffectRequirements,
-    EnchantmentEntityTarget, EntityPredicate, EntityTypePredicate,
+    EnchantmentEntityEffect, EnchantmentEntityTarget, EnchantmentTarget, EntityPredicate,
+    EntityTypePredicate, MobEffectSelection,
 };
 use steel_registry::entity_type::EntityTypeRef;
 use steel_registry::item_stack::ItemStack;
 use steel_registry::{REGISTRY, RegistryExt, TaggedRegistryExt};
+use steel_utils::random::Random;
 
 use crate::entity::damage::DamageSource;
+use crate::entity::{Entity, MobEffectInstance};
 
 #[derive(Debug, Clone, Copy)]
 pub(crate) struct EnchantmentDamageContext<'a> {
@@ -41,6 +44,47 @@ impl<'a> EnchantmentDamageContext<'a> {
     }
 }
 
+pub(crate) struct EnchantmentPostAttackContext<'a> {
+    victim: &'a dyn Entity,
+    attacker: Option<&'a dyn Entity>,
+    direct_attacker: Option<&'a dyn Entity>,
+    damage_source: &'a DamageSource,
+}
+
+impl<'a> EnchantmentPostAttackContext<'a> {
+    #[must_use]
+    pub(crate) const fn new(
+        victim: &'a dyn Entity,
+        attacker: Option<&'a dyn Entity>,
+        direct_attacker: Option<&'a dyn Entity>,
+        damage_source: &'a DamageSource,
+    ) -> Self {
+        Self {
+            victim,
+            attacker,
+            direct_attacker,
+            damage_source,
+        }
+    }
+
+    fn damage_context(&self) -> EnchantmentDamageContext<'a> {
+        EnchantmentDamageContext::new(
+            self.victim.entity_type(),
+            self.attacker.map(Entity::entity_type),
+            self.direct_attacker.map(Entity::entity_type),
+            self.damage_source,
+        )
+    }
+
+    fn affected_entity(&self, target: EnchantmentTarget) -> Option<&'a dyn Entity> {
+        match target {
+            EnchantmentTarget::Attacker => self.attacker,
+            EnchantmentTarget::DamagingEntity => self.direct_attacker,
+            EnchantmentTarget::Victim => Some(self.victim),
+        }
+    }
+}
+
 pub(crate) fn modify_damage(
     item: &ItemStack,
     context: &EnchantmentDamageContext<'_>,
@@ -60,6 +104,13 @@ pub(crate) fn modify_knockback(
         context,
         knockback,
     )
+}
+
+pub(crate) fn do_post_attack_effects_from_item(
+    item: &ItemStack,
+    context: &EnchantmentPostAttackContext<'_>,
+) {
+    apply_post_attack_effects(item, EnchantmentTarget::Attacker, context);
 }
 
 fn apply_value_effects(
@@ -100,6 +151,119 @@ fn apply_value_effects(
     }
 
     value
+}
+
+fn apply_post_attack_effects(
+    item: &ItemStack,
+    enchanted_target: EnchantmentTarget,
+    context: &EnchantmentPostAttackContext<'_>,
+) {
+    let Some(enchantments) = item.get_enchantments() else {
+        return;
+    };
+    let damage_context = context.damage_context();
+
+    for (key, level) in enchantments.iter() {
+        if *level == 0 {
+            continue;
+        }
+        let Some(enchantment) = REGISTRY.enchantments.by_key(key) else {
+            continue;
+        };
+        let level = *level as i32;
+
+        for effect in enchantment.effects.post_attack {
+            if effect.enchanted != enchanted_target {
+                continue;
+            }
+            if !requirements_match(effect.requirements, &damage_context) {
+                continue;
+            }
+            let Some(affected_entity) = context.affected_entity(effect.affected) else {
+                continue;
+            };
+            apply_entity_effect(&effect.effect, level, affected_entity);
+        }
+    }
+}
+
+fn apply_entity_effect(effect: &EnchantmentEntityEffect, level: i32, entity: &dyn Entity) -> bool {
+    if !entity_effect_is_supported(effect) {
+        return false;
+    }
+
+    apply_supported_entity_effect(effect, level, entity);
+    true
+}
+
+fn entity_effect_is_supported(effect: &EnchantmentEntityEffect) -> bool {
+    match effect {
+        EnchantmentEntityEffect::AllOf(effects) => effects
+            .iter()
+            .all(|effect| entity_effect_is_supported(effect)),
+        EnchantmentEntityEffect::Ignite { .. } => true,
+        EnchantmentEntityEffect::ApplyMobEffect { to_apply, .. } => {
+            matches!(to_apply, MobEffectSelection::Single(_))
+        }
+        EnchantmentEntityEffect::Unsupported { .. } => false,
+    }
+}
+
+fn apply_supported_entity_effect(
+    effect: &EnchantmentEntityEffect,
+    level: i32,
+    entity: &dyn Entity,
+) {
+    match effect {
+        EnchantmentEntityEffect::AllOf(effects) => {
+            for effect in *effects {
+                apply_supported_entity_effect(effect, level, entity);
+            }
+        }
+        EnchantmentEntityEffect::Ignite { duration } => {
+            let ticks = (duration.calculate(level) * 20.0).floor() as i32;
+            entity.ignite_for_ticks(ticks);
+        }
+        EnchantmentEntityEffect::ApplyMobEffect {
+            to_apply: MobEffectSelection::Single(effect),
+            min_duration,
+            max_duration,
+            min_amplifier,
+            max_amplifier,
+        } => {
+            let Some(living) = entity.as_living_entity() else {
+                return;
+            };
+            let min_duration = min_duration.calculate(level);
+            let max_duration = max_duration.calculate(level);
+            let min_amplifier = min_amplifier.calculate(level);
+            let max_amplifier = max_amplifier.calculate(level);
+            let (duration_seconds, amplifier) = {
+                let mut random = entity.base().random().lock();
+                (
+                    random_between(&mut *random, min_duration, max_duration),
+                    random_between(&mut *random, min_amplifier, max_amplifier),
+                )
+            };
+            let duration_ticks = java_round(duration_seconds * 20.0);
+            let amplifier = java_round(amplifier).max(0);
+            living.add_mob_effect(MobEffectInstance::with_duration(
+                effect,
+                duration_ticks,
+                amplifier,
+            ));
+        }
+        EnchantmentEntityEffect::ApplyMobEffect { .. }
+        | EnchantmentEntityEffect::Unsupported { .. } => {}
+    }
+}
+
+fn random_between(random: &mut impl Random, min: f32, max: f32) -> f32 {
+    min + random.next_f32() * (max - min)
+}
+
+fn java_round(value: f32) -> i32 {
+    (value + 0.5).floor() as i32
 }
 
 fn requirements_match(
@@ -145,7 +309,7 @@ fn requirements_state(
         }
         EnchantmentEffectRequirements::EntityProperties { entity, predicate } => context
             .entity_type(*entity)
-            .map(|entity_type| entity_predicate_matches(predicate, entity_type)),
+            .and_then(|entity_type| entity_predicate_matches(predicate, entity_type)),
         EnchantmentEffectRequirements::DamageSourceProperties(predicate) => Some(
             damage_source_predicate_matches(predicate, context.damage_source),
         ),
@@ -153,11 +317,15 @@ fn requirements_state(
     }
 }
 
-fn entity_predicate_matches(predicate: &EntityPredicate, entity_type: EntityTypeRef) -> bool {
+fn entity_predicate_matches(
+    predicate: &EntityPredicate,
+    entity_type: EntityTypeRef,
+) -> Option<bool> {
     match &predicate.entity_type {
-        EntityTypePredicate::Any => true,
-        EntityTypePredicate::Type(expected) => entity_type.key == *expected,
-        EntityTypePredicate::Tag(tag) => REGISTRY.entity_types.is_in_tag(entity_type, tag),
+        EntityTypePredicate::Any => Some(true),
+        EntityTypePredicate::Type(expected) => Some(entity_type.key == *expected),
+        EntityTypePredicate::Tag(tag) => Some(REGISTRY.entity_types.is_in_tag(entity_type, tag)),
+        EntityTypePredicate::Unsupported => None,
     }
 }
 
@@ -165,6 +333,12 @@ fn damage_source_predicate_matches(
     predicate: &DamageSourcePredicate,
     damage_source: &DamageSource,
 ) -> bool {
+    if let Some(is_direct) = predicate.is_direct
+        && damage_source.is_direct() != is_direct
+    {
+        return false;
+    }
+
     predicate
         .tags
         .iter()
@@ -173,14 +347,77 @@ fn damage_source_predicate_matches(
 
 #[cfg(test)]
 mod tests {
+    use std::sync::Weak;
+
+    use glam::DVec3;
     use steel_registry::data_components::vanilla_components::{ENCHANTMENTS, ItemEnchantments};
+    use steel_registry::entity_type::EntityTypeRef;
     use steel_registry::items::ItemRef;
     use steel_registry::{
         test_support::init_test_registry, vanilla_damage_types, vanilla_entities, vanilla_items,
+        vanilla_mob_effects,
     };
     use steel_utils::Identifier;
+    use steel_utils::locks::SyncMutex;
 
     use super::*;
+    use crate::entity::{EntityBase, LivingEntity, LivingEntityBase};
+
+    struct TestLivingEntity {
+        base: EntityBase,
+        living_base: LivingEntityBase,
+        health: SyncMutex<f32>,
+        entity_type: EntityTypeRef,
+    }
+
+    impl TestLivingEntity {
+        fn new(id: i32, entity_type: EntityTypeRef) -> Self {
+            Self {
+                base: EntityBase::new(id, DVec3::ZERO, entity_type.dimensions, Weak::new()),
+                living_base: LivingEntityBase::new(entity_type),
+                health: SyncMutex::new(20.0),
+                entity_type,
+            }
+        }
+    }
+
+    impl Entity for TestLivingEntity {
+        fn base(&self) -> &EntityBase {
+            &self.base
+        }
+
+        fn entity_type(&self) -> EntityTypeRef {
+            self.entity_type
+        }
+
+        fn is_living_entity(&self) -> bool {
+            true
+        }
+
+        fn as_living_entity(&self) -> Option<&dyn LivingEntity> {
+            Some(self)
+        }
+    }
+
+    impl LivingEntity for TestLivingEntity {
+        fn living_base(&self) -> &LivingEntityBase {
+            &self.living_base
+        }
+
+        fn get_health(&self) -> f32 {
+            *self.health.lock()
+        }
+
+        fn set_health(&self, health: f32) {
+            *self.health.lock() = health.clamp(0.0, self.get_max_health());
+        }
+
+        fn get_absorption_amount(&self) -> f32 {
+            0.0
+        }
+
+        fn set_absorption_amount(&self, _amount: f32) {}
+    }
 
     fn enchanted_item(item: ItemRef, enchantment: Identifier, level: u32) -> ItemStack {
         let mut enchantments = ItemEnchantments::empty();
@@ -308,5 +545,97 @@ mod tests {
             ),
             0.0,
         );
+    }
+
+    #[test]
+    fn post_attack_ignite_applies_to_direct_melee_victim() {
+        init_test_registry();
+
+        let attacker = TestLivingEntity::new(1, &vanilla_entities::PLAYER);
+        let victim = TestLivingEntity::new(2, &vanilla_entities::ZOMBIE);
+        let stack = enchanted_item(
+            &vanilla_items::ITEMS.diamond_sword,
+            Identifier::vanilla_static("fire_aspect"),
+            2,
+        );
+        let damage_source = DamageSource::environment(&vanilla_damage_types::PLAYER_ATTACK)
+            .with_causing_entity(attacker.id())
+            .with_direct_entity(attacker.id());
+        let context = EnchantmentPostAttackContext::new(
+            &victim,
+            Some(&attacker),
+            Some(&attacker),
+            &damage_source,
+        );
+
+        do_post_attack_effects_from_item(&stack, &context);
+
+        assert_eq!(victim.remaining_fire_ticks(), 160);
+    }
+
+    #[test]
+    fn post_attack_ignite_skips_indirect_damage_source() {
+        init_test_registry();
+
+        let attacker = TestLivingEntity::new(1, &vanilla_entities::PLAYER);
+        let direct_entity = TestLivingEntity::new(2, &vanilla_entities::PLAYER);
+        let victim = TestLivingEntity::new(3, &vanilla_entities::ZOMBIE);
+        let stack = enchanted_item(
+            &vanilla_items::ITEMS.diamond_sword,
+            Identifier::vanilla_static("fire_aspect"),
+            2,
+        );
+        let damage_source = DamageSource::environment(&vanilla_damage_types::ARROW)
+            .with_causing_entity(attacker.id())
+            .with_direct_entity(direct_entity.id());
+        let context = EnchantmentPostAttackContext::new(
+            &victim,
+            Some(&attacker),
+            Some(&direct_entity),
+            &damage_source,
+        );
+
+        do_post_attack_effects_from_item(&stack, &context);
+
+        assert_eq!(victim.remaining_fire_ticks(), 0);
+    }
+
+    #[test]
+    fn post_attack_mob_effect_matches_victim_predicate() {
+        init_test_registry();
+
+        let attacker = TestLivingEntity::new(1, &vanilla_entities::PLAYER);
+        let spider = TestLivingEntity::new(2, &vanilla_entities::SPIDER);
+        let zombie = TestLivingEntity::new(3, &vanilla_entities::ZOMBIE);
+        let stack = enchanted_item(
+            &vanilla_items::ITEMS.diamond_sword,
+            Identifier::vanilla_static("bane_of_arthropods"),
+            1,
+        );
+        let damage_source = DamageSource::environment(&vanilla_damage_types::PLAYER_ATTACK)
+            .with_causing_entity(attacker.id())
+            .with_direct_entity(attacker.id());
+        let spider_context = EnchantmentPostAttackContext::new(
+            &spider,
+            Some(&attacker),
+            Some(&attacker),
+            &damage_source,
+        );
+        let zombie_context = EnchantmentPostAttackContext::new(
+            &zombie,
+            Some(&attacker),
+            Some(&attacker),
+            &damage_source,
+        );
+
+        do_post_attack_effects_from_item(&stack, &spider_context);
+        do_post_attack_effects_from_item(&stack, &zombie_context);
+
+        let Some(slowness) = spider.mob_effect(vanilla_mob_effects::SLOWNESS) else {
+            panic!("bane of arthropods should apply slowness to spiders");
+        };
+        assert_eq!(slowness.duration(), 30);
+        assert_eq!(slowness.amplifier(), 3);
+        assert!(zombie.mob_effect(vanilla_mob_effects::SLOWNESS).is_none());
     }
 }

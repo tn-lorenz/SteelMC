@@ -64,6 +64,12 @@ impl DamageSource {
         REGISTRY.damage_types.is_in_tag(self.damage_type, tag)
     }
 
+    /// Returns vanilla `DamageSource.isDirect`.
+    #[must_use]
+    pub fn is_direct(&self) -> bool {
+        self.causing_entity_id == self.direct_entity_id
+    }
+
     /// Whether this damage bypasses the invulnerability cooldown timer.
     /// No vanilla damage types currently use this, but the logic exists in
     /// `LivingEntity.hurtServer()`.

@@ -1,4 +1,5 @@
 use crate::attribute::{AttributeModifierOperation, AttributeRef};
+use crate::mob_effect::MobEffectRef;
 use crate::sound_event::SoundEventRef;
 use steel_utils::Identifier;
 
@@ -181,6 +182,7 @@ pub enum EntityTypePredicate {
     Any,
     Type(Identifier),
     Tag(Identifier),
+    Unsupported,
 }
 
 #[derive(Debug, PartialEq, Eq)]
@@ -197,6 +199,7 @@ pub struct DamageSourceTagPredicate {
 #[derive(Debug, PartialEq, Eq)]
 pub struct DamageSourcePredicate {
     pub tags: &'static [DamageSourceTagPredicate],
+    pub is_direct: Option<bool>,
 }
 
 /// Vanilla loot condition subset used by generated enchantment effects.
@@ -228,6 +231,45 @@ impl<T> ConditionalEnchantmentEffect<T> {
     }
 }
 
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+pub enum EnchantmentTarget {
+    Attacker,
+    DamagingEntity,
+    Victim,
+}
+
+#[derive(Debug)]
+pub enum MobEffectSelection {
+    Single(MobEffectRef),
+    UnsupportedTag(Identifier),
+}
+
+#[derive(Debug)]
+pub enum EnchantmentEntityEffect {
+    AllOf(&'static [&'static EnchantmentEntityEffect]),
+    Ignite {
+        duration: &'static LevelBasedValue,
+    },
+    ApplyMobEffect {
+        to_apply: MobEffectSelection,
+        min_duration: &'static LevelBasedValue,
+        max_duration: &'static LevelBasedValue,
+        min_amplifier: &'static LevelBasedValue,
+        max_amplifier: &'static LevelBasedValue,
+    },
+    Unsupported {
+        effect_type: Identifier,
+    },
+}
+
+#[derive(Debug)]
+pub struct TargetedConditionalEnchantmentEffect<T> {
+    pub effect: T,
+    pub enchanted: EnchantmentTarget,
+    pub affected: EnchantmentTarget,
+    pub requirements: Option<&'static EnchantmentEffectRequirements>,
+}
+
 #[derive(Debug)]
 pub struct EnchantmentAttributeEffect {
     pub amount: &'static LevelBasedValue,
@@ -252,7 +294,7 @@ pub struct EnchantmentEffects {
         &'static [ConditionalEnchantmentEffect<EnchantmentValueEffect>],
     pub knockback: &'static [ConditionalEnchantmentEffect<EnchantmentValueEffect>],
     pub armor_effectiveness: &'static [ConditionalEnchantmentEffect<EnchantmentValueEffect>],
-    pub post_attack: bool,
+    pub post_attack: &'static [TargetedConditionalEnchantmentEffect<EnchantmentEntityEffect>],
     pub post_piercing_attack: bool,
     pub hit_block: bool,
     pub item_damage: &'static [ConditionalEnchantmentEffect<EnchantmentValueEffect>],
@@ -288,7 +330,7 @@ impl EnchantmentEffects {
         smash_damage_per_fallen_block: &[],
         knockback: &[],
         armor_effectiveness: &[],
-        post_attack: false,
+        post_attack: &[],
         post_piercing_attack: false,
         hit_block: false,
         item_damage: &[],
@@ -326,7 +368,7 @@ impl EnchantmentEffects {
             }
             EnchantmentEffectComponent::Knockback => !self.knockback.is_empty(),
             EnchantmentEffectComponent::ArmorEffectiveness => !self.armor_effectiveness.is_empty(),
-            EnchantmentEffectComponent::PostAttack => self.post_attack,
+            EnchantmentEffectComponent::PostAttack => !self.post_attack.is_empty(),
             EnchantmentEffectComponent::PostPiercingAttack => self.post_piercing_attack,
             EnchantmentEffectComponent::HitBlock => self.hit_block,
             EnchantmentEffectComponent::ItemDamage => !self.item_damage.is_empty(),
