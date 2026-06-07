@@ -63,6 +63,8 @@ static ENTITY_COUNTER: LazyLock<SyncMutex<i32>> = LazyLock::new(|| SyncMutex::ne
 const MOVEMENT_RECORD_EPSILON: f64 = 1.0e-7;
 const NO_PHYSICS_COLLISION_EPSILON: f64 = 1.0e-7;
 const WATER_ENTITY_FLOW_SCALE: f64 = 0.014;
+const DAMAGE_KNOCKBACK_POWER: f64 = 0.4_f32 as f64;
+const KNOCKBACK_DIRECTION_EPSILON_SQ: f64 = 1.0e-5_f32 as f64;
 const MOVE_TOWARDS_CLOSEST_SPACE_DIRECTIONS: [Direction; 5] = [
     Direction::North,
     Direction::South,
@@ -3133,7 +3135,7 @@ pub trait LivingEntity: Entity {
             if !source.is(&vanilla_damage_type_tags::DamageTypeTag::NO_IMPACT) {
                 self.broadcast_hurt_animation();
             }
-            // TODO: apply knockback once velocity/projectile damage context is complete.
+            self.apply_damage_knockback(source);
         }
 
         if self.is_dead_or_dying() {
@@ -3151,6 +3153,69 @@ pub trait LivingEntity: Entity {
 
         self.set_health(self.get_health() - amount);
     }
+
+    /// Applies vanilla hurt knockback for a damage source.
+    fn apply_damage_knockback(&self, source: &DamageSource) {
+        if source.is(&vanilla_damage_type_tags::DamageTypeTag::NO_KNOCKBACK) {
+            return;
+        }
+
+        let (xd, zd) = self.damage_knockback_direction(source);
+        self.knockback(DAMAGE_KNOCKBACK_POWER, xd, zd);
+        self.indicate_damage(xd, zd);
+    }
+
+    /// Returns the horizontal direction used by vanilla damage knockback.
+    fn damage_knockback_direction(&self, source: &DamageSource) -> (f64, f64) {
+        // TODO: when projectile entities expose calculateHorizontalHurtKnockbackDirection,
+        // use the direct entity hook before falling back to source_position.
+        let Some(source_position) = source.source_position else {
+            return (0.0, 0.0);
+        };
+
+        let position = self.position();
+        (
+            source_position.x - position.x,
+            source_position.z - position.z,
+        )
+    }
+
+    /// Applies vanilla `LivingEntity.knockback`.
+    fn knockback(&self, mut power: f64, mut xd: f64, mut zd: f64) {
+        power *= 1.0 - self.knockback_resistance();
+        if power <= 0.0 {
+            return;
+        }
+
+        while xd * xd + zd * zd < KNOCKBACK_DIRECTION_EPSILON_SQ {
+            let mut random = self.base().random().lock();
+            xd = (random.next_f64() - random.next_f64()) * 0.01;
+            zd = (random.next_f64() - random.next_f64()) * 0.01;
+        }
+
+        let old_velocity = self.velocity();
+        let delta_vector = DVec3::new(xd, 0.0, zd).normalize() * power;
+        self.set_velocity(DVec3::new(
+            old_velocity.x / 2.0 - delta_vector.x,
+            if self.on_ground() {
+                0.4_f64.min(old_velocity.y / 2.0 + power)
+            } else {
+                old_velocity.y
+            },
+            old_velocity.z / 2.0 - delta_vector.z,
+        ));
+        self.mark_velocity_sync();
+    }
+
+    /// Returns vanilla knockback resistance.
+    fn knockback_resistance(&self) -> f64 {
+        self.attributes()
+            .lock()
+            .required_value(vanilla_attributes::KNOCKBACK_RESISTANCE)
+    }
+
+    /// Mirrors vanilla `LivingEntity.indicateDamage`.
+    fn indicate_damage(&self, _xd: f64, _zd: f64) {}
 
     /// Returns the chunk used for vanilla nearby hurt broadcasts.
     fn hurt_broadcast_chunk(&self) -> ChunkPos {
@@ -4304,11 +4369,12 @@ mod tests {
     use crate::inventory::equipment::EquipmentSlot;
 
     use super::{
-        Entity, EntityBase, EntityFluidContact, EntityLevelCallback, EntityMoveError,
-        EntityVerticalMovementStateUpdate, LivingEntity, LivingEntityBase, LivingTravelInput,
-        RemovalReason, SharedEntity, closest_open_space_direction, fall_damage_reset_clip_target,
-        fall_flying_collision_damage, fall_flying_free_fall_interval, get_input_vector,
-        should_apply_resolved_movement, trapdoor_usable_as_ladder_state,
+        DAMAGE_KNOCKBACK_POWER, Entity, EntityBase, EntityFluidContact, EntityLevelCallback,
+        EntityMoveError, EntityVerticalMovementStateUpdate, LivingEntity, LivingEntityBase,
+        LivingTravelInput, RemovalReason, SharedEntity, closest_open_space_direction,
+        fall_damage_reset_clip_target, fall_flying_collision_damage,
+        fall_flying_free_fall_interval, get_input_vector, should_apply_resolved_movement,
+        trapdoor_usable_as_ladder_state,
     };
 
     struct PushableTestEntity {
@@ -5075,6 +5141,63 @@ mod tests {
         assert_f32_close(entity.get_health(), 0.0);
         assert_eq!(entity.pose(), EntityPose::Dying);
         assert!(!entity.hurt(&source, 1.0));
+    }
+
+    #[test]
+    fn generic_living_hurt_applies_source_position_knockback() {
+        init_test_registry();
+        let entity = LivingFluidTestEntity::new(0.0, 0.0, true);
+        entity.set_on_ground(true);
+        let source = DamageSource::environment(&vanilla_damage_types::PLAYER_ATTACK)
+            .with_source_position(DVec3::new(1.0, 0.0, 0.0));
+
+        assert!(entity.hurt(&source, 4.0));
+
+        assert_vec3_close(
+            entity.velocity(),
+            DVec3::new(-DAMAGE_KNOCKBACK_POWER, 0.4, 0.0),
+        );
+        assert!(entity.needs_velocity_sync());
+    }
+
+    #[test]
+    fn generic_living_hurt_respects_no_knockback_damage_tag() {
+        init_test_registry();
+        let entity = LivingFluidTestEntity::new(0.0, 0.0, true);
+        entity.set_on_ground(true);
+        entity.set_velocity(DVec3::new(0.2, 0.3, -0.1));
+        let initial_velocity = entity.velocity();
+        let source = DamageSource::environment(&vanilla_damage_types::DROWN)
+            .with_source_position(DVec3::new(1.0, 0.0, 0.0));
+
+        assert!(entity.hurt(&source, 4.0));
+
+        assert_vec3_close(entity.velocity(), initial_velocity);
+        assert!(!entity.needs_velocity_sync());
+    }
+
+    #[test]
+    fn generic_living_hurt_scales_knockback_by_resistance() {
+        init_test_registry();
+        let entity = LivingFluidTestEntity::new(0.0, 0.0, true);
+        entity.set_on_ground(true);
+        entity
+            .attributes()
+            .lock()
+            .set_base_value(vanilla_attributes::KNOCKBACK_RESISTANCE, 0.5);
+        let source = DamageSource::environment(&vanilla_damage_types::PLAYER_ATTACK)
+            .with_source_position(DVec3::new(1.0, 0.0, 0.0));
+
+        assert!(entity.hurt(&source, 4.0));
+
+        assert_vec3_close(
+            entity.velocity(),
+            DVec3::new(
+                -DAMAGE_KNOCKBACK_POWER * 0.5,
+                DAMAGE_KNOCKBACK_POWER * 0.5,
+                0.0,
+            ),
+        );
     }
 
     #[test]

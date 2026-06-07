@@ -31,6 +31,27 @@ impl DamageSource {
         }
     }
 
+    /// Adds the entity ultimately responsible for the damage.
+    #[must_use]
+    pub const fn with_causing_entity(mut self, entity_id: i32) -> Self {
+        self.causing_entity_id = Some(entity_id);
+        self
+    }
+
+    /// Adds the direct entity that delivered the damage.
+    #[must_use]
+    pub const fn with_direct_entity(mut self, entity_id: i32) -> Self {
+        self.direct_entity_id = Some(entity_id);
+        self
+    }
+
+    /// Adds the vanilla source position used by damage events and knockback.
+    #[must_use]
+    pub const fn with_source_position(mut self, source_position: DVec3) -> Self {
+        self.source_position = Some(source_position);
+        self
+    }
+
     /// Whether this damage bypasses creative/spectator invulnerability.
     #[must_use]
     pub fn bypasses_invulnerability(&self) -> bool {
