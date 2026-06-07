@@ -55,13 +55,13 @@ use game_mode_state::PlayerGameModeState;
 pub use game_profile::{GameProfile, GameProfileAction};
 use std::sync::{Arc, Weak};
 use steel_protocol::packets::game::{
-    AttributeSnapshot, CDamageEvent, CEntityEvent, CHurtAnimation, CPlayerCombatKill, CRespawn,
-    CSetHealth, CSetHeldSlot, CSetTime, ClientCommandAction, EquipmentSlotItem, SoundSource,
+    AttributeSnapshot, CEntityEvent, CPlayerCombatKill, CRespawn, CSetHealth, CSetHeldSlot,
+    CSetTime, ClientCommandAction, EquipmentSlotItem, SoundSource,
 };
 use steel_registry::RegistryEntry;
 use steel_registry::blocks::block_state_ext::BlockStateExt as _;
 use steel_registry::entity_data::EntityPose;
-use steel_registry::entity_type::EntityTypeRef;
+use steel_registry::entity_type::{EntityDimensions, EntityTypeRef};
 use steel_registry::game_rules::GameRuleValue;
 use steel_registry::sound_event::SoundEventRef;
 use steel_registry::vanilla_block_tags::BlockTag;
@@ -653,14 +653,10 @@ impl Player {
     }
 
     /// Main entry point for dealing damage. Returns `true` if damage was applied.
-    ///
-    /// Vanilla: `LivingEntity.hurtServer()` (with `ServerPlayer` override adding
-    /// `PvP` checks before delegating to super). When other living entities are
-    /// added, the core logic here should move to a `LivingEntity` trait method.
     pub fn hurt(&self, source: &DamageSource, amount: f32) -> bool {
-        // TODO: Vanilla ServerPlayer.hurtServer checks isInvulnerableTo() first, which
-        // includes gamerule checks (drowningDamage, fallDamage, fireDamage, freezeDamage).
-        // Add when gamerule damage-type system is implemented.
+        if LivingEntity::is_invulnerable_to(self, source) {
+            return false;
+        }
 
         {
             let abilities = self.abilities.lock();
@@ -669,21 +665,10 @@ impl Player {
             }
         }
 
+        // TODO: reset player noActionTime and remove shoulder entities.
         if self.get_health() <= 0.0 {
             return false;
         }
-
-        // TODO: Vanilla LivingEntity.hurtServer checks fire resistance effect here:
-        //   if source.is(IS_FIRE) && hasEffect(FIRE_RESISTANCE) → return false
-        // Blocked on: potion/effect system
-
-        // TODO: Vanilla LivingEntity.hurtServer wakes sleeping entities:
-        //   if this.isSleeping() { this.stopSleeping(); }
-        // Blocked on: full sleep system (stopSleeping, bed block state, stand-up position)
-
-        // TODO: Vanilla LivingEntity.hurtServer sets this.noActionTime = 0 here.
-        // This is the LivingEntity mob-despawn counter (separate from ServerPlayer.lastActionTime).
-        // For players it's not critical, but add for completeness when mob AI is implemented.
 
         // Difficulty scaling (vanilla: Player.hurtServer)
         let mut amount = amount;
@@ -703,63 +688,11 @@ impl Player {
             }
         }
 
-        if amount <= 0.0 {
+        if amount == 0.0 {
             return false;
         }
 
-        let Some((took_full_damage, effective_amount)) = self
-            .living_base
-            .apply_damage_cooldown(amount, source.bypasses_cooldown())
-        else {
-            return false;
-        };
-
-        // TODO: Vanilla LivingEntity.hurtServer applies item blocking (shield) before
-        // actuallyHurt via applyItemBlocking(). Implements shield damage reduction,
-        // BlocksAttacks component, and shield disable cooldown.
-        // Blocked on: item use / blocking system, BlocksAttacks data component
-
-        self.actually_hurt(source, effective_amount);
-
-        // TODO: Vanilla LivingEntity.hurtServer applies knockback after damage:
-        //   - Calculates knockback direction from source position or projectile
-        //   - Calls this.knockback(0.4, dx, dz)
-        //   - Calls this.indicateDamage(dx, dz) if not blocked
-        // Blocked on: knockback / velocity system, projectile system
-
-        if took_full_damage {
-            let type_id = source.damage_type.id() as i32;
-            let chunk_pos = *self.last_chunk_pos.lock();
-            let world = self.get_world();
-
-            world.broadcast_to_nearby(
-                chunk_pos,
-                CDamageEvent {
-                    entity_id: self.id(),
-                    source_type_id: type_id,
-                    source_cause_id: source.causing_entity_id.map_or(0, |id| id + 1),
-                    source_direct_id: source.direct_entity_id.map_or(0, |id| id + 1),
-                    source_position: source.source_position,
-                },
-                None,
-            );
-
-            let (yaw, _) = self.rotation();
-            world.broadcast_to_nearby(
-                chunk_pos,
-                CHurtAnimation {
-                    entity_id: self.id(),
-                    yaw,
-                },
-                None,
-            );
-        }
-
-        if self.get_health() <= 0.0 {
-            self.die(source);
-        }
-
-        true
+        LivingEntity::hurt_server(self, source, amount)
     }
 
     /// Applies damage after reductions.
@@ -1607,9 +1540,13 @@ impl Entity for Player {
         );
     }
 
+    fn dimensions_for_pose(&self, pose: EntityPose) -> EntityDimensions {
+        Player::dimensions_for_pose(pose)
+    }
+
     fn hurt(&self, source: &DamageSource, amount: f32) -> bool {
         // Delegates to Player's inherent hurt method which handles
-        // invulnerability, armor, death, and network packets.
+        // player-specific prechecks before the shared living hurt path.
         Player::hurt(self, source, amount)
     }
 
@@ -1658,6 +1595,27 @@ impl LivingEntity for Player {
 
     fn living_base(&self) -> &LivingEntityBase {
         &self.living_base
+    }
+
+    fn is_invulnerable_to(&self, source: &DamageSource) -> bool {
+        if self.default_is_invulnerable_to(source) {
+            return true;
+        }
+
+        // TODO: apply drowningDamage, fallDamage, fireDamage, and freezeDamage gamerules.
+        !self.has_client_loaded()
+    }
+
+    fn actually_hurt(&self, source: &DamageSource, amount: f32) {
+        Player::actually_hurt(self, source, amount);
+    }
+
+    fn hurt_broadcast_chunk(&self) -> ChunkPos {
+        *self.last_chunk_pos.lock()
+    }
+
+    fn die(&self, source: &DamageSource) {
+        Player::die(self, source);
     }
 
     fn with_equipment_slot(&self, slot: EquipmentSlot, visitor: &mut dyn FnMut(&ItemStack)) {

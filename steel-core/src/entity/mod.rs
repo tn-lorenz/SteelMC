@@ -7,15 +7,16 @@ use rustc_hash::FxHashSet;
 use simdnbt::borrow::NbtCompound as BorrowedNbtCompoundView;
 use simdnbt::owned::NbtCompound;
 use steel_protocol::packets::game::{
-    AttributeSnapshot, CEntityEvent, EquipmentSlotItem, SoundSource,
+    AttributeSnapshot, CDamageEvent, CEntityEvent, CHurtAnimation, EquipmentSlotItem, SoundSource,
 };
+use steel_registry::RegistryEntry;
 use steel_registry::blocks::{
     block_state_ext::BlockStateExt as _, properties::BlockStateProperties,
     shapes::is_shape_full_block,
 };
 use steel_registry::data_components::vanilla_components::GLIDER;
 use steel_registry::entity_data::{DataValue, EntityPose};
-use steel_registry::entity_type::{EntityAttachment, EntityTypeRef};
+use steel_registry::entity_type::{EntityAttachment, EntityDimensions, EntityTypeRef};
 use steel_registry::fluid::FluidState;
 use steel_registry::item_stack::ItemStack;
 use steel_registry::mob_effect::MobEffectRef;
@@ -26,7 +27,8 @@ use steel_registry::vanilla_entities;
 use steel_registry::vanilla_entity_type_tags::EntityTypeTag;
 use steel_registry::vanilla_item_tags::ItemTag;
 use steel_registry::{
-    REGISTRY, TaggedRegistryExt, sound_events, vanilla_damage_types, vanilla_game_events,
+    REGISTRY, TaggedRegistryExt, sound_events, vanilla_damage_type_tags, vanilla_damage_types,
+    vanilla_game_events,
 };
 use steel_registry::{vanilla_attributes, vanilla_fluid_tags, vanilla_items, vanilla_mob_effects};
 use steel_utils::entity_events::EntityStatus;
@@ -2145,6 +2147,20 @@ pub trait Entity: EntityEventSource + Send + Sync {
         self.base().pose()
     }
 
+    /// Returns vanilla dimensions for a physical pose.
+    fn dimensions_for_pose(&self, _pose: EntityPose) -> EntityDimensions {
+        self.entity_type().dimensions
+    }
+
+    /// Sets the physical pose and synchronized pose metadata.
+    fn set_pose(&self, pose: EntityPose) {
+        self.base()
+            .set_pose_and_dimensions(pose, self.dimensions_for_pose(pose));
+        if let Some(synced_data) = self.synced_data() {
+            synced_data.set_pose(pose);
+        }
+    }
+
     /// Returns whether vanilla currently considers this entity crouching.
     fn is_crouching(&self) -> bool {
         self.pose() == EntityPose::Sneaking
@@ -3058,6 +3074,137 @@ pub trait LivingEntity: Entity {
     /// Returns true if the entity is alive (health > 0).
     fn is_alive(&self) -> bool {
         !self.is_dead_or_dying()
+    }
+
+    /// Returns vanilla base living-entity invulnerability.
+    fn default_is_invulnerable_to(&self, source: &DamageSource) -> bool {
+        self.is_removed()
+            || self.is_invulnerable() && !source.bypasses_invulnerability()
+            || source.is(&vanilla_damage_type_tags::DamageTypeTag::IS_FIRE) && self.fire_immune()
+            || source.is(&vanilla_damage_type_tags::DamageTypeTag::IS_FALL)
+                && self.is_fall_damage_immune()
+    }
+
+    /// Returns whether this living entity ignores a damage source.
+    fn is_invulnerable_to(&self, source: &DamageSource) -> bool {
+        self.default_is_invulnerable_to(source)
+    }
+
+    /// Main vanilla living-entity damage entry point.
+    fn hurt_server(&self, source: &DamageSource, amount: f32) -> bool {
+        if self.is_invulnerable_to(source) {
+            return false;
+        }
+        if self.is_dead_or_dying() {
+            return false;
+        }
+        if source.is(&vanilla_damage_type_tags::DamageTypeTag::IS_FIRE)
+            && self.has_mob_effect(vanilla_mob_effects::FIRE_RESISTANCE)
+        {
+            return false;
+        }
+        if self.is_sleeping() {
+            self.stop_sleeping();
+        }
+
+        // TODO: reset LivingEntity.noActionTime when mob despawn counters exist.
+        let mut damage = amount;
+        if damage < 0.0 {
+            damage = 0.0;
+        }
+
+        // TODO: apply item blocking before actually_hurt once shield/use-item hooks exist.
+        // TODO: apply freezing extra damage and helmet damage once those equipment hooks exist.
+        if !damage.is_finite() {
+            damage = f32::MAX;
+        }
+
+        let Some((took_full_damage, effective_amount)) = self
+            .living_base()
+            .apply_damage_cooldown(damage, source.bypasses_cooldown())
+        else {
+            return false;
+        };
+
+        self.actually_hurt(source, effective_amount);
+
+        if took_full_damage {
+            self.broadcast_damage_event(source);
+            if !source.is(&vanilla_damage_type_tags::DamageTypeTag::NO_IMPACT) {
+                self.broadcast_hurt_animation();
+            }
+            // TODO: apply knockback once velocity/projectile damage context is complete.
+        }
+
+        if self.is_dead_or_dying() {
+            self.die(source);
+        }
+
+        true
+    }
+
+    /// Applies damage after vanilla reductions.
+    fn actually_hurt(&self, _source: &DamageSource, amount: f32) {
+        if amount <= 0.0 {
+            return;
+        }
+
+        self.set_health(self.get_health() - amount);
+    }
+
+    /// Returns the chunk used for vanilla nearby hurt broadcasts.
+    fn hurt_broadcast_chunk(&self) -> ChunkPos {
+        ChunkPos::from_entity_pos(self.position())
+    }
+
+    /// Broadcasts vanilla damage-event metadata near this entity.
+    fn broadcast_damage_event(&self, source: &DamageSource) {
+        let Some(world) = self.level() else {
+            return;
+        };
+
+        world.broadcast_to_nearby(
+            self.hurt_broadcast_chunk(),
+            CDamageEvent {
+                entity_id: self.id(),
+                source_type_id: source.damage_type.id() as i32,
+                source_cause_id: source.causing_entity_id.map_or(0, |id| id + 1),
+                source_direct_id: source.direct_entity_id.map_or(0, |id| id + 1),
+                source_position: source.source_position,
+            },
+            None,
+        );
+    }
+
+    /// Broadcasts vanilla hurt animation near this entity.
+    fn broadcast_hurt_animation(&self) {
+        let Some(world) = self.level() else {
+            return;
+        };
+
+        let (yaw, _) = self.rotation();
+        world.broadcast_to_nearby(
+            self.hurt_broadcast_chunk(),
+            CHurtAnimation {
+                entity_id: self.id(),
+                yaw,
+            },
+            None,
+        );
+    }
+
+    /// Processes vanilla living death side effects.
+    fn die(&self, _source: &DamageSource) {
+        if self.is_removed() {
+            return;
+        }
+        if !self.living_base().mark_death_processed() {
+            return;
+        }
+
+        // TODO: emit death game event, drops, and experience once mob death foundations exist.
+        self.broadcast_entity_event(EntityStatus::Death);
+        self.set_pose(EntityPose::Dying);
     }
 
     /// Gets the absorption amount (extra health from effects like absorption).
@@ -4142,15 +4289,18 @@ mod tests {
         block_state_ext::BlockStateExt as _,
         properties::{BlockStateProperties, Direction as BlockDirection},
     };
+    use steel_registry::entity_data::EntityPose;
     use steel_registry::entity_type::EntityTypeRef;
     use steel_registry::fluid::FluidState;
     use steel_registry::item_stack::ItemStack;
     use steel_registry::{
         sound_events, test_support::init_test_registry, vanilla_attributes, vanilla_blocks,
-        vanilla_entities, vanilla_fluids, vanilla_items, vanilla_mob_effects,
+        vanilla_damage_types, vanilla_entities, vanilla_fluids, vanilla_items, vanilla_mob_effects,
     };
+    use steel_utils::locks::SyncMutex;
     use steel_utils::{BlockPos, Direction};
 
+    use crate::entity::damage::DamageSource;
     use crate::inventory::equipment::EquipmentSlot;
 
     use super::{
@@ -4259,6 +4409,7 @@ mod tests {
     struct LivingFluidTestEntity {
         base: EntityBase,
         living_base: LivingEntityBase,
+        health: SyncMutex<f32>,
         entity_type: EntityTypeRef,
         affected_by_fluids: bool,
         can_stand_on_fluid: bool,
@@ -4282,6 +4433,7 @@ mod tests {
             Self {
                 base,
                 living_base: LivingEntityBase::new(&vanilla_entities::PLAYER),
+                health: SyncMutex::new(20.0),
                 entity_type: &vanilla_entities::PLAYER,
                 affected_by_fluids,
                 can_stand_on_fluid: false,
@@ -4301,6 +4453,11 @@ mod tests {
 
         const fn with_vehicle(mut self) -> Self {
             self.vehicle = true;
+            self
+        }
+
+        fn with_health(self, health: f32) -> Self {
+            *self.health.lock() = health;
             self
         }
 
@@ -4329,6 +4486,10 @@ mod tests {
         fn get_default_gravity(&self) -> f64 {
             LivingEntity::get_attribute_gravity(self)
         }
+
+        fn hurt(&self, source: &DamageSource, amount: f32) -> bool {
+            LivingEntity::hurt_server(self, source, amount)
+        }
     }
 
     impl LivingEntity for LivingFluidTestEntity {
@@ -4337,10 +4498,12 @@ mod tests {
         }
 
         fn get_health(&self) -> f32 {
-            20.0
+            *self.health.lock()
         }
 
-        fn set_health(&self, _health: f32) {}
+        fn set_health(&self, health: f32) {
+            *self.health.lock() = health.clamp(0.0, self.get_max_health());
+        }
 
         fn get_absorption_amount(&self) -> f32 {
             0.0
@@ -4395,6 +4558,13 @@ mod tests {
         assert!(
             diff.length_squared() < 1.0e-12,
             "expected {left:?} to equal {right:?}"
+        );
+    }
+
+    fn assert_f32_close(left: f32, right: f32) {
+        assert!(
+            (left - right).abs() <= f32::EPSILON,
+            "expected {left} to equal {right}"
         );
     }
 
@@ -4870,6 +5040,41 @@ mod tests {
         assert!(!entity.has_dolphins_grace());
         entity.set_mob_effect_active(vanilla_mob_effects::DOLPHINS_GRACE, true);
         assert!(entity.has_dolphins_grace());
+    }
+
+    #[test]
+    fn generic_living_hurt_applies_health_damage() {
+        init_test_registry();
+        let entity = LivingFluidTestEntity::new(0.0, 0.0, true);
+        let source = DamageSource::environment(&vanilla_damage_types::GENERIC);
+
+        assert!(entity.hurt(&source, 4.0));
+
+        assert_f32_close(entity.get_health(), 16.0);
+    }
+
+    #[test]
+    fn generic_living_hurt_ignores_fire_damage_with_fire_resistance() {
+        init_test_registry();
+        let entity = LivingFluidTestEntity::new(0.0, 0.0, true);
+        entity.set_mob_effect(vanilla_mob_effects::FIRE_RESISTANCE, 0);
+        let source = DamageSource::environment(&vanilla_damage_types::LAVA);
+
+        assert!(!entity.hurt(&source, 4.0));
+
+        assert_f32_close(entity.get_health(), 20.0);
+    }
+
+    #[test]
+    fn generic_living_hurt_processes_default_death_once() {
+        init_test_registry();
+        let entity = LivingFluidTestEntity::new(0.0, 0.0, true).with_health(3.0);
+        let source = DamageSource::environment(&vanilla_damage_types::GENERIC);
+
+        assert!(entity.hurt(&source, 4.0));
+        assert_f32_close(entity.get_health(), 0.0);
+        assert_eq!(entity.pose(), EntityPose::Dying);
+        assert!(!entity.hurt(&source, 1.0));
     }
 
     #[test]

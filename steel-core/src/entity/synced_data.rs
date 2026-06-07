@@ -1,4 +1,7 @@
-use steel_registry::{entity_data::DataValue, vanilla_entity_data::VanillaEntityData};
+use steel_registry::{
+    entity_data::{DataValue, EntityPose},
+    vanilla_entity_data::VanillaEntityData,
+};
 use steel_utils::locks::SyncMutex;
 use text_components::TextComponent;
 
@@ -29,6 +32,9 @@ pub trait EntitySyncedData: Send + Sync {
 
     /// Sets the shared vanilla `NoGravity` flag.
     fn set_no_gravity(&self, no_gravity: bool);
+
+    /// Sets synchronized vanilla pose.
+    fn set_pose(&self, pose: EntityPose);
 
     /// Returns the shared vanilla shift-key-down flag.
     fn is_shift_key_down(&self) -> bool;
@@ -105,6 +111,12 @@ where
         VanillaEntityData::base_mut(&mut *self.lock())
             .no_gravity
             .set(no_gravity);
+    }
+
+    fn set_pose(&self, pose: EntityPose) {
+        VanillaEntityData::base_mut(&mut *self.lock())
+            .pose
+            .set(pose);
     }
 
     fn is_shift_key_down(&self) -> bool {
