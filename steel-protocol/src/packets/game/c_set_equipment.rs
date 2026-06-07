@@ -3,52 +3,31 @@
 use std::io::{Result, Write};
 
 use steel_macros::ClientPacket;
-use steel_registry::{item_stack::ItemStack, packets::play::C_SET_EQUIPMENT};
+use steel_registry::{
+    equipment::EquipmentSlot, item_stack::ItemStack, packets::play::C_SET_EQUIPMENT,
+};
 use steel_utils::{codec::VarInt, serial::WriteTo};
 
-/// Vanilla equipment slot id used by `ClientboundSetEquipmentPacket`.
-#[derive(Clone, Copy, Debug, PartialEq, Eq)]
-pub enum EquipmentSlotId {
-    /// Main hand.
-    MainHand,
-    /// Off hand.
-    OffHand,
-    /// Feet armor.
-    Feet,
-    /// Legs armor.
-    Legs,
-    /// Chest armor.
-    Chest,
-    /// Head armor.
-    Head,
-    /// Body armor.
-    Body,
-    /// Saddle.
-    Saddle,
+const CONTINUE_MASK: u8 = 0x80;
+
+const fn vanilla_equipment_slot_id(slot: EquipmentSlot) -> u8 {
+    match slot {
+        EquipmentSlot::MainHand => 0,
+        EquipmentSlot::OffHand => 1,
+        EquipmentSlot::Feet => 2,
+        EquipmentSlot::Legs => 3,
+        EquipmentSlot::Chest => 4,
+        EquipmentSlot::Head => 5,
+        EquipmentSlot::Body => 6,
+        EquipmentSlot::Saddle => 7,
+    }
 }
 
-impl EquipmentSlotId {
-    const CONTINUE_MASK: u8 = 0x80;
-
-    const fn vanilla_id(self) -> u8 {
-        match self {
-            Self::MainHand => 0,
-            Self::OffHand => 1,
-            Self::Feet => 2,
-            Self::Legs => 3,
-            Self::Chest => 4,
-            Self::Head => 5,
-            Self::Body => 6,
-            Self::Saddle => 7,
-        }
-    }
-
-    const fn packet_id(self, has_next: bool) -> u8 {
-        if has_next {
-            self.vanilla_id() | Self::CONTINUE_MASK
-        } else {
-            self.vanilla_id()
-        }
+const fn equipment_slot_packet_id(slot: EquipmentSlot, has_next: bool) -> u8 {
+    if has_next {
+        vanilla_equipment_slot_id(slot) | CONTINUE_MASK
+    } else {
+        vanilla_equipment_slot_id(slot)
     }
 }
 
@@ -56,7 +35,7 @@ impl EquipmentSlotId {
 #[derive(Clone, Debug, PartialEq)]
 pub struct EquipmentSlotItem {
     /// Slot being updated.
-    pub slot: EquipmentSlotId,
+    pub slot: EquipmentSlot,
     /// New item stack for the slot. Empty stacks clear the slot on the client.
     pub item_stack: ItemStack,
 }
@@ -84,7 +63,10 @@ impl WriteTo for CSetEquipment {
         VarInt(self.entity_id).write(writer)?;
         let last_index = self.slots.len().saturating_sub(1);
         for (index, slot_item) in self.slots.iter().enumerate() {
-            writer.write_all(&[slot_item.slot.packet_id(index != last_index)])?;
+            writer.write_all(&[equipment_slot_packet_id(
+                slot_item.slot,
+                index != last_index,
+            )])?;
             slot_item.item_stack.write(writer)?;
         }
         Ok(())
@@ -103,11 +85,11 @@ mod tests {
             42,
             vec![
                 EquipmentSlotItem {
-                    slot: EquipmentSlotId::MainHand,
+                    slot: EquipmentSlot::MainHand,
                     item_stack: ItemStack::empty(),
                 },
                 EquipmentSlotItem {
-                    slot: EquipmentSlotId::Head,
+                    slot: EquipmentSlot::Head,
                     item_stack: ItemStack::empty(),
                 },
             ],

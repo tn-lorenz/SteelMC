@@ -76,6 +76,7 @@ pub mod dimension_type;
 pub mod enchantment;
 pub mod entity_data;
 pub mod entity_type;
+pub mod equipment;
 pub mod feature;
 pub mod fluid;
 pub mod frog_variant;

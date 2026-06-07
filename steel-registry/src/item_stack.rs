@@ -16,10 +16,11 @@ use crate::{
         Component, ComponentData, ComponentPatchEntry, DataComponentMap, DataComponentPatch,
         DataComponentType,
         vanilla_components::{
-            DAMAGE, ENCHANTMENTS, EQUIPPABLE, Equippable, EquippableSlot, ItemEnchantments,
-            MAX_DAMAGE, MAX_STACK_SIZE, TOOL, Tool, UNBREAKABLE,
+            DAMAGE, ENCHANTMENTS, EQUIPPABLE, Equippable, ItemEnchantments, MAX_DAMAGE,
+            MAX_STACK_SIZE, TOOL, Tool, UNBREAKABLE,
         },
     },
+    equipment::EquipmentSlot,
     items::ItemRef,
     vanilla_items::ITEMS,
 };
@@ -292,13 +293,13 @@ impl ItemStack {
 
     /// Returns the equipment slot this item can be equipped to, if any.
     #[must_use]
-    pub fn get_equippable_slot(&self) -> Option<EquippableSlot> {
+    pub fn get_equippable_slot(&self) -> Option<EquipmentSlot> {
         self.get_equippable().map(|e| e.slot)
     }
 
     /// Returns true if this item can be equipped in the given slot.
     #[must_use]
-    pub fn is_equippable_in_slot(&self, slot: EquippableSlot) -> bool {
+    pub fn is_equippable_in_slot(&self, slot: EquipmentSlot) -> bool {
         self.get_equippable_slot() == Some(slot)
     }
 

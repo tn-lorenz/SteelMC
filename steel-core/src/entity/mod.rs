@@ -7,7 +7,7 @@ use rustc_hash::FxHashSet;
 use simdnbt::borrow::NbtCompound as BorrowedNbtCompoundView;
 use simdnbt::owned::NbtCompound;
 use steel_protocol::packets::game::{
-    AttributeSnapshot, CEntityEvent, EquipmentSlotId, EquipmentSlotItem, SoundSource,
+    AttributeSnapshot, CEntityEvent, EquipmentSlotItem, SoundSource,
 };
 use steel_registry::blocks::{
     block_state_ext::BlockStateExt as _, properties::BlockStateProperties,
@@ -86,28 +86,12 @@ const fn fall_flying_free_fall_interval(fall_flying_ticks: i32) -> Option<i32> {
     }
 }
 
-const fn protocol_equipment_slot(slot: EquipmentSlot) -> EquipmentSlotId {
-    match slot {
-        EquipmentSlot::MainHand => EquipmentSlotId::MainHand,
-        EquipmentSlot::OffHand => EquipmentSlotId::OffHand,
-        EquipmentSlot::Feet => EquipmentSlotId::Feet,
-        EquipmentSlot::Legs => EquipmentSlotId::Legs,
-        EquipmentSlot::Chest => EquipmentSlotId::Chest,
-        EquipmentSlot::Head => EquipmentSlotId::Head,
-        EquipmentSlot::Body => EquipmentSlotId::Body,
-        EquipmentSlot::Saddle => EquipmentSlotId::Saddle,
-    }
-}
-
 pub(crate) fn equipment_items_to_packet_items(
     items: Vec<(EquipmentSlot, ItemStack)>,
 ) -> Vec<EquipmentSlotItem> {
     items
         .into_iter()
-        .map(|(slot, item_stack)| EquipmentSlotItem {
-            slot: protocol_equipment_slot(slot),
-            item_stack,
-        })
+        .map(|(slot, item_stack)| EquipmentSlotItem { slot, item_stack })
         .collect()
 }
 
@@ -3250,9 +3234,7 @@ pub trait LivingEntity: Entity {
             return false;
         };
 
-        item_stack.has(GLIDER)
-            && EquipmentSlot::from_equippable_slot(equippable.slot) == slot
-            && !item_stack.next_damage_will_break()
+        item_stack.has(GLIDER) && equippable.slot == slot && !item_stack.next_damage_will_break()
     }
 
     /// Returns whether the item in `slot` can be used for vanilla gliding.

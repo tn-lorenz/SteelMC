@@ -158,7 +158,7 @@ pub use c_set_chunk_center::CSetChunkCenter;
 pub use c_set_cursor_item::CSetCursorItem;
 pub use c_set_entity_data::CSetEntityData;
 pub use c_set_entity_motion::CSetEntityMotion;
-pub use c_set_equipment::{CSetEquipment, EquipmentSlotId, EquipmentSlotItem};
+pub use c_set_equipment::{CSetEquipment, EquipmentSlotItem};
 pub use c_set_experience::CSetExperience;
 pub use c_set_health::CSetHealth;
 pub use c_set_held_slot::CSetHeldSlot;

@@ -264,14 +264,14 @@ fn generate_builder_calls(item: &Item) -> Vec<TokenStream> {
                 // Parse the equippable component to get the slot
                 if let Some(slot_str) = value.get("slot").and_then(|s| s.as_str()) {
                     let slot_variant = match slot_str {
-                        "head" => quote! { vanilla_components::EquippableSlot::Head },
-                        "chest" => quote! { vanilla_components::EquippableSlot::Chest },
-                        "legs" => quote! { vanilla_components::EquippableSlot::Legs },
-                        "feet" => quote! { vanilla_components::EquippableSlot::Feet },
-                        "body" => quote! { vanilla_components::EquippableSlot::Body },
-                        "mainhand" => quote! { vanilla_components::EquippableSlot::Mainhand },
-                        "offhand" => quote! { vanilla_components::EquippableSlot::Offhand },
-                        "saddle" => quote! { vanilla_components::EquippableSlot::Saddle },
+                        "head" => quote! { vanilla_components::EquipmentSlot::Head },
+                        "chest" => quote! { vanilla_components::EquipmentSlot::Chest },
+                        "legs" => quote! { vanilla_components::EquipmentSlot::Legs },
+                        "feet" => quote! { vanilla_components::EquipmentSlot::Feet },
+                        "body" => quote! { vanilla_components::EquipmentSlot::Body },
+                        "mainhand" => quote! { vanilla_components::EquipmentSlot::MainHand },
+                        "offhand" => quote! { vanilla_components::EquipmentSlot::OffHand },
+                        "saddle" => quote! { vanilla_components::EquipmentSlot::Saddle },
                         _ => continue,
                     };
                     let allowed_entities = generate_allowed_entities(value);

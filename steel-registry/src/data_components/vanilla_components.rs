@@ -8,10 +8,11 @@ use text_components::TextComponent;
 use super::component_data::ComponentData;
 use super::registry::DataComponentRegistry;
 pub use super::registry::DataComponentType;
+pub use crate::equipment::EquipmentSlot;
 
 // Re-export component types for convenience
 pub use super::components::{
-    Equippable, EquippableAllowedEntities, EquippableSlot, ItemEnchantments, Tool, ToolRule,
+    Equippable, EquippableAllowedEntities, ItemEnchantments, Tool, ToolRule,
 };
 
 // ==================== Fully Implemented Components ====================

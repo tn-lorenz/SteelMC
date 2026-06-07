@@ -5,5 +5,5 @@ mod equippable;
 mod tool;
 
 pub use enchantments::ItemEnchantments;
-pub use equippable::{Equippable, EquippableAllowedEntities, EquippableSlot};
+pub use equippable::{Equippable, EquippableAllowedEntities};
 pub use tool::{Tool, ToolRule};

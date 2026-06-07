@@ -806,7 +806,7 @@ mod tests {
         sync::{Arc, Weak},
     };
 
-    use steel_protocol::packets::game::{AttributeSnapshot, EquipmentSlotId, EquipmentSlotItem};
+    use steel_protocol::packets::game::{AttributeSnapshot, EquipmentSlotItem};
     use steel_registry::item_stack::ItemStack;
     use steel_registry::{
         entity_type::EntityTypeRef, test_support, vanilla_entities, vanilla_items,
@@ -814,6 +814,7 @@ mod tests {
 
     use super::*;
     use crate::entity::EntityBase;
+    use crate::inventory::equipment::EquipmentSlot;
 
     struct PairingTestEntity {
         base: EntityBase,
@@ -1070,7 +1071,7 @@ mod tests {
         let entity_typed = PairingTestEntity::new(1, Vec::new());
         let stack = ItemStack::new(&vanilla_items::ITEMS.elytra);
         entity_typed.set_equipment(vec![EquipmentSlotItem {
-            slot: EquipmentSlotId::Chest,
+            slot: EquipmentSlot::Chest,
             item_stack: stack.clone(),
         }]);
         let entity: SharedEntity = entity_typed;
@@ -1078,7 +1079,7 @@ mod tests {
 
         assert_eq!(pairing.spawn_packet.id, entity.id());
         assert_eq!(pairing.equipment.len(), 1);
-        assert_eq!(pairing.equipment[0].slot, EquipmentSlotId::Chest);
+        assert_eq!(pairing.equipment[0].slot, EquipmentSlot::Chest);
         assert_eq!(pairing.equipment[0].item_stack, stack);
     }
 
@@ -1142,7 +1143,7 @@ mod tests {
 
         let stack = ItemStack::new(&vanilla_items::ITEMS.elytra);
         entity_typed.set_dirty_equipment(vec![EquipmentSlotItem {
-            slot: EquipmentSlotId::Chest,
+            slot: EquipmentSlot::Chest,
             item_stack: stack.clone(),
         }]);
 
@@ -1163,7 +1164,7 @@ mod tests {
         assert_eq!(updates[0].0, 1);
         assert_eq!(updates[0].1.entity_id, 1);
         assert_eq!(updates[0].1.slots.len(), 1);
-        assert_eq!(updates[0].1.slots[0].slot, EquipmentSlotId::Chest);
+        assert_eq!(updates[0].1.slots[0].slot, EquipmentSlot::Chest);
         assert_eq!(updates[0].1.slots[0].item_stack, stack);
 
         updates.clear();

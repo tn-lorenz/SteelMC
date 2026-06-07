@@ -2,7 +2,6 @@
 
 use crate::behavior::{InteractionResult, ItemBehavior, UseItemContext};
 use crate::entity::Entity;
-use crate::inventory::equipment::EquipmentSlot;
 use crate::player::player_inventory::EquipmentSwapResult;
 
 /// Default item behavior - does nothing special.
@@ -18,7 +17,7 @@ impl ItemBehavior for DefaultItemBehavior {
             return InteractionResult::Pass;
         }
 
-        let slot = EquipmentSlot::from_equippable_slot(equippable.slot);
+        let slot = equippable.slot;
         let result = context.inv.with_inventory(|inventory| {
             inventory.try_swap_with_equipment_slot(
                 context.hand,
