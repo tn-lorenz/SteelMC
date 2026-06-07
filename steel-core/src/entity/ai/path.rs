@@ -54,6 +54,35 @@ pub enum PathComputationType {
 }
 
 impl PathType {
+    pub const ALL: [Self; Self::COUNT] = [
+        Self::Blocked,
+        Self::Open,
+        Self::Walkable,
+        Self::WalkableDoor,
+        Self::Trapdoor,
+        Self::PowderSnow,
+        Self::OnTopOfPowderSnow,
+        Self::Fence,
+        Self::Lava,
+        Self::Water,
+        Self::WaterBorder,
+        Self::Rail,
+        Self::UnpassableRail,
+        Self::FireInNeighbor,
+        Self::Fire,
+        Self::DamagingInNeighbor,
+        Self::Damaging,
+        Self::DoorOpen,
+        Self::DoorWoodClosed,
+        Self::DoorIronClosed,
+        Self::Breach,
+        Self::Leaves,
+        Self::StickyHoney,
+        Self::Cocoa,
+        Self::DamageCautious,
+        Self::OnTopOfTrapdoor,
+        Self::BigMobsCloseToDanger,
+    ];
     pub const COUNT: usize = 27;
 
     #[must_use]
@@ -96,6 +125,63 @@ impl PathType {
             Self::OnTopOfTrapdoor => 0.0,
             Self::BigMobsCloseToDanger => 4.0,
         }
+    }
+}
+
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Default)]
+pub struct PathTypeSet {
+    bits: u32,
+}
+
+impl PathTypeSet {
+    #[must_use]
+    pub const fn new() -> Self {
+        Self { bits: 0 }
+    }
+
+    #[must_use]
+    pub const fn from_path_type(path_type: PathType) -> Self {
+        Self {
+            bits: Self::bit(path_type),
+        }
+    }
+
+    pub const fn insert(&mut self, path_type: PathType) {
+        self.bits |= Self::bit(path_type);
+    }
+
+    #[must_use]
+    pub const fn contains(self, path_type: PathType) -> bool {
+        self.bits & Self::bit(path_type) != 0
+    }
+
+    #[must_use]
+    pub const fn len(self) -> u32 {
+        self.bits.count_ones()
+    }
+
+    #[must_use]
+    pub const fn is_empty(self) -> bool {
+        self.bits == 0
+    }
+
+    #[must_use]
+    pub const fn single(self) -> Option<PathType> {
+        if self.bits.is_power_of_two() {
+            Some(PathType::ALL[self.bits.trailing_zeros() as usize])
+        } else {
+            None
+        }
+    }
+
+    pub fn iter(self) -> impl Iterator<Item = PathType> {
+        PathType::ALL
+            .into_iter()
+            .filter(move |path_type| self.contains(*path_type))
+    }
+
+    const fn bit(path_type: PathType) -> u32 {
+        1 << path_type.index()
     }
 }
 
@@ -244,7 +330,8 @@ mod tests {
     use steel_utils::BlockStateId;
 
     use super::{
-        PATH_TYPE_CACHE_MASK, PathType, PathTypeCache, PathfindingContext, PathfindingMalus,
+        PATH_TYPE_CACHE_MASK, PathType, PathTypeCache, PathTypeSet, PathfindingContext,
+        PathfindingMalus,
     };
     use crate::world::LevelReader;
 
@@ -297,6 +384,27 @@ mod tests {
 
         assert_eq!(malus.get(PathType::Fire).to_bits(), (-1.0_f32).to_bits());
         assert_eq!(malus.get(PathType::Water).to_bits(), 8.0_f32.to_bits());
+    }
+
+    #[test]
+    fn path_type_set_is_bit_indexed_by_vanilla_path_type_order() {
+        let mut set = PathTypeSet::new();
+        assert!(set.is_empty());
+        set.insert(PathType::Water);
+        set.insert(PathType::Fence);
+
+        assert_eq!(set.len(), 2);
+        assert!(set.contains(PathType::Water));
+        assert!(set.contains(PathType::Fence));
+        assert!(!set.contains(PathType::Open));
+        assert_eq!(
+            PathTypeSet::from_path_type(PathType::Rail).single(),
+            Some(PathType::Rail)
+        );
+        assert_eq!(
+            set.iter().collect::<Vec<_>>(),
+            vec![PathType::Fence, PathType::Water]
+        );
     }
 
     #[test]

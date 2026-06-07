@@ -6,5 +6,6 @@
 
 pub mod control;
 pub mod navigation;
+pub mod node;
 pub mod path;
 pub mod walk;

@@ -7,6 +7,7 @@
 use std::f32::consts::PI;
 
 use glam::DVec3;
+use steel_math::floor;
 use steel_registry::blocks::block_state_ext::BlockStateExt as _;
 use steel_registry::vanilla_attributes;
 use steel_registry::vanilla_block_tags::BlockTag;
@@ -16,7 +17,8 @@ use steel_utils::{BlockPos, axis::Axis};
 use crate::behavior::{BLOCK_BEHAVIORS, BlockCollisionContext};
 use crate::entity::ai::control::{MobControls, MoveControlOperation};
 use crate::entity::ai::navigation::PathNavigation;
-use crate::entity::ai::path::{PathType, PathfindingMalus};
+use crate::entity::ai::path::{PathType, PathfindingContext, PathfindingMalus};
+use crate::entity::ai::walk::WalkPathEvaluator;
 use crate::entity::{LivingEntity, LivingTravelInput};
 
 const MOB_FLAG_NO_AI: i8 = 1;
@@ -208,15 +210,50 @@ pub trait Mob: LivingEntity {
     }
 
     fn tick_strafe_control(&self, forward: f32, right: f32) {
-        // TODO: Apply vanilla NodeEvaluator path-type rejection once node evaluation exists.
         let movement_speed = self
             .attributes()
             .lock()
             .required_value(vanilla_attributes::MOVEMENT_SPEED) as f32;
         let speed = movement_speed * 0.25;
+        let mut strafe_forward = forward;
+        let mut strafe_right = right;
+
+        let mut distance = strafe_forward
+            .mul_add(strafe_forward, strafe_right * strafe_right)
+            .sqrt();
+        if distance < 1.0 {
+            distance = 1.0;
+        }
+        distance = speed / distance;
+        let xa = strafe_forward * distance;
+        let za = strafe_right * distance;
+        let yaw_radians = self.rotation().0 * PI / 180.0;
+        let sin = yaw_radians.sin();
+        let cos = yaw_radians.cos();
+        let dx = xa.mul_add(cos, -(za * sin));
+        let dz = za.mul_add(cos, xa * sin);
+        if !self.is_strafe_walkable(dx, dz) {
+            strafe_forward = 1.0;
+            strafe_right = 0.0;
+        }
+
         self.set_speed(speed);
-        self.set_travel_input(LivingTravelInput::new(right, 0.0, forward));
+        self.set_travel_input(LivingTravelInput::new(strafe_right, 0.0, strafe_forward));
         self.mob_base().controls().lock().move_control.set_wait();
+    }
+
+    fn is_strafe_walkable(&self, dx: f32, dz: f32) -> bool {
+        let Some(world) = self.level() else {
+            return true;
+        };
+        let position = self.position();
+        let pos = BlockPos::new(
+            floor(position.x + f64::from(dx)),
+            floor(position.y),
+            floor(position.z + f64::from(dz)),
+        );
+        let mut context = PathfindingContext::new(world.as_ref(), self.block_position());
+        WalkPathEvaluator::path_type_static(&mut context, pos) == PathType::Walkable
     }
 
     fn tick_jumping_control(&self, speed_modifier: f64) {
