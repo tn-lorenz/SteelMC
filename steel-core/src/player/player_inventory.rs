@@ -55,6 +55,8 @@ pub struct PlayerInventory {
     items: [ItemStack; Self::INVENTORY_SIZE],
     /// Entity equipment (armor, hands).
     equipment: EntityEquipment,
+    /// Whether the selected hotbar item must be synced as main-hand equipment.
+    dirty_main_hand: bool,
     /// Weak reference to the player.
     #[expect(
         dead_code,
@@ -81,6 +83,7 @@ impl PlayerInventory {
         Self {
             items: array::from_fn(|_| ItemStack::empty()),
             equipment: EntityEquipment::new(),
+            dirty_main_hand: false,
             player,
             selected: 0,
             times_changed: 0,
@@ -117,6 +120,9 @@ impl PlayerInventory {
     /// Panics if the slot is not a valid hotbar slot (must be 0-8).
     pub fn set_selected_slot(&mut self, slot: u8) {
         if Self::is_hotbar_slot(slot as usize) {
+            if self.selected != slot {
+                self.mark_main_hand_dirty();
+            }
             self.selected = slot;
         } else {
             panic!("Invalid hotbar slot: {slot}");
@@ -128,32 +134,34 @@ impl PlayerInventory {
         f(&self.items[self.selected as usize])
     }
 
-    /// Returns the currently selected item (main hand).
+    /// Returns a mutable reference to the currently selected item (main hand).
     #[must_use]
     pub const fn get_selected_item(&self) -> &ItemStack {
         &self.items[self.selected as usize]
     }
 
     /// Returns the currently selected item (main hand).
-    #[must_use]
     pub const fn get_selected_item_mut(&mut self) -> &mut ItemStack {
+        self.mark_main_hand_dirty();
         &mut self.items[self.selected as usize]
     }
 
     /// Sets the currently selected item (main hand).
     pub fn set_selected_item(&mut self, item: ItemStack) {
+        if self.items[self.selected as usize] != item {
+            self.mark_main_hand_dirty();
+        }
         self.items[self.selected as usize] = item;
         self.set_changed();
     }
 
-    /// Returns a clone of the offhand item.
+    /// Returns the offhand item.
     #[must_use]
     pub const fn get_offhand_item(&self) -> &ItemStack {
         self.equipment.get_ref(EquipmentSlot::OffHand)
     }
 
-    /// Returns a clone of the offhand item.
-    #[must_use]
+    /// Returns a mutable reference to the offhand item.
     pub const fn get_offhand_item_mut(&mut self) -> &mut ItemStack {
         self.equipment.get_mut(EquipmentSlot::OffHand)
     }
@@ -166,9 +174,46 @@ impl PlayerInventory {
 
     /// Executes a function with a mutable reference to the currently selected item.
     pub fn with_selected_item_mut<R>(&mut self, f: impl FnOnce(&mut ItemStack) -> R) -> R {
+        let previous = self.items[self.selected as usize].clone();
         let result = f(&mut self.items[self.selected as usize]);
+        if self.items[self.selected as usize] != previous {
+            self.mark_main_hand_dirty();
+        }
         self.set_changed();
         result
+    }
+
+    /// Returns non-empty equipment slots for entity tracking spawn sync.
+    #[must_use]
+    pub fn non_empty_equipment_items(&self) -> Vec<(EquipmentSlot, ItemStack)> {
+        let mut items = Vec::new();
+        let main_hand = self.get_selected_item();
+        if !main_hand.is_empty() {
+            items.push((EquipmentSlot::MainHand, main_hand.clone()));
+        }
+        items.extend(
+            self.equipment
+                .non_empty_items()
+                .into_iter()
+                .filter(|(slot, _)| *slot != EquipmentSlot::MainHand),
+        );
+        items
+    }
+
+    /// Drains equipment slots that changed since the last entity tracking sync.
+    pub fn drain_dirty_equipment_items(&mut self) -> Vec<(EquipmentSlot, ItemStack)> {
+        let mut items = Vec::new();
+        if self.dirty_main_hand {
+            self.dirty_main_hand = false;
+            items.push((EquipmentSlot::MainHand, self.get_selected_item().clone()));
+        }
+        items.extend(
+            self.equipment
+                .drain_dirty_items()
+                .into_iter()
+                .filter(|(slot, _)| *slot != EquipmentSlot::MainHand),
+        );
+        items
     }
 
     /// Returns the number of times this inventory has been modified.
@@ -775,6 +820,9 @@ impl Container for PlayerInventory {
 
     fn get_item_mut(&mut self, slot: usize) -> &mut ItemStack {
         if slot < Self::INVENTORY_SIZE {
+            if slot == self.selected as usize {
+                self.mark_main_hand_dirty();
+            }
             &mut self.items[slot]
         } else if let Some(eq_slot) = slot_to_equipment(slot) {
             self.equipment.get_mut(eq_slot)
@@ -785,6 +833,9 @@ impl Container for PlayerInventory {
 
     fn set_item(&mut self, slot: usize, stack: ItemStack) {
         if slot < Self::INVENTORY_SIZE {
+            if slot == self.selected as usize && self.items[slot] != stack {
+                self.mark_main_hand_dirty();
+            }
             self.items[slot] = stack;
         } else if let Some(eq_slot) = slot_to_equipment(slot) {
             self.equipment.set(eq_slot, stack);
@@ -814,6 +865,10 @@ impl Container for PlayerInventory {
 
     fn clear_content(&mut self) -> i32 {
         let mut count = 0;
+        let selected = self.selected as usize;
+        if !self.items[selected].is_empty() {
+            self.mark_main_hand_dirty();
+        }
         for item in &mut self.items {
             count += item.count();
             *item = ItemStack::empty();
@@ -830,7 +885,12 @@ impl Container for PlayerInventory {
 
     fn clear_content_matching(&mut self, predicate: &mut dyn FnMut(&mut ItemStack) -> bool) -> i32 {
         let mut count = 0;
-        for item in &mut self.items {
+        let selected = self.selected as usize;
+        for slot in 0..Self::INVENTORY_SIZE {
+            if slot == selected {
+                self.mark_main_hand_dirty();
+            }
+            let item = &mut self.items[slot];
             if predicate(item) {
                 count += item.count();
                 *item = ItemStack::empty();
@@ -847,6 +907,12 @@ impl Container for PlayerInventory {
             self.set_changed();
         }
         count
+    }
+}
+
+impl PlayerInventory {
+    const fn mark_main_hand_dirty(&mut self) {
+        self.dirty_main_hand = true;
     }
 }
 
@@ -887,5 +953,40 @@ mod tests {
 
         assert_eq!(inventory.clear_content(), 4);
         assert!(inventory.is_empty());
+    }
+
+    #[test]
+    fn non_empty_equipment_items_uses_selected_item_as_main_hand() {
+        init_test_registry();
+
+        let mut inventory = PlayerInventory::new(Weak::new());
+        let main_hand = ItemStack::with_count(&ITEMS.oak_log, 2);
+        let head = ItemStack::new(&ITEMS.diamond_helmet);
+        inventory.items[0] = main_hand.clone();
+        inventory
+            .equipment
+            .set(EquipmentSlot::MainHand, ItemStack::new(&ITEMS.stick));
+        inventory.equipment.set(EquipmentSlot::Head, head.clone());
+
+        let items = inventory.non_empty_equipment_items();
+
+        assert_eq!(items.len(), 2);
+        assert!(items.contains(&(EquipmentSlot::MainHand, main_hand)));
+        assert!(items.contains(&(EquipmentSlot::Head, head)));
+    }
+
+    #[test]
+    fn selected_slot_change_drains_main_hand_equipment_update_once() {
+        init_test_registry();
+
+        let mut inventory = PlayerInventory::new(Weak::new());
+        let selected = ItemStack::new(&ITEMS.oak_log);
+        inventory.items[1] = selected.clone();
+
+        inventory.set_selected_slot(1);
+        let dirty_items = inventory.drain_dirty_equipment_items();
+
+        assert_eq!(dirty_items, vec![(EquipmentSlot::MainHand, selected)]);
+        assert!(inventory.drain_dirty_equipment_items().is_empty());
     }
 }

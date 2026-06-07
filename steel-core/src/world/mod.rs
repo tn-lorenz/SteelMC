@@ -20,8 +20,8 @@ use sha2::{Digest, Sha256};
 use steel_protocol::packets::game::{
     CBlockDestruction, CBlockEvent, CGameEvent, CInitializeBorder, CLevelEvent, CPlayerChat,
     CPlayerInfoUpdate, CSetBorderCenter, CSetBorderLerpSize, CSetBorderSize,
-    CSetBorderWarningDelay, CSetBorderWarningDistance, CSetEntityData, CSound, CSystemChat,
-    CUpdateAttributes, GameEventType, SoundSource,
+    CSetBorderWarningDelay, CSetBorderWarningDistance, CSetEntityData, CSetEquipment, CSound,
+    CSystemChat, CUpdateAttributes, GameEventType, SoundSource,
 };
 use steel_protocol::utils::ConnectionProtocol;
 use steel_protocol::{
@@ -85,9 +85,9 @@ use crate::{
     chunk::heightmap::HeightmapType,
     chunk_saver::{ChunkStorage, RamOnlyStorage, RegionManager},
     entity::{
-        AddEntityError, Entity, EntityChunkCallback, EntityMovementSyncPacket, EntityOwnership,
-        EntityTracker, InactiveEntityCallback, RemovalReason, SharedEntity, WorldEntityManager,
-        entities::ItemEntity,
+        AddEntityError, Entity, EntityChangeSenders, EntityChunkCallback, EntityMovementSyncPacket,
+        EntityOwnership, EntityTracker, InactiveEntityCallback, RemovalReason, SharedEntity,
+        WorldEntityManager, entities::ItemEntity,
     },
     fluid::{FluidStateExt as _, fluid_state_to_block},
     level_data::{LevelDataManager, WorldBorderData, WorldGenerationSettings},
@@ -1213,6 +1213,10 @@ impl World {
     /// * `runs_normally` - Whether game elements (random ticks, entities) should run.
     ///   When false (frozen), only essential operations like chunk loading run.
     #[tracing::instrument(level = "trace", skip(self), name = "world_game_tick")]
+    #[expect(
+        clippy::too_many_lines,
+        reason = "world tick orchestration keeps vanilla subsystem order explicit"
+    )]
     pub fn tick_game(
         self: &Arc<Self>,
         tick_count: u64,
@@ -1275,41 +1279,53 @@ impl World {
             self.entity_tracker.send_changes(
                 |chunk| self.player_area_map.get_tracking_players(chunk),
                 |player_id| self.players.get_by_entity_id(player_id),
-                |entity_id, packet| {
-                    self.broadcast_movement_sync_to_entity_trackers(entity_id, packet, None);
-                },
-                |entity_id, dirty_entity_data| {
-                    let packet = CSetEntityData::new(entity_id, dirty_entity_data);
-                    let Ok(encoded) = EncodedPacket::from_bare(
-                        packet,
-                        self.compression,
-                        ConnectionProtocol::Play,
-                    ) else {
-                        return;
-                    };
-                    self.broadcast_to_entity_trackers_encoded(entity_id, encoded.clone(), None);
-                    if let Some(player) = self.players.get_by_entity_id(entity_id) {
-                        player.connection.send_encoded(encoded);
-                    }
-                },
-                |entity_id, dirty_attributes| {
-                    let packet = CUpdateAttributes::new(entity_id, dirty_attributes);
-                    let Ok(encoded) = EncodedPacket::from_bare(
-                        packet,
-                        self.compression,
-                        ConnectionProtocol::Play,
-                    ) else {
-                        return;
-                    };
-                    self.broadcast_to_entity_trackers_encoded(entity_id, encoded.clone(), None);
-                    if let Some(player) = self.players.get_by_entity_id(entity_id) {
-                        player.connection.send_encoded(encoded);
-                    }
-                },
-                |player_id, packet| {
-                    if let Some(player) = self.players.get_by_entity_id(player_id) {
-                        player.send_packet(packet);
-                    }
+                EntityChangeSenders {
+                    movement: |entity_id, packet| {
+                        self.broadcast_movement_sync_to_entity_trackers(entity_id, packet, None);
+                    },
+                    entity_data: |entity_id, dirty_entity_data| {
+                        let packet = CSetEntityData::new(entity_id, dirty_entity_data);
+                        let Ok(encoded) = EncodedPacket::from_bare(
+                            packet,
+                            self.compression,
+                            ConnectionProtocol::Play,
+                        ) else {
+                            return;
+                        };
+                        self.broadcast_to_entity_trackers_encoded(entity_id, encoded.clone(), None);
+                        if let Some(player) = self.players.get_by_entity_id(entity_id) {
+                            player.connection.send_encoded(encoded);
+                        }
+                    },
+                    attributes: |entity_id, dirty_attributes| {
+                        let packet = CUpdateAttributes::new(entity_id, dirty_attributes);
+                        let Ok(encoded) = EncodedPacket::from_bare(
+                            packet,
+                            self.compression,
+                            ConnectionProtocol::Play,
+                        ) else {
+                            return;
+                        };
+                        self.broadcast_to_entity_trackers_encoded(entity_id, encoded.clone(), None);
+                        if let Some(player) = self.players.get_by_entity_id(entity_id) {
+                            player.connection.send_encoded(encoded);
+                        }
+                    },
+                    equipment: |entity_id, packet: CSetEquipment| {
+                        let Ok(encoded) = EncodedPacket::from_bare(
+                            packet,
+                            self.compression,
+                            ConnectionProtocol::Play,
+                        ) else {
+                            return;
+                        };
+                        self.broadcast_to_entity_trackers_encoded(entity_id, encoded, None);
+                    },
+                    passengers: |player_id, packet| {
+                        if let Some(player) = self.players.get_by_entity_id(player_id) {
+                            player.send_packet(packet);
+                        }
+                    },
                 },
             );
         }

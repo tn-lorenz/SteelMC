@@ -56,7 +56,7 @@ pub use game_profile::{GameProfile, GameProfileAction};
 use std::sync::{Arc, Weak};
 use steel_protocol::packets::game::{
     AttributeSnapshot, CDamageEvent, CEntityEvent, CHurtAnimation, CPlayerCombatKill, CRespawn,
-    CSetHealth, CSetHeldSlot, CSetTime, ClientCommandAction, SoundSource,
+    CSetHealth, CSetHeldSlot, CSetTime, ClientCommandAction, EquipmentSlotItem, SoundSource,
 };
 use steel_registry::RegistryEntry;
 use steel_registry::blocks::block_state_ext::BlockStateExt as _;
@@ -85,7 +85,7 @@ use crate::config::RuntimeConfig;
 use crate::entity::damage::DamageSource;
 use crate::entity::{
     DEATH_DURATION, Entity, EntityBase, EntitySyncedData, LivingEntity, LivingEntityBase,
-    RemovalReason, SharedEntity,
+    RemovalReason, SharedEntity, equipment_items_to_packet_items,
 };
 use crate::fluid::get_fluid_state;
 use crate::inventory::{SyncPlayerInv, equipment::EquipmentSlot};
@@ -1494,6 +1494,14 @@ impl Entity for Player {
         self.attributes().lock().drain_dirty_sync()
     }
 
+    fn pack_all_equipment(&self) -> Vec<EquipmentSlotItem> {
+        equipment_items_to_packet_items(self.inventory.lock().non_empty_equipment_items())
+    }
+
+    fn drain_dirty_equipment(&self) -> Vec<EquipmentSlotItem> {
+        equipment_items_to_packet_items(self.inventory.lock().drain_dirty_equipment_items())
+    }
+
     fn max_up_step(&self) -> f32 {
         self.attributes()
             .lock()
@@ -1618,7 +1626,11 @@ impl LivingEntity for Player {
 
     fn with_equipment_slot(&self, slot: EquipmentSlot, visitor: &mut dyn FnMut(&ItemStack)) {
         let inventory = self.inventory.lock();
-        visitor(inventory.equipment().get_ref(slot));
+        if slot == EquipmentSlot::MainHand {
+            visitor(inventory.get_selected_item());
+        } else {
+            visitor(inventory.equipment().get_ref(slot));
+        }
     }
 
     fn with_equipment_slot_mut(
@@ -1627,7 +1639,11 @@ impl LivingEntity for Player {
         visitor: &mut dyn FnMut(&mut ItemStack),
     ) {
         let mut inventory = self.inventory.lock();
-        visitor(inventory.equipment_mut().get_mut(slot));
+        if slot == EquipmentSlot::MainHand {
+            visitor(inventory.get_selected_item_mut());
+        } else {
+            visitor(inventory.equipment_mut().get_mut(slot));
+        }
     }
 
     fn has_infinite_materials(&self) -> bool {

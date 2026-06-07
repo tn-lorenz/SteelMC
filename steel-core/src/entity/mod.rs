@@ -6,7 +6,9 @@ use glam::DVec3;
 use rustc_hash::FxHashSet;
 use simdnbt::borrow::NbtCompound as BorrowedNbtCompoundView;
 use simdnbt::owned::NbtCompound;
-use steel_protocol::packets::game::{AttributeSnapshot, CEntityEvent, SoundSource};
+use steel_protocol::packets::game::{
+    AttributeSnapshot, CEntityEvent, EquipmentSlotId, EquipmentSlotItem, SoundSource,
+};
 use steel_registry::blocks::{
     block_state_ext::BlockStateExt as _, properties::BlockStateProperties,
     shapes::is_shape_full_block,
@@ -99,6 +101,31 @@ const fn equipment_slot_matches_equippable(
             | (EquipmentSlot::Body, EquippableSlot::Body)
             | (EquipmentSlot::Saddle, EquippableSlot::Saddle)
     )
+}
+
+const fn protocol_equipment_slot(slot: EquipmentSlot) -> EquipmentSlotId {
+    match slot {
+        EquipmentSlot::MainHand => EquipmentSlotId::MainHand,
+        EquipmentSlot::OffHand => EquipmentSlotId::OffHand,
+        EquipmentSlot::Feet => EquipmentSlotId::Feet,
+        EquipmentSlot::Legs => EquipmentSlotId::Legs,
+        EquipmentSlot::Chest => EquipmentSlotId::Chest,
+        EquipmentSlot::Head => EquipmentSlotId::Head,
+        EquipmentSlot::Body => EquipmentSlotId::Body,
+        EquipmentSlot::Saddle => EquipmentSlotId::Saddle,
+    }
+}
+
+pub(crate) fn equipment_items_to_packet_items(
+    items: Vec<(EquipmentSlot, ItemStack)>,
+) -> Vec<EquipmentSlotItem> {
+    items
+        .into_iter()
+        .map(|(slot, item_stack)| EquipmentSlotItem {
+            slot: protocol_equipment_slot(slot),
+            item_stack,
+        })
+        .collect()
 }
 
 fn aabb_contains_any_liquid(world: &Arc<World>, aabb: WorldAabb) -> bool {
@@ -622,7 +649,7 @@ pub(crate) use shared_flags::EntitySharedFlags;
 pub(crate) use storage::EntityStorage;
 pub use synced_data::EntitySyncedData;
 pub(crate) use ticking::tick_vehicle_passengers_with_ticked_if;
-pub use tracker::EntityTracker;
+pub use tracker::{EntityChangeSenders, EntityTracker};
 
 /// Type alias for a shared entity reference.
 pub type SharedEntity = Arc<dyn Entity>;
@@ -1216,6 +1243,16 @@ pub trait Entity: EntityEventSource + Send + Sync {
     /// Mirrors vanilla `ServerEntity.sendDirtyEntityData`, which sends dirty
     /// living attributes after dirty entity data.
     fn drain_dirty_syncable_attributes(&self) -> Vec<AttributeSnapshot> {
+        Vec::new()
+    }
+
+    /// Packs non-empty equipment slots for initial spawn pairing.
+    fn pack_all_equipment(&self) -> Vec<EquipmentSlotItem> {
+        Vec::new()
+    }
+
+    /// Drains equipment slots that changed since the last tracker sync.
+    fn drain_dirty_equipment(&self) -> Vec<EquipmentSlotItem> {
         Vec::new()
     }
 
@@ -3160,6 +3197,16 @@ pub trait LivingEntity: Entity {
     ) {
         let mut equipment = self.living_base().equipment().lock();
         visitor(equipment.get_mut(slot));
+    }
+
+    /// Packs non-empty living equipment slots for initial spawn pairing.
+    fn pack_living_equipment(&self) -> Vec<EquipmentSlotItem> {
+        equipment_items_to_packet_items(self.living_base().equipment().lock().non_empty_items())
+    }
+
+    /// Drains dirty living equipment slots for tracker sync.
+    fn drain_dirty_living_equipment(&self) -> Vec<EquipmentSlotItem> {
+        equipment_items_to_packet_items(self.living_base().equipment().lock().drain_dirty_items())
     }
 
     /// Returns whether equipment durability should be skipped for this entity.
