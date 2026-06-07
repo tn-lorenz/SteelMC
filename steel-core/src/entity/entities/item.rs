@@ -7,9 +7,9 @@
 use std::sync::{Arc, Weak};
 
 use glam::DVec3;
+use steel_macros::entity_behavior;
 use steel_registry::entity_type::EntityTypeRef;
 use steel_registry::item_stack::ItemStack;
-use steel_registry::vanilla_entities;
 use steel_registry::vanilla_entity_data::ItemEntityData;
 use steel_utils::UuidExt;
 use steel_utils::locks::SyncMutex;
@@ -94,9 +94,13 @@ impl ItemEntityState {
 /// - Applies friction when on ground (0.98)
 /// - Despawns after 5 minutes (6000 ticks)
 /// - Has pickup delay before players can collect it
+#[entity_behavior]
 pub struct ItemEntity {
     /// Common entity fields (id, uuid, position, etc.).
     base: EntityBase,
+
+    /// Vanilla entity type registered for this implementation.
+    entity_type: EntityTypeRef,
 
     // === Synced Entity Data ===
     /// Entity data containing the `ItemStack`.
@@ -111,14 +115,34 @@ impl ItemEntity {
     ///
     /// Use `set_item()` to set the actual item after creation, or use `with_item()`.
     #[must_use]
-    pub fn new(id: i32, position: DVec3, world: Weak<World>) -> Self {
-        Self::with_item_and_velocity(id, position, ItemStack::empty(), DVec3::ZERO, world)
+    pub fn new(entity_type: EntityTypeRef, id: i32, position: DVec3, world: Weak<World>) -> Self {
+        Self::with_item_and_velocity(
+            entity_type,
+            id,
+            position,
+            ItemStack::empty(),
+            DVec3::ZERO,
+            world,
+        )
     }
 
     /// Creates a new item entity with the specified item.
     #[must_use]
-    pub fn with_item(id: i32, position: DVec3, item: ItemStack, world: Weak<World>) -> Self {
-        Self::with_item_and_velocity(id, position, item, Self::default_spawn_velocity(), world)
+    pub fn with_item(
+        entity_type: EntityTypeRef,
+        id: i32,
+        position: DVec3,
+        item: ItemStack,
+        world: Weak<World>,
+    ) -> Self {
+        Self::with_item_and_velocity(
+            entity_type,
+            id,
+            position,
+            item,
+            Self::default_spawn_velocity(),
+            world,
+        )
     }
 
     /// Creates a new item entity with the specified item and initial velocity.
@@ -126,6 +150,7 @@ impl ItemEntity {
     /// Mirrors vanilla's `ItemEntity(Level, double, double, double, ItemStack, double, double, double)`.
     #[must_use]
     pub fn with_item_and_velocity(
+        entity_type: EntityTypeRef,
         id: i32,
         position: DVec3,
         item: ItemStack,
@@ -141,11 +166,12 @@ impl ItemEntity {
         Self {
             base: EntityBase::new_with_state(
                 id,
-                EntityBaseState::new(position, vanilla_entities::ITEM.dimensions)
+                EntityBaseState::new(position, entity_type.dimensions)
                     .with_velocity(velocity)
                     .with_rotation((yaw, 0.0)),
                 world,
             ),
+            entity_type,
             entity_data: SyncMutex::new(entity_data),
             item_state: SyncMutex::new(ItemEntityState::new()),
         }
@@ -164,9 +190,10 @@ impl ItemEntity {
     /// Used when loading entities from disk. Type-specific data (item, age, etc.)
     /// is restored via `load_additional()` after this constructor.
     #[must_use]
-    pub fn from_saved(load: EntityBaseLoad) -> Self {
+    pub fn from_saved(entity_type: EntityTypeRef, load: EntityBaseLoad) -> Self {
         Self {
-            base: EntityBase::from_load(load, vanilla_entities::ITEM.dimensions),
+            base: EntityBase::from_load(load, entity_type.dimensions),
+            entity_type,
             entity_data: SyncMutex::new(ItemEntityData::new()),
             item_state: SyncMutex::new(ItemEntityState::new()),
         }
@@ -510,7 +537,7 @@ impl Entity for ItemEntity {
     }
 
     fn entity_type(&self) -> EntityTypeRef {
-        &vanilla_entities::ITEM
+        self.entity_type
     }
 
     fn tick(&self) {
@@ -743,7 +770,9 @@ mod tests {
 
     use glam::DVec3;
 
-    use steel_registry::{item_stack::ItemStack, vanilla_damage_types, vanilla_items};
+    use steel_registry::{
+        item_stack::ItemStack, vanilla_damage_types, vanilla_entities, vanilla_items,
+    };
 
     use crate::entity::{Entity, damage::DamageSource};
     use crate::world::World;
@@ -752,14 +781,24 @@ mod tests {
 
     #[test]
     fn item_entities_do_not_obstruct_block_placement() {
-        let item = ItemEntity::new(1, DVec3::ZERO, Weak::<World>::new());
+        let item = ItemEntity::new(
+            &vanilla_entities::ITEM,
+            1,
+            DVec3::ZERO,
+            Weak::<World>::new(),
+        );
 
         assert!(!item.blocks_building());
     }
 
     #[test]
     fn item_lava_hurt_sound_uses_vanilla_interval() {
-        let item = ItemEntity::new(1, DVec3::ZERO, Weak::<World>::new());
+        let item = ItemEntity::new(
+            &vanilla_entities::ITEM,
+            1,
+            DVec3::ZERO,
+            Weak::<World>::new(),
+        );
 
         assert!(item.should_play_lava_hurt_sound());
         item.advance_tick_count();
@@ -778,6 +817,7 @@ mod tests {
     #[test]
     fn item_with_stack_uses_vanilla_default_velocity() {
         let item = ItemEntity::with_item(
+            &vanilla_entities::ITEM,
             1,
             DVec3::ZERO,
             ItemStack::new(&vanilla_items::ITEMS.stone),
@@ -794,7 +834,12 @@ mod tests {
 
     #[test]
     fn item_damage_truncates_after_fractional_subtraction() {
-        let item = ItemEntity::new(1, DVec3::ZERO, Weak::<World>::new());
+        let item = ItemEntity::new(
+            &vanilla_entities::ITEM,
+            1,
+            DVec3::ZERO,
+            Weak::<World>::new(),
+        );
 
         assert!(item.hurt(
             &DamageSource::environment(&vanilla_damage_types::GENERIC),

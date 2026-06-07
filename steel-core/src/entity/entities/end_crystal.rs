@@ -5,8 +5,8 @@ use std::sync::Weak;
 use glam::DVec3;
 use simdnbt::borrow::{BaseNbtCompound as BorrowedNbtCompound, NbtCompound as NbtCompoundView};
 use simdnbt::owned::{NbtCompound, NbtTag};
+use steel_macros::entity_behavior;
 use steel_registry::entity_type::EntityTypeRef;
-use steel_registry::vanilla_entities;
 use steel_registry::vanilla_entity_data::EndCrystalEntityData;
 use steel_utils::{BlockPos, locks::SyncMutex};
 
@@ -18,8 +18,10 @@ use crate::world::World;
 /// Steel currently implements the synchronized data and saved fields used by generated
 /// End spikes. Portal handling, dragon fight callbacks, and explosion behavior are still
 /// intentionally left to the broader entity/combat foundations.
+#[entity_behavior(class = "EndCrystal")]
 pub struct EndCrystalEntity {
     base: EntityBase,
+    entity_type: EntityTypeRef,
     entity_data: SyncMutex<EndCrystalEntityData>,
     state: SyncMutex<EndCrystalState>,
 }
@@ -40,14 +42,10 @@ impl EndCrystalState {
 impl EndCrystalEntity {
     /// Creates a new End Crystal entity.
     #[must_use]
-    pub fn new(id: i32, position: DVec3, world: Weak<World>) -> Self {
+    pub fn new(entity_type: EntityTypeRef, id: i32, position: DVec3, world: Weak<World>) -> Self {
         Self {
-            base: EntityBase::new(
-                id,
-                position,
-                vanilla_entities::END_CRYSTAL.dimensions,
-                world,
-            ),
+            base: EntityBase::new(id, position, entity_type.dimensions, world),
+            entity_type,
             entity_data: SyncMutex::new(EndCrystalEntityData::new()),
             state: SyncMutex::new(EndCrystalState::new()),
         }
@@ -55,9 +53,10 @@ impl EndCrystalEntity {
 
     /// Creates an End Crystal entity from saved data.
     #[must_use]
-    pub fn from_saved(load: EntityBaseLoad) -> Self {
+    pub fn from_saved(entity_type: EntityTypeRef, load: EntityBaseLoad) -> Self {
         Self {
-            base: EntityBase::from_load(load, vanilla_entities::END_CRYSTAL.dimensions),
+            base: EntityBase::from_load(load, entity_type.dimensions),
+            entity_type,
             entity_data: SyncMutex::new(EndCrystalEntityData::new()),
             state: SyncMutex::new(EndCrystalState::new()),
         }
@@ -124,7 +123,7 @@ impl Entity for EndCrystalEntity {
     }
 
     fn entity_type(&self) -> EntityTypeRef {
-        &vanilla_entities::END_CRYSTAL
+        self.entity_type
     }
 
     fn tick(&self) {
@@ -181,10 +180,16 @@ mod tests {
     use std::io::Cursor;
 
     use simdnbt::borrow::read_compound as read_borrowed_compound;
+    use steel_registry::vanilla_entities;
 
     #[test]
     fn end_crystal_saves_invulnerable_state() {
-        let crystal = EndCrystalEntity::new(1, DVec3::new(1.5, 2.5, 3.5), Weak::new());
+        let crystal = EndCrystalEntity::new(
+            &vanilla_entities::END_CRYSTAL,
+            1,
+            DVec3::new(1.5, 2.5, 3.5),
+            Weak::new(),
+        );
         crystal.set_invulnerable(true);
 
         let mut nbt = NbtCompound::new();
@@ -192,7 +197,12 @@ mod tests {
 
         assert_eq!(nbt.byte("Invulnerable"), Some(1));
 
-        let loaded = EndCrystalEntity::new(2, DVec3::new(4.5, 5.5, 6.5), Weak::new());
+        let loaded = EndCrystalEntity::new(
+            &vanilla_entities::END_CRYSTAL,
+            2,
+            DVec3::new(4.5, 5.5, 6.5),
+            Weak::new(),
+        );
         let mut bytes = Vec::new();
         nbt.write(&mut bytes);
         let borrowed =
@@ -203,14 +213,20 @@ mod tests {
 
     #[test]
     fn end_crystal_is_pickable_like_vanilla() {
-        let crystal = EndCrystalEntity::new(1, DVec3::new(1.5, 2.5, 3.5), Weak::new());
+        let crystal = EndCrystalEntity::new(
+            &vanilla_entities::END_CRYSTAL,
+            1,
+            DVec3::new(1.5, 2.5, 3.5),
+            Weak::new(),
+        );
 
         assert!(crystal.is_pickable());
     }
 
     #[test]
     fn end_crystal_blocks_building_like_vanilla() {
-        let crystal = EndCrystalEntity::new(1, DVec3::ZERO, Weak::new());
+        let crystal =
+            EndCrystalEntity::new(&vanilla_entities::END_CRYSTAL, 1, DVec3::ZERO, Weak::new());
 
         assert!(crystal.blocks_building());
     }

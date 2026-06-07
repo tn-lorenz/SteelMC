@@ -299,11 +299,16 @@ pub(crate) fn scan_object_behaviors(
 ) -> HashMap<String, DiscoveredObject> {
     let manifest_dir = env::var("CARGO_MANIFEST_DIR").expect("CARGO_MANIFEST_DIR not set");
     let pattern = format!("{manifest_dir}/src/behavior/{folder}/**/*.rs");
+    scan_object_behaviors_with_pattern(&pattern, attribute_name)
+}
+
+pub(crate) fn scan_object_behaviors_with_pattern(
+    pattern: &str,
+    attribute_name: &str,
+) -> HashMap<String, DiscoveredObject> {
     let mut discovered: HashMap<String, DiscoveredObject> = HashMap::new();
 
-    for entry in
-        glob::glob(&pattern).unwrap_or_else(|_| panic!("Failed to glob {folder} behavior sources"))
-    {
+    for entry in glob::glob(pattern).unwrap_or_else(|_| panic!("Failed to glob {pattern}")) {
         let path = entry.expect("Failed to read glob entry");
         let content = fs::read_to_string(&path)
             .unwrap_or_else(|e| panic!("Failed to read {}: {e}", path.display()));

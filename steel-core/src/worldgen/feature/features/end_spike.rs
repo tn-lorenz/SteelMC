@@ -2,6 +2,7 @@ use std::f64::consts::PI;
 use std::sync::Arc;
 
 use glam::DVec3;
+use steel_registry::vanilla_entities;
 
 use super::super::prelude::*;
 use super::super::runner::FeatureDecorationRunner;
@@ -176,6 +177,7 @@ impl FeatureDecorationRunner {
             f64::from(spike.center_z) + 0.5,
         );
         let crystal = Arc::new(EndCrystalEntity::new(
+            &vanilla_entities::END_CRYSTAL,
             next_entity_id(),
             position,
             region.weak_world(),

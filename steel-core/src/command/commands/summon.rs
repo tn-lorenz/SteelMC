@@ -5,7 +5,7 @@
 use std::sync::Arc;
 
 use glam::DVec3;
-use steel_registry::{REGISTRY, vanilla_blocks};
+use steel_registry::{REGISTRY, vanilla_blocks, vanilla_entities};
 use text_components::TextComponent;
 
 use crate::command::arguments::vector3::Vector3Argument;
@@ -47,6 +47,7 @@ impl CommandExecutor<()> for SummonAtSelfExecutor {
 
         // Create the block display entity
         let entity = Arc::new(BlockDisplayEntity::new(
+            &vanilla_entities::BLOCK_DISPLAY,
             next_entity_id(),
             pos,
             Arc::downgrade(&world),
@@ -85,6 +86,7 @@ impl CommandExecutor<((), DVec3)> for SummonAtPosExecutor {
 
         // Create the block display entity
         let entity = Arc::new(BlockDisplayEntity::new(
+            &vanilla_entities::BLOCK_DISPLAY,
             next_entity_id(),
             pos,
             Arc::downgrade(&world),

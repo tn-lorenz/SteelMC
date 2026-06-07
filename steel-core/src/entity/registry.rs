@@ -5,30 +5,27 @@ use std::sync::{Arc, OnceLock, Weak};
 
 use glam::DVec3;
 use simdnbt::borrow::BaseNbtCompound as BorrowedNbtCompound;
+use steel_registry::RegistryExt;
 use steel_registry::entity_type::EntityTypeRef;
 use steel_registry::{REGISTRY, RegistryEntry};
-use steel_registry::{RegistryExt, vanilla_entities};
-use steel_utils::{BlockPos, Direction};
 use uuid::Uuid;
 
-use super::entities::{
-    BlockDisplayEntity, ChestMinecartEntity, EndCrystalEntity, ItemEntity, ItemFrameEntity,
-    RawEntity,
-};
+use super::entities::RawEntity;
+use super::generated_entities::register_entity_factories;
 use super::{EntityBaseLoad, EntityFireFreezeState, SharedEntity, next_entity_id};
 use crate::world::World;
 
 /// Factory function type for creating entities.
 ///
-/// Takes the entity ID, spawn position, and world reference.
+/// Takes the entity type, entity ID, spawn position, and world reference.
 /// Returns a new entity instance. The entity ID should be obtained from
 /// `next_entity_id()`.
-pub type EntityFactory = fn(i32, DVec3, Weak<World>) -> SharedEntity;
+pub type EntityFactory = fn(EntityTypeRef, i32, DVec3, Weak<World>) -> SharedEntity;
 
 /// Factory function type for loading entities from disk.
 ///
-/// Takes all base entity fields needed for reconstruction.
-pub type EntityLoadFactory = fn(EntityBaseLoad) -> SharedEntity;
+/// Takes the entity type and all base entity fields needed for reconstruction.
+pub type EntityLoadFactory = fn(EntityTypeRef, EntityBaseLoad) -> SharedEntity;
 
 /// Entity load request before the registry assigns a runtime ID.
 pub struct EntityLoadRequest {
@@ -108,6 +105,11 @@ impl EntityRegistry {
     /// Registers a factory function for an entity type.
     pub fn register(&mut self, entity_type: EntityTypeRef, factory: EntityFactory) {
         let id = entity_type.id();
+        assert!(
+            self.entries[id].factory.is_none(),
+            "entity factory for {} is already registered",
+            entity_type.key
+        );
         self.entries[id].factory = Some(factory);
     }
 
@@ -116,6 +118,11 @@ impl EntityRegistry {
     /// The load factory is used when loading entities from disk.
     pub fn register_load(&mut self, entity_type: EntityTypeRef, factory: EntityLoadFactory) {
         let id = entity_type.id();
+        assert!(
+            self.entries[id].load_factory.is_none(),
+            "entity load factory for {} is already registered",
+            entity_type.key
+        );
         self.entries[id].load_factory = Some(factory);
     }
 
@@ -134,7 +141,7 @@ impl EntityRegistry {
         self.entries
             .get(id)?
             .factory
-            .map(|f| f(entity_id, pos, world))
+            .map(|f| f(entity_type, entity_id, pos, world))
     }
 
     /// Creates an entity from persisted data and loads its type-specific NBT.
@@ -151,7 +158,7 @@ impl EntityRegistry {
         let load_factory = self.entries.get(id)?.load_factory?;
         let no_gravity = load.no_gravity;
 
-        let entity = load_factory(load);
+        let entity = load_factory(entity_type, load);
         entity.set_no_gravity(no_gravity);
         entity.load_additional(nbt);
         entity.sync_base_fire_freeze_entity_data();
@@ -169,7 +176,7 @@ impl EntityRegistry {
         let id = entity_type.id();
         let no_gravity = load.no_gravity;
         if let Some(load_factory) = self.entries.get(id).and_then(|entry| entry.load_factory) {
-            let entity = load_factory(load);
+            let entity = load_factory(entity_type, load);
             entity.set_no_gravity(no_gravity);
             entity.load_additional(nbt);
             entity.sync_base_fire_freeze_entity_data();
@@ -237,54 +244,7 @@ pub static ENTITIES: EntityRegistryLock = EntityRegistryLock(OnceLock::new());
 /// Panics if called more than once.
 pub fn init_entities() {
     let mut registry = EntityRegistry::new();
-
-    // Register block display entity factory
-    registry.register(&vanilla_entities::BLOCK_DISPLAY, |id, pos, world| {
-        Arc::new(BlockDisplayEntity::new(id, pos, world))
-    });
-    registry.register_load(&vanilla_entities::BLOCK_DISPLAY, |load| {
-        Arc::new(BlockDisplayEntity::from_saved(load))
-    });
-
-    // Register item entity factory
-    registry.register(&vanilla_entities::ITEM, |id, pos, world| {
-        Arc::new(ItemEntity::new(id, pos, world))
-    });
-    registry.register_load(&vanilla_entities::ITEM, |load| {
-        Arc::new(ItemEntity::from_saved(load))
-    });
-
-    // Register end crystal entity factory
-    registry.register(&vanilla_entities::END_CRYSTAL, |id, pos, world| {
-        Arc::new(EndCrystalEntity::new(id, pos, world))
-    });
-    registry.register_load(&vanilla_entities::END_CRYSTAL, |load| {
-        Arc::new(EndCrystalEntity::from_saved(load))
-    });
-
-    // Register chest minecart entity factory
-    registry.register(&vanilla_entities::CHEST_MINECART, |id, pos, world| {
-        Arc::new(ChestMinecartEntity::new(id, pos, world))
-    });
-    registry.register_load(&vanilla_entities::CHEST_MINECART, |load| {
-        Arc::new(ChestMinecartEntity::from_saved(load))
-    });
-
-    registry.register(&vanilla_entities::ITEM_FRAME, |id, pos, world| {
-        Arc::new(ItemFrameEntity::new(
-            id,
-            BlockPos::new(
-                pos.x.floor() as i32,
-                pos.y.floor() as i32,
-                pos.z.floor() as i32,
-            ),
-            Direction::South,
-            world,
-        ))
-    });
-    registry.register_load(&vanilla_entities::ITEM_FRAME, |load| {
-        Arc::new(ItemFrameEntity::from_saved(load))
-    });
+    register_entity_factories(&mut registry);
 
     assert!(
         ENTITIES.set(registry).is_ok(),
@@ -299,6 +259,7 @@ mod tests {
     use simdnbt::borrow::read_compound as read_borrowed_compound;
     use simdnbt::owned::NbtCompound;
     use steel_registry::test_support::init_test_registry;
+    use steel_registry::vanilla_entities;
 
     use super::*;
 
@@ -343,5 +304,23 @@ mod tests {
             saved.string("CustomName").map(ToString::to_string),
             Some("raw".to_owned())
         );
+    }
+
+    #[test]
+    fn create_forwards_entity_type_to_factory() {
+        init_test_registry();
+        let mut registry = EntityRegistry::new();
+        registry.register(
+            &vanilla_entities::OAK_BOAT,
+            |entity_type, id, pos, world| Arc::new(RawEntity::new(id, pos, world, entity_type)),
+        );
+
+        let Some(entity) =
+            registry.create(&vanilla_entities::OAK_BOAT, 5, DVec3::ZERO, Weak::new())
+        else {
+            panic!("registered entity factory should create an entity");
+        };
+
+        assert_eq!(entity.entity_type(), &vanilla_entities::OAK_BOAT);
     }
 }

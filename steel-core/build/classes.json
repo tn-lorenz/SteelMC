@@ -13886,5 +13886,819 @@
       "name": "ominous_bottle",
       "class": "Item"
     }
+  ],
+  "entities": [
+    {
+      "name": "acacia_boat",
+      "class": "Boat",
+      "java_class": "net.minecraft.world.entity.vehicle.boat.Boat",
+      "drop_item": "acacia_boat"
+    },
+    {
+      "name": "acacia_chest_boat",
+      "class": "ChestBoat",
+      "java_class": "net.minecraft.world.entity.vehicle.boat.ChestBoat",
+      "drop_item": "acacia_chest_boat"
+    },
+    {
+      "name": "allay",
+      "class": "Allay",
+      "java_class": "net.minecraft.world.entity.animal.allay.Allay"
+    },
+    {
+      "name": "area_effect_cloud",
+      "class": "AreaEffectCloud",
+      "java_class": "net.minecraft.world.entity.AreaEffectCloud"
+    },
+    {
+      "name": "armadillo",
+      "class": "Armadillo",
+      "java_class": "net.minecraft.world.entity.animal.armadillo.Armadillo"
+    },
+    {
+      "name": "armor_stand",
+      "class": "ArmorStand",
+      "java_class": "net.minecraft.world.entity.decoration.ArmorStand"
+    },
+    {
+      "name": "arrow",
+      "class": "Arrow",
+      "java_class": "net.minecraft.world.entity.projectile.arrow.Arrow"
+    },
+    {
+      "name": "axolotl",
+      "class": "Axolotl",
+      "java_class": "net.minecraft.world.entity.animal.axolotl.Axolotl"
+    },
+    {
+      "name": "bamboo_chest_raft",
+      "class": "ChestRaft",
+      "java_class": "net.minecraft.world.entity.vehicle.boat.ChestRaft",
+      "drop_item": "bamboo_chest_raft"
+    },
+    {
+      "name": "bamboo_raft",
+      "class": "Raft",
+      "java_class": "net.minecraft.world.entity.vehicle.boat.Raft",
+      "drop_item": "bamboo_raft"
+    },
+    {
+      "name": "bat",
+      "class": "Bat",
+      "java_class": "net.minecraft.world.entity.ambient.Bat"
+    },
+    {
+      "name": "bee",
+      "class": "Bee",
+      "java_class": "net.minecraft.world.entity.animal.bee.Bee"
+    },
+    {
+      "name": "birch_boat",
+      "class": "Boat",
+      "java_class": "net.minecraft.world.entity.vehicle.boat.Boat",
+      "drop_item": "birch_boat"
+    },
+    {
+      "name": "birch_chest_boat",
+      "class": "ChestBoat",
+      "java_class": "net.minecraft.world.entity.vehicle.boat.ChestBoat",
+      "drop_item": "birch_chest_boat"
+    },
+    {
+      "name": "blaze",
+      "class": "Blaze",
+      "java_class": "net.minecraft.world.entity.monster.Blaze"
+    },
+    {
+      "name": "block_display",
+      "class": "BlockDisplay",
+      "java_class": "net.minecraft.world.entity.Display$BlockDisplay"
+    },
+    {
+      "name": "bogged",
+      "class": "Bogged",
+      "java_class": "net.minecraft.world.entity.monster.skeleton.Bogged"
+    },
+    {
+      "name": "breeze",
+      "class": "Breeze",
+      "java_class": "net.minecraft.world.entity.monster.breeze.Breeze"
+    },
+    {
+      "name": "breeze_wind_charge",
+      "class": "BreezeWindCharge",
+      "java_class": "net.minecraft.world.entity.projectile.hurtingprojectile.windcharge.BreezeWindCharge"
+    },
+    {
+      "name": "camel",
+      "class": "Camel",
+      "java_class": "net.minecraft.world.entity.animal.camel.Camel"
+    },
+    {
+      "name": "camel_husk",
+      "class": "CamelHusk",
+      "java_class": "net.minecraft.world.entity.animal.camel.CamelHusk"
+    },
+    {
+      "name": "cat",
+      "class": "Cat",
+      "java_class": "net.minecraft.world.entity.animal.feline.Cat"
+    },
+    {
+      "name": "cave_spider",
+      "class": "CaveSpider",
+      "java_class": "net.minecraft.world.entity.monster.spider.CaveSpider"
+    },
+    {
+      "name": "cherry_boat",
+      "class": "Boat",
+      "java_class": "net.minecraft.world.entity.vehicle.boat.Boat",
+      "drop_item": "cherry_boat"
+    },
+    {
+      "name": "cherry_chest_boat",
+      "class": "ChestBoat",
+      "java_class": "net.minecraft.world.entity.vehicle.boat.ChestBoat",
+      "drop_item": "cherry_chest_boat"
+    },
+    {
+      "name": "chest_minecart",
+      "class": "MinecartChest",
+      "java_class": "net.minecraft.world.entity.vehicle.minecart.MinecartChest",
+      "drop_item": "chest_minecart"
+    },
+    {
+      "name": "chicken",
+      "class": "Chicken",
+      "java_class": "net.minecraft.world.entity.animal.chicken.Chicken"
+    },
+    {
+      "name": "cod",
+      "class": "Cod",
+      "java_class": "net.minecraft.world.entity.animal.fish.Cod"
+    },
+    {
+      "name": "copper_golem",
+      "class": "CopperGolem",
+      "java_class": "net.minecraft.world.entity.animal.golem.CopperGolem"
+    },
+    {
+      "name": "command_block_minecart",
+      "class": "MinecartCommandBlock",
+      "java_class": "net.minecraft.world.entity.vehicle.minecart.MinecartCommandBlock",
+      "drop_item": "minecart"
+    },
+    {
+      "name": "cow",
+      "class": "Cow",
+      "java_class": "net.minecraft.world.entity.animal.cow.Cow"
+    },
+    {
+      "name": "creaking",
+      "class": "Creaking",
+      "java_class": "net.minecraft.world.entity.monster.creaking.Creaking"
+    },
+    {
+      "name": "creeper",
+      "class": "Creeper",
+      "java_class": "net.minecraft.world.entity.monster.Creeper"
+    },
+    {
+      "name": "dark_oak_boat",
+      "class": "Boat",
+      "java_class": "net.minecraft.world.entity.vehicle.boat.Boat",
+      "drop_item": "dark_oak_boat"
+    },
+    {
+      "name": "dark_oak_chest_boat",
+      "class": "ChestBoat",
+      "java_class": "net.minecraft.world.entity.vehicle.boat.ChestBoat",
+      "drop_item": "dark_oak_chest_boat"
+    },
+    {
+      "name": "dolphin",
+      "class": "Dolphin",
+      "java_class": "net.minecraft.world.entity.animal.dolphin.Dolphin"
+    },
+    {
+      "name": "donkey",
+      "class": "Donkey",
+      "java_class": "net.minecraft.world.entity.animal.equine.Donkey"
+    },
+    {
+      "name": "dragon_fireball",
+      "class": "DragonFireball",
+      "java_class": "net.minecraft.world.entity.projectile.hurtingprojectile.DragonFireball"
+    },
+    {
+      "name": "drowned",
+      "class": "Drowned",
+      "java_class": "net.minecraft.world.entity.monster.zombie.Drowned"
+    },
+    {
+      "name": "egg",
+      "class": "ThrownEgg",
+      "java_class": "net.minecraft.world.entity.projectile.throwableitemprojectile.ThrownEgg"
+    },
+    {
+      "name": "elder_guardian",
+      "class": "ElderGuardian",
+      "java_class": "net.minecraft.world.entity.monster.ElderGuardian"
+    },
+    {
+      "name": "enderman",
+      "class": "EnderMan",
+      "java_class": "net.minecraft.world.entity.monster.EnderMan"
+    },
+    {
+      "name": "endermite",
+      "class": "Endermite",
+      "java_class": "net.minecraft.world.entity.monster.Endermite"
+    },
+    {
+      "name": "ender_dragon",
+      "class": "EnderDragon",
+      "java_class": "net.minecraft.world.entity.boss.enderdragon.EnderDragon"
+    },
+    {
+      "name": "ender_pearl",
+      "class": "ThrownEnderpearl",
+      "java_class": "net.minecraft.world.entity.projectile.throwableitemprojectile.ThrownEnderpearl"
+    },
+    {
+      "name": "end_crystal",
+      "class": "EndCrystal",
+      "java_class": "net.minecraft.world.entity.boss.enderdragon.EndCrystal"
+    },
+    {
+      "name": "evoker",
+      "class": "Evoker",
+      "java_class": "net.minecraft.world.entity.monster.illager.Evoker"
+    },
+    {
+      "name": "evoker_fangs",
+      "class": "EvokerFangs",
+      "java_class": "net.minecraft.world.entity.projectile.EvokerFangs"
+    },
+    {
+      "name": "experience_bottle",
+      "class": "ThrownExperienceBottle",
+      "java_class": "net.minecraft.world.entity.projectile.throwableitemprojectile.ThrownExperienceBottle"
+    },
+    {
+      "name": "experience_orb",
+      "class": "ExperienceOrb",
+      "java_class": "net.minecraft.world.entity.ExperienceOrb"
+    },
+    {
+      "name": "eye_of_ender",
+      "class": "EyeOfEnder",
+      "java_class": "net.minecraft.world.entity.projectile.EyeOfEnder"
+    },
+    {
+      "name": "falling_block",
+      "class": "FallingBlockEntity",
+      "java_class": "net.minecraft.world.entity.item.FallingBlockEntity"
+    },
+    {
+      "name": "fireball",
+      "class": "LargeFireball",
+      "java_class": "net.minecraft.world.entity.projectile.hurtingprojectile.LargeFireball"
+    },
+    {
+      "name": "firework_rocket",
+      "class": "FireworkRocketEntity",
+      "java_class": "net.minecraft.world.entity.projectile.FireworkRocketEntity"
+    },
+    {
+      "name": "fox",
+      "class": "Fox",
+      "java_class": "net.minecraft.world.entity.animal.fox.Fox"
+    },
+    {
+      "name": "frog",
+      "class": "Frog",
+      "java_class": "net.minecraft.world.entity.animal.frog.Frog"
+    },
+    {
+      "name": "furnace_minecart",
+      "class": "MinecartFurnace",
+      "java_class": "net.minecraft.world.entity.vehicle.minecart.MinecartFurnace",
+      "drop_item": "furnace_minecart"
+    },
+    {
+      "name": "ghast",
+      "class": "Ghast",
+      "java_class": "net.minecraft.world.entity.monster.Ghast"
+    },
+    {
+      "name": "happy_ghast",
+      "class": "HappyGhast",
+      "java_class": "net.minecraft.world.entity.animal.happyghast.HappyGhast"
+    },
+    {
+      "name": "giant",
+      "class": "Giant",
+      "java_class": "net.minecraft.world.entity.monster.Giant"
+    },
+    {
+      "name": "glow_item_frame",
+      "class": "GlowItemFrame",
+      "java_class": "net.minecraft.world.entity.decoration.GlowItemFrame"
+    },
+    {
+      "name": "glow_squid",
+      "class": "GlowSquid",
+      "java_class": "net.minecraft.world.entity.animal.squid.GlowSquid"
+    },
+    {
+      "name": "goat",
+      "class": "Goat",
+      "java_class": "net.minecraft.world.entity.animal.goat.Goat"
+    },
+    {
+      "name": "guardian",
+      "class": "Guardian",
+      "java_class": "net.minecraft.world.entity.monster.Guardian"
+    },
+    {
+      "name": "hoglin",
+      "class": "Hoglin",
+      "java_class": "net.minecraft.world.entity.monster.hoglin.Hoglin"
+    },
+    {
+      "name": "hopper_minecart",
+      "class": "MinecartHopper",
+      "java_class": "net.minecraft.world.entity.vehicle.minecart.MinecartHopper",
+      "drop_item": "hopper_minecart"
+    },
+    {
+      "name": "horse",
+      "class": "Horse",
+      "java_class": "net.minecraft.world.entity.animal.equine.Horse"
+    },
+    {
+      "name": "husk",
+      "class": "Husk",
+      "java_class": "net.minecraft.world.entity.monster.zombie.Husk"
+    },
+    {
+      "name": "illusioner",
+      "class": "Illusioner",
+      "java_class": "net.minecraft.world.entity.monster.illager.Illusioner"
+    },
+    {
+      "name": "interaction",
+      "class": "Interaction",
+      "java_class": "net.minecraft.world.entity.Interaction"
+    },
+    {
+      "name": "iron_golem",
+      "class": "IronGolem",
+      "java_class": "net.minecraft.world.entity.animal.golem.IronGolem"
+    },
+    {
+      "name": "item",
+      "class": "ItemEntity",
+      "java_class": "net.minecraft.world.entity.item.ItemEntity"
+    },
+    {
+      "name": "item_display",
+      "class": "ItemDisplay",
+      "java_class": "net.minecraft.world.entity.Display$ItemDisplay"
+    },
+    {
+      "name": "item_frame",
+      "class": "ItemFrame",
+      "java_class": "net.minecraft.world.entity.decoration.ItemFrame"
+    },
+    {
+      "name": "jungle_boat",
+      "class": "Boat",
+      "java_class": "net.minecraft.world.entity.vehicle.boat.Boat",
+      "drop_item": "jungle_boat"
+    },
+    {
+      "name": "jungle_chest_boat",
+      "class": "ChestBoat",
+      "java_class": "net.minecraft.world.entity.vehicle.boat.ChestBoat",
+      "drop_item": "jungle_chest_boat"
+    },
+    {
+      "name": "leash_knot",
+      "class": "LeashFenceKnotEntity",
+      "java_class": "net.minecraft.world.entity.decoration.LeashFenceKnotEntity"
+    },
+    {
+      "name": "lightning_bolt",
+      "class": "LightningBolt",
+      "java_class": "net.minecraft.world.entity.LightningBolt"
+    },
+    {
+      "name": "llama",
+      "class": "Llama",
+      "java_class": "net.minecraft.world.entity.animal.equine.Llama"
+    },
+    {
+      "name": "llama_spit",
+      "class": "LlamaSpit",
+      "java_class": "net.minecraft.world.entity.projectile.LlamaSpit"
+    },
+    {
+      "name": "magma_cube",
+      "class": "MagmaCube",
+      "java_class": "net.minecraft.world.entity.monster.MagmaCube"
+    },
+    {
+      "name": "mangrove_boat",
+      "class": "Boat",
+      "java_class": "net.minecraft.world.entity.vehicle.boat.Boat",
+      "drop_item": "mangrove_boat"
+    },
+    {
+      "name": "mangrove_chest_boat",
+      "class": "ChestBoat",
+      "java_class": "net.minecraft.world.entity.vehicle.boat.ChestBoat",
+      "drop_item": "mangrove_chest_boat"
+    },
+    {
+      "name": "mannequin",
+      "class": "Mannequin",
+      "java_class": "net.minecraft.world.entity.decoration.Mannequin"
+    },
+    {
+      "name": "marker",
+      "class": "Marker",
+      "java_class": "net.minecraft.world.entity.Marker"
+    },
+    {
+      "name": "minecart",
+      "class": "Minecart",
+      "java_class": "net.minecraft.world.entity.vehicle.minecart.Minecart",
+      "drop_item": "minecart"
+    },
+    {
+      "name": "mooshroom",
+      "class": "MushroomCow",
+      "java_class": "net.minecraft.world.entity.animal.cow.MushroomCow"
+    },
+    {
+      "name": "mule",
+      "class": "Mule",
+      "java_class": "net.minecraft.world.entity.animal.equine.Mule"
+    },
+    {
+      "name": "nautilus",
+      "class": "Nautilus",
+      "java_class": "net.minecraft.world.entity.animal.nautilus.Nautilus"
+    },
+    {
+      "name": "oak_boat",
+      "class": "Boat",
+      "java_class": "net.minecraft.world.entity.vehicle.boat.Boat",
+      "drop_item": "oak_boat"
+    },
+    {
+      "name": "oak_chest_boat",
+      "class": "ChestBoat",
+      "java_class": "net.minecraft.world.entity.vehicle.boat.ChestBoat",
+      "drop_item": "oak_chest_boat"
+    },
+    {
+      "name": "ocelot",
+      "class": "Ocelot",
+      "java_class": "net.minecraft.world.entity.animal.feline.Ocelot"
+    },
+    {
+      "name": "ominous_item_spawner",
+      "class": "OminousItemSpawner",
+      "java_class": "net.minecraft.world.entity.OminousItemSpawner"
+    },
+    {
+      "name": "painting",
+      "class": "Painting",
+      "java_class": "net.minecraft.world.entity.decoration.painting.Painting"
+    },
+    {
+      "name": "pale_oak_boat",
+      "class": "Boat",
+      "java_class": "net.minecraft.world.entity.vehicle.boat.Boat",
+      "drop_item": "pale_oak_boat"
+    },
+    {
+      "name": "pale_oak_chest_boat",
+      "class": "ChestBoat",
+      "java_class": "net.minecraft.world.entity.vehicle.boat.ChestBoat",
+      "drop_item": "pale_oak_chest_boat"
+    },
+    {
+      "name": "panda",
+      "class": "Panda",
+      "java_class": "net.minecraft.world.entity.animal.panda.Panda"
+    },
+    {
+      "name": "parched",
+      "class": "Parched",
+      "java_class": "net.minecraft.world.entity.monster.skeleton.Parched"
+    },
+    {
+      "name": "parrot",
+      "class": "Parrot",
+      "java_class": "net.minecraft.world.entity.animal.parrot.Parrot"
+    },
+    {
+      "name": "phantom",
+      "class": "Phantom",
+      "java_class": "net.minecraft.world.entity.monster.Phantom"
+    },
+    {
+      "name": "pig",
+      "class": "Pig",
+      "java_class": "net.minecraft.world.entity.animal.pig.Pig"
+    },
+    {
+      "name": "piglin",
+      "class": "Piglin",
+      "java_class": "net.minecraft.world.entity.monster.piglin.Piglin"
+    },
+    {
+      "name": "piglin_brute",
+      "class": "PiglinBrute",
+      "java_class": "net.minecraft.world.entity.monster.piglin.PiglinBrute"
+    },
+    {
+      "name": "pillager",
+      "class": "Pillager",
+      "java_class": "net.minecraft.world.entity.monster.illager.Pillager"
+    },
+    {
+      "name": "polar_bear",
+      "class": "PolarBear",
+      "java_class": "net.minecraft.world.entity.animal.polarbear.PolarBear"
+    },
+    {
+      "name": "splash_potion",
+      "class": "ThrownSplashPotion",
+      "java_class": "net.minecraft.world.entity.projectile.throwableitemprojectile.ThrownSplashPotion"
+    },
+    {
+      "name": "lingering_potion",
+      "class": "ThrownLingeringPotion",
+      "java_class": "net.minecraft.world.entity.projectile.throwableitemprojectile.ThrownLingeringPotion"
+    },
+    {
+      "name": "pufferfish",
+      "class": "Pufferfish",
+      "java_class": "net.minecraft.world.entity.animal.fish.Pufferfish"
+    },
+    {
+      "name": "rabbit",
+      "class": "Rabbit",
+      "java_class": "net.minecraft.world.entity.animal.rabbit.Rabbit"
+    },
+    {
+      "name": "ravager",
+      "class": "Ravager",
+      "java_class": "net.minecraft.world.entity.monster.Ravager"
+    },
+    {
+      "name": "salmon",
+      "class": "Salmon",
+      "java_class": "net.minecraft.world.entity.animal.fish.Salmon"
+    },
+    {
+      "name": "sheep",
+      "class": "Sheep",
+      "java_class": "net.minecraft.world.entity.animal.sheep.Sheep"
+    },
+    {
+      "name": "shulker",
+      "class": "Shulker",
+      "java_class": "net.minecraft.world.entity.monster.Shulker"
+    },
+    {
+      "name": "shulker_bullet",
+      "class": "ShulkerBullet",
+      "java_class": "net.minecraft.world.entity.projectile.ShulkerBullet"
+    },
+    {
+      "name": "silverfish",
+      "class": "Silverfish",
+      "java_class": "net.minecraft.world.entity.monster.Silverfish"
+    },
+    {
+      "name": "skeleton",
+      "class": "Skeleton",
+      "java_class": "net.minecraft.world.entity.monster.skeleton.Skeleton"
+    },
+    {
+      "name": "skeleton_horse",
+      "class": "SkeletonHorse",
+      "java_class": "net.minecraft.world.entity.animal.equine.SkeletonHorse"
+    },
+    {
+      "name": "slime",
+      "class": "Slime",
+      "java_class": "net.minecraft.world.entity.monster.Slime"
+    },
+    {
+      "name": "small_fireball",
+      "class": "SmallFireball",
+      "java_class": "net.minecraft.world.entity.projectile.hurtingprojectile.SmallFireball"
+    },
+    {
+      "name": "sniffer",
+      "class": "Sniffer",
+      "java_class": "net.minecraft.world.entity.animal.sniffer.Sniffer"
+    },
+    {
+      "name": "snowball",
+      "class": "Snowball",
+      "java_class": "net.minecraft.world.entity.projectile.throwableitemprojectile.Snowball"
+    },
+    {
+      "name": "snow_golem",
+      "class": "SnowGolem",
+      "java_class": "net.minecraft.world.entity.animal.golem.SnowGolem"
+    },
+    {
+      "name": "spawner_minecart",
+      "class": "MinecartSpawner",
+      "java_class": "net.minecraft.world.entity.vehicle.minecart.MinecartSpawner",
+      "drop_item": "minecart"
+    },
+    {
+      "name": "spectral_arrow",
+      "class": "SpectralArrow",
+      "java_class": "net.minecraft.world.entity.projectile.arrow.SpectralArrow"
+    },
+    {
+      "name": "spider",
+      "class": "Spider",
+      "java_class": "net.minecraft.world.entity.monster.spider.Spider"
+    },
+    {
+      "name": "spruce_boat",
+      "class": "Boat",
+      "java_class": "net.minecraft.world.entity.vehicle.boat.Boat",
+      "drop_item": "spruce_boat"
+    },
+    {
+      "name": "spruce_chest_boat",
+      "class": "ChestBoat",
+      "java_class": "net.minecraft.world.entity.vehicle.boat.ChestBoat",
+      "drop_item": "spruce_chest_boat"
+    },
+    {
+      "name": "squid",
+      "class": "Squid",
+      "java_class": "net.minecraft.world.entity.animal.squid.Squid"
+    },
+    {
+      "name": "stray",
+      "class": "Stray",
+      "java_class": "net.minecraft.world.entity.monster.skeleton.Stray"
+    },
+    {
+      "name": "strider",
+      "class": "Strider",
+      "java_class": "net.minecraft.world.entity.monster.Strider"
+    },
+    {
+      "name": "tadpole",
+      "class": "Tadpole",
+      "java_class": "net.minecraft.world.entity.animal.frog.Tadpole"
+    },
+    {
+      "name": "text_display",
+      "class": "TextDisplay",
+      "java_class": "net.minecraft.world.entity.Display$TextDisplay"
+    },
+    {
+      "name": "tnt",
+      "class": "PrimedTnt",
+      "java_class": "net.minecraft.world.entity.item.PrimedTnt"
+    },
+    {
+      "name": "tnt_minecart",
+      "class": "MinecartTNT",
+      "java_class": "net.minecraft.world.entity.vehicle.minecart.MinecartTNT",
+      "drop_item": "tnt_minecart"
+    },
+    {
+      "name": "trader_llama",
+      "class": "TraderLlama",
+      "java_class": "net.minecraft.world.entity.animal.equine.TraderLlama"
+    },
+    {
+      "name": "trident",
+      "class": "ThrownTrident",
+      "java_class": "net.minecraft.world.entity.projectile.arrow.ThrownTrident"
+    },
+    {
+      "name": "tropical_fish",
+      "class": "TropicalFish",
+      "java_class": "net.minecraft.world.entity.animal.fish.TropicalFish"
+    },
+    {
+      "name": "turtle",
+      "class": "Turtle",
+      "java_class": "net.minecraft.world.entity.animal.turtle.Turtle"
+    },
+    {
+      "name": "vex",
+      "class": "Vex",
+      "java_class": "net.minecraft.world.entity.monster.Vex"
+    },
+    {
+      "name": "villager",
+      "class": "Villager",
+      "java_class": "net.minecraft.world.entity.npc.villager.Villager"
+    },
+    {
+      "name": "vindicator",
+      "class": "Vindicator",
+      "java_class": "net.minecraft.world.entity.monster.illager.Vindicator"
+    },
+    {
+      "name": "wandering_trader",
+      "class": "WanderingTrader",
+      "java_class": "net.minecraft.world.entity.npc.wanderingtrader.WanderingTrader"
+    },
+    {
+      "name": "warden",
+      "class": "Warden",
+      "java_class": "net.minecraft.world.entity.monster.warden.Warden"
+    },
+    {
+      "name": "wind_charge",
+      "class": "WindCharge",
+      "java_class": "net.minecraft.world.entity.projectile.hurtingprojectile.windcharge.WindCharge"
+    },
+    {
+      "name": "witch",
+      "class": "Witch",
+      "java_class": "net.minecraft.world.entity.monster.Witch"
+    },
+    {
+      "name": "wither",
+      "class": "WitherBoss",
+      "java_class": "net.minecraft.world.entity.boss.wither.WitherBoss"
+    },
+    {
+      "name": "wither_skeleton",
+      "class": "WitherSkeleton",
+      "java_class": "net.minecraft.world.entity.monster.skeleton.WitherSkeleton"
+    },
+    {
+      "name": "wither_skull",
+      "class": "WitherSkull",
+      "java_class": "net.minecraft.world.entity.projectile.hurtingprojectile.WitherSkull"
+    },
+    {
+      "name": "wolf",
+      "class": "Wolf",
+      "java_class": "net.minecraft.world.entity.animal.wolf.Wolf"
+    },
+    {
+      "name": "zoglin",
+      "class": "Zoglin",
+      "java_class": "net.minecraft.world.entity.monster.Zoglin"
+    },
+    {
+      "name": "zombie",
+      "class": "Zombie",
+      "java_class": "net.minecraft.world.entity.monster.zombie.Zombie"
+    },
+    {
+      "name": "zombie_horse",
+      "class": "ZombieHorse",
+      "java_class": "net.minecraft.world.entity.animal.equine.ZombieHorse"
+    },
+    {
+      "name": "zombie_nautilus",
+      "class": "ZombieNautilus",
+      "java_class": "net.minecraft.world.entity.animal.nautilus.ZombieNautilus"
+    },
+    {
+      "name": "zombie_villager",
+      "class": "ZombieVillager",
+      "java_class": "net.minecraft.world.entity.monster.zombie.ZombieVillager"
+    },
+    {
+      "name": "zombified_piglin",
+      "class": "ZombifiedPiglin",
+      "java_class": "net.minecraft.world.entity.monster.zombie.ZombifiedPiglin"
+    },
+    {
+      "name": "player",
+      "class": "Player",
+      "java_class": "net.minecraft.world.entity.player.Player"
+    },
+    {
+      "name": "fishing_bobber",
+      "class": "FishingHook",
+      "java_class": "net.minecraft.world.entity.projectile.FishingHook"
+    }
   ]
 }

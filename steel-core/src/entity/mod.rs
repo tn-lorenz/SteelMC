@@ -576,6 +576,8 @@ mod callback;
 pub mod damage;
 pub mod entities;
 mod fluid_contact;
+#[path = "generated/entities.rs"]
+mod generated_entities;
 mod inside_block_effects;
 mod living_base;
 mod manager;

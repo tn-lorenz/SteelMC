@@ -2767,6 +2767,7 @@ mod tests {
         let entity_pos = DVec3::new(5.5, 6.0, 7.5);
         let proto = ProtoChunk::new(single_empty_section(), pos, 0, 16, Weak::new());
         let crystal = Arc::new(EndCrystalEntity::new(
+            &vanilla_entities::END_CRYSTAL,
             next_entity_id(),
             entity_pos,
             Weak::new(),
@@ -2811,6 +2812,7 @@ mod tests {
         let proto = ProtoChunk::new(single_empty_section(), pos, 0, 16, Weak::new());
         let chunk = ChunkAccess::Proto(proto);
         let entity: SharedEntity = Arc::new(EndCrystalEntity::new(
+            &vanilla_entities::END_CRYSTAL,
             next_entity_id(),
             DVec3::new(5.5, 6.0, 7.5),
             Weak::new(),
@@ -2834,6 +2836,7 @@ mod tests {
         let proto = ProtoChunk::new(single_empty_section(), pos, 0, 16, Weak::new());
         let chunk = ChunkAccess::Proto(proto);
         let entity: SharedEntity = Arc::new(EndCrystalEntity::new(
+            &vanilla_entities::END_CRYSTAL,
             next_entity_id(),
             DVec3::new(5.5, 6.0, 7.5),
             Weak::new(),
@@ -2868,11 +2871,13 @@ mod tests {
         let proto = ProtoChunk::new(single_empty_section(), pos, 0, 16, Weak::new());
         let chunk = ChunkAccess::Proto(proto);
         let vehicle: SharedEntity = Arc::new(EndCrystalEntity::new(
+            &vanilla_entities::END_CRYSTAL,
             next_entity_id(),
             DVec3::new(5.5, 6.0, 7.5),
             Weak::new(),
         ));
         let passenger: SharedEntity = Arc::new(EndCrystalEntity::new(
+            &vanilla_entities::END_CRYSTAL,
             next_entity_id(),
             DVec3::new(5.5, 8.0, 7.5),
             Weak::new(),
@@ -2930,6 +2935,7 @@ mod tests {
         let proto = ProtoChunk::new(single_empty_section(), pos, 0, 16, Weak::new());
         let chunk = ChunkAccess::Proto(proto);
         let vehicle: SharedEntity = Arc::new(EndCrystalEntity::new(
+            &vanilla_entities::END_CRYSTAL,
             next_entity_id(),
             DVec3::new(5.5, 6.0, 7.5),
             Weak::new(),

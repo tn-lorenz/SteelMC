@@ -49,7 +49,7 @@ use steel_registry::{block_entity_type::BlockEntityTypeRef, vanilla_dimension_ty
 use steel_registry::{
     blocks::BlockRef, vanilla_game_rules::ADVANCE_TIME, vanilla_game_rules::ADVANCE_WEATHER,
 };
-use steel_registry::{vanilla_blocks, vanilla_game_events};
+use steel_registry::{vanilla_blocks, vanilla_entities, vanilla_game_events};
 use steel_utils::{
     locks::{SyncMutex, SyncRwLock},
     random::{RandomSource, legacy_random::LegacyRandom},
@@ -1988,6 +1988,7 @@ impl World {
 
             let entity_id = next_entity_id();
             let entity = Arc::new(ItemEntity::with_item_and_velocity(
+                &vanilla_entities::ITEM,
                 entity_id,
                 DVec3::new(x, y, z),
                 split_stack,
@@ -3166,6 +3167,7 @@ impl World {
 
         let entity_id = next_entity_id();
         let entity = Arc::new(ItemEntity::with_item_and_velocity(
+            &vanilla_entities::ITEM,
             entity_id,
             pos,
             item,
