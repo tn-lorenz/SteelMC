@@ -18,6 +18,7 @@ use steel_utils::{BlockPos, ChunkPos, axis::Axis};
 
 use crate::behavior::{BLOCK_BEHAVIORS, BlockCollisionContext};
 use crate::entity::ai::control::{MobControls, MoveControlOperation};
+use crate::entity::ai::goal::GoalSelector;
 use crate::entity::ai::navigation::{NavigationPathRequest, PathNavigation};
 use crate::entity::ai::path::{Path, PathType, PathfindingContext, PathfindingMalus};
 use crate::entity::ai::walk::{MobPathSettings, WalkNodeEvaluator, WalkPathEvaluator};
@@ -33,10 +34,28 @@ const MOVE_CONTROL_MAX_TURN: f32 = 90.0;
 
 #[derive(Debug)]
 pub struct MobBase {
+    goal_selector: SyncMutex<GoalSelector>,
+    target_selector: SyncMutex<GoalSelector>,
     controls: SyncMutex<MobControls>,
     navigation: SyncMutex<PathNavigation>,
     pathfinding_malus: SyncMutex<PathfindingMalus>,
     persistence_required: SyncMutex<bool>,
+    home_restriction: SyncMutex<MobHomeRestriction>,
+}
+
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+struct MobHomeRestriction {
+    position: BlockPos,
+    radius: i32,
+}
+
+impl MobHomeRestriction {
+    const fn none() -> Self {
+        Self {
+            position: BlockPos::ZERO,
+            radius: -1,
+        }
+    }
 }
 
 impl MobBase {
@@ -47,11 +66,24 @@ impl MobBase {
         pathfinding_malus.set(PathType::Fire, -1.0);
 
         Self {
+            goal_selector: SyncMutex::new(GoalSelector::new()),
+            target_selector: SyncMutex::new(GoalSelector::new()),
             controls: SyncMutex::new(MobControls::new()),
             navigation: SyncMutex::new(PathNavigation::new()),
             pathfinding_malus: SyncMutex::new(pathfinding_malus),
             persistence_required: SyncMutex::new(false),
+            home_restriction: SyncMutex::new(MobHomeRestriction::none()),
         }
+    }
+
+    #[must_use]
+    pub const fn goal_selector(&self) -> &SyncMutex<GoalSelector> {
+        &self.goal_selector
+    }
+
+    #[must_use]
+    pub const fn target_selector(&self) -> &SyncMutex<GoalSelector> {
+        &self.target_selector
     }
 
     #[must_use]
@@ -73,6 +105,10 @@ impl MobBase {
     pub const fn persistence_required(&self) -> &SyncMutex<bool> {
         &self.persistence_required
     }
+
+    const fn home_restriction(&self) -> &SyncMutex<MobHomeRestriction> {
+        &self.home_restriction
+    }
 }
 
 impl Default for MobBase {
@@ -90,6 +126,8 @@ pub trait Mob: LivingEntity {
 
     fn custom_server_ai_step(&self) {}
 
+    fn tick_goal_selectors(&self) {}
+
     fn remove_when_far_away(&self, _dist_sqr: f64) -> bool {
         true
     }
@@ -105,6 +143,42 @@ pub trait Mob: LivingEntity {
 
     fn set_persistence_required(&self) {
         *self.mob_base().persistence_required().lock() = true;
+    }
+
+    fn is_within_home(&self) -> bool {
+        self.is_within_home_pos(self.block_position())
+    }
+
+    fn is_within_home_pos(&self, pos: BlockPos) -> bool {
+        let home = *self.mob_base().home_restriction().lock();
+        home.radius == -1
+            || block_pos_distance_sqr(home.position, pos) < home_radius_sqr(home.radius)
+    }
+
+    fn is_within_home_vec(&self, pos: DVec3) -> bool {
+        let home = *self.mob_base().home_restriction().lock();
+        home.radius == -1
+            || block_center_distance_sqr(home.position, pos) < home_radius_sqr(home.radius)
+    }
+
+    fn set_home_to(&self, position: BlockPos, radius: i32) {
+        *self.mob_base().home_restriction().lock() = MobHomeRestriction { position, radius };
+    }
+
+    fn home_position(&self) -> BlockPos {
+        self.mob_base().home_restriction().lock().position
+    }
+
+    fn home_radius(&self) -> i32 {
+        self.mob_base().home_restriction().lock().radius
+    }
+
+    fn clear_home(&self) {
+        self.mob_base().home_restriction().lock().radius = -1;
+    }
+
+    fn has_home(&self) -> bool {
+        self.home_radius() != -1
     }
 
     fn check_mob_despawn(&self) {
@@ -220,6 +294,7 @@ pub trait Mob: LivingEntity {
 
     fn mob_server_ai_step(&self) {
         self.increment_no_action_time();
+        self.tick_goal_selectors();
         self.tick_path_navigation();
         self.custom_server_ai_step();
         self.tick_move_control();
@@ -433,6 +508,31 @@ pub trait PathfinderMob: Mob {
         false
     }
 
+    fn tick_pathfinder_goal_selectors(&self)
+    where
+        Self: Sized,
+    {
+        let id_based_tick_count = self.tick_count().wrapping_add(self.id());
+        if id_based_tick_count % 2 != 0 && self.tick_count() > 1 {
+            self.mob_base()
+                .target_selector()
+                .lock()
+                .tick_running_goals(self, false);
+            self.mob_base()
+                .goal_selector()
+                .lock()
+                .tick_running_goals(self, false);
+        } else {
+            self.mob_base().target_selector().lock().tick(self);
+            self.mob_base().goal_selector().lock().tick(self);
+        }
+    }
+
+    fn is_stable_destination(&self, pos: BlockPos) -> bool {
+        self.level()
+            .is_some_and(|world| world.get_block_state(pos.below()).is_solid_render())
+    }
+
     fn create_path_to(&self, target: BlockPos, reach_range: i32) -> Option<Path> {
         let world = self.level()?;
         if !world.has_full_chunk(ChunkPos::from_block_pos(target)) {
@@ -588,6 +688,23 @@ fn should_jump_to_wanted_position<M: Mob + ?Sized>(
 
 fn position_shape_top(pos: BlockPos, local_y: f64) -> f64 {
     f64::from(pos.y()) + local_y
+}
+
+fn block_pos_distance_sqr(a: BlockPos, b: BlockPos) -> f64 {
+    let dx = f64::from(a.x() - b.x());
+    let dy = f64::from(a.y() - b.y());
+    let dz = f64::from(a.z() - b.z());
+    dx.mul_add(dx, dy.mul_add(dy, dz * dz))
+}
+
+fn block_center_distance_sqr(pos: BlockPos, target: DVec3) -> f64 {
+    let (x, y, z) = pos.get_center();
+    DVec3::new(x, y, z).distance_squared(target)
+}
+
+fn home_radius_sqr(radius: i32) -> f64 {
+    let radius = f64::from(radius);
+    radius * radius
 }
 
 fn rotlerp(a: f32, b: f32, max: f32) -> f32 {
@@ -806,6 +923,22 @@ mod tests {
 
         assert_eq!(mob.no_action_time(), 0);
         assert!(!mob.is_removed());
+    }
+
+    #[test]
+    fn mob_home_restriction_uses_vanilla_radius() {
+        let mob = DespawnTestMob::new(None, false);
+
+        assert!(mob.is_within_home_pos(BlockPos::new(1000, 64, 1000)));
+
+        mob.set_home_to(BlockPos::ZERO, 4);
+        assert!(mob.has_home());
+        assert!(mob.is_within_home_pos(BlockPos::new(3, 0, 0)));
+        assert!(!mob.is_within_home_pos(BlockPos::new(4, 0, 0)));
+
+        mob.clear_home();
+        assert!(!mob.has_home());
+        assert!(mob.is_within_home_pos(BlockPos::new(1000, 64, 1000)));
     }
 
     #[test]

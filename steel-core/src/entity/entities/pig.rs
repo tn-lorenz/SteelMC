@@ -26,6 +26,7 @@ use steel_utils::locks::SyncMutex;
 use steel_utils::random::Random as _;
 use steel_utils::{BlockPos, BlockStateId, Identifier};
 
+use crate::entity::ai::goal::WaterAvoidingRandomStrollGoal;
 use crate::entity::damage::DamageSource;
 use crate::entity::{
     Entity, EntityBase, EntityBaseLoad, EntitySyncedData, LivingEntity, LivingEntityBase, Mob,
@@ -81,14 +82,19 @@ impl PigEntity {
 
     fn new_with_base(base: EntityBase, entity_type: EntityTypeRef) -> Self {
         let living_base = LivingEntityBase::new(entity_type);
+        let mob_base = MobBase::new();
         let mut entity_data = PigEntityData::new();
         living_base.initialize_synced_data(&mut entity_data);
+        mob_base
+            .goal_selector()
+            .lock()
+            .add_goal(6, WaterAvoidingRandomStrollGoal::new(1.0));
 
         Self {
             base,
             entity_type,
             living_base,
-            mob_base: MobBase::new(),
+            mob_base,
             entity_data: SyncMutex::new(entity_data),
             age_state: SyncMutex::new(PigAgeState::new()),
         }
@@ -549,6 +555,10 @@ impl Mob for PigEntity {
         &self.mob_base
     }
 
+    fn tick_goal_selectors(&self) {
+        PathfinderMob::tick_pathfinder_goal_selectors(self);
+    }
+
     fn remove_when_far_away(&self, _dist_sqr: f64) -> bool {
         false
     }
@@ -657,6 +667,18 @@ mod tests {
         let pig = PigEntity::new(&vanilla_entities::PIG, 1, DVec3::ZERO, Weak::new());
 
         assert!(!pig.remove_when_far_away(f64::MAX));
+    }
+
+    #[test]
+    fn pig_registers_vanilla_random_stroll_goal_foundation() {
+        init_test_registry();
+
+        let pig = PigEntity::new(&vanilla_entities::PIG, 1, DVec3::ZERO, Weak::new());
+
+        assert_eq!(
+            pig.mob_base().goal_selector().lock().available_goal_count(),
+            1
+        );
     }
 
     #[test]
