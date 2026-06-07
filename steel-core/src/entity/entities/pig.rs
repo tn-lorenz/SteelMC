@@ -583,6 +583,7 @@ mod tests {
     use steel_registry::test_support::init_test_registry;
     use steel_registry::vanilla_entities;
 
+    use crate::entity::ai::navigation::NavigationTickContext;
     use crate::entity::ai::node::Node;
     use crate::entity::ai::path::{Path, PathType};
 
@@ -692,7 +693,12 @@ mod tests {
         assert!(pig.move_to_path(Some(path), 1.0));
         let target = {
             let mut navigation = pig.mob_base().navigation().lock();
-            navigation.next_move_target(pig.position(), pig.bounding_box().width())
+            navigation.next_move_target(NavigationTickContext {
+                mob_position: pig.position(),
+                mob_bounding_box_width: pig.bounding_box().width(),
+                mob_speed: pig.get_speed(),
+                game_time: 0,
+            })
         };
         let Some((target, speed_modifier)) = target else {
             panic!("navigation should provide a move target");

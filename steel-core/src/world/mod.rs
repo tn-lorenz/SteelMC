@@ -575,6 +575,11 @@ impl World {
         level_data.data_mut().game_time = tick_count as i64;
     }
 
+    /// Returns vanilla level game time.
+    pub fn game_time(&self) -> i64 {
+        self.level_data.read().game_time()
+    }
+
     /// Returns the total height of the world in blocks.
     pub const fn get_height(&self) -> i32 {
         self.dimension_type.height

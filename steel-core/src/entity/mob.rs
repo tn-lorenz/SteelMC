@@ -19,7 +19,7 @@ use steel_utils::{BlockPos, ChunkPos, axis::Axis};
 use crate::behavior::{BLOCK_BEHAVIORS, BlockCollisionContext};
 use crate::entity::ai::control::{MobControls, MoveControlOperation};
 use crate::entity::ai::goal::GoalSelector;
-use crate::entity::ai::navigation::{NavigationPathRequest, PathNavigation};
+use crate::entity::ai::navigation::{NavigationPathRequest, NavigationTickContext, PathNavigation};
 use crate::entity::ai::path::{Path, PathType, PathfindingContext, PathfindingMalus};
 use crate::entity::ai::walk::{MobPathSettings, WalkNodeEvaluator, WalkPathEvaluator};
 use crate::entity::{Entity, LivingEntity, LivingTravelInput, RemovalReason};
@@ -314,20 +314,23 @@ pub trait Mob: LivingEntity {
     }
 
     fn tick_path_navigation(&self) {
+        let Some(world) = self.level() else {
+            return;
+        };
         let (target, speed_modifier) = {
             let mut navigation = self.mob_base().navigation().lock();
             navigation.tick();
-            let Some(target) =
-                navigation.next_move_target(self.position(), self.bounding_box().width())
-            else {
+            let Some(target) = navigation.next_move_target(NavigationTickContext {
+                mob_position: self.position(),
+                mob_bounding_box_width: self.bounding_box().width(),
+                mob_speed: self.get_speed(),
+                game_time: world.game_time(),
+            }) else {
                 return;
             };
             target
         };
 
-        let Some(world) = self.level() else {
-            return;
-        };
         let target_pos = BlockPos::containing(target.x, target.y, target.z);
         let ground_y = if world.get_block_state(target_pos.below()).is_air() {
             target.y
@@ -578,7 +581,7 @@ pub trait PathfinderMob: Mob {
             return false;
         };
 
-        navigation.move_to(path, speed_modifier)
+        navigation.move_to(path, speed_modifier, self.position())
     }
 
     fn is_path_finding(&self) -> bool {

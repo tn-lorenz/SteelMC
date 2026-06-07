@@ -12,6 +12,8 @@ use crate::world::LevelReader;
 const DIRECT_TARGET_REACHED_DISTANCE_SQR: f64 = 2.500_000_3e-7;
 const DEFAULT_REQUIRED_PATH_LENGTH: f32 = 16.0;
 const MAX_VISITED_NODES_SCALE: f32 = 16.0;
+const STUCK_CHECK_INTERVAL: i32 = 100;
+const STUCK_THRESHOLD_DISTANCE_FACTOR: f32 = 0.25;
 
 #[derive(Debug, Clone, Copy, PartialEq)]
 pub struct NavigationPathRequest<'a> {
@@ -19,6 +21,14 @@ pub struct NavigationPathRequest<'a> {
     pub targets: &'a [BlockPos],
     pub max_path_length: f32,
     pub reach_range: i32,
+}
+
+#[derive(Debug, Clone, Copy, PartialEq)]
+pub struct NavigationTickContext {
+    pub mob_position: DVec3,
+    pub mob_bounding_box_width: f64,
+    pub mob_speed: f32,
+    pub game_time: i64,
 }
 
 #[derive(Debug, Clone, PartialEq)]
@@ -33,6 +43,13 @@ pub struct PathNavigation {
     required_path_length: f32,
     reach_range: i32,
     tick: i32,
+    last_stuck_check: i32,
+    last_stuck_check_pos: DVec3,
+    timeout_cached_node: BlockPos,
+    timeout_timer: i64,
+    last_timeout_check: i64,
+    timeout_limit: f64,
+    stuck: bool,
     done: bool,
 }
 
@@ -50,6 +67,13 @@ impl PathNavigation {
             required_path_length: DEFAULT_REQUIRED_PATH_LENGTH,
             reach_range: 0,
             tick: 0,
+            last_stuck_check: 0,
+            last_stuck_check_pos: DVec3::ZERO,
+            timeout_cached_node: BlockPos::ZERO,
+            timeout_timer: 0,
+            last_timeout_check: 0,
+            timeout_limit: 0.0,
+            stuck: false,
             done: true,
         }
     }
@@ -107,6 +131,11 @@ impl PathNavigation {
         self.tick
     }
 
+    #[must_use]
+    pub const fn is_stuck(&self) -> bool {
+        self.stuck
+    }
+
     pub const fn tick(&mut self) {
         self.tick = self.tick.wrapping_add(1);
     }
@@ -153,10 +182,11 @@ impl PathNavigation {
         )?;
         self.target_pos = Some(path.target());
         self.reach_range = request.reach_range;
+        self.reset_stuck_timeout();
         Some(path)
     }
 
-    pub fn move_to(&mut self, path: Path, speed_modifier: f64) -> bool {
+    pub fn move_to(&mut self, path: Path, speed_modifier: f64, mob_position: DVec3) -> bool {
         self.direct_target = None;
         if path.node_count() == 0 {
             self.path = None;
@@ -178,6 +208,8 @@ impl PathNavigation {
 
         self.target_pos = self.path.as_ref().map(Path::target);
         self.speed_modifier = speed_modifier;
+        self.last_stuck_check = self.tick;
+        self.last_stuck_check_pos = mob_position;
         self.done = false;
         true
     }
@@ -194,21 +226,17 @@ impl PathNavigation {
         self.done = false;
     }
 
-    pub fn next_move_target(
-        &mut self,
-        mob_position: DVec3,
-        mob_bounding_box_width: f64,
-    ) -> Option<(DVec3, f64)> {
+    pub fn next_move_target(&mut self, context: NavigationTickContext) -> Option<(DVec3, f64)> {
         if self.done {
             return None;
         }
 
         if self.path.is_some() {
-            return self.next_path_move_target(mob_position, mob_bounding_box_width);
+            return self.next_path_move_target(context);
         }
 
         let target = self.direct_target?;
-        if target.distance_squared(mob_position) < DIRECT_TARGET_REACHED_DISTANCE_SQR {
+        if target.distance_squared(context.mob_position) < DIRECT_TARGET_REACHED_DISTANCE_SQR {
             self.stop();
             return None;
         }
@@ -216,47 +244,57 @@ impl PathNavigation {
         Some((target, self.speed_modifier))
     }
 
-    fn next_path_move_target(
-        &mut self,
-        mob_position: DVec3,
-        mob_bounding_box_width: f64,
-    ) -> Option<(DVec3, f64)> {
-        let Some(path) = self.path.as_mut() else {
-            self.done = true;
-            return None;
-        };
+    fn next_path_move_target(&mut self, context: NavigationTickContext) -> Option<(DVec3, f64)> {
+        {
+            let Some(path) = self.path.as_mut() else {
+                self.done = true;
+                return None;
+            };
 
-        let Some(current_node_pos) = path.next_node_pos() else {
+            let Some(current_node_pos) = path.next_node_pos() else {
+                self.stop();
+                return None;
+            };
+
+            let max_distance_to_waypoint = if context.mob_bounding_box_width > 0.75 {
+                context.mob_bounding_box_width / 2.0
+            } else {
+                0.75 - context.mob_bounding_box_width / 2.0
+            };
+            let x_distance =
+                (context.mob_position.x - (f64::from(current_node_pos.x()) + 0.5)).abs();
+            let y_distance = (context.mob_position.y - f64::from(current_node_pos.y())).abs();
+            let z_distance =
+                (context.mob_position.z - (f64::from(current_node_pos.z()) + 0.5)).abs();
+            let is_close_enough_to_current_node = x_distance < max_distance_to_waypoint
+                && z_distance < max_distance_to_waypoint
+                && y_distance < 1.0;
+            let should_cut_corner = path
+                .next_node()
+                .is_some_and(|node| can_cut_corner(node.path_type))
+                && should_target_next_node_in_direction(path, context.mob_position);
+            if is_close_enough_to_current_node || should_cut_corner {
+                path.advance();
+            }
+
+            if path.is_done() {
+                self.stop();
+                return None;
+            }
+        }
+
+        self.do_stuck_detection(context.mob_position, context.mob_speed, context.game_time);
+        if self.done {
+            return None;
+        }
+
+        let Some(path) = self.path.as_ref() else {
             self.stop();
             return None;
         };
-
-        let max_distance_to_waypoint = if mob_bounding_box_width > 0.75 {
-            mob_bounding_box_width / 2.0
-        } else {
-            0.75 - mob_bounding_box_width / 2.0
-        };
-        let x_distance = (mob_position.x - (f64::from(current_node_pos.x()) + 0.5)).abs();
-        let y_distance = (mob_position.y - f64::from(current_node_pos.y())).abs();
-        let z_distance = (mob_position.z - (f64::from(current_node_pos.z()) + 0.5)).abs();
-        let is_close_enough_to_current_node = x_distance < max_distance_to_waypoint
-            && z_distance < max_distance_to_waypoint
-            && y_distance < 1.0;
-        let should_cut_corner = path
-            .next_node()
-            .is_some_and(|node| can_cut_corner(node.path_type))
-            && should_target_next_node_in_direction(path, mob_position);
-        if is_close_enough_to_current_node || should_cut_corner {
-            path.advance();
-        }
-
-        if path.is_done() {
-            self.stop();
-            return None;
-        }
 
         let target = path.next_node().map(|node| {
-            let offset = f64::from(floor(mob_bounding_box_width + 1.0)) * 0.5;
+            let offset = f64::from(floor(context.mob_bounding_box_width + 1.0)) * 0.5;
             DVec3::new(
                 f64::from(node.x) + offset,
                 f64::from(node.y),
@@ -264,6 +302,66 @@ impl PathNavigation {
             )
         })?;
         Some((target, self.speed_modifier))
+    }
+
+    fn do_stuck_detection(&mut self, mob_position: DVec3, mob_speed: f32, game_time: i64) {
+        if self.tick - self.last_stuck_check > STUCK_CHECK_INTERVAL {
+            let effective_speed = if mob_speed >= 1.0 {
+                mob_speed
+            } else {
+                mob_speed * mob_speed
+            };
+            let threshold_distance =
+                effective_speed * STUCK_CHECK_INTERVAL as f32 * STUCK_THRESHOLD_DISTANCE_FACTOR;
+            if mob_position.distance_squared(self.last_stuck_check_pos)
+                < f64::from(threshold_distance * threshold_distance)
+            {
+                self.stuck = true;
+                self.stop();
+            } else {
+                self.stuck = false;
+            }
+
+            self.last_stuck_check = self.tick;
+            self.last_stuck_check_pos = mob_position;
+        }
+
+        if self.is_done() {
+            return;
+        }
+
+        let Some(current_node_pos) = self.path.as_ref().and_then(Path::next_node_pos) else {
+            return;
+        };
+        if current_node_pos == self.timeout_cached_node {
+            self.timeout_timer += game_time - self.last_timeout_check;
+        } else {
+            self.timeout_cached_node = current_node_pos;
+            let dist_to_node = mob_position.distance(block_bottom_center(current_node_pos));
+            self.timeout_limit = if mob_speed > 0.0 {
+                dist_to_node / f64::from(mob_speed) * 20.0
+            } else {
+                0.0
+            };
+        }
+
+        if self.timeout_limit > 0.0 && self.timeout_timer as f64 > self.timeout_limit * 3.0 {
+            self.timeout_path();
+        }
+
+        self.last_timeout_check = game_time;
+    }
+
+    fn timeout_path(&mut self) {
+        self.reset_stuck_timeout();
+        self.stop();
+    }
+
+    const fn reset_stuck_timeout(&mut self) {
+        self.timeout_cached_node = BlockPos::ZERO;
+        self.timeout_timer = 0;
+        self.timeout_limit = 0.0;
+        self.stuck = false;
     }
 }
 
@@ -322,7 +420,7 @@ mod tests {
     use steel_registry::{REGISTRY, test_support::init_test_registry, vanilla_blocks};
     use steel_utils::{BlockPos, BlockStateId, WorldAabb};
 
-    use super::{NavigationPathRequest, PathNavigation};
+    use super::{NavigationPathRequest, NavigationTickContext, PathNavigation};
     use crate::behavior::init_behaviors;
     use crate::entity::ai::node::Node;
     use crate::entity::ai::path::{Path, PathType, PathfindingMalus};
@@ -375,6 +473,28 @@ mod tests {
         node
     }
 
+    fn tick_context(mob_position: DVec3) -> NavigationTickContext {
+        NavigationTickContext {
+            mob_position,
+            mob_bounding_box_width: 0.9,
+            mob_speed: 0.25,
+            game_time: 0,
+        }
+    }
+
+    fn tick_context_with_time(
+        mob_position: DVec3,
+        mob_speed: f32,
+        game_time: i64,
+    ) -> NavigationTickContext {
+        NavigationTickContext {
+            mob_position,
+            mob_bounding_box_width: 0.9,
+            mob_speed,
+            game_time,
+        }
+    }
+
     #[test]
     fn move_to_path_targets_next_node_after_current_node_is_reached() {
         let path = Path::new(
@@ -384,9 +504,9 @@ mod tests {
         );
         let mut navigation = PathNavigation::new();
 
-        assert!(navigation.move_to(path, 1.25));
+        assert!(navigation.move_to(path, 1.25, DVec3::new(0.5, 64.0, 0.5)));
 
-        let target = navigation.next_move_target(DVec3::new(0.5, 64.0, 0.5), 0.9);
+        let target = navigation.next_move_target(tick_context(DVec3::new(0.5, 64.0, 0.5)));
 
         let Some((target, speed)) = target else {
             panic!("navigation should target the next path node");
@@ -401,11 +521,11 @@ mod tests {
         let path = Path::new(vec![Node::new(0, 64, 0)], BlockPos::new(0, 64, 0), true);
         let mut navigation = PathNavigation::new();
 
-        assert!(navigation.move_to(path, 1.0));
+        assert!(navigation.move_to(path, 1.0, DVec3::new(0.5, 64.0, 0.5)));
 
         assert!(
             navigation
-                .next_move_target(DVec3::new(0.5, 64.0, 0.5), 0.9)
+                .next_move_target(tick_context(DVec3::new(0.5, 64.0, 0.5)))
                 .is_none()
         );
         assert!(navigation.is_done());
@@ -426,9 +546,9 @@ mod tests {
         );
         let mut navigation = PathNavigation::new();
 
-        assert!(navigation.move_to(path, 1.0));
+        assert!(navigation.move_to(path, 1.0, DVec3::new(0.0, 64.0, 0.5)));
 
-        let target = navigation.next_move_target(DVec3::new(1.1, 64.0, 0.5), 0.9);
+        let target = navigation.next_move_target(tick_context(DVec3::new(1.1, 64.0, 0.5)));
 
         let Some((target, _speed)) = target else {
             panic!("navigation should target a path node");
@@ -449,15 +569,49 @@ mod tests {
         );
         let mut navigation = PathNavigation::new();
 
-        assert!(navigation.move_to(path, 1.0));
+        assert!(navigation.move_to(path, 1.0, DVec3::new(0.0, 64.0, 0.5)));
 
-        let target = navigation.next_move_target(DVec3::new(1.1, 64.0, 0.5), 0.9);
+        let target = navigation.next_move_target(tick_context(DVec3::new(1.1, 64.0, 0.5)));
 
         let Some((target, _speed)) = target else {
             panic!("navigation should target the current path node");
         };
         assert_eq!(target, DVec3::new(0.5, 64.0, 0.5));
         assert_eq!(navigation.path().map(Path::next_node_index), Some(0));
+    }
+
+    #[test]
+    fn path_navigation_stops_when_stationary_past_stuck_interval() {
+        let path = Path::new(vec![Node::new(1, 64, 0)], BlockPos::new(1, 64, 0), true);
+        let mut navigation = PathNavigation::new();
+        let mob_position = DVec3::new(0.0, 64.0, 0.5);
+
+        assert!(navigation.move_to(path, 1.0, mob_position));
+        for game_time in 1..=101 {
+            navigation.tick();
+            let _ =
+                navigation.next_move_target(tick_context_with_time(mob_position, 0.25, game_time));
+        }
+
+        assert!(navigation.is_stuck());
+        assert!(navigation.is_done());
+    }
+
+    #[test]
+    fn path_navigation_times_out_when_same_node_takes_too_long() {
+        let path = Path::new(vec![Node::new(2, 64, 0)], BlockPos::new(2, 64, 0), true);
+        let mut navigation = PathNavigation::new();
+        let mob_position = DVec3::new(1.0, 64.0, 0.5);
+
+        assert!(navigation.move_to(path, 1.0, mob_position));
+        for game_time in 1..=92 {
+            navigation.tick();
+            let _ =
+                navigation.next_move_target(tick_context_with_time(mob_position, 1.0, game_time));
+        }
+
+        assert!(!navigation.is_stuck());
+        assert!(navigation.is_done());
     }
 
     #[test]
@@ -482,15 +636,15 @@ mod tests {
         );
         let mut navigation = PathNavigation::new();
 
-        assert!(navigation.move_to(path, 1.0));
+        assert!(navigation.move_to(path, 1.0, DVec3::new(0.5, 64.0, 0.5)));
         assert!(
             navigation
-                .next_move_target(DVec3::new(0.5, 64.0, 0.5), 0.9)
+                .next_move_target(tick_context(DVec3::new(0.5, 64.0, 0.5)))
                 .is_some()
         );
         assert_eq!(navigation.path().map(Path::next_node_index), Some(1));
 
-        assert!(navigation.move_to(same_path, 1.5));
+        assert!(navigation.move_to(same_path, 1.5, DVec3::new(0.5, 64.0, 0.5)));
 
         assert_eq!(navigation.path().map(Path::next_node_index), Some(1));
         assert_eq!(navigation.speed_modifier().to_bits(), 1.5_f64.to_bits());
@@ -503,7 +657,7 @@ mod tests {
 
         assert!(
             navigation
-                .next_move_target(DVec3::new(1.0, 64.0, 1.0), 0.9)
+                .next_move_target(tick_context(DVec3::new(1.0, 64.0, 1.0)))
                 .is_none()
         );
         assert!(navigation.is_done());
