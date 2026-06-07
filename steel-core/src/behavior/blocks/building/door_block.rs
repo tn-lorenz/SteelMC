@@ -30,6 +30,7 @@ use crate::{
         InventoryAccess,
     },
     entity::Entity,
+    entity::ai::path::PathComputationType,
     fluid::fluid_state_to_block,
     player::Player,
     world::{LevelReader, ScheduledTickAccess, World, game_event_context::GameEventContext},
@@ -256,6 +257,15 @@ impl BlockBehavior for DoorBlock {
         }
     }
 
+    fn is_pathfindable(&self, state: BlockStateId, computation_type: PathComputationType) -> bool {
+        match computation_type {
+            PathComputationType::Land | PathComputationType::Air => {
+                state.get_value(&BlockStateProperties::OPEN)
+            }
+            PathComputationType::Water => false,
+        }
+    }
+
     fn set_placed_by(
         &self,
         state: BlockStateId,
@@ -417,6 +427,10 @@ impl BlockBehavior for WeatheringCopperDoorBlock {
 
     fn can_survive(&self, state: BlockStateId, world: &dyn LevelReader, pos: BlockPos) -> bool {
         self.door().can_survive(state, world, pos)
+    }
+
+    fn is_pathfindable(&self, state: BlockStateId, computation_type: PathComputationType) -> bool {
+        self.door().is_pathfindable(state, computation_type)
     }
 
     fn set_placed_by(

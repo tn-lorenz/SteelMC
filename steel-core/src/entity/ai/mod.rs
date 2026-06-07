@@ -7,3 +7,4 @@
 pub mod control;
 pub mod navigation;
 pub mod path;
+pub mod walk;

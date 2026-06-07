@@ -6,7 +6,9 @@ use glam::DVec3;
 use steel_registry::blocks::BlockRef;
 use steel_registry::blocks::block_state_ext::BlockStateExt;
 use steel_registry::blocks::properties::{BlockStateProperties, Direction};
-use steel_registry::blocks::shapes::{BooleanOp, VoxelShape, join_unoptimized_boxes};
+use steel_registry::blocks::shapes::{
+    BooleanOp, VoxelShape, is_shape_full_block, join_unoptimized_boxes,
+};
 use steel_registry::entity_type::EntityTypeRef;
 use steel_registry::fluid::{FluidRef, FluidState};
 use steel_registry::item_stack::ItemStack;
@@ -18,11 +20,12 @@ use steel_registry::{REGISTRY, RegistryEntry, RegistryExt};
 use steel_utils::types::{InteractionHand, UpdateFlags};
 use steel_utils::{BlockPos, BlockStateId, WorldAabb, axis::Axis};
 
-use crate::behavior::BLOCK_BEHAVIORS;
 use crate::behavior::InventoryAccess;
 use crate::behavior::blocks::vegetation::bonemealable::Bonemealable;
 use crate::behavior::context::{BlockHitResult, BlockPlaceContext, InteractionResult};
+use crate::behavior::{BLOCK_BEHAVIORS, BlockStateBehaviorExt};
 use crate::block_entity::SharedBlockEntity;
+use crate::entity::ai::path::PathComputationType;
 use crate::entity::{Entity, InsideBlockEffectCollector, damage::DamageSource};
 use crate::fluid::is_water_fluid;
 use crate::physics::collide;
@@ -656,6 +659,18 @@ pub trait BlockBehavior: Send + Sync {
     )]
     fn is_randomly_ticking(&self, state: BlockStateId) -> bool {
         false
+    }
+
+    /// Returns whether this block state is pathfindable for the supplied vanilla path computation.
+    ///
+    /// Vanilla baseline for `BlockBehaviour.isPathfindable`.
+    fn is_pathfindable(&self, state: BlockStateId, computation_type: PathComputationType) -> bool {
+        match computation_type {
+            PathComputationType::Land | PathComputationType::Air => {
+                !is_shape_full_block(state.get_collision_shape())
+            }
+            PathComputationType::Water => is_water_fluid(state.get_fluid_state().fluid_id),
+        }
     }
 
     /// Returns this block state's collision shape for the supplied collision context.

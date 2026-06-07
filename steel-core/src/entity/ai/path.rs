@@ -1,4 +1,12 @@
-//! Path type and malus state used by vanilla mob pathfinding.
+//! Path type, cache, and malus state used by vanilla mob pathfinding.
+
+use steel_utils::{BlockPos, BlockStateId, PackedBlockPos};
+
+use crate::entity::ai::walk::WalkPathEvaluator;
+use crate::world::LevelReader;
+
+const PATH_TYPE_CACHE_SIZE: usize = 4096;
+const PATH_TYPE_CACHE_MASK: usize = PATH_TYPE_CACHE_SIZE - 1;
 
 /// Vanilla `PathType`.
 ///
@@ -35,6 +43,14 @@ pub enum PathType {
     DamageCautious,
     OnTopOfTrapdoor,
     BigMobsCloseToDanger,
+}
+
+/// Vanilla `PathComputationType`.
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Hash)]
+pub enum PathComputationType {
+    Land,
+    Water,
+    Air,
 }
 
 impl PathType {
@@ -112,9 +128,147 @@ impl Default for PathfindingMalus {
     }
 }
 
+#[derive(Debug, Clone)]
+pub struct PathTypeCache {
+    positions: Box<[i64]>,
+    path_types: Box<[Option<PathType>]>,
+}
+
+impl PathTypeCache {
+    #[must_use]
+    pub fn new() -> Self {
+        Self {
+            positions: vec![0; PATH_TYPE_CACHE_SIZE].into_boxed_slice(),
+            path_types: vec![None; PATH_TYPE_CACHE_SIZE].into_boxed_slice(),
+        }
+    }
+
+    #[must_use]
+    pub fn get_or_compute(&mut self, level: &dyn LevelReader, pos: BlockPos) -> PathType {
+        let key = PackedBlockPos::from(pos).as_raw();
+        let index = Self::index(key);
+        if self.positions[index] == key
+            && let Some(path_type) = self.path_types[index]
+        {
+            return path_type;
+        }
+
+        let path_type = WalkPathEvaluator::path_type_from_state(level, pos);
+        self.positions[index] = key;
+        self.path_types[index] = Some(path_type);
+        path_type
+    }
+
+    pub fn invalidate(&mut self, pos: BlockPos) {
+        let key = PackedBlockPos::from(pos).as_raw();
+        let index = Self::index(key);
+        if self.positions[index] == key {
+            self.path_types[index] = None;
+        }
+    }
+
+    const fn index(pos: i64) -> usize {
+        (fastutil_mix(pos as u64) as usize) & PATH_TYPE_CACHE_MASK
+    }
+}
+
+impl Default for PathTypeCache {
+    fn default() -> Self {
+        Self::new()
+    }
+}
+
+pub struct PathfindingContext<'a> {
+    level: &'a dyn LevelReader,
+    cache: Option<&'a mut PathTypeCache>,
+    mob_position: BlockPos,
+}
+
+impl<'a> PathfindingContext<'a> {
+    #[must_use]
+    pub const fn new(level: &'a dyn LevelReader, mob_position: BlockPos) -> Self {
+        Self {
+            level,
+            cache: None,
+            mob_position,
+        }
+    }
+
+    #[must_use]
+    pub fn with_cache(
+        level: &'a dyn LevelReader,
+        mob_position: BlockPos,
+        cache: &'a mut PathTypeCache,
+    ) -> Self {
+        Self {
+            level,
+            cache: Some(cache),
+            mob_position,
+        }
+    }
+
+    #[must_use]
+    pub fn get_path_type_from_state(&mut self, x: i32, y: i32, z: i32) -> PathType {
+        let pos = BlockPos::new(x, y, z);
+        match self.cache.as_deref_mut() {
+            Some(cache) => cache.get_or_compute(self.level, pos),
+            None => WalkPathEvaluator::path_type_from_state(self.level, pos),
+        }
+    }
+
+    #[must_use]
+    pub fn get_block_state(&self, pos: BlockPos) -> BlockStateId {
+        self.level.get_block_state(pos)
+    }
+
+    #[must_use]
+    pub const fn level(&self) -> &dyn LevelReader {
+        self.level
+    }
+
+    #[must_use]
+    pub const fn mob_position(&self) -> BlockPos {
+        self.mob_position
+    }
+}
+
+const fn fastutil_mix(value: u64) -> u64 {
+    let mixed = value.wrapping_mul(0x9E37_79B9_7F4A_7C15);
+    let mixed = mixed ^ (mixed >> 32);
+    mixed ^ (mixed >> 16)
+}
+
 #[cfg(test)]
 mod tests {
-    use super::{PathType, PathfindingMalus};
+    use steel_registry::{REGISTRY, test_support::init_test_registry, vanilla_blocks};
+    use steel_utils::BlockStateId;
+
+    use super::{
+        PATH_TYPE_CACHE_MASK, PathType, PathTypeCache, PathfindingContext, PathfindingMalus,
+    };
+    use crate::world::LevelReader;
+
+    struct SingleBlockLevel {
+        state: BlockStateId,
+    }
+
+    impl LevelReader for SingleBlockLevel {
+        fn get_block_state(&self, _pos: steel_utils::BlockPos) -> BlockStateId {
+            self.state
+        }
+
+        fn raw_brightness(&self, _pos: steel_utils::BlockPos, _sky_darkening: u8) -> u8 {
+            0
+        }
+
+        fn min_y(&self) -> i32 {
+            -64
+        }
+
+        fn height(&self) -> i32 {
+            384
+        }
+    }
 
     #[test]
     fn default_malus_matches_vanilla_path_types() {
@@ -143,5 +297,42 @@ mod tests {
 
         assert_eq!(malus.get(PathType::Fire).to_bits(), (-1.0_f32).to_bits());
         assert_eq!(malus.get(PathType::Water).to_bits(), 8.0_f32.to_bits());
+    }
+
+    #[test]
+    fn path_type_cache_uses_vanilla_direct_mapped_size() {
+        assert_eq!(PATH_TYPE_CACHE_MASK, 4095);
+    }
+
+    #[test]
+    fn path_type_cache_invalidates_matching_position() {
+        init_test_registry();
+
+        let level = SingleBlockLevel {
+            state: REGISTRY.blocks.get_default_state_id(&vanilla_blocks::AIR),
+        };
+        let pos = steel_utils::BlockPos::new(1, 64, 1);
+        let mut cache = PathTypeCache::new();
+
+        assert_eq!(cache.get_or_compute(&level, pos), PathType::Open);
+        cache.invalidate(pos);
+        assert_eq!(cache.get_or_compute(&level, pos), PathType::Open);
+    }
+
+    #[test]
+    fn pathfinding_context_uses_cache_when_supplied() {
+        init_test_registry();
+
+        let level = SingleBlockLevel {
+            state: REGISTRY.blocks.get_default_state_id(&vanilla_blocks::AIR),
+        };
+        let mut cache = PathTypeCache::new();
+        let mut context = PathfindingContext::with_cache(
+            &level,
+            steel_utils::BlockPos::new(0, 64, 0),
+            &mut cache,
+        );
+
+        assert_eq!(context.get_path_type_from_state(0, 64, 0), PathType::Open);
     }
 }
