@@ -3,6 +3,7 @@
 use steel_math::floor;
 use steel_registry::blocks::block_state_ext::BlockStateExt as _;
 use steel_registry::blocks::properties::BlockStateProperties;
+use steel_registry::fluid::FluidState;
 use steel_registry::vanilla_block_tags::BlockTag;
 use steel_registry::vanilla_blocks;
 use steel_utils::{BlockPos, Direction, WorldAabb, axis::Axis};
@@ -24,6 +25,9 @@ pub struct MobPathSettings {
     mob_position_vec: glam::DVec3,
     mob_position: BlockPos,
     bounding_box: WorldAabb,
+    on_ground: bool,
+    in_water: bool,
+    can_stand_on_fluid: fn(FluidState) -> bool,
     max_up_step: f32,
     max_fall_distance: i32,
     malus: [f32; PathType::COUNT],
@@ -49,6 +53,9 @@ impl MobPathSettings {
             mob_position_vec: mob.position(),
             mob_position: mob.block_position(),
             bounding_box,
+            on_ground: mob.on_ground(),
+            in_water: mob.is_in_water(),
+            can_stand_on_fluid: |_| false,
             max_up_step: mob.max_up_step(),
             max_fall_distance: mob.max_fall_distance(),
             malus,
@@ -92,6 +99,9 @@ impl MobPathSettings {
             mob_position_vec: glam::DVec3::new(center_x, f64::from(mob_position.y()), center_z),
             mob_position,
             bounding_box,
+            on_ground: true,
+            in_water: false,
+            can_stand_on_fluid: |_| false,
             max_up_step: 0.6,
             max_fall_distance: 3,
             malus,
@@ -139,6 +149,27 @@ impl MobPathSettings {
     }
 
     #[must_use]
+    pub const fn with_on_ground(mut self, on_ground: bool) -> Self {
+        self.on_ground = on_ground;
+        self
+    }
+
+    #[must_use]
+    pub const fn with_in_water(mut self, in_water: bool) -> Self {
+        self.in_water = in_water;
+        self
+    }
+
+    #[must_use]
+    pub const fn with_can_stand_on_fluid(
+        mut self,
+        can_stand_on_fluid: fn(FluidState) -> bool,
+    ) -> Self {
+        self.can_stand_on_fluid = can_stand_on_fluid;
+        self
+    }
+
+    #[must_use]
     pub const fn entity_width(&self) -> i32 {
         self.entity_width
     }
@@ -166,6 +197,21 @@ impl MobPathSettings {
     #[must_use]
     pub const fn bounding_box(&self) -> WorldAabb {
         self.bounding_box
+    }
+
+    #[must_use]
+    pub const fn on_ground(&self) -> bool {
+        self.on_ground
+    }
+
+    #[must_use]
+    pub const fn in_water(&self) -> bool {
+        self.in_water
+    }
+
+    #[must_use]
+    pub fn can_stand_on_fluid(&self, fluid_state: FluidState) -> bool {
+        (self.can_stand_on_fluid)(fluid_state)
     }
 
     #[must_use]
@@ -300,6 +346,61 @@ impl WalkNodeEvaluator {
 
     pub(crate) fn reset_search_state(&mut self) {
         self.nodes.reset_search_state();
+    }
+
+    #[must_use]
+    pub fn get_start(&mut self, context: &mut PathfindingContext<'_>) -> i32 {
+        let position = self.settings.mob_position_vec();
+        let mut start_y = self.settings.mob_position().y();
+        let mut reusable_pos = BlockPos::containing(position.x, f64::from(start_y), position.z);
+        let mut block_state = context.get_block_state(reusable_pos);
+
+        if self
+            .settings
+            .can_stand_on_fluid(block_state.get_fluid_state())
+        {
+            while self
+                .settings
+                .can_stand_on_fluid(block_state.get_fluid_state())
+            {
+                start_y += 1;
+                reusable_pos = BlockPos::containing(position.x, f64::from(start_y), position.z);
+                block_state = context.get_block_state(reusable_pos);
+            }
+            start_y -= 1;
+        } else if self.settings.can_float() && self.settings.in_water() {
+            while block_state.get_fluid_state().is_water() {
+                start_y += 1;
+                reusable_pos = BlockPos::containing(position.x, f64::from(start_y), position.z);
+                block_state = context.get_block_state(reusable_pos);
+            }
+            start_y -= 1;
+        } else if self.settings.on_ground() {
+            start_y = floor(position.y + 0.5);
+        } else {
+            reusable_pos = BlockPos::containing(position.x, position.y + 1.0, position.z);
+
+            while reusable_pos.y() > context.level().min_y() {
+                start_y = reusable_pos.y();
+                reusable_pos = reusable_pos.below();
+                let below_block_state = context.get_block_state(reusable_pos);
+                if !below_block_state.is_air()
+                    && !below_block_state.is_pathfindable(PathComputationType::Land)
+                {
+                    break;
+                }
+            }
+        }
+
+        let start_pos = self.settings.mob_position();
+        let centered_start = BlockPos::new(start_pos.x(), start_y, start_pos.z());
+        if !self.can_start_at(context, centered_start)
+            && let Some(corner) = self.first_startable_corner(context, start_y)
+        {
+            return self.get_start_node(context, corner);
+        }
+
+        self.get_start_node(context, centered_start)
     }
 
     #[must_use]
@@ -608,6 +709,52 @@ impl WalkNodeEvaluator {
         } else {
             PathType::UnpassableRail
         }
+    }
+
+    fn first_startable_corner(
+        &self,
+        context: &mut PathfindingContext<'_>,
+        start_y: i32,
+    ) -> Option<BlockPos> {
+        let bounding_box = self.settings.bounding_box();
+        [
+            BlockPos::containing(
+                bounding_box.min_x(),
+                f64::from(start_y),
+                bounding_box.min_z(),
+            ),
+            BlockPos::containing(
+                bounding_box.min_x(),
+                f64::from(start_y),
+                bounding_box.max_z(),
+            ),
+            BlockPos::containing(
+                bounding_box.max_x(),
+                f64::from(start_y),
+                bounding_box.min_z(),
+            ),
+            BlockPos::containing(
+                bounding_box.max_x(),
+                f64::from(start_y),
+                bounding_box.max_z(),
+            ),
+        ]
+        .into_iter()
+        .find(|pos| self.can_start_at(context, *pos))
+    }
+
+    fn get_start_node(&mut self, context: &mut PathfindingContext<'_>, pos: BlockPos) -> i32 {
+        let path_type = self.get_path_type_of_mob(context, pos.x(), pos.y(), pos.z());
+        let cost_malus = self.settings.pathfinding_malus(path_type);
+        let node = self.nodes.get_node(pos.x(), pos.y(), pos.z());
+        node.path_type = path_type;
+        node.cost_malus = cost_malus;
+        node.hash()
+    }
+
+    fn can_start_at(&self, context: &mut PathfindingContext<'_>, pos: BlockPos) -> bool {
+        let path_type = self.get_path_type_of_mob(context, pos.x(), pos.y(), pos.z());
+        path_type != PathType::Open && self.settings.pathfinding_malus(path_type) >= 0.0
     }
 
     fn is_neighbor_valid(&self, node: Option<i32>, current_cost_malus: f32) -> bool {
@@ -1231,6 +1378,94 @@ mod tests {
                 .to_bits(),
             63.5_f64.to_bits()
         );
+    }
+
+    #[test]
+    fn get_start_uses_grounded_mob_block_position() {
+        init_test_registry();
+        init_behaviors();
+
+        let air = REGISTRY.blocks.get_default_state_id(&vanilla_blocks::AIR);
+        let stone = REGISTRY.blocks.get_default_state_id(&vanilla_blocks::STONE);
+        let level = GridLevel::new(air).with(BlockPos::new(0, 63, 0), stone);
+        let mut context = PathfindingContext::new(&level, BlockPos::new(0, 64, 0));
+        let mut evaluator = WalkNodeEvaluator::new(test_settings(1, 1, 1));
+
+        let start = evaluator.get_start(&mut context);
+
+        let Some(node) = evaluator.node(start) else {
+            panic!("start node should exist");
+        };
+        assert_eq!((node.x, node.y, node.z), (0, 64, 0));
+        assert_eq!(node.path_type, PathType::Walkable);
+        assert_eq!(node.cost_malus.to_bits(), 0.0_f32.to_bits());
+    }
+
+    #[test]
+    fn get_start_floats_to_top_water_node_when_mob_can_float() {
+        init_test_registry();
+        init_behaviors();
+
+        let air = REGISTRY.blocks.get_default_state_id(&vanilla_blocks::AIR);
+        let water = REGISTRY.blocks.get_default_state_id(&vanilla_blocks::WATER);
+        let level = GridLevel::new(air)
+            .with(BlockPos::new(0, 64, 0), water)
+            .with(BlockPos::new(0, 65, 0), water);
+        let mut context = PathfindingContext::new(&level, BlockPos::new(0, 64, 0));
+        let mut evaluator = WalkNodeEvaluator::new(
+            test_settings(1, 1, 1)
+                .with_can_float(true)
+                .with_in_water(true)
+                .with_on_ground(false),
+        );
+
+        let start = evaluator.get_start(&mut context);
+
+        let Some(node) = evaluator.node(start) else {
+            panic!("start node should exist");
+        };
+        assert_eq!((node.x, node.y, node.z), (0, 65, 0));
+        assert_eq!(node.path_type, PathType::Water);
+    }
+
+    #[test]
+    fn get_start_scans_down_to_first_ground_when_airborne() {
+        init_test_registry();
+        init_behaviors();
+
+        let air = REGISTRY.blocks.get_default_state_id(&vanilla_blocks::AIR);
+        let stone = REGISTRY.blocks.get_default_state_id(&vanilla_blocks::STONE);
+        let level = GridLevel::new(air).with(BlockPos::new(0, 62, 0), stone);
+        let mut context = PathfindingContext::new(&level, BlockPos::new(0, 64, 0));
+        let mut evaluator = WalkNodeEvaluator::new(test_settings(1, 1, 1).with_on_ground(false));
+
+        let start = evaluator.get_start(&mut context);
+
+        let Some(node) = evaluator.node(start) else {
+            panic!("start node should exist");
+        };
+        assert_eq!((node.x, node.y, node.z), (0, 63, 0));
+        assert_eq!(node.path_type, PathType::Walkable);
+    }
+
+    #[test]
+    fn get_start_uses_first_startable_bounding_box_corner() {
+        init_test_registry();
+        init_behaviors();
+
+        let air = REGISTRY.blocks.get_default_state_id(&vanilla_blocks::AIR);
+        let stone = REGISTRY.blocks.get_default_state_id(&vanilla_blocks::STONE);
+        let level = GridLevel::new(air).with(BlockPos::new(0, 63, 1), stone);
+        let mut context = PathfindingContext::new(&level, BlockPos::new(0, 64, 0));
+        let mut evaluator = WalkNodeEvaluator::new(test_settings(1, 1, 1));
+
+        let start = evaluator.get_start(&mut context);
+
+        let Some(node) = evaluator.node(start) else {
+            panic!("start node should exist");
+        };
+        assert_eq!((node.x, node.y, node.z), (0, 64, 1));
+        assert_eq!(node.path_type, PathType::Walkable);
     }
 
     #[test]

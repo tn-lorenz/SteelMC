@@ -12,7 +12,6 @@ const FUDGING: f32 = 1.5;
 
 #[derive(Debug, Clone, Copy, PartialEq)]
 pub struct PathRequest<'a> {
-    pub from: i32,
     pub targets: &'a [BlockPos],
     pub max_path_length: f32,
     pub reach_range: i32,
@@ -51,8 +50,9 @@ impl PathFinder {
         collision: &mut impl WalkNodeCollision,
         request: PathRequest<'_>,
     ) -> Option<Path> {
+        let from = evaluator.get_start(context);
         let (from_point, mut target_entries) =
-            self.prepare_search(evaluator, request.from, request.targets)?;
+            self.prepare_search(evaluator, from, request.targets)?;
         let max_visited_nodes_adjusted =
             (self.max_visited_nodes as f32 * request.max_visited_nodes_multiplier) as i32;
         let mut reached_targets = Vec::new();
@@ -361,15 +361,13 @@ mod tests {
     use std::ops::RangeInclusive;
 
     use steel_registry::{REGISTRY, test_support::init_test_registry, vanilla_blocks};
-    use steel_utils::{BlockPos, BlockStateId, Direction, WorldAabb};
+    use steel_utils::{BlockPos, BlockStateId, WorldAabb};
 
     use super::{PathFinder, PathRequest};
     use crate::behavior::init_behaviors;
     use crate::entity::ai::node::Node;
-    use crate::entity::ai::path::{PathType, PathfindingContext, PathfindingMalus};
-    use crate::entity::ai::walk::{
-        AcceptedNodeRequest, MobPathSettings, WalkNodeCollision, WalkNodeEvaluator,
-    };
+    use crate::entity::ai::path::{PathfindingContext, PathfindingMalus};
+    use crate::entity::ai::walk::{MobPathSettings, WalkNodeEvaluator};
     use crate::world::LevelReader;
 
     struct GridLevel {
@@ -421,9 +419,6 @@ mod tests {
         let mut context = PathfindingContext::new(&level, BlockPos::new(0, 64, 0));
         let mut evaluator = WalkNodeEvaluator::new(test_settings(1, 1, 1));
         let mut no_collision = |_aabb: WorldAabb| false;
-        let Some(start) = accepted_start(&mut evaluator, &mut context, &mut no_collision) else {
-            panic!("start should be accepted");
-        };
         let mut pathfinder = PathFinder::new(128);
 
         let path = pathfinder.find_path(
@@ -431,7 +426,6 @@ mod tests {
             &mut context,
             &mut no_collision,
             PathRequest {
-                from: start,
                 targets: &[BlockPos::new(2, 64, 0)],
                 max_path_length: 16.0,
                 reach_range: 0,
@@ -466,9 +460,6 @@ mod tests {
         let mut context = PathfindingContext::new(&level, BlockPos::new(0, 64, 0));
         let mut evaluator = WalkNodeEvaluator::new(test_settings(1, 1, 1));
         let mut no_collision = |_aabb: WorldAabb| false;
-        let Some(start) = accepted_start(&mut evaluator, &mut context, &mut no_collision) else {
-            panic!("start should be accepted");
-        };
         let mut pathfinder = PathFinder::new(128);
 
         let path = pathfinder.find_path(
@@ -476,7 +467,6 @@ mod tests {
             &mut context,
             &mut no_collision,
             PathRequest {
-                from: start,
                 targets: &[BlockPos::new(4, 64, 0)],
                 max_path_length: 1.5,
                 reach_range: 0,
@@ -514,24 +504,6 @@ mod tests {
             entity_depth,
             BlockPos::new(0, 64, 0),
             &PathfindingMalus::new(),
-        )
-    }
-
-    fn accepted_start(
-        evaluator: &mut WalkNodeEvaluator,
-        context: &mut PathfindingContext<'_>,
-        collision: &mut impl WalkNodeCollision,
-    ) -> Option<i32> {
-        evaluator.find_accepted_node(
-            context,
-            collision,
-            AcceptedNodeRequest {
-                pos: BlockPos::new(0, 64, 0),
-                jump_size: 0,
-                node_height: 64.0,
-                travel_direction: Direction::North,
-                current_path_type: PathType::Walkable,
-            },
         )
     }
 }
