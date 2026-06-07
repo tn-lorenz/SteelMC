@@ -4,7 +4,7 @@ use glam::DVec3;
 use steel_math::floor;
 use steel_utils::BlockPos;
 
-use crate::entity::ai::path::{Path, PathTypeCache, PathfindingContext};
+use crate::entity::ai::path::{Path, PathType, PathTypeCache, PathfindingContext};
 use crate::entity::ai::pathfinder::{PathFinder, PathRequest};
 use crate::entity::ai::walk::{WalkNodeCollision, WalkNodeEvaluator};
 use crate::world::LevelReader;
@@ -239,10 +239,14 @@ impl PathNavigation {
         let x_distance = (mob_position.x - (f64::from(current_node_pos.x()) + 0.5)).abs();
         let y_distance = (mob_position.y - f64::from(current_node_pos.y())).abs();
         let z_distance = (mob_position.z - (f64::from(current_node_pos.z()) + 0.5)).abs();
-        if x_distance < max_distance_to_waypoint
+        let is_close_enough_to_current_node = x_distance < max_distance_to_waypoint
             && z_distance < max_distance_to_waypoint
-            && y_distance < 1.0
-        {
+            && y_distance < 1.0;
+        let should_cut_corner = path
+            .next_node()
+            .is_some_and(|node| can_cut_corner(node.path_type))
+            && should_target_next_node_in_direction(path, mob_position);
+        if is_close_enough_to_current_node || should_cut_corner {
             path.advance();
         }
 
@@ -263,6 +267,49 @@ impl PathNavigation {
     }
 }
 
+fn should_target_next_node_in_direction(path: &Path, mob_position: DVec3) -> bool {
+    let next_node_index = path.next_node_index();
+    if next_node_index + 1 >= path.node_count() {
+        return false;
+    }
+
+    let Some(current_node_pos) = path.next_node_pos() else {
+        return false;
+    };
+    let current_node = block_bottom_center(current_node_pos);
+    if mob_position.distance_squared(current_node) >= 4.0 {
+        return false;
+    }
+
+    let Some(next_node_pos) = path.node_pos(next_node_index + 1) else {
+        return false;
+    };
+    let next_node = block_bottom_center(next_node_pos);
+    let mob_to_current = current_node - mob_position;
+    let mob_to_next = next_node - mob_position;
+    let mob_to_current_sqr = mob_to_current.length_squared();
+    let mob_to_next_sqr = mob_to_next.length_squared();
+    let closer_to_next_than_current = mob_to_next_sqr < mob_to_current_sqr;
+    let within_current_block = mob_to_current_sqr < 0.5;
+    if !closer_to_next_than_current && !within_current_block {
+        return false;
+    }
+
+    mob_to_next.dot(mob_to_current) < 0.0
+}
+
+fn block_bottom_center(pos: BlockPos) -> DVec3 {
+    let (x, y, z) = pos.get_bottom_center();
+    DVec3::new(x, y, z)
+}
+
+const fn can_cut_corner(path_type: PathType) -> bool {
+    !matches!(
+        path_type,
+        PathType::FireInNeighbor | PathType::DamagingInNeighbor | PathType::WalkableDoor
+    )
+}
+
 impl Default for PathNavigation {
     fn default() -> Self {
         Self::new()
@@ -278,7 +325,7 @@ mod tests {
     use super::{NavigationPathRequest, PathNavigation};
     use crate::behavior::init_behaviors;
     use crate::entity::ai::node::Node;
-    use crate::entity::ai::path::{Path, PathfindingMalus};
+    use crate::entity::ai::path::{Path, PathType, PathfindingMalus};
     use crate::entity::ai::walk::{MobPathSettings, WalkNodeEvaluator};
     use crate::world::LevelReader;
 
@@ -322,6 +369,12 @@ mod tests {
         }
     }
 
+    fn node_with_path_type(x: i32, y: i32, z: i32, path_type: PathType) -> Node {
+        let mut node = Node::new(x, y, z);
+        node.path_type = path_type;
+        node
+    }
+
     #[test]
     fn move_to_path_targets_next_node_after_current_node_is_reached() {
         let path = Path::new(
@@ -358,6 +411,53 @@ mod tests {
         assert!(navigation.is_done());
         assert!(navigation.path().is_none());
         assert_eq!(navigation.target_pos(), None);
+    }
+
+    #[test]
+    fn path_navigation_targets_next_node_when_mob_passed_current_node_directionally() {
+        let path = Path::new(
+            vec![
+                node_with_path_type(0, 64, 0, PathType::Walkable),
+                Node::new(1, 64, 0),
+                Node::new(2, 64, 0),
+            ],
+            BlockPos::new(2, 64, 0),
+            true,
+        );
+        let mut navigation = PathNavigation::new();
+
+        assert!(navigation.move_to(path, 1.0));
+
+        let target = navigation.next_move_target(DVec3::new(1.1, 64.0, 0.5), 0.9);
+
+        let Some((target, _speed)) = target else {
+            panic!("navigation should target a path node");
+        };
+        assert_eq!(target, DVec3::new(1.5, 64.0, 0.5));
+        assert_eq!(navigation.path().map(Path::next_node_index), Some(1));
+    }
+
+    #[test]
+    fn path_navigation_does_not_cut_corner_through_walkable_door() {
+        let path = Path::new(
+            vec![
+                node_with_path_type(0, 64, 0, PathType::WalkableDoor),
+                Node::new(1, 64, 0),
+            ],
+            BlockPos::new(1, 64, 0),
+            true,
+        );
+        let mut navigation = PathNavigation::new();
+
+        assert!(navigation.move_to(path, 1.0));
+
+        let target = navigation.next_move_target(DVec3::new(1.1, 64.0, 0.5), 0.9);
+
+        let Some((target, _speed)) = target else {
+            panic!("navigation should target the current path node");
+        };
+        assert_eq!(target, DVec3::new(0.5, 64.0, 0.5));
+        assert_eq!(navigation.path().map(Path::next_node_index), Some(0));
     }
 
     #[test]
