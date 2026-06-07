@@ -13,7 +13,7 @@ use steel_registry::blocks::{
     block_state_ext::BlockStateExt as _, properties::BlockStateProperties,
     shapes::is_shape_full_block,
 };
-use steel_registry::data_components::vanilla_components::{EquippableSlot, GLIDER};
+use steel_registry::data_components::vanilla_components::GLIDER;
 use steel_registry::entity_data::{DataValue, EntityPose};
 use steel_registry::entity_type::{EntityAttachment, EntityTypeRef};
 use steel_registry::fluid::FluidState;
@@ -84,23 +84,6 @@ const fn fall_flying_free_fall_interval(fall_flying_ticks: i32) -> Option<i32> {
     } else {
         None
     }
-}
-
-const fn equipment_slot_matches_equippable(
-    slot: EquipmentSlot,
-    equippable_slot: EquippableSlot,
-) -> bool {
-    matches!(
-        (slot, equippable_slot),
-        (EquipmentSlot::MainHand, EquippableSlot::Mainhand)
-            | (EquipmentSlot::OffHand, EquippableSlot::Offhand)
-            | (EquipmentSlot::Feet, EquippableSlot::Feet)
-            | (EquipmentSlot::Legs, EquippableSlot::Legs)
-            | (EquipmentSlot::Chest, EquippableSlot::Chest)
-            | (EquipmentSlot::Head, EquippableSlot::Head)
-            | (EquipmentSlot::Body, EquippableSlot::Body)
-            | (EquipmentSlot::Saddle, EquippableSlot::Saddle)
-    )
 }
 
 const fn protocol_equipment_slot(slot: EquipmentSlot) -> EquipmentSlotId {
@@ -3268,7 +3251,7 @@ pub trait LivingEntity: Entity {
         };
 
         item_stack.has(GLIDER)
-            && equipment_slot_matches_equippable(slot, equippable.slot)
+            && EquipmentSlot::from_equippable_slot(equippable.slot) == slot
             && !item_stack.next_damage_will_break()
     }
 

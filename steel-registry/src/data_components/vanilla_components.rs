@@ -10,7 +10,9 @@ use super::registry::DataComponentRegistry;
 pub use super::registry::DataComponentType;
 
 // Re-export component types for convenience
-pub use super::components::{Equippable, EquippableSlot, ItemEnchantments, Tool, ToolRule};
+pub use super::components::{
+    Equippable, EquippableAllowedEntities, EquippableSlot, ItemEnchantments, Tool, ToolRule,
+};
 
 // ==================== Fully Implemented Components ====================
 

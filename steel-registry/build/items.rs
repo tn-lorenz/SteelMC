@@ -96,6 +96,54 @@ fn parse_block_or_tag(s: &str) -> TokenStream {
     }
 }
 
+fn split_identifier(s: &str) -> (&str, &str) {
+    s.split_once(':').unwrap_or(("minecraft", s))
+}
+
+fn identifier_token(s: &str) -> TokenStream {
+    let (namespace, path) = split_identifier(s);
+    quote! { Identifier::new_static(#namespace, #path) }
+}
+
+fn entity_type_ref_token(s: &str) -> Option<TokenStream> {
+    let (namespace, path) = split_identifier(s);
+    if namespace != "minecraft" {
+        return None;
+    }
+
+    let ident = Ident::new(&path.to_shouty_snake_case(), Span::call_site());
+    Some(quote! { &vanilla_entities::#ident })
+}
+
+fn generate_allowed_entities(value: &Value) -> TokenStream {
+    match value.get("allowed_entities") {
+        Some(Value::String(s)) if s.starts_with('#') => {
+            let tag = identifier_token(s.trim_start_matches('#'));
+            quote! { Some(vanilla_components::EquippableAllowedEntities::Tag(#tag)) }
+        }
+        Some(Value::String(s)) => {
+            if let Some(entity_type) = entity_type_ref_token(s) {
+                quote! {
+                    Some(vanilla_components::EquippableAllowedEntities::EntityTypes(vec![#entity_type]))
+                }
+            } else {
+                quote! { None }
+            }
+        }
+        Some(Value::Array(values)) => {
+            let entity_types = values
+                .iter()
+                .filter_map(|value| value.as_str())
+                .filter_map(entity_type_ref_token)
+                .collect::<Vec<_>>();
+            quote! {
+                Some(vanilla_components::EquippableAllowedEntities::EntityTypes(vec![#(#entity_types),*]))
+            }
+        }
+        _ => quote! { None },
+    }
+}
+
 /// Generates the TokenStream for a single ToolRule from JSON data.
 fn generate_tool_rule(rule: &Value) -> TokenStream {
     // Parse blocks - can be a string (single block or tag), or an array of strings
@@ -226,9 +274,26 @@ fn generate_builder_calls(item: &Item) -> Vec<TokenStream> {
                         "saddle" => quote! { vanilla_components::EquippableSlot::Saddle },
                         _ => continue,
                     };
-                    builder_calls.push(
-                        quote! { .builder_set(vanilla_components::EQUIPPABLE, Some(vanilla_components::Equippable { slot: #slot_variant })) },
-                    );
+                    let allowed_entities = generate_allowed_entities(value);
+                    let swappable = value
+                        .get("swappable")
+                        .and_then(|v| v.as_bool())
+                        .unwrap_or(true);
+                    let equip_on_interact = value
+                        .get("equip_on_interact")
+                        .and_then(|v| v.as_bool())
+                        .unwrap_or(false);
+                    builder_calls.push(quote! {
+                        .builder_set(
+                            vanilla_components::EQUIPPABLE,
+                            Some(vanilla_components::Equippable {
+                                slot: #slot_variant,
+                                allowed_entities: #allowed_entities,
+                                swappable: #swappable,
+                                equip_on_interact: #equip_on_interact,
+                            }),
+                        )
+                    });
                 }
             }
             "minecraft:tool" => {
@@ -318,7 +383,7 @@ pub(crate) fn build() -> TokenStream {
     quote! {
         use crate::{
             data_components::{vanilla_components, DataComponentMap},
-            vanilla_blocks,
+            vanilla_blocks, vanilla_entities,
             items::{Item, ItemRegistry},
         };
         use steel_utils::Identifier;

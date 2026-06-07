@@ -1,5 +1,7 @@
 //! Equipment slot definitions for entities.
 
+use steel_registry::data_components::vanilla_components::EquippableSlot;
+
 /// Equipment slot types for categorization.
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Hash)]
 pub enum EquipmentSlotType {
@@ -68,6 +70,21 @@ impl EquipmentSlot {
             | EquipmentSlot::Head => EquipmentSlotType::HumanoidArmor,
             EquipmentSlot::Body => EquipmentSlotType::AnimalArmor,
             EquipmentSlot::Saddle => EquipmentSlotType::Saddle,
+        }
+    }
+
+    /// Converts an item equippable slot into an entity equipment slot.
+    #[must_use]
+    pub const fn from_equippable_slot(slot: EquippableSlot) -> Self {
+        match slot {
+            EquippableSlot::Head => EquipmentSlot::Head,
+            EquippableSlot::Chest => EquipmentSlot::Chest,
+            EquippableSlot::Legs => EquipmentSlot::Legs,
+            EquippableSlot::Feet => EquipmentSlot::Feet,
+            EquippableSlot::Body => EquipmentSlot::Body,
+            EquippableSlot::Mainhand => EquipmentSlot::MainHand,
+            EquippableSlot::Offhand => EquipmentSlot::OffHand,
+            EquippableSlot::Saddle => EquipmentSlot::Saddle,
         }
     }
 

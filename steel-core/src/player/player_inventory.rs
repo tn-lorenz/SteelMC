@@ -3,6 +3,7 @@
 use std::{
     array,
     f32::consts::TAU,
+    mem,
     sync::{LazyLock, Weak},
 };
 
@@ -27,6 +28,15 @@ use crate::{
     },
     player::Player,
 };
+
+/// Result of swapping a held item with an equipment slot.
+#[derive(Debug, PartialEq)]
+pub enum EquipmentSwapResult {
+    /// The swap succeeded. Contains an overflow stack that should be dropped if non-empty.
+    Success(ItemStack),
+    /// The swap is blocked by vanilla equipment rules.
+    Fail,
+}
 
 /// Maps inventory slot indices (36+) to equipment slots.
 /// Slots 36-39: Armor (feet, legs, chest, head)
@@ -305,6 +315,130 @@ impl PlayerInventory {
             InteractionHand::MainHand => self.set_selected_item(item),
             InteractionHand::OffHand => self.set_offhand_item(item),
         }
+    }
+
+    /// Swaps the selected main-hand item with the offhand item.
+    ///
+    /// Returns true when the visible hand contents changed.
+    pub fn swap_hands(&mut self) -> bool {
+        if ItemStack::matches(self.get_selected_item(), self.get_offhand_item()) {
+            return false;
+        }
+
+        let main_hand = self.take_equipment_slot_item(EquipmentSlot::MainHand);
+        let offhand = self.take_equipment_slot_item(EquipmentSlot::OffHand);
+        self.set_equipment_slot_item(EquipmentSlot::MainHand, offhand);
+        self.set_equipment_slot_item(EquipmentSlot::OffHand, main_hand);
+        true
+    }
+
+    /// Attempts to equip the held item into the target equipment slot.
+    pub fn try_swap_with_equipment_slot(
+        &mut self,
+        hand: InteractionHand,
+        slot: EquipmentSlot,
+        has_infinite_materials: bool,
+    ) -> EquipmentSwapResult {
+        let in_hand = self.get_item_in_hand(hand);
+        if in_hand.is_empty() {
+            return EquipmentSwapResult::Fail;
+        }
+
+        let in_equipment_slot = self.get_equipment_slot_item(slot);
+        if ItemStack::is_same_item_same_components(in_hand, in_equipment_slot) {
+            return EquipmentSwapResult::Fail;
+        }
+
+        // TODO: Honor PREVENT_ARMOR_CHANGE once enchantment effects are implemented.
+        if in_hand.count() <= 1 {
+            self.swap_single_item_with_equipment_slot(hand, slot, has_infinite_materials);
+            return EquipmentSwapResult::Success(ItemStack::empty());
+        }
+
+        let to_equip = in_hand.copy_with_count(1);
+        if !has_infinite_materials {
+            self.get_item_in_hand_mut(hand).shrink(1);
+        }
+        let mut overflow = self.set_equipment_slot_item(slot, to_equip);
+        if !overflow.is_empty() && self.add(&mut overflow) {
+            overflow = ItemStack::empty();
+        }
+
+        EquipmentSwapResult::Success(overflow)
+    }
+
+    fn swap_single_item_with_equipment_slot(
+        &mut self,
+        hand: InteractionHand,
+        slot: EquipmentSlot,
+        has_infinite_materials: bool,
+    ) {
+        if has_infinite_materials {
+            let held = self
+                .get_item_in_hand(hand)
+                .copy_with_count(self.get_item_in_hand(hand).count());
+            let previous = self.set_equipment_slot_item(slot, held);
+            if !previous.is_empty() {
+                self.set_item_in_hand(hand, previous);
+            }
+            return;
+        }
+
+        let held = self.take_item_in_hand(hand);
+        let previous = self.set_equipment_slot_item(slot, held);
+        self.set_item_in_hand(hand, previous);
+    }
+
+    const fn get_equipment_slot_item(&self, slot: EquipmentSlot) -> &ItemStack {
+        match slot {
+            EquipmentSlot::MainHand => self.get_selected_item(),
+            _ => self.equipment.get_ref(slot),
+        }
+    }
+
+    fn set_equipment_slot_item(&mut self, slot: EquipmentSlot, item: ItemStack) -> ItemStack {
+        if slot == EquipmentSlot::MainHand {
+            return self.set_selected_equipment_item(item);
+        }
+
+        let old = self.equipment.set(slot, item);
+        self.set_changed();
+        old
+    }
+
+    fn set_selected_equipment_item(&mut self, item: ItemStack) -> ItemStack {
+        let selected = self.selected as usize;
+        let old = mem::replace(&mut self.items[selected], item);
+        if old != self.items[selected] {
+            self.mark_main_hand_dirty();
+        }
+        self.set_changed();
+        old
+    }
+
+    fn take_item_in_hand(&mut self, hand: InteractionHand) -> ItemStack {
+        match hand {
+            InteractionHand::MainHand => self.take_equipment_slot_item(EquipmentSlot::MainHand),
+            InteractionHand::OffHand => self.take_equipment_slot_item(EquipmentSlot::OffHand),
+        }
+    }
+
+    fn take_equipment_slot_item(&mut self, slot: EquipmentSlot) -> ItemStack {
+        if slot == EquipmentSlot::MainHand {
+            let selected = self.selected as usize;
+            let old = mem::take(&mut self.items[selected]);
+            if !old.is_empty() {
+                self.mark_main_hand_dirty();
+                self.set_changed();
+            }
+            return old;
+        }
+
+        let old = self.equipment.take(slot);
+        if !old.is_empty() {
+            self.set_changed();
+        }
+        old
     }
 }
 
@@ -988,5 +1122,76 @@ mod tests {
 
         assert_eq!(dirty_items, vec![(EquipmentSlot::MainHand, selected)]);
         assert!(inventory.drain_dirty_equipment_items().is_empty());
+    }
+
+    #[test]
+    fn swap_hands_swaps_selected_and_offhand() {
+        init_test_registry();
+
+        let mut inventory = PlayerInventory::new(Weak::new());
+        let main_hand = ItemStack::with_count(&ITEMS.oak_log, 3);
+        let offhand = ItemStack::new(&ITEMS.shield);
+        inventory.set_selected_item(main_hand.clone());
+        inventory.set_offhand_item(offhand.clone());
+        inventory.drain_dirty_equipment_items();
+
+        assert!(inventory.swap_hands());
+
+        assert_eq!(inventory.get_selected_item(), &offhand);
+        assert_eq!(inventory.get_offhand_item(), &main_hand);
+        let dirty_items = inventory.drain_dirty_equipment_items();
+        assert!(dirty_items.contains(&(EquipmentSlot::MainHand, offhand)));
+        assert!(dirty_items.contains(&(EquipmentSlot::OffHand, main_hand)));
+    }
+
+    #[test]
+    fn equippable_single_item_moves_to_empty_armor_slot() {
+        init_test_registry();
+
+        let mut inventory = PlayerInventory::new(Weak::new());
+        inventory.set_selected_item(ItemStack::new(&ITEMS.diamond_helmet));
+
+        let result = inventory.try_swap_with_equipment_slot(
+            InteractionHand::MainHand,
+            EquipmentSlot::Head,
+            false,
+        );
+
+        assert_eq!(result, EquipmentSwapResult::Success(ItemStack::empty()));
+        assert!(inventory.get_selected_item().is_empty());
+        assert_eq!(
+            inventory.equipment().get_ref(EquipmentSlot::Head),
+            &ItemStack::new(&ITEMS.diamond_helmet)
+        );
+    }
+
+    #[test]
+    fn equippable_stack_moves_one_item_and_returns_old_equipment_to_inventory() {
+        init_test_registry();
+
+        let mut inventory = PlayerInventory::new(Weak::new());
+        inventory.set_selected_item(ItemStack::with_count(&ITEMS.carved_pumpkin, 2));
+        inventory
+            .equipment_mut()
+            .set(EquipmentSlot::Head, ItemStack::new(&ITEMS.diamond_helmet));
+
+        let result = inventory.try_swap_with_equipment_slot(
+            InteractionHand::MainHand,
+            EquipmentSlot::Head,
+            false,
+        );
+
+        assert_eq!(result, EquipmentSwapResult::Success(ItemStack::empty()));
+        assert_eq!(inventory.get_selected_item().count(), 1);
+        assert_eq!(
+            inventory.equipment().get_ref(EquipmentSlot::Head),
+            &ItemStack::new(&ITEMS.carved_pumpkin)
+        );
+        assert!(
+            inventory
+                .get_items()
+                .iter()
+                .any(|stack| stack.is(&ITEMS.diamond_helmet))
+        );
     }
 }

@@ -15,6 +15,7 @@ use steel_registry::blocks::properties::Direction;
 use steel_registry::{REGISTRY, vanilla_attributes};
 use steel_utils::BlockPos;
 use steel_utils::Identifier;
+use steel_utils::entity_events::EntityStatus;
 use steel_utils::translations;
 use steel_utils::types::{Difficulty, GameType, InteractionHand};
 use text_components::TextComponent;
@@ -512,8 +513,16 @@ impl Player {
                 log::debug!("Player {} released use item", self.gameprofile.name);
             }
             PlayerAction::SwapItemWithOffhand => {
-                // TODO: Implement swap item with offhand (F key)
-                log::debug!("Player {} wants to swap items", self.gameprofile.name);
+                if self.game_mode() == GameType::Spectator {
+                    return;
+                }
+
+                let changed = self.inventory.lock().swap_hands();
+                if changed {
+                    self.broadcast_entity_event(EntityStatus::SwapHands);
+                    self.broadcast_inventory_changes();
+                }
+                // TODO: Stop active item use once the using-item foundation exists.
             }
             PlayerAction::Stab => {
                 log::debug!("Player {} performed stab action", self.gameprofile.name);
