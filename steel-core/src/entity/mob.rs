@@ -4,6 +4,8 @@ use std::f32::consts::PI;
 use std::sync::Arc;
 
 use glam::DVec3;
+use simdnbt::borrow::NbtCompound as BorrowedNbtCompoundView;
+use simdnbt::owned::{NbtCompound, NbtTag};
 use steel_math::floor;
 use steel_registry::blocks::block_state_ext::BlockStateExt as _;
 use steel_registry::enchantment_effect::EnchantmentEffectComponent;
@@ -57,9 +59,52 @@ impl DropChances {
         self.by_equipment[slot.index()] = PRESERVE_ITEM_DROP_CHANCE;
     }
 
+    fn set_equipment_chance(&mut self, slot: EquipmentSlot, chance: f32) -> bool {
+        if chance < 0.0 {
+            return false;
+        }
+
+        self.by_equipment[slot.index()] = chance;
+        true
+    }
+
     #[must_use]
     fn is_preserved(self, slot: EquipmentSlot) -> bool {
         self.by_equipment(slot) > PRESERVE_ITEM_DROP_CHANCE_THRESHOLD
+    }
+
+    fn save(self, nbt: &mut NbtCompound) {
+        if self == Self::DEFAULT {
+            return;
+        }
+
+        let mut drop_chances = NbtCompound::new();
+        for slot in EquipmentSlot::ALL {
+            let chance = self.by_equipment(slot);
+            if chance.to_bits() != DEFAULT_EQUIPMENT_DROP_CHANCE.to_bits() {
+                drop_chances.insert(slot.name(), chance);
+            }
+        }
+
+        nbt.insert("drop_chances", NbtTag::Compound(drop_chances));
+    }
+
+    fn load(nbt: BorrowedNbtCompoundView<'_, '_>) -> Self {
+        let Some(drop_chances) = nbt.compound("drop_chances") else {
+            return Self::DEFAULT;
+        };
+
+        let mut loaded = Self::DEFAULT;
+        for slot in EquipmentSlot::ALL {
+            let Some(chance) = drop_chances.float(slot.name()) else {
+                continue;
+            };
+            if !loaded.set_equipment_chance(slot, chance) {
+                return Self::DEFAULT;
+            }
+        }
+
+        loaded
     }
 }
 
@@ -71,6 +116,7 @@ pub struct MobBase {
     navigation: SyncMutex<PathNavigation>,
     pathfinding_malus: SyncMutex<PathfindingMalus>,
     persistence_required: SyncMutex<bool>,
+    can_pick_up_loot: SyncMutex<bool>,
     drop_chances: SyncMutex<DropChances>,
     home_restriction: SyncMutex<MobHomeRestriction>,
 }
@@ -104,6 +150,7 @@ impl MobBase {
             navigation: SyncMutex::new(PathNavigation::new()),
             pathfinding_malus: SyncMutex::new(pathfinding_malus),
             persistence_required: SyncMutex::new(false),
+            can_pick_up_loot: SyncMutex::new(false),
             drop_chances: SyncMutex::new(DropChances::DEFAULT),
             home_restriction: SyncMutex::new(MobHomeRestriction::none()),
         }
@@ -137,6 +184,10 @@ impl MobBase {
     #[must_use]
     pub const fn persistence_required(&self) -> &SyncMutex<bool> {
         &self.persistence_required
+    }
+
+    pub const fn can_pick_up_loot(&self) -> &SyncMutex<bool> {
+        &self.can_pick_up_loot
     }
 
     const fn drop_chances(&self) -> &SyncMutex<DropChances> {
@@ -210,7 +261,11 @@ pub trait Mob: LivingEntity {
 
     /// Returns vanilla `Mob.canPickUpLoot`.
     fn can_pick_up_loot(&self) -> bool {
-        false
+        *self.mob_base().can_pick_up_loot().lock()
+    }
+
+    fn set_can_pick_up_loot(&self, can_pick_up_loot: bool) {
+        *self.mob_base().can_pick_up_loot().lock() = can_pick_up_loot;
     }
 
     fn equipment_drop_chance(&self, slot: EquipmentSlot) -> f32 {
@@ -282,6 +337,30 @@ pub trait Mob: LivingEntity {
 
             self.spawn_at_location(item_stack, 0.0);
         }
+    }
+
+    fn save_mob(&self, nbt: &mut NbtCompound) {
+        nbt.insert("CanPickUpLoot", i8::from(self.can_pick_up_loot()));
+        nbt.insert(
+            "PersistenceRequired",
+            i8::from(self.is_persistence_required()),
+        );
+        self.mob_base().drop_chances().lock().save(nbt);
+        // TODO: Persist leash, home, and death-loot data once those foundations exist.
+        nbt.insert("LeftHanded", i8::from(self.is_left_handed()));
+        if self.is_no_ai() {
+            nbt.insert("NoAI", i8::from(true));
+        }
+    }
+
+    fn load_mob(&self, nbt: BorrowedNbtCompoundView<'_, '_>) {
+        self.set_can_pick_up_loot(nbt.byte("CanPickUpLoot").is_some_and(|value| value != 0));
+        *self.mob_base().persistence_required().lock() = nbt
+            .byte("PersistenceRequired")
+            .is_some_and(|value| value != 0);
+        *self.mob_base().drop_chances().lock() = DropChances::load(nbt);
+        self.set_left_handed(nbt.byte("LeftHanded").is_some_and(|value| value != 0));
+        self.set_no_ai(nbt.byte("NoAI").is_some_and(|value| value != 0));
     }
 
     fn is_within_home(&self) -> bool {

@@ -600,12 +600,7 @@ impl Entity for PigEntity {
     }
 
     fn save_additional(&self, nbt: &mut NbtCompound) {
-        // TODO: Persist mob loot pickup, leash, home, and death-loot data once those foundations exist.
-        nbt.insert("LeftHanded", i8::from(self.is_left_handed()));
-        if self.is_no_ai() {
-            nbt.insert("NoAI", i8::from(true));
-        }
-
+        self.save_mob(nbt);
         self.save_ageable_mob(nbt);
         self.save_animal(nbt);
         nbt.insert("variant", self.variant().key.to_string());
@@ -613,13 +608,7 @@ impl Entity for PigEntity {
     }
 
     fn load_additional(&self, nbt: BorrowedNbtCompoundView<'_, '_>) {
-        if let Some(left_handed) = nbt.byte("LeftHanded") {
-            self.set_left_handed(left_handed != 0);
-        }
-        if let Some(no_ai) = nbt.byte("NoAI") {
-            self.set_no_ai(no_ai != 0);
-        }
-
+        self.load_mob(nbt);
         self.load_ageable_mob(nbt);
         self.load_animal(nbt);
 
@@ -1386,6 +1375,9 @@ mod tests {
         init_test_registry();
 
         let pig = PigEntity::new(&vanilla_entities::PIG, 1, DVec3::ZERO, Weak::new());
+        pig.set_can_pick_up_loot(true);
+        pig.set_persistence_required();
+        pig.set_guaranteed_drop(EquipmentSlot::Saddle);
         pig.set_no_ai(true);
         pig.set_left_handed(true);
         pig.set_age(-24_000);
@@ -1397,6 +1389,13 @@ mod tests {
         let mut nbt = NbtCompound::new();
         pig.save_additional(&mut nbt);
 
+        assert_eq!(nbt.byte("CanPickUpLoot"), Some(1));
+        assert_eq!(nbt.byte("PersistenceRequired"), Some(1));
+        let Some(drop_chances) = nbt.compound("drop_chances") else {
+            panic!("non-default mob drop chances should be saved");
+        };
+        assert_eq!(drop_chances.float("saddle"), Some(2.0));
+        assert_eq!(drop_chances.float("head"), None);
         assert_eq!(nbt.byte("NoAI"), Some(1));
         assert_eq!(nbt.byte("LeftHanded"), Some(1));
         assert_eq!(nbt.int("Age"), Some(-24_000));
@@ -1417,6 +1416,11 @@ mod tests {
         init_test_registry();
 
         let mut nbt = NbtCompound::new();
+        nbt.insert("CanPickUpLoot", 1_i8);
+        nbt.insert("PersistenceRequired", 1_i8);
+        let mut drop_chances = NbtCompound::new();
+        drop_chances.insert("saddle", 2.0_f32);
+        nbt.insert("drop_chances", NbtTag::Compound(drop_chances));
         nbt.insert("NoAI", 1_i8);
         nbt.insert("LeftHanded", 1_i8);
         nbt.insert("Age", -24_000_i32);
@@ -1433,6 +1437,16 @@ mod tests {
         let pig = PigEntity::new(&vanilla_entities::PIG, 1, DVec3::ZERO, Weak::new());
         pig.load_additional((&borrowed).into());
 
+        assert!(pig.can_pick_up_loot());
+        assert!(pig.is_persistence_required());
+        assert_eq!(
+            pig.equipment_drop_chance(EquipmentSlot::Saddle).to_bits(),
+            2.0_f32.to_bits()
+        );
+        assert_eq!(
+            pig.equipment_drop_chance(EquipmentSlot::Head).to_bits(),
+            0.085_f32.to_bits()
+        );
         assert!(pig.is_no_ai());
         assert!(pig.is_left_handed());
         assert_eq!(pig.get_age(), -24_000);
