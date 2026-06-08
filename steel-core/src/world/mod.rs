@@ -3710,7 +3710,7 @@ impl World {
         self.players.iter_players(|_, player| {
             if predicate(player) {
                 let distance_sqr = player.position().distance_squared(position);
-                if distance_sqr <= max_distance_sqr
+                if nearest_player_distance_in_range(distance_sqr, max_distance, max_distance_sqr)
                     && nearest
                         .as_ref()
                         .is_none_or(|(_, current)| distance_sqr < *current)
@@ -3801,6 +3801,14 @@ impl World {
         self.game_event_listeners
             .dispatch(self, event, source_pos, context);
     }
+}
+
+fn nearest_player_distance_in_range(
+    distance_sqr: f64,
+    max_distance: f64,
+    max_distance_sqr: f64,
+) -> bool {
+    max_distance < 0.0 || distance_sqr < max_distance_sqr
 }
 
 impl LevelReader for World {
@@ -3927,6 +3935,17 @@ mod tests {
             diff.length_squared() < 1.0e-24,
             "expected {left:?} to equal {right:?}"
         );
+    }
+
+    #[test]
+    fn nearest_player_range_uses_vanilla_strict_boundary() {
+        assert!(nearest_player_distance_in_range(63.999, 8.0, 64.0));
+        assert!(!nearest_player_distance_in_range(64.0, 8.0, 64.0));
+    }
+
+    #[test]
+    fn nearest_player_negative_range_is_unbounded() {
+        assert!(nearest_player_distance_in_range(1_000_000.0, -1.0, 1.0));
     }
 
     #[test]
