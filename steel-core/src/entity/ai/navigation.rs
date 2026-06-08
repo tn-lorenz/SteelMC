@@ -64,6 +64,7 @@ pub struct PathNavigation {
     can_float: bool,
     can_open_doors: bool,
     can_walk_over_fences: bool,
+    avoid_sun: bool,
 }
 
 impl PathNavigation {
@@ -93,6 +94,7 @@ impl PathNavigation {
             can_float: false,
             can_open_doors: false,
             can_walk_over_fences: false,
+            avoid_sun: false,
         }
     }
 
@@ -190,6 +192,15 @@ impl PathNavigation {
         self.can_walk_over_fences = can_walk_over_fences;
     }
 
+    #[must_use]
+    pub const fn avoid_sun(&self) -> bool {
+        self.avoid_sun
+    }
+
+    pub const fn set_avoid_sun(&mut self, avoid_sun: bool) {
+        self.avoid_sun = avoid_sun;
+    }
+
     pub const fn tick(&mut self) {
         self.tick = self.tick.wrapping_add(1);
     }
@@ -223,7 +234,7 @@ impl PathNavigation {
     ) -> Option<Path> {
         let mut context =
             PathfindingContext::with_cache(level, request.mob_position, &mut self.path_type_cache);
-        let path = self.path_finder.find_path(
+        let mut path = self.path_finder.find_path(
             evaluator,
             &mut context,
             collision,
@@ -234,10 +245,32 @@ impl PathNavigation {
                 max_visited_nodes_multiplier: self.max_visited_nodes_multiplier,
             },
         )?;
+        self.trim_path_for_avoid_sun(level, request.mob_position, &mut path);
         self.target_pos = Some(path.target());
         self.reach_range = request.reach_range;
         self.reset_stuck_timeout();
         Some(path)
+    }
+
+    fn trim_path_for_avoid_sun(
+        &self,
+        level: &dyn LevelReader,
+        mob_position: BlockPos,
+        path: &mut Path,
+    ) {
+        if !self.avoid_sun || level.can_see_sky(mob_position) {
+            return;
+        }
+
+        for index in 0..path.node_count() {
+            let Some(pos) = path.node_pos(index) else {
+                continue;
+            };
+            if level.can_see_sky(pos) {
+                path.truncate_nodes(index);
+                return;
+            }
+        }
     }
 
     pub fn move_to(&mut self, path: Path, speed_modifier: f64, mob_position: DVec3) -> bool {
@@ -581,6 +614,7 @@ mod tests {
     struct GridLevel {
         default_state: BlockStateId,
         states: Vec<(BlockPos, BlockStateId)>,
+        sky_positions: Vec<BlockPos>,
     }
 
     impl GridLevel {
@@ -588,11 +622,17 @@ mod tests {
             Self {
                 default_state,
                 states: Vec::new(),
+                sky_positions: Vec::new(),
             }
         }
 
         fn with(mut self, pos: BlockPos, state: BlockStateId) -> Self {
             self.states.push((pos, state));
+            self
+        }
+
+        fn with_sky(mut self, pos: BlockPos) -> Self {
+            self.sky_positions.push(pos);
             self
         }
     }
@@ -607,6 +647,10 @@ mod tests {
 
         fn raw_brightness(&self, _pos: BlockPos, _sky_darkening: u8) -> u8 {
             0
+        }
+
+        fn can_see_sky(&self, pos: BlockPos) -> bool {
+            self.sky_positions.contains(&pos)
         }
 
         fn min_y(&self) -> i32 {
@@ -677,6 +721,57 @@ mod tests {
         navigation.set_can_walk_over_fences(true);
 
         assert!(navigation.can_walk_over_fences());
+    }
+
+    #[test]
+    fn path_navigation_tracks_avoid_sun_flag() {
+        let mut navigation = PathNavigation::new();
+
+        assert!(!navigation.avoid_sun());
+
+        navigation.set_avoid_sun(true);
+
+        assert!(navigation.avoid_sun());
+    }
+
+    #[test]
+    fn avoid_sun_trims_path_before_first_sky_node() {
+        let level = GridLevel::new(BlockStateId(0)).with_sky(BlockPos::new(2, 64, 0));
+        let mut path = Path::new(
+            vec![
+                Node::new(0, 64, 0),
+                Node::new(1, 64, 0),
+                Node::new(2, 64, 0),
+                Node::new(3, 64, 0),
+            ],
+            BlockPos::new(3, 64, 0),
+            true,
+        );
+        let mut navigation = PathNavigation::new();
+        navigation.set_avoid_sun(true);
+
+        navigation.trim_path_for_avoid_sun(&level, BlockPos::new(0, 64, 0), &mut path);
+
+        assert_eq!(path.node_count(), 2);
+        assert_eq!(path.node_pos(1), Some(BlockPos::new(1, 64, 0)));
+    }
+
+    #[test]
+    fn avoid_sun_keeps_path_when_mob_is_already_under_sky() {
+        let level = GridLevel::new(BlockStateId(0))
+            .with_sky(BlockPos::new(0, 64, 0))
+            .with_sky(BlockPos::new(1, 64, 0));
+        let mut path = Path::new(
+            vec![Node::new(0, 64, 0), Node::new(1, 64, 0)],
+            BlockPos::new(1, 64, 0),
+            true,
+        );
+        let mut navigation = PathNavigation::new();
+        navigation.set_avoid_sun(true);
+
+        navigation.trim_path_for_avoid_sun(&level, BlockPos::new(0, 64, 0), &mut path);
+
+        assert_eq!(path.node_count(), 2);
     }
 
     #[test]

@@ -18,6 +18,11 @@ pub trait LevelReader {
     /// Returns vanilla raw brightness at a position after sky darkening.
     fn raw_brightness(&self, pos: BlockPos, sky_darkening: u8) -> u8;
 
+    /// Returns vanilla `BlockAndLightGetter.canSeeSky`.
+    fn can_see_sky(&self, pos: BlockPos) -> bool {
+        self.raw_brightness(pos, 0) >= 15
+    }
+
     /// Returns this dimension's vanilla ambient light factor.
     fn ambient_light(&self) -> f32 {
         0.0
@@ -159,6 +164,24 @@ mod tests {
         assert_eq!(
             level.max_local_raw_brightness(BlockPos::new(30_000_000, 64, 0), 0),
             15
+        );
+    }
+
+    #[test]
+    fn can_see_sky_uses_vanilla_sky_light_threshold() {
+        assert!(
+            TestLevel {
+                raw_brightness: 15,
+                ambient_light: 0.0,
+            }
+            .can_see_sky(BlockPos::ZERO)
+        );
+        assert!(
+            !TestLevel {
+                raw_brightness: 14,
+                ambient_light: 0.0,
+            }
+            .can_see_sky(BlockPos::ZERO)
         );
     }
 }

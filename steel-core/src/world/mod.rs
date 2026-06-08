@@ -1659,13 +1659,20 @@ impl World {
             && self.dimension_type.key != vanilla_dimension_types::THE_END.key
     }
 
-    fn can_see_sky_for_precipitation(&self, pos: BlockPos) -> bool {
-        if self.raw_brightness(pos, 0) < 15 {
+    /// Returns whether the position has unobstructed sky exposure.
+    ///
+    /// Live worlds use the motion-blocking heightmap until Steel has a full
+    /// live sky-light engine.
+    pub fn can_see_sky(&self, pos: BlockPos) -> bool {
+        if !self.dimension_type.has_skylight {
             return false;
         }
-
         self.height_at(HeightmapType::MotionBlocking, pos.x(), pos.z())
             .is_some_and(|height| height <= pos.y())
+    }
+
+    fn can_see_sky_for_precipitation(&self, pos: BlockPos) -> bool {
+        self.can_see_sky(pos)
     }
 
     pub(crate) fn biome_at(&self, pos: BlockPos) -> Option<BiomeRef> {
@@ -3777,6 +3784,10 @@ impl LevelReader for World {
         sky_light
     }
 
+    fn can_see_sky(&self, pos: BlockPos) -> bool {
+        Self::can_see_sky(self, pos)
+    }
+
     fn ambient_light(&self) -> f32 {
         self.dimension_type.ambient_light
     }
@@ -3797,6 +3808,10 @@ impl LevelReader for Arc<World> {
 
     fn raw_brightness(&self, pos: BlockPos, sky_darkening: u8) -> u8 {
         self.as_ref().raw_brightness(pos, sky_darkening)
+    }
+
+    fn can_see_sky(&self, pos: BlockPos) -> bool {
+        self.as_ref().can_see_sky(pos)
     }
 
     fn ambient_light(&self) -> f32 {
