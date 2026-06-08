@@ -86,6 +86,37 @@ impl EquipmentSlot {
         }
     }
 
+    /// Returns vanilla's protocol ID for this slot.
+    #[must_use]
+    pub const fn id(self) -> i32 {
+        match self {
+            EquipmentSlot::MainHand => 0,
+            EquipmentSlot::OffHand => 5,
+            EquipmentSlot::Feet => 1,
+            EquipmentSlot::Legs => 2,
+            EquipmentSlot::Chest => 3,
+            EquipmentSlot::Head => 4,
+            EquipmentSlot::Body => 6,
+            EquipmentSlot::Saddle => 7,
+        }
+    }
+
+    /// Returns the equipment slot with the given vanilla protocol ID.
+    #[must_use]
+    pub const fn by_id(id: i32) -> Option<Self> {
+        match id {
+            0 => Some(EquipmentSlot::MainHand),
+            1 => Some(EquipmentSlot::Feet),
+            2 => Some(EquipmentSlot::Legs),
+            3 => Some(EquipmentSlot::Chest),
+            4 => Some(EquipmentSlot::Head),
+            5 => Some(EquipmentSlot::OffHand),
+            6 => Some(EquipmentSlot::Body),
+            7 => Some(EquipmentSlot::Saddle),
+            _ => None,
+        }
+    }
+
     /// Returns true if this is an armor slot (humanoid or animal).
     #[must_use]
     pub const fn is_armor(self) -> bool {
@@ -252,5 +283,31 @@ impl EquipmentSlotGroup {
             Self::Body => matches!(slot, EquipmentSlot::Body),
             Self::Saddle => matches!(slot, EquipmentSlot::Saddle),
         }
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use super::EquipmentSlot;
+
+    #[test]
+    fn equipment_slot_protocol_ids_match_vanilla() {
+        let slots = [
+            (EquipmentSlot::MainHand, 0),
+            (EquipmentSlot::Feet, 1),
+            (EquipmentSlot::Legs, 2),
+            (EquipmentSlot::Chest, 3),
+            (EquipmentSlot::Head, 4),
+            (EquipmentSlot::OffHand, 5),
+            (EquipmentSlot::Body, 6),
+            (EquipmentSlot::Saddle, 7),
+        ];
+
+        for (slot, id) in slots {
+            assert_eq!(slot.id(), id);
+            assert_eq!(EquipmentSlot::by_id(id), Some(slot));
+        }
+        assert_eq!(EquipmentSlot::by_id(-1), None);
+        assert_eq!(EquipmentSlot::by_id(8), None);
     }
 }

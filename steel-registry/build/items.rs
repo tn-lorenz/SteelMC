@@ -128,6 +128,19 @@ fn sound_event_ref_token(value: &Value, field: &str, default: &str) -> TokenStre
     generate_sound_event_ref(&id)
 }
 
+fn optional_identifier_token(value: &Value, field: &str) -> TokenStream {
+    value
+        .get(field)
+        .and_then(|value| value.as_str())
+        .map_or_else(
+            || quote! { None },
+            |id| {
+                let id = identifier_token(id);
+                quote! { Some(#id) }
+            },
+        )
+}
+
 fn attribute_ref_token(s: &str) -> Option<TokenStream> {
     let (namespace, path) = split_identifier(s);
     if namespace != "minecraft" {
@@ -407,6 +420,8 @@ fn generate_builder_calls(item: &Item) -> Vec<TokenStream> {
                         "equip_sound",
                         "minecraft:item.armor.equip_generic",
                     );
+                    let asset_id = optional_identifier_token(value, "asset_id");
+                    let camera_overlay = optional_identifier_token(value, "camera_overlay");
                     let dispensable = value
                         .get("dispensable")
                         .and_then(|v| v.as_bool())
@@ -438,6 +453,8 @@ fn generate_builder_calls(item: &Item) -> Vec<TokenStream> {
                             Some(vanilla_components::Equippable {
                                 slot: #slot_variant,
                                 equip_sound: #equip_sound,
+                                asset_id: #asset_id,
+                                camera_overlay: #camera_overlay,
                                 allowed_entities: #allowed_entities,
                                 dispensable: #dispensable,
                                 swappable: #swappable,
