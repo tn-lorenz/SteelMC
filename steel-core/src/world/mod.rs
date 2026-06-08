@@ -609,6 +609,11 @@ impl World {
         self.level_data.read().game_time()
     }
 
+    /// Returns vanilla level difficulty.
+    pub fn difficulty(&self) -> Difficulty {
+        self.level_data.read().data().difficulty
+    }
+
     /// Returns the total height of the world in blocks.
     pub const fn get_height(&self) -> i32 {
         self.dimension_type.height

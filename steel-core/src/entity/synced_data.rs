@@ -42,6 +42,9 @@ pub trait EntitySyncedData: Send + Sync {
     /// Returns the shared vanilla swimming flag.
     fn is_swimming(&self) -> bool;
 
+    /// Returns the shared vanilla invisible flag.
+    fn is_base_invisible_flag(&self) -> bool;
+
     /// Sets the shared vanilla shift-key-down flag.
     fn set_shift_key_down(&self, shift_key_down: bool);
 
@@ -131,6 +134,13 @@ where
             *VanillaEntityData::base(&*self.lock()).shared_flags.get(),
         )
         .contains(EntitySharedFlags::SWIMMING)
+    }
+
+    fn is_base_invisible_flag(&self) -> bool {
+        EntitySharedFlags::from_metadata_byte(
+            *VanillaEntityData::base(&*self.lock()).shared_flags.get(),
+        )
+        .contains(EntitySharedFlags::INVISIBLE)
     }
 
     fn set_shift_key_down(&self, shift_key_down: bool) {
@@ -234,6 +244,16 @@ mod tests {
             .set(EntitySharedFlags::SWIMMING.metadata_byte());
 
         assert!(EntitySyncedData::is_swimming(&data));
+    }
+
+    #[test]
+    fn synced_data_reads_invisible_from_generated_base_layer() {
+        let data = SyncMutex::new(ItemEntityData::new());
+        assert!(!EntitySyncedData::is_base_invisible_flag(&data));
+
+        EntitySyncedData::set_base_invisible_flag(&data, true);
+
+        assert!(EntitySyncedData::is_base_invisible_flag(&data));
     }
 
     #[test]

@@ -28,7 +28,9 @@ use steel_utils::locks::SyncMutex;
 use steel_utils::random::Random as _;
 use steel_utils::{BlockPos, BlockStateId, Identifier};
 
-use crate::entity::ai::goal::{RandomLookAroundGoal, WaterAvoidingRandomStrollGoal};
+use crate::entity::ai::goal::{
+    LookAtPlayerGoal, RandomLookAroundGoal, WaterAvoidingRandomStrollGoal,
+};
 use crate::entity::damage::DamageSource;
 use crate::entity::{
     AgeableMob, AgeableMobBase, Animal, AnimalBase, Entity, EntityBase, EntityBaseLoad,
@@ -80,6 +82,10 @@ impl PigEntity {
             .goal_selector()
             .lock()
             .add_goal(6, WaterAvoidingRandomStrollGoal::new(1.0));
+        mob_base
+            .goal_selector()
+            .lock()
+            .add_goal(7, LookAtPlayerGoal::new(6.0));
         mob_base
             .goal_selector()
             .lock()
@@ -742,10 +748,9 @@ mod tests {
 
         let pig = PigEntity::new(&vanilla_entities::PIG, 1, DVec3::ZERO, Weak::new());
 
-        assert_eq!(
-            pig.mob_base().goal_selector().lock().available_goal_count(),
-            2
-        );
+        let selector = pig.mob_base().goal_selector().lock();
+        assert_eq!(selector.available_goal_count(), 3);
+        assert_eq!(selector.available_goal_priorities(), vec![6, 7, 8]);
     }
 
     #[test]

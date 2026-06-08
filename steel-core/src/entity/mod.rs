@@ -34,6 +34,7 @@ use steel_registry::{vanilla_attributes, vanilla_fluid_tags, vanilla_items, vani
 use steel_utils::entity_events::EntityStatus;
 use steel_utils::locks::SyncMutex;
 use steel_utils::random::Random as _;
+use steel_utils::types::Difficulty;
 use steel_utils::{BlockPos, BlockStateId, ChunkPos, Direction, Identifier, WorldAabb, axis::Axis};
 use text_components::TextComponent;
 use uuid::Uuid;
@@ -818,6 +819,23 @@ pub trait Entity: EntityEventSource + Send + Sync {
     /// Mirrors vanilla `Entity.isSpectator`. Base entities are never spectators;
     /// players override this from their game mode.
     fn is_spectator(&self) -> bool {
+        false
+    }
+
+    /// Returns vanilla `Entity.isInvisible()`.
+    fn is_invisible(&self) -> bool {
+        self.synced_data()
+            .is_some_and(EntitySyncedData::is_base_invisible_flag)
+    }
+
+    /// Returns vanilla `Entity.isDiscrete()`.
+    fn is_discrete(&self) -> bool {
+        self.synced_data()
+            .is_some_and(EntitySyncedData::is_shift_key_down)
+    }
+
+    /// Returns whether this entity is allied to `other`.
+    fn is_allied_to(&self, _other: &dyn Entity) -> bool {
         false
     }
 
@@ -3167,6 +3185,126 @@ pub trait LivingEntity: Entity {
         !self.is_dead_or_dying()
     }
 
+    /// Returns vanilla `LivingEntity.getArmorCoverPercentage()`.
+    fn get_armor_cover_percentage(&self) -> f32 {
+        let mut covered_slots = 0;
+        for slot in EquipmentSlot::ARMOR_SLOTS {
+            self.with_equipment_slot(slot, &mut |item_stack| {
+                if !item_stack.is_empty() {
+                    covered_slots += 1;
+                }
+            });
+        }
+
+        covered_slots as f32 / EquipmentSlot::ARMOR_SLOTS.len() as f32
+    }
+
+    /// Returns vanilla `LivingEntity.getVisibilityPercent()`.
+    fn get_visibility_percent(&self, targeting_entity: Option<&dyn Entity>) -> f64 {
+        let mut visibility_percent = 1.0;
+        if self.is_discrete() {
+            visibility_percent *= 0.8;
+        }
+
+        if self.is_invisible() {
+            visibility_percent *= 0.7 * f64::from(self.get_armor_cover_percentage().max(0.1));
+        }
+
+        if self.disguise_head_matches_targeting_entity(targeting_entity) {
+            visibility_percent *= 0.5;
+        }
+
+        visibility_percent
+    }
+
+    /// Returns whether the equipped head item reduces visibility to `targeting_entity`.
+    fn disguise_head_matches_targeting_entity(
+        &self,
+        targeting_entity: Option<&dyn Entity>,
+    ) -> bool {
+        let Some(targeting_entity) = targeting_entity else {
+            return false;
+        };
+
+        let mut matches_target = false;
+        self.with_equipment_slot(EquipmentSlot::Head, &mut |item_stack| {
+            let target_type = targeting_entity.entity_type();
+            matches_target = target_type == &vanilla_entities::SKELETON
+                && item_stack.is(&vanilla_items::ITEMS.skeleton_skull)
+                || target_type == &vanilla_entities::ZOMBIE
+                    && item_stack.is(&vanilla_items::ITEMS.zombie_head)
+                || target_type == &vanilla_entities::PIGLIN
+                    && item_stack.is(&vanilla_items::ITEMS.piglin_head)
+                || target_type == &vanilla_entities::PIGLIN_BRUTE
+                    && item_stack.is(&vanilla_items::ITEMS.piglin_head)
+                || target_type == &vanilla_entities::CREEPER
+                    && item_stack.is(&vanilla_items::ITEMS.creeper_head);
+        });
+        matches_target
+    }
+
+    /// Returns vanilla `LivingEntity.canBeSeenByAnyone()`.
+    fn can_be_seen_by_anyone(&self) -> bool {
+        !self.is_spectator() && Entity::is_alive(self)
+    }
+
+    /// Returns vanilla `LivingEntity.canBeSeenAsEnemy()`.
+    fn can_be_seen_as_enemy(&self) -> bool {
+        !self.is_invulnerable() && self.can_be_seen_by_anyone()
+    }
+
+    /// Returns vanilla `LivingEntity.canAttack()`.
+    fn can_attack(&self, target: &dyn LivingEntity) -> bool {
+        if target.entity_type() == &vanilla_entities::PLAYER
+            && self
+                .level()
+                .is_some_and(|world| world.difficulty() == Difficulty::Peaceful)
+        {
+            return false;
+        }
+
+        target.can_be_seen_as_enemy()
+    }
+
+    /// Returns vanilla `LivingEntity.hasLineOfSight()`.
+    fn has_line_of_sight(&self, target: &dyn Entity) -> bool {
+        self.has_line_of_sight_with(
+            target,
+            ClipBlockShape::Collider,
+            ClipFluid::None,
+            target.get_eye_y(),
+        )
+    }
+
+    /// Returns vanilla line-of-sight with explicit clip options.
+    fn has_line_of_sight_with(
+        &self,
+        target: &dyn Entity,
+        block_shape: ClipBlockShape,
+        fluid: ClipFluid,
+        target_eye_y: f64,
+    ) -> bool {
+        let Some(world) = self.level() else {
+            return false;
+        };
+        let Some(target_world) = target.level() else {
+            return false;
+        };
+        if !Arc::ptr_eq(&world, &target_world) {
+            return false;
+        }
+
+        let position = self.position();
+        let target_position = target.position();
+        let start = DVec3::new(position.x, self.get_eye_y(), position.z);
+        let end = DVec3::new(target_position.x, target_eye_y, target_position.z);
+        if start.distance_squared(end) > 128.0 * 128.0 {
+            return false;
+        }
+
+        world.clip(start, end, block_shape, fluid).is_miss()
+    }
+
     /// Returns vanilla base living-entity invulnerability.
     fn default_is_invulnerable_to(&self, source: &DamageSource) -> bool {
         self.is_removed()
@@ -4476,6 +4614,7 @@ mod tests {
     use steel_registry::entity_type::EntityTypeRef;
     use steel_registry::fluid::FluidState;
     use steel_registry::item_stack::ItemStack;
+    use steel_registry::vanilla_entity_data::LivingEntityData as SyncedLivingEntityData;
     use steel_registry::{
         sound_events, test_support::init_test_registry, vanilla_attributes, vanilla_blocks,
         vanilla_damage_types, vanilla_entities, vanilla_fluids, vanilla_items, vanilla_mob_effects,
@@ -4488,9 +4627,9 @@ mod tests {
 
     use super::{
         DAMAGE_KNOCKBACK_POWER, Entity, EntityBase, EntityFluidContact, EntityLevelCallback,
-        EntityMoveError, EntityVerticalMovementStateUpdate, LivingEntity, LivingEntityBase,
-        LivingTravelInput, RemovalReason, SharedEntity, closest_open_space_direction,
-        fall_damage_reset_clip_target, fall_flying_collision_damage,
+        EntityMoveError, EntitySyncedData, EntityVerticalMovementStateUpdate, LivingEntity,
+        LivingEntityBase, LivingTravelInput, RemovalReason, SharedEntity,
+        closest_open_space_direction, fall_damage_reset_clip_target, fall_flying_collision_damage,
         fall_flying_free_fall_interval, get_input_vector, should_apply_resolved_movement,
         trapdoor_usable_as_ladder_state,
     };
@@ -4593,6 +4732,7 @@ mod tests {
     struct LivingFluidTestEntity {
         base: EntityBase,
         living_base: LivingEntityBase,
+        entity_data: SyncMutex<SyncedLivingEntityData>,
         health: SyncMutex<f32>,
         entity_type: EntityTypeRef,
         affected_by_fluids: bool,
@@ -4617,6 +4757,7 @@ mod tests {
             Self {
                 base,
                 living_base: LivingEntityBase::new(&vanilla_entities::PLAYER),
+                entity_data: SyncMutex::new(SyncedLivingEntityData::new()),
                 health: SyncMutex::new(20.0),
                 entity_type: &vanilla_entities::PLAYER,
                 affected_by_fluids,
@@ -4677,6 +4818,10 @@ mod tests {
 
         fn hurt(&self, source: &DamageSource, amount: f32) -> bool {
             LivingEntity::hurt_server(self, source, amount)
+        }
+
+        fn synced_data(&self) -> Option<&dyn EntitySyncedData> {
+            Some(&self.entity_data)
         }
     }
 
@@ -4752,6 +4897,13 @@ mod tests {
     fn assert_f32_close(left: f32, right: f32) {
         assert!(
             (left - right).abs() <= f32::EPSILON,
+            "expected {left} to equal {right}"
+        );
+    }
+
+    fn assert_f64_close(left: f64, right: f64) {
+        assert!(
+            (left - right).abs() <= 1.0e-12,
             "expected {left} to equal {right}"
         );
     }
@@ -5010,6 +5162,60 @@ mod tests {
             &ItemStack::new(&vanilla_items::ITEMS.stone),
             EquipmentSlot::Chest
         ));
+    }
+
+    #[test]
+    fn living_armor_cover_counts_non_empty_humanoid_armor_slots() {
+        init_test_registry();
+        let entity = LivingFluidTestEntity::new(0.0, 0.0, true);
+
+        assert_f32_close(entity.get_armor_cover_percentage(), 0.0);
+
+        entity.equip(
+            EquipmentSlot::Head,
+            ItemStack::new(&vanilla_items::ITEMS.stone),
+        );
+        entity.equip(
+            EquipmentSlot::Feet,
+            ItemStack::new(&vanilla_items::ITEMS.stone),
+        );
+
+        assert_f32_close(entity.get_armor_cover_percentage(), 0.5);
+    }
+
+    #[test]
+    fn living_visibility_percent_uses_discrete_and_invisible_scaling() {
+        init_test_registry();
+        let entity = LivingFluidTestEntity::new(0.0, 0.0, true);
+
+        assert_f64_close(entity.get_visibility_percent(None), 1.0);
+
+        EntitySyncedData::set_base_invisible_flag(&entity.entity_data, true);
+
+        let invisible_without_armor = 0.7 * f64::from(0.1_f32);
+        assert_f64_close(entity.get_visibility_percent(None), invisible_without_armor);
+
+        entity.set_shared_shift_key_down(true);
+
+        assert_f64_close(
+            entity.get_visibility_percent(None),
+            0.8 * invisible_without_armor,
+        );
+    }
+
+    #[test]
+    fn living_visibility_percent_uses_matching_mob_head_disguise() {
+        init_test_registry();
+        let entity = LivingFluidTestEntity::new(0.0, 0.0, true);
+        let skeleton = LivingFluidTestEntity::new(0.0, 0.0, true)
+            .with_entity_type(&vanilla_entities::SKELETON);
+
+        entity.equip(
+            EquipmentSlot::Head,
+            ItemStack::new(&vanilla_items::ITEMS.skeleton_skull),
+        );
+
+        assert_f64_close(entity.get_visibility_percent(Some(&skeleton)), 0.5);
     }
 
     #[test]

@@ -257,6 +257,15 @@ impl GoalSelector {
         self.available_goals.len()
     }
 
+    #[cfg(test)]
+    #[must_use]
+    pub(crate) fn available_goal_priorities(&self) -> Vec<i32> {
+        self.available_goals
+            .iter()
+            .map(|goal| goal.priority)
+            .collect()
+    }
+
     fn can_start_goal(&self, index: usize) -> bool {
         let goal = &self.available_goals[index];
         !goal.is_running()

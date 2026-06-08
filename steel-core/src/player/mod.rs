@@ -1613,6 +1613,12 @@ impl LivingEntity for Player {
         &self.living_base
     }
 
+    fn can_be_seen_as_enemy(&self) -> bool {
+        !self.abilities.lock().invulnerable
+            && !self.is_invulnerable()
+            && self.can_be_seen_by_anyone()
+    }
+
     fn is_invulnerable_to(&self, source: &DamageSource) -> bool {
         if self.default_is_invulnerable_to(source) {
             return true;
