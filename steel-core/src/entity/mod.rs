@@ -1314,6 +1314,7 @@ pub trait Entity: EntityEventSource + Send + Sync {
         self.check_below_world();
         self.sync_base_fire_freeze_entity_data();
         if let Some(mob) = self.as_mob() {
+            mob.mob_base_tick();
             mob.tick_leash();
         }
         // TODO: Add remaining vanilla baseTick pieces: portal and sprint particles.
@@ -3740,6 +3741,9 @@ pub trait LivingEntity: Entity {
 
     /// Runs vanilla `LivingEntity.playHurtSound`.
     fn play_hurt_sound(&self, source: &DamageSource) {
+        if let Some(mob) = self.as_mob() {
+            mob.reset_ambient_sound_time();
+        }
         self.make_sound(self.hurt_sound(source));
     }
 

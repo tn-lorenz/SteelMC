@@ -12,6 +12,7 @@ use steel_registry::blocks::block_state_ext::BlockStateExt as _;
 use steel_registry::enchantment_effect::EnchantmentEffectComponent;
 use steel_registry::item_stack::ItemStack;
 use steel_registry::loot_table::LootTableRef;
+use steel_registry::sound_event::SoundEventRef;
 use steel_registry::vanilla_block_tags::BlockTag;
 use steel_registry::vanilla_game_rules::ENTITY_DROPS;
 use steel_registry::{
@@ -151,6 +152,7 @@ pub struct MobBase {
     death_loot_table: SyncMutex<Option<Identifier>>,
     death_loot_table_seed: SyncMutex<i64>,
     leash_data: SyncMutex<Option<LeashData>>,
+    ambient_sound_time: SyncMutex<i32>,
 }
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
@@ -382,6 +384,7 @@ impl MobBase {
             death_loot_table: SyncMutex::new(None),
             death_loot_table_seed: SyncMutex::new(0),
             leash_data: SyncMutex::new(None),
+            ambient_sound_time: SyncMutex::new(0),
         }
     }
 
@@ -438,6 +441,22 @@ impl MobBase {
     const fn leash_data(&self) -> &SyncMutex<Option<LeashData>> {
         &self.leash_data
     }
+
+    #[must_use]
+    pub fn ambient_sound_time(&self) -> i32 {
+        *self.ambient_sound_time.lock()
+    }
+
+    pub fn set_ambient_sound_time(&self, ambient_sound_time: i32) {
+        *self.ambient_sound_time.lock() = ambient_sound_time;
+    }
+
+    fn get_and_increment_ambient_sound_time(&self) -> i32 {
+        let mut ambient_sound_time = self.ambient_sound_time.lock();
+        let previous = *ambient_sound_time;
+        *ambient_sound_time += 1;
+        previous
+    }
 }
 
 impl Default for MobBase {
@@ -456,6 +475,35 @@ pub trait Mob: LivingEntity {
     fn custom_server_ai_step(&self) {}
 
     fn tick_goal_selectors(&self) {}
+
+    fn ambient_sound_interval(&self) -> i32 {
+        80
+    }
+
+    fn ambient_sound(&self) -> Option<SoundEventRef> {
+        None
+    }
+
+    fn play_ambient_sound(&self) {
+        self.make_sound(self.ambient_sound());
+    }
+
+    fn reset_ambient_sound_time(&self) {
+        self.mob_base()
+            .set_ambient_sound_time(-self.ambient_sound_interval());
+    }
+
+    fn mob_base_tick(&self) {
+        if !LivingEntity::is_alive(self) {
+            return;
+        }
+
+        let ambient_sound_time = self.mob_base().get_and_increment_ambient_sound_time();
+        if self.base().random().lock().next_i32_bounded(1000) < ambient_sound_time {
+            self.reset_ambient_sound_time();
+            self.play_ambient_sound();
+        }
+    }
 
     fn finalize_spawn(
         &self,
@@ -1706,13 +1754,16 @@ mod tests {
     use glam::DVec3;
     use steel_registry::entity_type::EntityTypeRef;
     use steel_registry::vanilla_entities;
-    use steel_registry::{REGISTRY, test_support::init_test_registry, vanilla_blocks};
+    use steel_registry::{
+        REGISTRY, test_support::init_test_registry, vanilla_blocks, vanilla_damage_types,
+    };
     use steel_utils::locks::SyncMutex;
     use steel_utils::{BlockPos, BlockStateId};
 
     use super::{can_attempt_equipment_drop, find_ground_path_target_surface};
     use crate::entity::ai::control::{DEFAULT_LOOK_X_MAX_ROT_ANGLE, DEFAULT_LOOK_Y_MAX_ROT_SPEED};
     use crate::entity::ai::path::PathType;
+    use crate::entity::damage::DamageSource;
     use crate::entity::mob::{Mob, MobBase};
     use crate::entity::{Entity, EntityBase, LivingEntity, LivingEntityBase, SharedEntity};
     use crate::world::LevelReader;
@@ -1813,6 +1864,14 @@ mod tests {
         fn entity_type(&self) -> EntityTypeRef {
             &vanilla_entities::PIG
         }
+
+        fn is_mob(&self) -> bool {
+            true
+        }
+
+        fn as_mob(&self) -> Option<&dyn Mob> {
+            Some(self)
+        }
     }
 
     impl LivingEntity for DespawnTestMob {
@@ -1872,6 +1931,36 @@ mod tests {
         mob.mob_server_ai_step();
 
         assert_eq!(mob.no_action_time(), 13);
+    }
+
+    #[test]
+    fn mob_base_tick_increments_ambient_sound_time_when_roll_fails() {
+        let mob = DespawnTestMob::new(None, false);
+
+        mob.mob_base_tick();
+
+        assert_eq!(mob.mob_base().ambient_sound_time(), 1);
+    }
+
+    #[test]
+    fn mob_base_tick_resets_ambient_sound_time_after_vanilla_roll() {
+        let mob = DespawnTestMob::new(None, false);
+
+        mob.mob_base().set_ambient_sound_time(1000);
+        mob.mob_base_tick();
+
+        assert_eq!(mob.mob_base().ambient_sound_time(), -80);
+    }
+
+    #[test]
+    fn mob_hurt_sound_resets_ambient_sound_time() {
+        let mob = DespawnTestMob::new(None, false);
+        let source = DamageSource::environment(&vanilla_damage_types::GENERIC);
+
+        mob.mob_base().set_ambient_sound_time(12);
+        LivingEntity::play_hurt_sound(&mob, &source);
+
+        assert_eq!(mob.mob_base().ambient_sound_time(), -80);
     }
 
     #[test]

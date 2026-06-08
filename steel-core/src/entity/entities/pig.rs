@@ -812,6 +812,10 @@ impl Mob for PigEntity {
         Animal::custom_server_ai_step_animal(self);
     }
 
+    fn ambient_sound(&self) -> Option<SoundEventRef> {
+        Some(self.current_sound_set().ambient_sound)
+    }
+
     fn remove_when_far_away(&self, dist_sqr: f64) -> bool {
         Animal::remove_when_far_away_animal(self, dist_sqr)
     }
@@ -1227,6 +1231,30 @@ mod tests {
         assert_eq!(
             LivingEntity::hurt_sound(&pig, &source).map(|sound| &sound.key),
             Some(&sound_events::ENTITY_BABY_PIG_HURT.key)
+        );
+    }
+
+    #[test]
+    fn pig_ambient_sound_uses_current_sound_variant() {
+        init_test_registry();
+
+        let pig = PigEntity::new(&vanilla_entities::PIG, 1, DVec3::ZERO, Weak::new());
+
+        assert_eq!(
+            Mob::ambient_sound(&pig).map(|sound| &sound.key),
+            Some(&sound_events::ENTITY_PIG_AMBIENT.key)
+        );
+
+        pig.set_sound_variant(&vanilla_pig_sound_variants::BIG);
+        assert_eq!(
+            Mob::ambient_sound(&pig).map(|sound| &sound.key),
+            Some(&sound_events::ENTITY_PIG_BIG_AMBIENT.key)
+        );
+
+        pig.set_baby(true);
+        assert_eq!(
+            Mob::ambient_sound(&pig).map(|sound| &sound.key),
+            Some(&sound_events::ENTITY_BABY_PIG_AMBIENT.key)
         );
     }
 
