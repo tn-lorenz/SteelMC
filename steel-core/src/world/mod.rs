@@ -163,6 +163,7 @@ impl ClipHitResult {
 }
 
 mod border;
+mod environment;
 pub mod game_event_context;
 pub mod game_event_listener;
 mod level_reader;
@@ -1650,6 +1651,40 @@ impl World {
     /// Checks whether the thunder level and rain level are sufficient to spawn thunderbolts using the provided guard.
     pub fn is_thundering_with_guard(&self, guard: &Weather) -> bool {
         guard.rain_level * guard.thunder_level > 0.9 && self.can_have_weather()
+    }
+
+    /// Returns the current vanilla `SKY_LIGHT_LEVEL` environment attribute.
+    pub fn sky_light_level(&self) -> f32 {
+        let day_time = self.level_data.read().day_time();
+        let (rain_level, thunder_level) = if self.can_have_weather() {
+            let weather = self.weather.lock();
+            (weather.rain_level, weather.thunder_level)
+        } else {
+            (0.0, 0.0)
+        };
+
+        environment::sky_light_level(
+            self.dimension_type,
+            day_time,
+            rain_level,
+            thunder_level,
+            self.can_have_weather(),
+        )
+    }
+
+    /// Returns vanilla `Level.skyDarken`.
+    pub fn sky_darkening(&self) -> u8 {
+        environment::sky_darkening(self.sky_light_level())
+    }
+
+    /// Returns vanilla `Level.isBrightOutside`.
+    pub fn is_bright_outside(&self) -> bool {
+        self.dimension_type.fixed_time.is_none() && self.sky_darkening() < 4
+    }
+
+    /// Returns vanilla `Level.isDarkOutside`.
+    pub fn is_dark_outside(&self) -> bool {
+        self.dimension_type.fixed_time.is_none() && !self.is_bright_outside()
     }
 
     /// Checks whether the world can have weather.
