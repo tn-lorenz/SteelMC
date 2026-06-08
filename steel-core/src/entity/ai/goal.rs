@@ -23,6 +23,7 @@ mod random_stroll;
 mod random_swimming;
 mod restrict_sun;
 mod selector;
+mod target_goal;
 mod tempt_goal;
 mod try_find_water;
 mod water_avoiding_random_stroll;
