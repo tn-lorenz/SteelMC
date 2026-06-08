@@ -94,7 +94,7 @@ fn create_entity(
     };
 
     if let Some(mob) = entity.as_mob() {
-        mob.finalize_spawn(&world, EntitySpawnReason::Command);
+        let _ = mob.finalize_spawn(&world, EntitySpawnReason::Command, None);
     }
 
     match world.try_add_entity(Arc::clone(&entity)) {

@@ -1,10 +1,14 @@
 //! Shared vanilla `AgeableMob` state and hooks.
 
+use std::sync::Arc;
+
 use simdnbt::borrow::NbtCompound as BorrowedNbtCompoundView;
 use simdnbt::owned::NbtCompound;
 use steel_utils::locks::SyncMutex;
+use steel_utils::random::Random as _;
 
-use crate::entity::{Entity, Mob};
+use crate::entity::{AgeableMobGroupData, Entity, EntitySpawnReason, Mob, SpawnGroupData};
+use crate::world::World;
 
 const BABY_START_AGE: i32 = -24_000;
 
@@ -111,6 +115,11 @@ pub trait AgeableMob: Mob {
     /// Hook called after the baby/adult boundary changes.
     fn age_boundary_changed(&self, _baby: bool) {}
 
+    /// Returns vanilla `AgeableMob.getBabyStartAge`.
+    fn get_baby_start_age(&self) -> i32 {
+        BABY_START_AGE
+    }
+
     /// Returns vanilla `AgeableMob.age`.
     fn get_age(&self) -> i32 {
         self.ageable_base().age()
@@ -132,7 +141,7 @@ pub trait AgeableMob: Mob {
 
     /// Sets the vanilla baby state using the `AgeableMob` start age.
     fn set_baby(&self, baby: bool) {
-        self.set_age(if baby { BABY_START_AGE } else { 0 });
+        self.set_age(if baby { self.get_baby_start_age() } else { 0 });
     }
 
     /// Returns vanilla `AgeableMob.forcedAge`.
@@ -188,6 +197,28 @@ pub trait AgeableMob: Mob {
         if self.get_age() == 0 {
             self.set_age(self.forced_age());
         }
+    }
+
+    /// Runs vanilla `AgeableMob.finalizeSpawn`, then delegates to `Mob.finalizeSpawn`.
+    fn finalize_spawn_ageable_mob(
+        &self,
+        world: &Arc<World>,
+        spawn_reason: EntitySpawnReason,
+        group_data: Option<SpawnGroupData>,
+    ) -> Option<SpawnGroupData> {
+        let mut group_data = match group_data {
+            Some(SpawnGroupData::AgeableMob(group_data)) => group_data,
+            None => AgeableMobGroupData::with_should_spawn_baby(true),
+        };
+        if group_data.finalize_ageable_spawn(|| world.random().lock().next_f32()) {
+            self.set_age(self.get_baby_start_age());
+        }
+
+        self.finalize_spawn_mob_base(
+            world,
+            spawn_reason,
+            Some(SpawnGroupData::AgeableMob(group_data)),
+        )
     }
 
     /// Ticks vanilla age progression.

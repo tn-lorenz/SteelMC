@@ -41,6 +41,7 @@ use crate::entity::{
     AgeableMob, AgeableMobBase, Animal, AnimalBase, Entity, EntityBase, EntityBaseLoad,
     EntitySpawnReason, EntitySyncedData, ItemBasedSteering, ItemSteerable, LivingEntity,
     LivingEntityBase, Mob, MobBase, MobEffectSyncChange, PathfinderMob, SharedEntity,
+    SpawnGroupData,
 };
 use crate::inventory::equipment::EquipmentSlot;
 use crate::physics::MoveResult;
@@ -810,7 +811,12 @@ impl Mob for PigEntity {
         Animal::remove_when_far_away_animal(self, dist_sqr)
     }
 
-    fn finalize_spawn(&self, world: &Arc<World>, spawn_reason: EntitySpawnReason) {
+    fn finalize_spawn(
+        &self,
+        world: &Arc<World>,
+        spawn_reason: EntitySpawnReason,
+        group_data: Option<SpawnGroupData>,
+    ) -> Option<SpawnGroupData> {
         let biome = world.biome_at(self.block_position());
         let (variant, sound_variant) = {
             let mut random = world.random().lock();
@@ -831,7 +837,7 @@ impl Mob for PigEntity {
             self.set_sound_variant(sound_variant);
         }
 
-        self.finalize_spawn_mob_base(world, spawn_reason);
+        self.finalize_spawn_ageable_mob(world, spawn_reason, group_data)
     }
 
     fn mob_interact(&self, player: &Player, hand: InteractionHand) -> InteractionResult {

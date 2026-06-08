@@ -39,7 +39,7 @@ use crate::entity::damage::DamageSource;
 use crate::entity::entities::LeashFenceKnotEntity;
 use crate::entity::{
     Entity, EntitySpawnReason, LivingEntity, LivingTravelInput, RemovalReason, SharedEntity,
-    WeakEntity,
+    SpawnGroupData, WeakEntity,
 };
 use crate::inventory::equipment::EquipmentSlot;
 use crate::physics::WorldCollisionProvider;
@@ -457,11 +457,21 @@ pub trait Mob: LivingEntity {
 
     fn tick_goal_selectors(&self) {}
 
-    fn finalize_spawn(&self, world: &Arc<World>, spawn_reason: EntitySpawnReason) {
-        self.finalize_spawn_mob_base(world, spawn_reason);
+    fn finalize_spawn(
+        &self,
+        world: &Arc<World>,
+        spawn_reason: EntitySpawnReason,
+        group_data: Option<SpawnGroupData>,
+    ) -> Option<SpawnGroupData> {
+        self.finalize_spawn_mob_base(world, spawn_reason, group_data)
     }
 
-    fn finalize_spawn_mob_base(&self, world: &Arc<World>, _spawn_reason: EntitySpawnReason) {
+    fn finalize_spawn_mob_base(
+        &self,
+        world: &Arc<World>,
+        _spawn_reason: EntitySpawnReason,
+        group_data: Option<SpawnGroupData>,
+    ) -> Option<SpawnGroupData> {
         let needs_random_spawn_bonus = !self
             .attributes()
             .lock()
@@ -486,6 +496,7 @@ pub trait Mob: LivingEntity {
             );
         }
         self.set_left_handed(left_handed);
+        group_data
     }
 
     /// Handles vanilla `Mob.interact`.

@@ -672,7 +672,7 @@ pub use movement_sync::{
 };
 pub use registry::{ENTITIES, EntityLoadRequest, EntityRegistry, init_entities};
 pub(crate) use shared_flags::EntitySharedFlags;
-pub(crate) use spawn::EntitySpawnReason;
+pub(crate) use spawn::{AgeableMobGroupData, EntitySpawnReason, SpawnGroupData};
 pub(crate) use storage::EntityStorage;
 pub use synced_data::EntitySyncedData;
 pub(crate) use ticking::{
