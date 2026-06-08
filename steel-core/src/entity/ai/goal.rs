@@ -13,6 +13,7 @@ mod panic_goal;
 mod random_look_around;
 mod random_pos;
 mod random_stroll;
+mod random_swimming;
 mod selector;
 mod tempt_goal;
 mod try_find_water;
