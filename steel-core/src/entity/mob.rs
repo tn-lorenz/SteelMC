@@ -29,7 +29,7 @@ use crate::behavior::{BLOCK_BEHAVIORS, BlockCollisionContext, InteractionResult}
 use crate::entity::ai::control::{
     BodyRotationInput, MobControls, MoveControlOperation, rotate_if_necessary, rotate_towards,
 };
-use crate::entity::ai::goal::GoalSelector;
+use crate::entity::ai::goal::{GoalControl, GoalSelector};
 use crate::entity::ai::navigation::{
     NavigationPathRequest, NavigationRecomputeRequest, NavigationTickContext, PathNavigation,
 };
@@ -1264,6 +1264,9 @@ pub trait Mob: LivingEntity {
 
     fn mob_server_ai_step(&self) {
         self.increment_no_action_time();
+        if self.tick_count() % 5 == 0 {
+            self.update_control_flags();
+        }
         self.tick_goal_selectors();
         self.tick_path_navigation();
         self.custom_server_ai_step();
@@ -1463,6 +1466,20 @@ pub trait Mob: LivingEntity {
     fn tick_jump_control(&self) {
         let jumping = self.mob_base().controls().lock().jump_control.tick();
         self.set_jumping(jumping);
+    }
+
+    fn update_control_flags(&self) {
+        let no_controller = self
+            .controlling_passenger()
+            .is_none_or(|passenger| !passenger.is_mob());
+        let not_in_boat = self
+            .vehicle()
+            .is_none_or(|vehicle| !vehicle.entity_type().is_abstract_boat);
+
+        let mut selector = self.mob_base().goal_selector().lock();
+        selector.set_control(GoalControl::Move, no_controller);
+        selector.set_control(GoalControl::Jump, no_controller && not_in_boat);
+        selector.set_control(GoalControl::Look, no_controller);
     }
 
     fn tick_body_rotation_control(&self) {
@@ -1834,6 +1851,7 @@ mod tests {
 
     use super::{can_attempt_equipment_drop, find_ground_path_target_surface};
     use crate::entity::ai::control::{DEFAULT_LOOK_X_MAX_ROT_ANGLE, DEFAULT_LOOK_Y_MAX_ROT_SPEED};
+    use crate::entity::ai::goal::GoalControl;
     use crate::entity::ai::path::PathType;
     use crate::entity::damage::DamageSource;
     use crate::entity::mob::{Mob, MobBase};
@@ -1896,6 +1914,7 @@ mod tests {
         health: SyncMutex<f32>,
         nearest_player_distance_sqr: Option<f64>,
         remove_when_far_away: bool,
+        controlling_passenger: SyncMutex<Option<SharedEntity>>,
     }
 
     impl DespawnTestMob {
@@ -1924,7 +1943,12 @@ mod tests {
                 health: SyncMutex::new(10.0),
                 nearest_player_distance_sqr,
                 remove_when_far_away,
+                controlling_passenger: SyncMutex::new(None),
             }
+        }
+
+        fn set_controlling_passenger(&self, passenger: SharedEntity) {
+            *self.controlling_passenger.lock() = Some(passenger);
         }
     }
 
@@ -1943,6 +1967,10 @@ mod tests {
 
         fn as_mob(&self) -> Option<&dyn Mob> {
             Some(self)
+        }
+
+        fn controlling_passenger(&self) -> Option<SharedEntity> {
+            self.controlling_passenger.lock().clone()
         }
     }
 
@@ -1982,6 +2010,30 @@ mod tests {
         }
     }
 
+    struct MobControlVehicleEntity {
+        base: EntityBase,
+        entity_type: EntityTypeRef,
+    }
+
+    impl MobControlVehicleEntity {
+        fn new(id: i32, entity_type: EntityTypeRef) -> Self {
+            Self {
+                base: EntityBase::new(id, DVec3::ZERO, entity_type.dimensions, Weak::new()),
+                entity_type,
+            }
+        }
+    }
+
+    impl Entity for MobControlVehicleEntity {
+        fn base(&self) -> &EntityBase {
+            &self.base
+        }
+
+        fn entity_type(&self) -> EntityTypeRef {
+            self.entity_type
+        }
+    }
+
     #[test]
     fn mob_base_uses_vanilla_fire_path_malus_overrides() {
         let base = MobBase::new();
@@ -2003,6 +2055,55 @@ mod tests {
         mob.mob_server_ai_step();
 
         assert_eq!(mob.no_action_time(), 13);
+    }
+
+    #[test]
+    fn mob_control_flags_enable_goals_without_controller_or_boat() {
+        let mob = DespawnTestMob::new(None, false);
+        {
+            let mut selector = mob.mob_base().goal_selector().lock();
+            selector.disable_control(GoalControl::Move);
+            selector.disable_control(GoalControl::Jump);
+            selector.disable_control(GoalControl::Look);
+        }
+
+        mob.update_control_flags();
+
+        let selector = mob.mob_base().goal_selector().lock();
+        assert!(!selector.is_control_disabled(GoalControl::Move));
+        assert!(!selector.is_control_disabled(GoalControl::Jump));
+        assert!(!selector.is_control_disabled(GoalControl::Look));
+    }
+
+    #[test]
+    fn mob_control_flags_disable_goals_for_mob_controller() {
+        let mob = DespawnTestMob::new(None, false);
+        let controller: SharedEntity =
+            Arc::new(DespawnTestMob::with_position(2, DVec3::ZERO, None, false));
+        mob.set_controlling_passenger(controller);
+
+        mob.update_control_flags();
+
+        let selector = mob.mob_base().goal_selector().lock();
+        assert!(selector.is_control_disabled(GoalControl::Move));
+        assert!(selector.is_control_disabled(GoalControl::Jump));
+        assert!(selector.is_control_disabled(GoalControl::Look));
+    }
+
+    #[test]
+    fn mob_control_flags_disable_jump_when_riding_boat() {
+        let mob = Arc::new(DespawnTestMob::new(None, false));
+        let mob_entity: SharedEntity = mob.clone();
+        let boat: SharedEntity =
+            Arc::new(MobControlVehicleEntity::new(2, &vanilla_entities::OAK_BOAT));
+        EntityBase::restore_passenger_relationship(&boat, &mob_entity);
+
+        mob.update_control_flags();
+
+        let selector = mob.mob_base().goal_selector().lock();
+        assert!(!selector.is_control_disabled(GoalControl::Move));
+        assert!(selector.is_control_disabled(GoalControl::Jump));
+        assert!(!selector.is_control_disabled(GoalControl::Look));
     }
 
     #[test]

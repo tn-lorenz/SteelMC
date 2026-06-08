@@ -281,6 +281,12 @@ impl GoalSelector {
             .collect()
     }
 
+    #[cfg(test)]
+    #[must_use]
+    pub(crate) const fn is_control_disabled(&self, control: GoalControl) -> bool {
+        self.disabled_controls.contains(control)
+    }
+
     fn can_start_goal(&self, index: usize) -> bool {
         let goal = &self.available_goals[index];
         !goal.is_running()
