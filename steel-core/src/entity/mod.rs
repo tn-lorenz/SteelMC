@@ -583,6 +583,7 @@ mod fluid_contact;
 #[path = "generated/entities.rs"]
 mod generated_entities;
 mod inside_block_effects;
+mod item_based_steering;
 mod living_base;
 mod manager;
 mod mob;
@@ -611,6 +612,7 @@ pub use fluid_contact::EntityFluidContact;
 pub use inside_block_effects::{
     InsideBlockEffectCallback, InsideBlockEffectCollector, InsideBlockEffectType,
 };
+pub(crate) use item_based_steering::{ItemBasedSteering, ItemSteerable};
 pub use living_base::{
     ActiveMobEffect, DEATH_DURATION, LivingEntityBase, LivingTravelInput, MobEffectInstance,
     MobEffectSyncChange, MobEffectSyncPacket,
@@ -1453,6 +1455,19 @@ pub trait Entity: EntityEventSource + Send + Sync {
     /// Mirrors vanilla's frequent `instanceof Animal` branches without
     /// requiring core code to downcast through `Any`.
     fn as_animal(&self) -> Option<&dyn Animal> {
+        None
+    }
+
+    /// Returns true for entities that implement vanilla item-steered boosts.
+    fn is_item_steerable(&self) -> bool {
+        false
+    }
+
+    /// Returns this entity as item steerable when it has item-steering behavior.
+    ///
+    /// Mirrors vanilla's `instanceof ItemSteerable` branches without requiring
+    /// core code to downcast through `Any`.
+    fn as_item_steerable(&self) -> Option<&dyn ItemSteerable> {
         None
     }
 

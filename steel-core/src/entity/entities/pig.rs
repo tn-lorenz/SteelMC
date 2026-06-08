@@ -39,8 +39,8 @@ use crate::entity::ai::goal::{
 use crate::entity::damage::DamageSource;
 use crate::entity::{
     AgeableMob, AgeableMobBase, Animal, AnimalBase, Entity, EntityBase, EntityBaseLoad,
-    EntitySyncedData, LivingEntity, LivingEntityBase, Mob, MobBase, MobEffectSyncChange,
-    PathfinderMob, SharedEntity,
+    EntitySyncedData, ItemBasedSteering, ItemSteerable, LivingEntity, LivingEntityBase, Mob,
+    MobBase, MobEffectSyncChange, PathfinderMob, SharedEntity,
 };
 use crate::inventory::equipment::EquipmentSlot;
 use crate::physics::MoveResult;
@@ -56,6 +56,7 @@ pub struct PigEntity {
     mob_base: MobBase,
     ageable_base: AgeableMobBase,
     animal_base: AnimalBase,
+    steering: SyncMutex<ItemBasedSteering>,
     entity_data: SyncMutex<PigEntityData>,
 }
 
@@ -83,6 +84,7 @@ impl PigEntity {
         let mob_base = MobBase::new();
         let ageable_base = AgeableMobBase::new();
         let animal_base = AnimalBase::new();
+        let steering = SyncMutex::new(ItemBasedSteering::new());
         let mut entity_data = PigEntityData::new();
         living_base.initialize_synced_data(&mut entity_data);
         mob_base
@@ -141,6 +143,7 @@ impl PigEntity {
             mob_base,
             ageable_base,
             animal_base,
+            steering,
             entity_data: SyncMutex::new(entity_data),
         }
     }
@@ -294,6 +297,39 @@ impl PigEntity {
     #[must_use]
     pub fn can_use_saddle_slot(&self) -> bool {
         Entity::is_alive(self) && !self.is_baby()
+    }
+
+    /// Returns the synced vanilla `DATA_BOOST_TIME` value.
+    #[must_use]
+    pub fn boost_time_total(&self) -> i32 {
+        ItemSteerable::boost_time_total(self)
+    }
+
+    /// Returns whether item-based steering is currently boosting.
+    #[must_use]
+    pub fn is_boosting(&self) -> bool {
+        self.steering.lock().is_boosting()
+    }
+
+    /// Returns the current elapsed boost time.
+    #[must_use]
+    pub fn elapsed_boost_time(&self) -> i32 {
+        self.steering.lock().boost_time()
+    }
+
+    /// Advances the active item-based steering boost.
+    pub fn tick_boost(&self) {
+        ItemSteerable::tick_boost(self);
+    }
+
+    /// Returns vanilla pig ridden speed.
+    #[must_use]
+    pub fn ridden_speed(&self) -> f32 {
+        let movement_speed = self
+            .attributes()
+            .lock()
+            .required_value(vanilla_attributes::MOVEMENT_SPEED) as f32;
+        movement_speed * 0.225 * ItemSteerable::boost_factor(self)
     }
 
     fn update_dirty_mob_effect_entity_data(&self) {
@@ -453,6 +489,14 @@ impl Entity for PigEntity {
     }
 
     fn as_animal(&self) -> Option<&dyn Animal> {
+        Some(self)
+    }
+
+    fn is_item_steerable(&self) -> bool {
+        true
+    }
+
+    fn as_item_steerable(&self) -> Option<&dyn ItemSteerable> {
         Some(self)
     }
 
@@ -717,6 +761,20 @@ impl Animal for PigEntity {
     }
 }
 
+impl ItemSteerable for PigEntity {
+    fn item_based_steering(&self) -> &SyncMutex<ItemBasedSteering> {
+        &self.steering
+    }
+
+    fn boost_time_total(&self) -> i32 {
+        *self.entity_data.lock().boost_time.get()
+    }
+
+    fn set_boost_time_total(&self, boost_time_total: i32) {
+        self.entity_data.lock().boost_time.set(boost_time_total);
+    }
+}
+
 impl Mob for PigEntity {
     fn mob_base(&self) -> &MobBase {
         &self.mob_base
@@ -795,7 +853,7 @@ mod tests {
     use crate::entity::ai::node::Node;
     use crate::entity::ai::path::{Path, PathType};
     use crate::entity::damage::DamageSource;
-    use crate::entity::{Animal, DEATH_DURATION, RemovalReason};
+    use crate::entity::{Animal, DEATH_DURATION, ItemSteerable, RemovalReason};
     use crate::inventory::equipment::EquipmentSlot;
 
     use super::*;
@@ -893,6 +951,51 @@ mod tests {
         animal.set_in_love_time(5);
         assert_eq!(animal.in_love_time(), 5);
         assert!(animal.is_in_love());
+    }
+
+    #[test]
+    fn pig_exposes_item_steerable_behavior_without_downcasting() {
+        init_test_registry();
+
+        let pig = PigEntity::new(&vanilla_entities::PIG, 1, DVec3::ZERO, Weak::new());
+        let entity = &pig as &dyn Entity;
+
+        assert!(entity.is_item_steerable());
+        let Some(steerable) = entity.as_item_steerable() else {
+            panic!("pig should expose item-steerable behavior");
+        };
+        assert_eq!(steerable.boost_time_total(), 0);
+    }
+
+    #[test]
+    fn pig_item_steerable_boost_updates_synced_total_once() {
+        init_test_registry();
+
+        let pig = PigEntity::new(&vanilla_entities::PIG, 1, DVec3::ZERO, Weak::new());
+
+        assert!(ItemSteerable::boost(&pig));
+        let boost_time_total = pig.boost_time_total();
+
+        assert!((140..=980).contains(&boost_time_total));
+        assert!(pig.is_boosting());
+        assert_eq!(pig.elapsed_boost_time(), 0);
+        assert!(!ItemSteerable::boost(&pig));
+        assert_eq!(pig.boost_time_total(), boost_time_total);
+    }
+
+    #[test]
+    fn pig_ridden_speed_uses_item_steering_boost_factor() {
+        init_test_registry();
+
+        let pig = PigEntity::new(&vanilla_entities::PIG, 1, DVec3::ZERO, Weak::new());
+        let base_ridden_speed = 0.25_f32 * 0.225;
+
+        assert_eq!(pig.ridden_speed().to_bits(), base_ridden_speed.to_bits());
+
+        assert!(ItemSteerable::boost(&pig));
+        pig.tick_boost();
+
+        assert!(pig.ridden_speed() > base_ridden_speed);
     }
 
     #[test]
