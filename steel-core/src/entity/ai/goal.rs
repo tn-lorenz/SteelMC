@@ -12,6 +12,7 @@ mod follow_parent;
 mod interact;
 mod leap_at_target;
 mod look_at_player;
+mod melee_attack;
 mod move_to_block;
 mod move_towards_restriction;
 mod move_towards_target;
