@@ -100,6 +100,20 @@ fn leash_scan_area(center: DVec3) -> WorldAabb {
     )
 }
 
+fn transfer_leashables_to_holder(leashables: Vec<SharedEntity>, new_holder: &SharedEntity) -> bool {
+    let mut transferred = false;
+    for leashable in leashables {
+        let Some(mob) = leashable.as_mob() else {
+            continue;
+        };
+        if mob.can_have_a_leash_attached_to(new_holder.as_ref()) {
+            let _ = mob.set_leashed_to(new_holder);
+            transferred = true;
+        }
+    }
+    transferred
+}
+
 fn fall_flying_collision_damage(previous_horizontal_speed: f64, new_horizontal_speed: f64) -> f32 {
     ((previous_horizontal_speed - new_horizontal_speed) * 10.0 - 3.0) as f32
 }
@@ -1435,10 +1449,15 @@ pub trait Entity: EntityEventSource + Send + Sync {
 
     /// Finds leashable mobs in vanilla's nearby leash scan whose holder is this entity.
     fn leashables_leashed_to(&self) -> Vec<SharedEntity> {
+        self.leashables_leashed_to_holder_in_area(self.as_entity_event_source())
+    }
+
+    /// Finds leashable mobs in this entity's nearby leash scan whose holder is `holder`.
+    fn leashables_leashed_to_holder_in_area(&self, holder: &dyn Entity) -> Vec<SharedEntity> {
         let Some(world) = self.level() else {
             return Vec::new();
         };
-        let holder_id = self.id();
+        let holder_id = holder.id();
         let scan_area = leash_scan_area(world_aabb_center(self.bounding_box()));
         world.get_entities_in_aabb_matching(&scan_area, |entity| {
             entity.as_mob().is_some_and(|mob| {
@@ -1446,6 +1465,21 @@ pub trait Entity: EntityEventSource + Send + Sync {
                     .is_some_and(|holder| holder.id() == holder_id)
             })
         })
+    }
+
+    /// Transfers leashables currently held by `old_holder` to this entity.
+    fn transfer_leashables_from_holder(&self, old_holder: &dyn Entity) -> bool {
+        let Some(world) = self.level() else {
+            return false;
+        };
+        let Some(new_holder) = world.get_entity_by_id(self.id()) else {
+            return false;
+        };
+
+        transfer_leashables_to_holder(
+            self.leashables_leashed_to_holder_in_area(old_holder),
+            &new_holder,
+        )
     }
 
     /// Drops this entity's leash and all leashables attached to it.
@@ -1529,8 +1563,26 @@ pub trait Entity: EntityEventSource + Send + Sync {
             return InteractionResult::Pass;
         }
 
-        // TODO: Implement secondary-use leash transfer and equipment shearing
-        // once fence-knot and shearing foundations exist.
+        if player.is_secondary_use_active()
+            && mob.can_be_leashed()
+            && self
+                .as_living_entity()
+                .is_none_or(|living| !LivingEntity::is_baby(living))
+            && self.transfer_leashables_from_holder(player)
+        {
+            if let Some(world) = self.level() {
+                world.game_event(
+                    &vanilla_game_events::ENTITY_ACTION,
+                    self.block_position(),
+                    &GameEventContext::new(Some(player), None),
+                );
+            }
+            self.play_sound(&sound_events::ITEM_LEAD_TIED, 1.0, 1.0);
+            return InteractionResult::Success;
+        }
+
+        // TODO: Implement equipment shearing once equippable component data
+        // includes `can_be_sheared` and shearing sound.
         let holding_shears = {
             let inventory = player.inventory.lock();
             inventory
@@ -5204,6 +5256,7 @@ mod tests {
     use uuid::Uuid;
 
     use crate::entity::damage::DamageSource;
+    use crate::entity::entities::PigEntity;
     use crate::inventory::equipment::EquipmentSlot;
 
     use super::{
@@ -5212,7 +5265,7 @@ mod tests {
         LivingEntityBase, LivingTravelInput, RemovalReason, SharedEntity,
         closest_open_space_direction, fall_damage_reset_clip_target, fall_flying_collision_damage,
         fall_flying_free_fall_interval, get_input_vector, should_apply_resolved_movement,
-        start_riding_entities, trapdoor_usable_as_ladder_state,
+        start_riding_entities, transfer_leashables_to_holder, trapdoor_usable_as_ladder_state,
     };
 
     struct PushableTestEntity {
@@ -6455,6 +6508,82 @@ mod tests {
         assert!(vehicle.has_passenger(passenger.as_ref()));
         assert_eq!(vehicle.first_passenger().map(|entity| entity.id()), Some(1));
         assert_eq!(passenger.pose(), EntityPose::Standing);
+    }
+
+    #[test]
+    fn transfer_leashables_to_holder_moves_valid_mobs() {
+        init_test_registry();
+
+        let old_holder: SharedEntity = Arc::new(PigEntity::new(
+            &vanilla_entities::PIG,
+            1,
+            DVec3::ZERO,
+            Weak::new(),
+        ));
+        let new_holder: SharedEntity = Arc::new(PigEntity::new(
+            &vanilla_entities::PIG,
+            2,
+            DVec3::ZERO,
+            Weak::new(),
+        ));
+        let leashable: SharedEntity = Arc::new(PigEntity::new(
+            &vanilla_entities::PIG,
+            3,
+            DVec3::new(1.0, 0.0, 0.0),
+            Weak::new(),
+        ));
+        let Some(mob) = leashable.as_mob() else {
+            panic!("pig should expose mob behavior");
+        };
+        assert!(mob.set_leashed_to(&old_holder));
+
+        assert!(transfer_leashables_to_holder(
+            vec![Arc::clone(&leashable)],
+            &new_holder
+        ));
+
+        let Some(holder) = mob.leash_holder() else {
+            panic!("transferred mob should stay leashed");
+        };
+        assert_eq!(holder.id(), new_holder.id());
+    }
+
+    #[test]
+    fn transfer_leashables_to_holder_skips_mobs_outside_snap_distance() {
+        init_test_registry();
+
+        let old_holder: SharedEntity = Arc::new(PigEntity::new(
+            &vanilla_entities::PIG,
+            1,
+            DVec3::ZERO,
+            Weak::new(),
+        ));
+        let new_holder: SharedEntity = Arc::new(PigEntity::new(
+            &vanilla_entities::PIG,
+            2,
+            DVec3::ZERO,
+            Weak::new(),
+        ));
+        let leashable: SharedEntity = Arc::new(PigEntity::new(
+            &vanilla_entities::PIG,
+            3,
+            DVec3::new(20.0, 0.0, 0.0),
+            Weak::new(),
+        ));
+        let Some(mob) = leashable.as_mob() else {
+            panic!("pig should expose mob behavior");
+        };
+        assert!(mob.set_leashed_to(&old_holder));
+
+        assert!(!transfer_leashables_to_holder(
+            vec![Arc::clone(&leashable)],
+            &new_holder
+        ));
+
+        let Some(holder) = mob.leash_holder() else {
+            panic!("untransferred mob should stay leashed");
+        };
+        assert_eq!(holder.id(), old_holder.id());
     }
 
     #[test]
