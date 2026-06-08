@@ -4,6 +4,8 @@ mod breed_goal;
 mod float_goal;
 mod follow_parent;
 mod look_at_player;
+mod move_towards_restriction;
+mod move_towards_target;
 mod panic_goal;
 mod random_look_around;
 mod random_pos;
