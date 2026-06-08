@@ -1,12 +1,15 @@
 //! Shared vanilla `Animal` state and hooks.
 
+use std::sync::Arc;
+
 use simdnbt::borrow::NbtCompound as BorrowedNbtCompoundView;
 use simdnbt::owned::{NbtCompound, NbtTag};
 use steel_utils::UuidExt;
 use steel_utils::locks::SyncMutex;
 use uuid::Uuid;
 
-use crate::entity::AgeableMob;
+use crate::entity::{AgeableMob, SharedEntity};
+use crate::world::World;
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
 struct AnimalState {
@@ -100,10 +103,27 @@ pub trait Animal: AgeableMob {
         self.animal_base().set_love_cause_uuid(love_cause);
     }
 
+    /// Returns vanilla `Animal.isInLove`.
+    fn is_in_love(&self) -> bool {
+        self.in_love_time() > 0
+    }
+
     /// Resets vanilla love mode without clearing the stored love cause.
     fn reset_love(&self) {
         self.set_in_love_time(0);
     }
+
+    /// Returns vanilla `Animal.canMate`.
+    fn can_mate(&self, partner: &dyn Animal) -> bool {
+        self.uuid() != partner.uuid()
+            && self.entity_type() == partner.entity_type()
+            && self.is_in_love()
+            && partner.is_in_love()
+    }
+
+    /// Creates this animal's vanilla breeding offspring.
+    fn get_breed_offspring(&self, world: &Arc<World>, partner: &dyn Animal)
+    -> Option<SharedEntity>;
 
     /// Ticks vanilla animal love state.
     fn tick_animal_love(&self) {

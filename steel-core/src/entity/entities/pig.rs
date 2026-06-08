@@ -37,7 +37,7 @@ use crate::entity::damage::DamageSource;
 use crate::entity::{
     AgeableMob, AgeableMobBase, Animal, AnimalBase, Entity, EntityBase, EntityBaseLoad,
     EntitySyncedData, LivingEntity, LivingEntityBase, Mob, MobBase, MobEffectSyncChange,
-    PathfinderMob, SharedEntity,
+    PathfinderMob, SharedEntity, next_entity_id,
 };
 use crate::physics::MoveResult;
 use crate::world::World;
@@ -612,6 +612,19 @@ impl Animal for PigEntity {
     fn animal_base(&self) -> &AnimalBase {
         &self.animal_base
     }
+
+    fn get_breed_offspring(
+        &self,
+        world: &Arc<World>,
+        _partner: &dyn Animal,
+    ) -> Option<SharedEntity> {
+        Some(Arc::new(PigEntity::new(
+            self.entity_type,
+            next_entity_id(),
+            self.position(),
+            Arc::downgrade(world),
+        )))
+    }
 }
 
 impl Mob for PigEntity {
@@ -740,6 +753,28 @@ mod tests {
         };
         animal.set_in_love_time(5);
         assert_eq!(animal.in_love_time(), 5);
+        assert!(animal.is_in_love());
+    }
+
+    #[test]
+    fn pig_can_mate_with_same_type_when_both_in_love() {
+        init_test_registry();
+
+        let pig = PigEntity::new(&vanilla_entities::PIG, 1, DVec3::ZERO, Weak::new());
+        let partner = PigEntity::new(
+            &vanilla_entities::PIG,
+            2,
+            DVec3::new(1.0, 0.0, 0.0),
+            Weak::new(),
+        );
+
+        assert!(!pig.can_mate(&partner));
+
+        pig.set_in_love_time(20);
+        partner.set_in_love_time(20);
+
+        assert!(pig.can_mate(&partner));
+        assert!(!pig.can_mate(&pig));
     }
 
     #[test]
