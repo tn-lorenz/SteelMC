@@ -1668,7 +1668,7 @@ impl World {
             .is_some_and(|height| height <= pos.y())
     }
 
-    fn biome_at(&self, pos: BlockPos) -> Option<BiomeRef> {
+    pub(crate) fn biome_at(&self, pos: BlockPos) -> Option<BiomeRef> {
         let biome_zoom_seed = obfuscate_biome_seed(self.seed());
         let mut missing_chunk = false;
         let biome_id = fuzzed_biome_at_block(

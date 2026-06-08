@@ -16,7 +16,9 @@ use crate::command::commands::{
 };
 use crate::command::context::CommandContext;
 use crate::command::error::CommandError;
-use crate::entity::{AddEntityError, ENTITIES, Entity, SharedEntity, next_entity_id};
+use crate::entity::{
+    AddEntityError, ENTITIES, Entity, EntitySpawnReason, SharedEntity, next_entity_id,
+};
 use crate::world::World;
 
 /// Handler for the "summon" command.
@@ -91,7 +93,10 @@ fn create_entity(
         return Err(command_failed(translations::COMMANDS_SUMMON_FAILED.msg()));
     };
 
-    // TODO: Run mob `finalizeSpawn` once command spawn finalization exists.
+    if let Some(mob) = entity.as_mob() {
+        mob.finalize_spawn(&world, EntitySpawnReason::Command);
+    }
+
     match world.try_add_entity(Arc::clone(&entity)) {
         Ok(()) => Ok(entity),
         Err(AddEntityError::DuplicateUuid { .. }) => Err(command_failed(

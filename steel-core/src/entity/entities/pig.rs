@@ -39,8 +39,8 @@ use crate::entity::ai::goal::{
 use crate::entity::damage::DamageSource;
 use crate::entity::{
     AgeableMob, AgeableMobBase, Animal, AnimalBase, Entity, EntityBase, EntityBaseLoad,
-    EntitySyncedData, ItemBasedSteering, ItemSteerable, LivingEntity, LivingEntityBase, Mob,
-    MobBase, MobEffectSyncChange, PathfinderMob, SharedEntity,
+    EntitySpawnReason, EntitySyncedData, ItemBasedSteering, ItemSteerable, LivingEntity,
+    LivingEntityBase, Mob, MobBase, MobEffectSyncChange, PathfinderMob, SharedEntity,
 };
 use crate::inventory::equipment::EquipmentSlot;
 use crate::physics::MoveResult;
@@ -808,6 +808,30 @@ impl Mob for PigEntity {
 
     fn remove_when_far_away(&self, dist_sqr: f64) -> bool {
         Animal::remove_when_far_away_animal(self, dist_sqr)
+    }
+
+    fn finalize_spawn(&self, world: &Arc<World>, spawn_reason: EntitySpawnReason) {
+        let biome = world.biome_at(self.block_position());
+        let (variant, sound_variant) = {
+            let mut random = world.random().lock();
+            let variant = biome.and_then(|biome| {
+                REGISTRY
+                    .pig_variants
+                    .select_spawn_variant(biome, &mut *random)
+            });
+            let sound_variant = REGISTRY.pig_sound_variants.pick_random(&mut *random);
+            (variant, sound_variant)
+        };
+
+        if let Some(variant) = variant {
+            self.set_variant(variant);
+        }
+
+        if let Some(sound_variant) = sound_variant {
+            self.set_sound_variant(sound_variant);
+        }
+
+        self.finalize_spawn_mob_base(world, spawn_reason);
     }
 
     fn mob_interact(&self, player: &Player, hand: InteractionHand) -> InteractionResult {

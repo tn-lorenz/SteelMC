@@ -34,10 +34,12 @@ use crate::entity::ai::navigation::{
 };
 use crate::entity::ai::path::{Path, PathType, PathfindingContext, PathfindingMalus};
 use crate::entity::ai::walk::{MobPathSettings, WalkNodeEvaluator, WalkPathEvaluator};
+use crate::entity::attribute::{AttributeModifier, AttributeModifierOperation};
 use crate::entity::damage::DamageSource;
 use crate::entity::entities::LeashFenceKnotEntity;
 use crate::entity::{
-    Entity, LivingEntity, LivingTravelInput, RemovalReason, SharedEntity, WeakEntity,
+    Entity, EntitySpawnReason, LivingEntity, LivingTravelInput, RemovalReason, SharedEntity,
+    WeakEntity,
 };
 use crate::inventory::equipment::EquipmentSlot;
 use crate::physics::WorldCollisionProvider;
@@ -63,6 +65,9 @@ const ENTITY_LEASH_ATTACHMENT_POINT: DVec3 = DVec3::new(0.0, 0.5, 0.5);
 const LEASHER_ATTACHMENT_POINT: DVec3 = DVec3::new(0.0, 0.5, 0.0);
 const DELAYED_LEASH_DROP_TICKS: i32 = 100;
 const BODY_ROTATION_MOVING_DISTANCE_SQR: f64 = 2.500_000_3e-7;
+const RANDOM_SPAWN_BONUS_ID: Identifier = Identifier::vanilla_static("random_spawn_bonus");
+const RANDOM_SPAWN_BONUS_SCALE: f64 = 0.114_850_000_000_000_01;
+const LEFT_HANDED_SPAWN_CHANCE: f32 = 0.05;
 
 #[derive(Debug, Clone, Copy, PartialEq)]
 struct DropChances {
@@ -451,6 +456,37 @@ pub trait Mob: LivingEntity {
     fn custom_server_ai_step(&self) {}
 
     fn tick_goal_selectors(&self) {}
+
+    fn finalize_spawn(&self, world: &Arc<World>, spawn_reason: EntitySpawnReason) {
+        self.finalize_spawn_mob_base(world, spawn_reason);
+    }
+
+    fn finalize_spawn_mob_base(&self, world: &Arc<World>, _spawn_reason: EntitySpawnReason) {
+        let needs_random_spawn_bonus = !self
+            .attributes()
+            .lock()
+            .has_modifier(vanilla_attributes::FOLLOW_RANGE, &RANDOM_SPAWN_BONUS_ID);
+        let (random_spawn_bonus, left_handed) = {
+            let mut random = world.random().lock();
+            let random_spawn_bonus =
+                needs_random_spawn_bonus.then(|| random.triangle(0.0, RANDOM_SPAWN_BONUS_SCALE));
+            let left_handed = random.next_f32() < LEFT_HANDED_SPAWN_CHANCE;
+            (random_spawn_bonus, left_handed)
+        };
+
+        if let Some(amount) = random_spawn_bonus {
+            self.attributes().lock().add_modifier(
+                vanilla_attributes::FOLLOW_RANGE,
+                AttributeModifier {
+                    id: RANDOM_SPAWN_BONUS_ID,
+                    amount,
+                    operation: AttributeModifierOperation::AddMultipliedBase,
+                },
+                true,
+            );
+        }
+        self.set_left_handed(left_handed);
+    }
 
     /// Handles vanilla `Mob.interact`.
     fn interact_mob(
