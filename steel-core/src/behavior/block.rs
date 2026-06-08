@@ -673,6 +673,34 @@ pub trait BlockBehavior: Send + Sync {
         }
     }
 
+    /// Mirrors vanilla `DoorBlock.isWoodenDoor`.
+    ///
+    /// Despite the vanilla name, this returns true for any door block type that
+    /// can be opened by hand.
+    #[expect(
+        unused_variables,
+        reason = "default trait implementation ignores all params"
+    )]
+    fn is_wooden_door(&self, state: BlockStateId) -> bool {
+        false
+    }
+
+    /// Mirrors vanilla `DoorBlock.setOpen` for AI door goals.
+    #[expect(
+        unused_variables,
+        reason = "default trait implementation ignores all params"
+    )]
+    fn set_door_open(
+        &self,
+        state: BlockStateId,
+        world: &Arc<World>,
+        pos: BlockPos,
+        source_entity: Option<&dyn Entity>,
+        open: bool,
+    ) -> bool {
+        false
+    }
+
     /// Returns this block state's collision shape for the supplied collision context.
     ///
     /// Vanilla baseline for `BlockState.getCollisionShape(BlockGetter, BlockPos, CollisionContext)`.
