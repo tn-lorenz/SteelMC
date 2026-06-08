@@ -692,6 +692,10 @@ impl Entity for ItemEntity {
         Some(self)
     }
 
+    fn player_touch(self: Arc<Self>, player: &Arc<Player>) {
+        self.try_pickup(player);
+    }
+
     fn hurt(&self, _source: &DamageSource, amount: f32) -> bool {
         // TODO: Check isInvulnerableToBase and canBeHurtBy (damage resistance component)
         let new_health = {

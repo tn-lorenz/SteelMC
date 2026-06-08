@@ -3,6 +3,7 @@
 pub(super) struct PlayerTickState {
     tick_count: i32,
     attack_strength_ticker: i32,
+    take_xp_delay: i32,
     ack_block_changes_up_to: i32,
 }
 
@@ -12,6 +13,7 @@ impl PlayerTickState {
         Self {
             tick_count: 0,
             attack_strength_ticker: 0,
+            take_xp_delay: 0,
             ack_block_changes_up_to: -1,
         }
     }
@@ -26,8 +28,20 @@ impl PlayerTickState {
         self.attack_strength_ticker
     }
 
+    #[must_use]
+    pub(super) const fn take_xp_delay(self) -> i32 {
+        self.take_xp_delay
+    }
+
+    pub(super) const fn set_take_xp_delay(&mut self, delay: i32) {
+        self.take_xp_delay = delay;
+    }
+
     pub(super) const fn advance_tick(&mut self) {
         self.tick_count = self.tick_count.wrapping_add(1);
+        if self.take_xp_delay > 0 {
+            self.take_xp_delay -= 1;
+        }
     }
 
     pub(super) const fn advance_attack_strength_ticker(&mut self) {
@@ -75,6 +89,21 @@ mod tests {
 
         state.reset_attack_strength_ticker();
         assert_eq!(state.attack_strength_ticker(), 0);
+    }
+
+    #[test]
+    fn xp_pickup_delay_decrements_during_tick() {
+        let mut state = PlayerTickState::new();
+        state.set_take_xp_delay(2);
+
+        state.advance_tick();
+        assert_eq!(state.take_xp_delay(), 1);
+
+        state.advance_tick();
+        assert_eq!(state.take_xp_delay(), 0);
+
+        state.advance_tick();
+        assert_eq!(state.take_xp_delay(), 0);
     }
 
     #[test]

@@ -14,6 +14,8 @@ use steel_protocol::packets::game::{
 };
 use steel_registry::enchantment_effect::EnchantmentEffectComponent;
 use steel_registry::item_stack::ItemStack;
+use steel_registry::{REGISTRY, RegistryExt};
+use steel_utils::random::Random;
 use steel_utils::types::{GameType, InteractionHand};
 
 use crate::{
@@ -389,6 +391,49 @@ impl PlayerInventory {
         EquipmentSwapResult::Success(overflow)
     }
 
+    /// Repairs a random damaged equipped item with `REPAIR_WITH_XP`, returning leftover XP.
+    pub fn repair_random_equipped_item_with_xp(
+        &mut self,
+        amount: i32,
+        random: &mut impl Random,
+    ) -> i32 {
+        let mut remaining = amount;
+
+        loop {
+            let candidates = self.repair_with_xp_candidate_slots();
+            if candidates.is_empty() {
+                return remaining;
+            }
+
+            let selected = random.next_i32_bounded(candidates.len() as i32) as usize;
+            let slot = candidates[selected];
+            let item = self.get_equipment_slot_item_mut(slot);
+            let to_repair = item
+                .apply_unconditional_enchantment_value_effects(
+                    EnchantmentEffectComponent::RepairWithXp,
+                    remaining as f32,
+                )
+                .max(0.0) as i32;
+            if to_repair <= 0 {
+                return 0;
+            }
+
+            let damage = item.get_damage_value();
+            let repair = to_repair.min(damage);
+            if repair <= 0 {
+                return 0;
+            }
+
+            item.set_damage_value(damage - repair);
+            self.set_changed();
+
+            remaining -= repair * remaining / to_repair;
+            if remaining <= 0 {
+                return 0;
+            }
+        }
+    }
+
     fn swap_single_item_with_equipment_slot(
         &mut self,
         hand: InteractionHand,
@@ -416,6 +461,46 @@ impl PlayerInventory {
             EquipmentSlot::MainHand => self.get_selected_item(),
             _ => self.equipment.get_ref(slot),
         }
+    }
+
+    fn get_equipment_slot_item_mut(&mut self, slot: EquipmentSlot) -> &mut ItemStack {
+        match slot {
+            EquipmentSlot::MainHand => {
+                self.mark_main_hand_dirty();
+                &mut self.items[self.selected as usize]
+            }
+            _ => self.equipment.get_mut(slot),
+        }
+    }
+
+    fn repair_with_xp_candidate_slots(&self) -> Vec<EquipmentSlot> {
+        let mut slots = Vec::new();
+        for slot in EquipmentSlot::ALL {
+            let item = self.get_equipment_slot_item(slot);
+            if !item.is_damaged() {
+                continue;
+            }
+
+            let Some(enchantments) = item.get_enchantments() else {
+                continue;
+            };
+            for (key, level) in enchantments.iter() {
+                if *level == 0 {
+                    continue;
+                }
+                let Some(enchantment) = REGISTRY.enchantments.by_key(key) else {
+                    continue;
+                };
+                if enchantment
+                    .effects
+                    .has(EnchantmentEffectComponent::RepairWithXp)
+                    && enchantment.matching_slot(slot)
+                {
+                    slots.push(slot);
+                }
+            }
+        }
+        slots
     }
 
     fn refresh_player_equipment_attribute_modifiers(&self, slot: EquipmentSlot) {
@@ -504,11 +589,7 @@ impl Player {
                 continue;
             }
 
-            if let Some(item_entity) = entity.as_item_entity() {
-                item_entity.try_pickup(&player_arc);
-            }
-
-            // TODO: Handle other entity types (experience orbs, arrows)
+            entity.player_touch(&player_arc);
         }
     }
 
@@ -1119,6 +1200,7 @@ mod tests {
     use steel_registry::test_support::init_test_registry;
     use steel_registry::vanilla_items::ITEMS;
     use steel_utils::Identifier;
+    use steel_utils::random::legacy_random::LegacyRandom;
 
     use super::*;
 
@@ -1255,6 +1337,50 @@ mod tests {
             inventory.equipment().get_ref(EquipmentSlot::Head),
             &bound_helmet
         );
+    }
+
+    #[test]
+    fn repair_with_xp_repairs_damaged_mending_item() {
+        init_test_registry();
+
+        let mut inventory = PlayerInventory::new(Weak::new());
+        let mut pickaxe = ItemStack::new(&ITEMS.diamond_pickaxe);
+        pickaxe.set_damage_value(10);
+        pickaxe.set_enchantments(&[(Identifier::vanilla_static("mending"), 1)], false);
+        inventory.set_selected_item(pickaxe);
+        inventory.drain_dirty_equipment_items();
+        let before = inventory.get_times_changed();
+        let mut random = LegacyRandom::from_seed(1);
+
+        let remaining = inventory.repair_random_equipped_item_with_xp(3, &mut random);
+
+        assert_eq!(remaining, 0);
+        assert_eq!(inventory.get_selected_item().get_damage_value(), 4);
+        assert_ne!(inventory.get_times_changed(), before);
+        assert_eq!(
+            inventory.drain_dirty_equipment_items(),
+            vec![(
+                EquipmentSlot::MainHand,
+                inventory.get_selected_item().copy_with_count(1)
+            )]
+        );
+    }
+
+    #[test]
+    fn repair_with_xp_returns_leftover_when_item_is_fully_repaired() {
+        init_test_registry();
+
+        let mut inventory = PlayerInventory::new(Weak::new());
+        let mut pickaxe = ItemStack::new(&ITEMS.diamond_pickaxe);
+        pickaxe.set_damage_value(3);
+        pickaxe.set_enchantments(&[(Identifier::vanilla_static("mending"), 1)], false);
+        inventory.set_selected_item(pickaxe);
+        let mut random = LegacyRandom::from_seed(1);
+
+        let remaining = inventory.repair_random_equipped_item_with_xp(5, &mut random);
+
+        assert_eq!(remaining, 4);
+        assert_eq!(inventory.get_selected_item().get_damage_value(), 0);
     }
 
     #[test]

@@ -54,7 +54,7 @@ use crate::world::game_event_context::GameEventContext;
 use crate::world::{ClipBlockShape, ClipFluid, World};
 use crate::{entity::damage::DamageSource, player::Player};
 
-use entities::ItemEntity;
+use entities::{ExperienceOrbEntity, ItemEntity};
 
 /// Global counter for allocating unique entity IDs.
 ///
@@ -1312,6 +1312,14 @@ pub trait Entity: EntityEventSource + Send + Sync {
     fn as_item_entity(self: Arc<Self>) -> Option<Arc<ItemEntity>> {
         None
     }
+
+    /// Gets the entity as an `ExperienceOrbEntity` if it is one.
+    fn as_experience_orb(self: Arc<Self>) -> Option<Arc<ExperienceOrbEntity>> {
+        None
+    }
+
+    /// Called when a player touches this entity during nearby pickup processing.
+    fn player_touch(self: Arc<Self>, _player: &Arc<Player>) {}
 
     /// Returns true for entities that implement vanilla living-entity behavior.
     fn is_living_entity(&self) -> bool {

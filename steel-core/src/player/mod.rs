@@ -1041,6 +1041,22 @@ impl Player {
         self.tick_state.lock().tick_count()
     }
 
+    /// Returns vanilla `Player.takeXpDelay`.
+    #[must_use]
+    pub(crate) fn take_xp_delay(&self) -> i32 {
+        self.tick_state.lock().take_xp_delay()
+    }
+
+    /// Sets vanilla `Player.takeXpDelay`.
+    pub(crate) fn set_take_xp_delay(&self, delay: i32) {
+        self.tick_state.lock().set_take_xp_delay(delay);
+    }
+
+    /// Gives raw experience points to this player.
+    pub(crate) fn give_experience_points(&self, points: i32) {
+        self.experience.lock().add_points(points);
+    }
+
     /// Advances this player's local server tick count.
     fn advance_tick(&self) {
         self.tick_state.lock().advance_tick();

@@ -1,4 +1,5 @@
 use crate::enchantment_effect::EnchantmentEffects;
+use crate::equipment::EquipmentSlot;
 pub use crate::equipment::EquipmentSlotGroup;
 use crate::items::ItemRef;
 use crate::{REGISTRY, RegistryEntry, RegistryExt, TaggedRegistryExt};
@@ -95,6 +96,12 @@ fn parse_tag_ref(tag_ref: &str) -> Option<Identifier> {
 }
 
 impl Enchantment {
+    /// Vanilla `Enchantment::matchingSlot`.
+    #[must_use]
+    pub fn matching_slot(&self, slot: EquipmentSlot) -> bool {
+        self.slots.iter().any(|group| group.test(slot))
+    }
+
     /// Checks if this enchantment can be applied to the given item via `supported_items` tag.
     pub fn can_enchant(&self, item: ItemRef) -> bool {
         let Some(tag) = parse_tag_ref(self.supported_items) else {
@@ -196,6 +203,7 @@ crate::impl_tagged_registry!(EnchantmentRegistry, enchantments_by_key, "enchantm
 #[cfg(test)]
 mod tests {
     use crate::enchantment_effect::EnchantmentEffectComponent;
+    use crate::equipment::EquipmentSlot;
     use crate::vanilla_enchantments;
 
     #[test]
@@ -205,6 +213,12 @@ mod tests {
                 .effects
                 .has(EnchantmentEffectComponent::PreventArmorChange)
         );
+    }
+
+    #[test]
+    fn enchantment_matching_slot_uses_slot_groups() {
+        assert!(vanilla_enchantments::BINDING_CURSE.matching_slot(EquipmentSlot::Head));
+        assert!(!vanilla_enchantments::BINDING_CURSE.matching_slot(EquipmentSlot::MainHand));
     }
 
     #[test]
