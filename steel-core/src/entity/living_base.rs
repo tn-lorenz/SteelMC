@@ -20,6 +20,7 @@ use steel_registry::vanilla_entity_data::VanillaLivingEntityData;
 use steel_registry::vanilla_mob_effects;
 use steel_utils::locks::SyncMutex;
 use steel_utils::{BlockPos, Identifier};
+use uuid::Uuid;
 
 use crate::entity::attribute::{AttributeMap, AttributeModifier, AttributeModifierOperation};
 use crate::entity::damage::DamageSource;
@@ -401,6 +402,8 @@ struct LivingEntityState {
     death_processed: bool,
     invulnerable_time: i32,
     last_hurt: f32,
+    last_hurt_by_player: Option<Uuid>,
+    last_hurt_by_player_memory_time: i32,
     last_damage_source: Option<DamageSource>,
     last_damage_stamp: i64,
     absorption_amount: f32,
@@ -426,6 +429,8 @@ impl LivingEntityState {
             death_processed: false,
             invulnerable_time: 0,
             last_hurt: 0.0,
+            last_hurt_by_player: None,
+            last_hurt_by_player_memory_time: 0,
             last_damage_source: None,
             last_damage_stamp: 0,
             absorption_amount: 0.0,
@@ -1066,6 +1071,35 @@ impl LivingEntityBase {
         state.last_damage_source.clone()
     }
 
+    /// Sets vanilla `LivingEntity.lastHurtByPlayer` and memory time.
+    pub fn set_last_hurt_by_player(&self, player_uuid: Uuid, time_to_remember: i32) {
+        let mut state = self.state.lock();
+        state.last_hurt_by_player = Some(player_uuid);
+        state.last_hurt_by_player_memory_time = time_to_remember;
+    }
+
+    /// Returns vanilla `LivingEntity.lastHurtByPlayerMemoryTime`.
+    #[must_use]
+    pub fn last_hurt_by_player_memory_time(&self) -> i32 {
+        self.state.lock().last_hurt_by_player_memory_time
+    }
+
+    /// Returns the remembered player UUID, if present.
+    #[must_use]
+    pub fn last_hurt_by_player_uuid(&self) -> Option<Uuid> {
+        self.state.lock().last_hurt_by_player
+    }
+
+    /// Ticks vanilla last-hurt-by-player memory.
+    pub fn tick_last_hurt_by_player_memory(&self) {
+        let mut state = self.state.lock();
+        if state.last_hurt_by_player_memory_time > 0 {
+            state.last_hurt_by_player_memory_time -= 1;
+        } else {
+            state.last_hurt_by_player = None;
+        }
+    }
+
     /// Marks death side effects as processed.
     ///
     /// Returns `false` if they were already processed.
@@ -1159,6 +1193,33 @@ mod tests {
             &vanilla_damage_types::GENERIC
         ));
         assert!(base.last_damage_source(51).is_none());
+    }
+
+    #[test]
+    fn last_hurt_by_player_memory_ticks_down_then_clears_reference() {
+        init_test_registry();
+        let base = LivingEntityBase::new(&vanilla_entities::PIG);
+        let player_uuid = uuid::Uuid::from_u128(7);
+
+        base.set_last_hurt_by_player(player_uuid, 2);
+
+        assert_eq!(base.last_hurt_by_player_uuid(), Some(player_uuid));
+        assert_eq!(base.last_hurt_by_player_memory_time(), 2);
+
+        base.tick_last_hurt_by_player_memory();
+
+        assert_eq!(base.last_hurt_by_player_uuid(), Some(player_uuid));
+        assert_eq!(base.last_hurt_by_player_memory_time(), 1);
+
+        base.tick_last_hurt_by_player_memory();
+
+        assert_eq!(base.last_hurt_by_player_uuid(), Some(player_uuid));
+        assert_eq!(base.last_hurt_by_player_memory_time(), 0);
+
+        base.tick_last_hurt_by_player_memory();
+
+        assert!(base.last_hurt_by_player_uuid().is_none());
+        assert_eq!(base.last_hurt_by_player_memory_time(), 0);
     }
 
     #[test]

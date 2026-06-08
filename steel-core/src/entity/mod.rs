@@ -3381,6 +3381,33 @@ pub trait LivingEntity: Entity {
         self.living_base().last_damage_source(game_time)
     }
 
+    /// Sets vanilla `LivingEntity.lastHurtByPlayer`.
+    fn set_last_hurt_by_player(&self, player_uuid: Uuid, time_to_remember: i32) {
+        self.living_base()
+            .set_last_hurt_by_player(player_uuid, time_to_remember);
+    }
+
+    /// Returns vanilla `LivingEntity.lastHurtByPlayerMemoryTime`.
+    fn last_hurt_by_player_memory_time(&self) -> i32 {
+        self.living_base().last_hurt_by_player_memory_time()
+    }
+
+    /// Resolves vanilla `LivingEntity.resolvePlayerResponsibleForDamage`.
+    fn resolve_player_responsible_for_damage(&self, source: &DamageSource) {
+        let Some(entity_id) = source.causing_entity_id else {
+            return;
+        };
+        let Some(world) = self.level() else {
+            return;
+        };
+        let Some(entity) = world.get_entity_by_id(entity_id) else {
+            return;
+        };
+        if entity.entity_type() == &vanilla_entities::PLAYER {
+            self.set_last_hurt_by_player(entity.uuid(), 100);
+        }
+    }
+
     /// Returns vanilla `LivingEntity.hasLineOfSight()`.
     fn has_line_of_sight(&self, target: &dyn Entity) -> bool {
         self.has_line_of_sight_with(
@@ -3473,6 +3500,7 @@ pub trait LivingEntity: Entity {
 
         self.before_actually_hurt(source, effective_amount);
         self.actually_hurt(source, effective_amount);
+        self.resolve_player_responsible_for_damage(source);
 
         if took_full_damage {
             self.broadcast_damage_event(source);
@@ -3636,8 +3664,7 @@ pub trait LivingEntity: Entity {
             return;
         };
         if self.should_drop_loot(world.as_ref()) {
-            // TODO: Track lastHurtByPlayerMemoryTime for vanilla player-kill loot.
-            let killed_by_player = false;
+            let killed_by_player = self.last_hurt_by_player_memory_time() > 0;
             // TODO: Run entity loot tables here before custom death loot once
             // entity loot table contexts are available.
             self.drop_custom_death_loot(source, killed_by_player);
@@ -3975,6 +4002,7 @@ pub trait LivingEntity: Entity {
         self.living_base()
             .tick_fall_flying_state(self.is_fall_flying());
         self.living_base().tick_post_impulse_grace_time();
+        self.living_base().tick_last_hurt_by_player_memory();
     }
 
     /// Mirrors vanilla `LivingEntity.canGlideUsing()`.
@@ -4867,6 +4895,7 @@ mod tests {
     };
     use steel_utils::locks::SyncMutex;
     use steel_utils::{BlockPos, Direction};
+    use uuid::Uuid;
 
     use crate::entity::damage::DamageSource;
     use crate::inventory::equipment::EquipmentSlot;
@@ -5205,6 +5234,28 @@ mod tests {
         entity.default_tick();
 
         assert_eq!(entity.base().boarding_cooldown(), 1);
+    }
+
+    #[test]
+    fn living_tick_state_decrements_last_hurt_by_player_memory() {
+        init_test_registry();
+
+        let entity = LivingFluidTestEntity::new(0.0, 0.0, true);
+        let player_uuid = Uuid::from_u128(42);
+        entity.set_last_hurt_by_player(player_uuid, 1);
+
+        entity.tick_living_state();
+
+        assert_eq!(
+            entity.living_base().last_hurt_by_player_uuid(),
+            Some(player_uuid)
+        );
+        assert_eq!(entity.last_hurt_by_player_memory_time(), 0);
+
+        entity.tick_living_state();
+
+        assert!(entity.living_base().last_hurt_by_player_uuid().is_none());
+        assert_eq!(entity.last_hurt_by_player_memory_time(), 0);
     }
 
     #[test]
