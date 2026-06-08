@@ -458,11 +458,6 @@ impl RegistryLock {
     pub fn init(&self, value: Registry) -> Result<(), Registry> {
         self.0.set(value)
     }
-
-    #[cfg(test)]
-    pub(crate) fn get_or_init(&self, f: impl FnOnce() -> Registry) -> &Registry {
-        self.0.get_or_init(f)
-    }
 }
 
 impl Deref for RegistryLock {

@@ -229,6 +229,7 @@ enum PredicateJson {
 
 /// Damage source predicate for damage_source_properties condition.
 #[derive(Deserialize, Debug, Clone)]
+#[serde(deny_unknown_fields)]
 struct DamageSourcePredicateJson {
     #[serde(default)]
     tags: Option<Vec<DamageTagPredicateJson>>,
@@ -577,9 +578,11 @@ fn generate_tool_predicate(predicate: &Option<PredicateJson>) -> TokenStream {
         && let Some(first) = enchants.first()
         && let Some(enchant_name) = &first.enchantments
     {
-        let enchant_name = enchant_name
-            .strip_prefix("minecraft:")
-            .unwrap_or(enchant_name);
+        let enchant_name = enchant_name.strip_prefix("#minecraft:").unwrap_or(
+            enchant_name
+                .strip_prefix("minecraft:")
+                .unwrap_or(enchant_name),
+        );
         let min_level = first.levels.as_ref().and_then(|l| l.min).unwrap_or(1);
 
         return quote! {
@@ -674,9 +677,11 @@ fn generate_equipment_slot_predicate(slot: &Option<EquipmentSlotJson>) -> TokenS
                 && let Some(first) = enchants.first()
                 && let Some(enchant_name) = &first.enchantments
             {
-                let enchant_name = enchant_name
-                    .strip_prefix("minecraft:")
-                    .unwrap_or(enchant_name);
+                let enchant_name = enchant_name.strip_prefix("#minecraft:").unwrap_or(
+                    enchant_name
+                        .strip_prefix("minecraft:")
+                        .unwrap_or(enchant_name),
+                );
                 let min_level = first.levels.as_ref().and_then(|l| l.min).unwrap_or(1);
                 return quote! {
                     Some(ToolPredicate::HasEnchantment {

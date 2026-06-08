@@ -3,13 +3,13 @@
 use std::sync::{Arc, LazyLock, Weak};
 
 use glam::DVec3;
+use rand::SeedableRng as _;
 use rustc_hash::FxHashSet;
 use simdnbt::borrow::NbtCompound as BorrowedNbtCompoundView;
 use simdnbt::owned::NbtCompound;
 use steel_protocol::packets::game::{
     AttributeSnapshot, CDamageEvent, CEntityEvent, CHurtAnimation, EquipmentSlotItem, SoundSource,
 };
-use steel_registry::RegistryEntry;
 use steel_registry::blocks::{
     block_state_ext::BlockStateExt as _, properties::BlockStateProperties,
     shapes::is_shape_full_block,
@@ -20,6 +20,9 @@ use steel_registry::entity_data::{DataValue, EntityPose};
 use steel_registry::entity_type::{EntityAttachment, EntityDimensions, EntityTypeRef};
 use steel_registry::fluid::FluidState;
 use steel_registry::item_stack::ItemStack;
+use steel_registry::loot_table::{
+    DamageSourceInfo, EntityRef, EntityRefFlags, LootContext, LootTableRef,
+};
 use steel_registry::mob_effect::MobEffectRef;
 use steel_registry::sound_event::SoundEventRef;
 use steel_registry::vanilla_block_tags::BlockTag;
@@ -32,6 +35,7 @@ use steel_registry::{
     REGISTRY, TaggedRegistryExt, sound_events, vanilla_damage_type_tags, vanilla_damage_types,
     vanilla_game_events,
 };
+use steel_registry::{RegistryEntry, RegistryExt};
 use steel_registry::{vanilla_attributes, vanilla_fluid_tags, vanilla_items, vanilla_mob_effects};
 use steel_utils::entity_events::EntityStatus;
 use steel_utils::locks::SyncMutex;
@@ -3816,6 +3820,11 @@ pub trait LivingEntity: Entity {
         self.living_base().last_hurt_by_player_memory_time()
     }
 
+    /// Returns vanilla `LivingEntity.lastHurtByPlayer`, if still remembered.
+    fn last_hurt_by_player_uuid(&self) -> Option<Uuid> {
+        self.living_base().last_hurt_by_player_uuid()
+    }
+
     /// Resolves vanilla `LivingEntity.resolvePlayerResponsibleForDamage`.
     fn resolve_player_responsible_for_damage(&self, source: &DamageSource) {
         let Some(entity_id) = source.causing_entity_id else {
@@ -4089,14 +4098,77 @@ pub trait LivingEntity: Entity {
         };
         if self.should_drop_loot(world.as_ref()) {
             let killed_by_player = self.last_hurt_by_player_memory_time() > 0;
-            // TODO: Run entity loot tables here before custom death loot once
-            // entity loot table contexts are available.
+            self.drop_from_loot_table(source, killed_by_player);
             self.drop_custom_death_loot(source, killed_by_player);
             if let Some(mob) = self.as_mob() {
                 mob.drop_custom_death_loot_mob(source, killed_by_player);
             }
         }
         // TODO: Drop equipment overrides and experience once those foundations exist.
+    }
+
+    /// Resolves the loot table used by vanilla `LivingEntity.dropFromLootTable`.
+    fn death_loot_table(&self) -> Option<LootTableRef> {
+        if let Some(mob) = self.as_mob()
+            && mob.has_custom_death_loot_table()
+        {
+            return mob.custom_death_loot_table();
+        }
+
+        let entity_type = self.entity_type();
+        let loot_key = Identifier::vanilla(format!("entities/{}", entity_type.key.path));
+        REGISTRY.loot_tables.by_key(&loot_key)
+    }
+
+    /// Returns vanilla `Entity.getLootTableSeed` for death loot.
+    fn death_loot_table_seed(&self) -> i64 {
+        self.as_mob().map_or(0, Mob::death_loot_table_seed)
+    }
+
+    /// Runs vanilla `LivingEntity.dropFromLootTable`.
+    fn drop_from_loot_table(&self, source: &DamageSource, killed_by_player: bool) {
+        let Some(world) = self.level() else {
+            return;
+        };
+        let has_custom_death_loot_table =
+            self.as_mob().is_some_and(Mob::has_custom_death_loot_table);
+        let Some(loot_table) = self.death_loot_table() else {
+            if has_custom_death_loot_table && let Some(mob) = self.as_mob() {
+                mob.clear_custom_death_loot_table();
+            }
+            return;
+        };
+
+        let seed = self.death_loot_table_seed();
+        let drops = if seed == 0 {
+            let mut rng = rand::rng();
+            death_loot_items_with_rng(
+                self,
+                loot_table,
+                world.as_ref(),
+                source,
+                killed_by_player,
+                &mut rng,
+            )
+        } else {
+            let mut rng = rand::rngs::StdRng::seed_from_u64(seed as u64);
+            death_loot_items_with_rng(
+                self,
+                loot_table,
+                world.as_ref(),
+                source,
+                killed_by_player,
+                &mut rng,
+            )
+        };
+
+        if has_custom_death_loot_table && let Some(mob) = self.as_mob() {
+            mob.clear_custom_death_loot_table();
+        }
+
+        for item_stack in drops {
+            self.spawn_at_location(item_stack, 0.0);
+        }
     }
 
     /// Hook for non-mob custom death loot.
@@ -5363,6 +5435,91 @@ pub trait LivingEntity: Entity {
     }
 }
 
+fn death_loot_items_with_rng<R: rand::Rng, E: LivingEntity + ?Sized>(
+    entity: &E,
+    loot_table: LootTableRef,
+    world: &World,
+    source: &DamageSource,
+    killed_by_player: bool,
+    rng: &mut R,
+) -> Vec<ItemStack> {
+    let causing_entity = source
+        .causing_entity_id
+        .and_then(|entity_id| world.get_entity_by_id(entity_id));
+    let direct_entity = source
+        .direct_entity_id
+        .and_then(|entity_id| world.get_entity_by_id(entity_id));
+    let last_damage_player = if killed_by_player {
+        entity
+            .last_hurt_by_player_uuid()
+            .and_then(|uuid| world.get_entity_by_uuid(&uuid))
+    } else {
+        None
+    };
+
+    let position = entity.position();
+    let this_entity = living_entity_loot_ref(entity);
+    let causing_entity = causing_entity.as_deref().map(entity_loot_ref);
+    let direct_entity = direct_entity.as_deref().map(entity_loot_ref);
+    let last_damage_player = last_damage_player.as_deref().map(entity_loot_ref);
+    let damage_source = DamageSourceInfo {
+        damage_type: Some(&source.damage_type.key),
+        tags: &[],
+        is_direct: source.is_direct(),
+    };
+
+    let mut context = LootContext::new(rng)
+        .with_origin(position.x, position.y, position.z)
+        .with_game_time(world.game_time())
+        .with_killed_by_player(killed_by_player)
+        .with_this_entity(this_entity)
+        .with_damage_source(damage_source);
+    if let Some(entity) = causing_entity {
+        context = context.with_killer_entity(entity);
+    }
+    if let Some(entity) = direct_entity {
+        context = context.with_direct_killer_entity(entity);
+    }
+    if let Some(entity) = last_damage_player {
+        context = context.with_last_damage_player(entity);
+    }
+
+    loot_table.get_random_items(&mut context)
+}
+
+fn living_entity_loot_ref<E: LivingEntity + ?Sized>(entity: &E) -> EntityRef<'_> {
+    EntityRef {
+        entity_type: Some(&entity.entity_type().key),
+        flags: EntityRefFlags {
+            is_on_fire: entity.is_on_fire(),
+            is_sneaking: entity.is_crouching(),
+            is_sprinting: entity.is_sprinting(),
+            is_swimming: entity.is_swimming(),
+            is_baby: entity.is_baby(),
+        },
+        // TODO: Include equipment and custom name once loot contexts can snapshot entity data.
+        equipment: None,
+        custom_name: None,
+    }
+}
+
+fn entity_loot_ref(entity: &dyn Entity) -> EntityRef<'_> {
+    let living_entity = entity.as_living_entity();
+    EntityRef {
+        entity_type: Some(&entity.entity_type().key),
+        flags: EntityRefFlags {
+            is_on_fire: entity.is_on_fire(),
+            is_sneaking: entity.is_crouching(),
+            is_sprinting: living_entity.is_some_and(|entity| entity.is_sprinting()),
+            is_swimming: entity.is_swimming(),
+            is_baby: living_entity.is_some_and(|entity| entity.is_baby()),
+        },
+        // TODO: Include equipment and custom name once loot contexts can snapshot entity data.
+        equipment: None,
+        custom_name: None,
+    }
+}
+
 #[cfg(test)]
 mod tests {
     use std::sync::{Arc, Weak};
@@ -5379,14 +5536,16 @@ mod tests {
     use steel_registry::vanilla_entity_data::LivingEntityData as SyncedLivingEntityData;
     use steel_registry::{
         sound_events, test_support::init_test_registry, vanilla_attributes, vanilla_blocks,
-        vanilla_damage_types, vanilla_entities, vanilla_fluids, vanilla_items, vanilla_mob_effects,
+        vanilla_damage_types, vanilla_entities, vanilla_fluids, vanilla_items, vanilla_loot_tables,
+        vanilla_mob_effects,
     };
     use steel_utils::locks::SyncMutex;
-    use steel_utils::{BlockPos, Direction};
+    use steel_utils::{BlockPos, Direction, Identifier};
     use uuid::Uuid;
 
     use crate::entity::damage::DamageSource;
     use crate::entity::entities::PigEntity;
+    use crate::entity::mob::Mob;
     use crate::inventory::equipment::EquipmentSlot;
 
     use super::{
@@ -5791,6 +5950,27 @@ mod tests {
 
         assert!(entity.living_base().last_hurt_by_player_uuid().is_none());
         assert_eq!(entity.last_hurt_by_player_memory_time(), 0);
+    }
+
+    #[test]
+    fn living_death_loot_table_uses_default_and_custom_mob_tables() {
+        init_test_registry();
+
+        let pig = PigEntity::new(&vanilla_entities::PIG, 1, DVec3::ZERO, Weak::new());
+        let Some(default_table) = pig.death_loot_table() else {
+            panic!("pig should resolve its default entity loot table");
+        };
+        assert_eq!(&default_table.key, &vanilla_loot_tables::ENTITIES_PIG.key);
+
+        pig.set_death_loot_table(Some(Identifier::vanilla_static("entities/cow")));
+        let Some(custom_table) = pig.death_loot_table() else {
+            panic!("custom cow loot table should resolve");
+        };
+        assert_eq!(&custom_table.key, &vanilla_loot_tables::ENTITIES_COW.key);
+        assert_eq!(LivingEntity::death_loot_table_seed(&pig), 0);
+
+        pig.set_death_loot_table(Some(Identifier::vanilla_static("entities/not_real")));
+        assert!(pig.death_loot_table().is_none());
     }
 
     #[test]

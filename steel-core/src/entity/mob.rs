@@ -11,9 +11,12 @@ use steel_protocol::packets::game::SoundSource;
 use steel_registry::blocks::block_state_ext::BlockStateExt as _;
 use steel_registry::enchantment_effect::EnchantmentEffectComponent;
 use steel_registry::item_stack::ItemStack;
+use steel_registry::loot_table::LootTableRef;
 use steel_registry::vanilla_block_tags::BlockTag;
 use steel_registry::vanilla_game_rules::ENTITY_DROPS;
-use steel_registry::{sound_events, vanilla_attributes, vanilla_game_events, vanilla_items};
+use steel_registry::{
+    REGISTRY, RegistryExt, sound_events, vanilla_attributes, vanilla_game_events, vanilla_items,
+};
 use steel_utils::UuidExt;
 use steel_utils::locks::SyncMutex;
 use steel_utils::random::Random as _;
@@ -665,6 +668,26 @@ pub trait Mob: LivingEntity {
 
     fn set_death_loot_table_seed(&self, seed: i64) {
         *self.mob_base().death_loot_table_seed().lock() = seed;
+    }
+
+    fn custom_death_loot_table(&self) -> Option<LootTableRef> {
+        self.mob_base()
+            .death_loot_table()
+            .lock()
+            .as_ref()
+            .and_then(|key| REGISTRY.loot_tables.by_key(key))
+    }
+
+    fn has_custom_death_loot_table(&self) -> bool {
+        self.mob_base().death_loot_table().lock().is_some()
+    }
+
+    fn death_loot_table_seed(&self) -> i64 {
+        *self.mob_base().death_loot_table_seed().lock()
+    }
+
+    fn clear_custom_death_loot_table(&self) {
+        *self.mob_base().death_loot_table().lock() = None;
     }
 
     fn is_leashed(&self) -> bool {

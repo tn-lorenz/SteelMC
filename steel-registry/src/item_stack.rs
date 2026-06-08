@@ -550,10 +550,9 @@ impl ItemStack {
 
     /// Applies furnace smelting to convert this item (e.g., raw iron -> iron ingot).
     pub fn apply_furnace_smelt(&mut self) {
-        // TODO: Implement smelting recipe lookup
-        // 1. Look up this item in smelting recipes
-        // 2. If found, replace self.item with the result item
-        // Note: This changes the item type, not just components
+        if let Some(result_item) = REGISTRY.recipes.find_smelting_result(self) {
+            self.item = result_item;
+        }
     }
 
     /// Creates an exploration map pointing to a structure.
