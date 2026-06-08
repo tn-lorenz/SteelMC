@@ -1398,12 +1398,83 @@ pub trait Entity: EntityEventSource + Send + Sync {
     /// Handles vanilla entity right-click interaction.
     fn interact(
         &self,
-        _player: &Player,
-        _hand: InteractionHand,
+        player: &Player,
+        hand: InteractionHand,
+        location: DVec3,
+    ) -> InteractionResult {
+        self.interact_entity(player, hand, location)
+    }
+
+    /// Handles shared vanilla `Entity.interact` behavior.
+    fn interact_entity(
+        &self,
+        player: &Player,
+        hand: InteractionHand,
         _location: DVec3,
     ) -> InteractionResult {
-        // TODO: Implement default leash and shears interactions once those foundations exist.
-        InteractionResult::Pass
+        let Some(mob) = self.as_mob() else {
+            return InteractionResult::Pass;
+        };
+        let is_alive = self
+            .as_living_entity()
+            .is_none_or(|living| LivingEntity::is_alive(living));
+        if !is_alive {
+            return InteractionResult::Pass;
+        }
+
+        // TODO: Implement secondary-use leash transfer and shears once fence-knot
+        // and shearing foundations exist.
+        if let Some(holder) = mob.leash_holder() {
+            if holder.id() == player.id() {
+                if player.has_infinite_materials() {
+                    mob.remove_leash();
+                } else {
+                    mob.drop_leash();
+                }
+
+                if let Some(world) = self.level() {
+                    world.game_event(
+                        &vanilla_game_events::ENTITY_INTERACT,
+                        self.block_position(),
+                        &GameEventContext::new(Some(player), None),
+                    );
+                }
+                self.play_sound(&sound_events::ITEM_LEAD_UNTIED, 1.0, 1.0);
+                return InteractionResult::Success;
+            }
+
+            if holder.as_player().is_some() {
+                return InteractionResult::Pass;
+            }
+        }
+
+        let holding_lead = {
+            let inventory = player.inventory.lock();
+            inventory
+                .get_item_in_hand(hand)
+                .is(&vanilla_items::ITEMS.lead)
+        };
+        if !holding_lead || !mob.can_have_a_leash_attached_to(player) {
+            return InteractionResult::Pass;
+        }
+
+        let Some(world) = self.level() else {
+            return InteractionResult::Pass;
+        };
+        let Some(player_entity) = world.get_entity_by_id(player.id()) else {
+            return InteractionResult::Pass;
+        };
+
+        if mob.is_leashed() {
+            mob.drop_leash();
+        }
+        if !mob.set_leashed_to(&player_entity) {
+            return InteractionResult::Pass;
+        }
+
+        self.play_sound(&sound_events::ITEM_LEAD_TIED, 1.0, 1.0);
+        player.inventory.lock().shrink_item_in_hand(hand, 1);
+        InteractionResult::Success
     }
 
     /// Returns true for entities that implement vanilla living-entity behavior.

@@ -9,8 +9,9 @@ use simdnbt::owned::{NbtCompound, NbtTag};
 use steel_math::floor;
 use steel_registry::blocks::block_state_ext::BlockStateExt as _;
 use steel_registry::enchantment_effect::EnchantmentEffectComponent;
-use steel_registry::vanilla_attributes;
+use steel_registry::item_stack::ItemStack;
 use steel_registry::vanilla_block_tags::BlockTag;
+use steel_registry::{vanilla_attributes, vanilla_game_events, vanilla_items};
 use steel_utils::UuidExt;
 use steel_utils::locks::SyncMutex;
 use steel_utils::random::Random as _;
@@ -33,6 +34,7 @@ use crate::entity::{
 use crate::inventory::equipment::EquipmentSlot;
 use crate::physics::WorldCollisionProvider;
 use crate::player::Player;
+use crate::world::game_event_context::GameEventContext;
 use crate::world::{LevelReader, World};
 
 const MOB_FLAG_NO_AI: i8 = 1;
@@ -323,14 +325,30 @@ pub trait Mob: LivingEntity {
         &self,
         player: &Player,
         hand: InteractionHand,
-        _location: DVec3,
+        location: DVec3,
     ) -> InteractionResult {
-        if !Entity::is_alive(self) {
+        if !LivingEntity::is_alive(self) {
             return InteractionResult::Pass;
         }
 
         // TODO: Handle name tags and spawn eggs once item-on-entity behavior exists.
-        self.mob_interact(player, hand)
+        let interaction_result = self.interact_entity(player, hand, location);
+        if interaction_result != InteractionResult::Pass {
+            return interaction_result;
+        }
+
+        let interaction_result = self.mob_interact(player, hand);
+        if interaction_result.consumes_action()
+            && let Some(world) = self.level()
+        {
+            world.game_event(
+                &vanilla_game_events::ENTITY_INTERACT,
+                self.block_position(),
+                &GameEventContext::new(Some(player), None),
+            );
+        }
+
+        interaction_result
     }
 
     /// Handles vanilla `Mob.mobInteract`.
@@ -584,10 +602,23 @@ pub trait Mob: LivingEntity {
         true
     }
 
-    fn remove_leash_state(&self) {
-        if self.mob_base().leash_data().lock().take().is_some() {
-            // TODO: Apply full dropLeash behavior once leash ticking and holder hooks exist.
+    fn drop_leash(&self) {
+        if self.leash_holder().is_none() {
+            return;
         }
+
+        self.remove_leash_state();
+        let _ = self.spawn_at_location(ItemStack::new(&vanilla_items::ITEMS.lead), 0.0);
+    }
+
+    fn remove_leash(&self) {
+        if self.leash_holder().is_some() {
+            self.remove_leash_state();
+        }
+    }
+
+    fn remove_leash_state(&self) {
+        let _ = self.mob_base().leash_data().lock().take();
     }
 
     fn is_within_home(&self) -> bool {

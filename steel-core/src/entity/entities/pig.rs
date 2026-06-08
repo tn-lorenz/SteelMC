@@ -1551,6 +1551,44 @@ mod tests {
     }
 
     #[test]
+    fn pig_drop_leash_clears_live_leash_state() {
+        init_test_registry();
+
+        let pig = PigEntity::new(&vanilla_entities::PIG, 1, DVec3::ZERO, Weak::new());
+        let holder: SharedEntity = Arc::new(PigEntity::new(
+            &vanilla_entities::PIG,
+            2,
+            DVec3::ZERO,
+            Weak::new(),
+        ));
+        assert!(pig.set_leashed_to(&holder));
+
+        pig.drop_leash();
+
+        assert!(!pig.is_leashed());
+        assert!(!pig.may_be_leashed());
+    }
+
+    #[test]
+    fn pig_remove_leash_clears_live_leash_state() {
+        init_test_registry();
+
+        let pig = PigEntity::new(&vanilla_entities::PIG, 1, DVec3::ZERO, Weak::new());
+        let holder: SharedEntity = Arc::new(PigEntity::new(
+            &vanilla_entities::PIG,
+            2,
+            DVec3::ZERO,
+            Weak::new(),
+        ));
+        assert!(pig.set_leashed_to(&holder));
+
+        pig.remove_leash();
+
+        assert!(!pig.is_leashed());
+        assert!(!pig.may_be_leashed());
+    }
+
+    #[test]
     fn pig_uses_vanilla_fire_path_malus_from_mob_base() {
         init_test_registry();
 
