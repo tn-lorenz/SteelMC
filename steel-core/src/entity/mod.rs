@@ -639,6 +639,43 @@ pub type SharedEntity = Arc<dyn Entity>;
 /// Type alias for a weak entity reference.
 pub type WeakEntity = Weak<dyn Entity>;
 
+fn start_riding_entities(passenger: &SharedEntity, entity_to_ride: &SharedEntity) -> bool {
+    if !entity_to_ride.could_accept_passenger() {
+        return false;
+    }
+
+    if !entity_to_ride.entity_type().can_serialize {
+        return false;
+    }
+
+    if entity_to_ride.id() == passenger.id() {
+        return false;
+    }
+
+    let mut vehicle_entity = entity_to_ride.vehicle();
+    while let Some(vehicle) = vehicle_entity {
+        if vehicle.id() == passenger.id() {
+            return false;
+        }
+        vehicle_entity = vehicle.vehicle();
+    }
+
+    if !passenger.can_ride(entity_to_ride.as_ref())
+        || !entity_to_ride.can_add_passenger(passenger.as_ref())
+    {
+        return false;
+    }
+
+    if passenger.is_passenger() {
+        passenger.stop_riding();
+    }
+
+    passenger.set_pose(EntityPose::Standing);
+    EntityBase::start_riding_relationship(entity_to_ride, passenger);
+    // TODO: Emit ENTITY_MOUNT game event and riding advancement trigger once those foundations exist.
+    true
+}
+
 /// Final state accepted from a client-authored movement packet.
 #[derive(Debug, Clone, Copy, PartialEq)]
 pub struct AcceptedClientMovement {
@@ -868,11 +905,31 @@ pub trait Entity: EntityEventSource + Send + Sync {
         self.vehicle().is_some()
     }
 
+    /// Returns whether vanilla allows this entity to start riding `vehicle`.
+    ///
+    /// Mirrors vanilla `Entity.canRide`.
+    fn can_ride(&self, _vehicle: &dyn Entity) -> bool {
+        !self.is_discrete() && self.base().boarding_cooldown() <= 0
+    }
+
     /// Stops riding the current vehicle, if any.
     ///
     /// Mirrors vanilla `Entity.stopRiding`.
     fn stop_riding(&self) {
         self.base().stop_riding();
+    }
+
+    /// Starts riding `entity_to_ride` if vanilla boarding rules allow it.
+    ///
+    /// Mirrors vanilla `Entity.startRiding(Entity)`.
+    fn start_riding(&self, entity_to_ride: &SharedEntity) -> bool {
+        let Some(world) = self.level() else {
+            return false;
+        };
+        let Some(passenger) = world.get_entity_by_id(self.id()) else {
+            return false;
+        };
+        start_riding_entities(&passenger, entity_to_ride)
     }
 
     /// Gets this entity's direct passengers.
@@ -949,6 +1006,20 @@ pub trait Entity: EntityEventSource + Send + Sync {
     /// Mirrors vanilla `Entity.hasPassenger(Entity)`.
     fn has_passenger(&self, passenger: &dyn Entity) -> bool {
         self.base().has_passenger_id(passenger.id())
+    }
+
+    /// Returns whether this entity can accept `passenger` as a direct passenger.
+    ///
+    /// Mirrors vanilla `Entity.canAddPassenger`.
+    fn can_add_passenger(&self, _passenger: &dyn Entity) -> bool {
+        self.passengers().is_empty()
+    }
+
+    /// Returns whether this entity can accept any passenger.
+    ///
+    /// Mirrors vanilla `Entity.couldAcceptPassenger`.
+    fn could_accept_passenger(&self) -> bool {
+        true
     }
 
     /// Returns the current direct passenger index for attachment lookup.
@@ -4676,7 +4747,7 @@ mod tests {
         LivingEntityBase, LivingTravelInput, RemovalReason, SharedEntity,
         closest_open_space_direction, fall_damage_reset_clip_target, fall_flying_collision_damage,
         fall_flying_free_fall_interval, get_input_vector, should_apply_resolved_movement,
-        trapdoor_usable_as_ladder_state,
+        start_riding_entities, trapdoor_usable_as_ladder_state,
     };
 
     struct PushableTestEntity {
@@ -4701,6 +4772,37 @@ mod tests {
         }
 
         fn is_pushable(&self) -> bool {
+            true
+        }
+    }
+
+    struct MultiPassengerTestEntity {
+        base: EntityBase,
+    }
+
+    impl MultiPassengerTestEntity {
+        fn shared(id: i32) -> SharedEntity {
+            Arc::new(Self {
+                base: EntityBase::new(
+                    id,
+                    DVec3::ZERO,
+                    vanilla_entities::ITEM.dimensions,
+                    Weak::new(),
+                ),
+            })
+        }
+    }
+
+    impl Entity for MultiPassengerTestEntity {
+        fn base(&self) -> &EntityBase {
+            &self.base
+        }
+
+        fn entity_type(&self) -> EntityTypeRef {
+            &vanilla_entities::ITEM
+        }
+
+        fn can_add_passenger(&self, _passenger: &dyn Entity) -> bool {
             true
         }
     }
@@ -5850,6 +5952,68 @@ mod tests {
 
         assert!(entity.controlling_passenger().is_none());
         assert!(!entity.has_controlling_passenger());
+    }
+
+    #[test]
+    fn start_riding_entities_links_passenger_and_vehicle() {
+        init_test_registry();
+
+        let passenger = PushableTestEntity::shared(1, DVec3::ZERO);
+        let vehicle = PushableTestEntity::shared(2, DVec3::ZERO);
+
+        assert!(start_riding_entities(&passenger, &vehicle));
+
+        assert!(passenger.is_passenger());
+        assert_eq!(passenger.vehicle().map(|entity| entity.id()), Some(2));
+        assert!(vehicle.has_passenger(passenger.as_ref()));
+        assert_eq!(vehicle.first_passenger().map(|entity| entity.id()), Some(1));
+        assert_eq!(passenger.pose(), EntityPose::Standing);
+    }
+
+    #[test]
+    fn start_riding_entities_respects_boarding_cooldown() {
+        init_test_registry();
+
+        let passenger = PushableTestEntity::shared(1, DVec3::ZERO);
+        let vehicle = PushableTestEntity::shared(2, DVec3::ZERO);
+        passenger.base().set_boarding_cooldown(2);
+
+        assert!(!start_riding_entities(&passenger, &vehicle));
+        assert!(!passenger.is_passenger());
+        assert!(!vehicle.is_vehicle());
+    }
+
+    #[test]
+    fn start_riding_entities_rejects_vehicle_cycles() {
+        init_test_registry();
+
+        let root = PushableTestEntity::shared(1, DVec3::ZERO);
+        let child = PushableTestEntity::shared(2, DVec3::ZERO);
+        EntityBase::restore_passenger_relationship(&root, &child);
+
+        assert!(!start_riding_entities(&root, &child));
+        assert_eq!(child.vehicle().map(|entity| entity.id()), Some(1));
+        assert_eq!(root.first_passenger().map(|entity| entity.id()), Some(2));
+    }
+
+    #[test]
+    fn start_riding_entities_inserts_player_passenger_first() {
+        init_test_registry();
+
+        let vehicle = MultiPassengerTestEntity::shared(1);
+        let mob_passenger = PushableTestEntity::shared(2, DVec3::ZERO);
+        let player_passenger =
+            KnownMovementTestEntity::shared(3, &vanilla_entities::PLAYER, DVec3::ZERO, DVec3::ZERO);
+
+        assert!(start_riding_entities(&mob_passenger, &vehicle));
+        assert!(start_riding_entities(&player_passenger, &vehicle));
+
+        let passenger_ids = vehicle
+            .passengers()
+            .into_iter()
+            .map(|entity| entity.id())
+            .collect::<Vec<_>>();
+        assert_eq!(passenger_ids, vec![3, 2]);
     }
 
     #[test]

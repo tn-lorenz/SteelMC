@@ -1381,6 +1381,16 @@ impl EntityBase {
     /// Restores a persisted passenger relationship without applying gameplay boarding rules.
     pub(crate) fn restore_passenger_relationship(vehicle: &SharedEntity, passenger: &SharedEntity) {
         passenger.base().stop_riding_relationship();
+        Self::add_passenger_relationship(vehicle, passenger);
+    }
+
+    /// Starts a gameplay passenger relationship after vanilla boarding rules pass.
+    pub(crate) fn start_riding_relationship(vehicle: &SharedEntity, passenger: &SharedEntity) {
+        passenger.base().stop_riding_relationship();
+        Self::add_passenger_relationship(vehicle, passenger);
+    }
+
+    fn add_passenger_relationship(vehicle: &SharedEntity, passenger: &SharedEntity) {
         if vehicle.base().has_passenger_id(passenger.id()) {
             return;
         }
