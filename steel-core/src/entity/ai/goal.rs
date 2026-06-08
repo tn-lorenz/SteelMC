@@ -6,6 +6,7 @@ mod float_goal;
 mod follow_mob;
 mod follow_parent;
 mod look_at_player;
+mod move_to_block;
 mod move_towards_restriction;
 mod move_towards_target;
 mod panic_goal;
