@@ -5,6 +5,7 @@ mod breath_air;
 mod breed_goal;
 mod climb_on_top_of_powder_snow;
 mod door_interact;
+mod flee_sun;
 mod float_goal;
 mod follow_mob;
 mod follow_parent;
