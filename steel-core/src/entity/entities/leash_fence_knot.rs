@@ -204,6 +204,12 @@ impl Entity for LeashFenceKnotEntity {
         Some(self)
     }
 
+    fn notify_leashee_removed(&self, _leashable: &dyn Entity) {
+        if self.level().is_some() && self.leashables_leashed_to().is_empty() {
+            self.set_removed(RemovalReason::Discarded);
+        }
+    }
+
     fn tick(&self) {
         if self.level().is_none() {
             return;

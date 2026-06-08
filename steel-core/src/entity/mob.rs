@@ -597,6 +597,7 @@ pub trait Mob: LivingEntity {
             return false;
         }
 
+        let old_holder = self.leash_holder();
         {
             let mut leash_data = self.mob_base().leash_data().lock();
             if let Some(leash_data) = leash_data.as_mut() {
@@ -609,14 +610,19 @@ pub trait Mob: LivingEntity {
         if self.is_passenger() {
             self.stop_riding();
         }
-        // TODO: Notify old/new leash holders once holder notification hooks exist.
+        if let Some(old_holder) = old_holder
+            && old_holder.id() != holder.id()
+        {
+            old_holder.notify_leashee_removed(self.as_entity_event_source());
+        }
         true
     }
 
     fn tick_leash(&self) {
-        if self.leash_holder().is_some() {
+        if let Some(holder) = self.leash_holder() {
+            holder.notify_leash_holder(self.as_entity_event_source());
             // TODO: Apply full vanilla leash physics, snap distance, gamerule
-            // drops, and holder notifications.
+            // drops, and distance behavior.
             return;
         }
 
@@ -659,18 +665,27 @@ pub trait Mob: LivingEntity {
             return;
         }
 
-        self.remove_leash_state();
+        let holder = self.remove_leash_state();
         let _ = self.spawn_at_location(ItemStack::new(&vanilla_items::ITEMS.lead), 0.0);
+        if let Some(holder) = holder {
+            holder.notify_leashee_removed(self.as_entity_event_source());
+        }
     }
 
     fn remove_leash(&self) {
         if self.leash_holder().is_some() {
-            self.remove_leash_state();
+            if let Some(holder) = self.remove_leash_state() {
+                holder.notify_leashee_removed(self.as_entity_event_source());
+            }
         }
     }
 
-    fn remove_leash_state(&self) {
-        let _ = self.mob_base().leash_data().lock().take();
+    fn remove_leash_state(&self) -> Option<SharedEntity> {
+        self.mob_base()
+            .leash_data()
+            .lock()
+            .take()
+            .and_then(|leash_data| leash_data.holder())
     }
 
     fn is_within_home(&self) -> bool {

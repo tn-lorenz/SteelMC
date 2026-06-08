@@ -1444,6 +1444,12 @@ pub trait Entity: EntityEventSource + Send + Sync {
         None
     }
 
+    /// Called by leashables while this entity is their live leash holder.
+    fn notify_leash_holder(&self, _leashable: &dyn Entity) {}
+
+    /// Called when a leashable stops using this entity as its live leash holder.
+    fn notify_leashee_removed(&self, _leashable: &dyn Entity) {}
+
     /// Called when a player touches this entity during nearby pickup processing.
     fn player_touch(self: Arc<Self>, _player: &Arc<Player>) {}
 
@@ -5294,6 +5300,53 @@ mod tests {
         }
     }
 
+    struct LeashNotificationTestEntity {
+        base: EntityBase,
+        holder_notifications: SyncMutex<Vec<i32>>,
+        removed_notifications: SyncMutex<Vec<i32>>,
+    }
+
+    impl LeashNotificationTestEntity {
+        fn new(id: i32) -> Arc<Self> {
+            Arc::new(Self {
+                base: EntityBase::new(
+                    id,
+                    DVec3::ZERO,
+                    vanilla_entities::ITEM.dimensions,
+                    Weak::new(),
+                ),
+                holder_notifications: SyncMutex::new(Vec::new()),
+                removed_notifications: SyncMutex::new(Vec::new()),
+            })
+        }
+
+        fn holder_notifications(&self) -> Vec<i32> {
+            self.holder_notifications.lock().clone()
+        }
+
+        fn removed_notifications(&self) -> Vec<i32> {
+            self.removed_notifications.lock().clone()
+        }
+    }
+
+    impl Entity for LeashNotificationTestEntity {
+        fn base(&self) -> &EntityBase {
+            &self.base
+        }
+
+        fn entity_type(&self) -> EntityTypeRef {
+            &vanilla_entities::ITEM
+        }
+
+        fn notify_leash_holder(&self, leashable: &dyn Entity) {
+            self.holder_notifications.lock().push(leashable.id());
+        }
+
+        fn notify_leashee_removed(&self, leashable: &dyn Entity) {
+            self.removed_notifications.lock().push(leashable.id());
+        }
+    }
+
     struct MultiPassengerTestEntity {
         base: EntityBase,
     }
@@ -6584,6 +6637,53 @@ mod tests {
             panic!("untransferred mob should stay leashed");
         };
         assert_eq!(holder.id(), old_holder.id());
+    }
+
+    #[test]
+    fn set_leashed_to_notifies_replaced_holder() {
+        init_test_registry();
+
+        let old_holder_typed = LeashNotificationTestEntity::new(1);
+        let old_holder: SharedEntity = old_holder_typed.clone();
+        let new_holder_typed = LeashNotificationTestEntity::new(2);
+        let new_holder: SharedEntity = new_holder_typed.clone();
+        let leashable: SharedEntity = Arc::new(PigEntity::new(
+            &vanilla_entities::PIG,
+            3,
+            DVec3::ZERO,
+            Weak::new(),
+        ));
+        let Some(mob) = leashable.as_mob() else {
+            panic!("pig should expose mob behavior");
+        };
+
+        assert!(mob.set_leashed_to(&old_holder));
+        assert!(mob.set_leashed_to(&new_holder));
+
+        assert_eq!(old_holder_typed.removed_notifications(), vec![3]);
+        assert!(new_holder_typed.removed_notifications().is_empty());
+    }
+
+    #[test]
+    fn tick_leash_notifies_live_holder() {
+        init_test_registry();
+
+        let holder_typed = LeashNotificationTestEntity::new(1);
+        let holder: SharedEntity = holder_typed.clone();
+        let leashable: SharedEntity = Arc::new(PigEntity::new(
+            &vanilla_entities::PIG,
+            3,
+            DVec3::ZERO,
+            Weak::new(),
+        ));
+        let Some(mob) = leashable.as_mob() else {
+            panic!("pig should expose mob behavior");
+        };
+        assert!(mob.set_leashed_to(&holder));
+
+        mob.tick_leash();
+
+        assert_eq!(holder_typed.holder_notifications(), vec![3]);
     }
 
     #[test]
