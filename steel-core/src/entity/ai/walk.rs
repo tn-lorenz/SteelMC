@@ -46,6 +46,11 @@ impl MobPathSettings {
             malus[path_type.index()] = mob.get_pathfinding_malus(path_type);
         }
 
+        let navigation = mob.mob_base().navigation().lock();
+        let can_float = navigation.can_float();
+        let can_open_doors = navigation.can_open_doors();
+        drop(navigation);
+
         Self {
             entity_width: floor(bounding_box.width() + 1.0),
             entity_height: floor(bounding_box.height() + 1.0),
@@ -60,8 +65,8 @@ impl MobPathSettings {
             max_fall_distance: mob.max_fall_distance(),
             malus,
             can_pass_doors: true,
-            can_open_doors: false,
-            can_float: mob.mob_base().navigation().lock().can_float(),
+            can_open_doors,
+            can_float,
             can_walk_over_fences: false,
         }
     }
@@ -1162,16 +1167,23 @@ impl WalkPathEvaluator {
 
 #[cfg(test)]
 mod tests {
+    use std::sync::Weak;
+
+    use glam::DVec3;
     use steel_registry::blocks::block_state_ext::BlockStateExt as _;
     use steel_registry::blocks::properties::{BlockStateProperties, SlabType};
-    use steel_registry::{REGISTRY, test_support::init_test_registry, vanilla_blocks};
+    use steel_registry::{
+        REGISTRY, test_support::init_test_registry, vanilla_blocks, vanilla_entities,
+    };
     use steel_utils::{BlockPos, BlockStateId, Direction, WorldAabb};
 
     use super::{AcceptedNodeRequest, MobPathSettings, WalkNodeEvaluator, WalkPathEvaluator};
     use crate::behavior::{BlockStateBehaviorExt as _, init_behaviors};
+    use crate::entity::Mob as _;
     use crate::entity::ai::path::{
         PathComputationType, PathType, PathfindingContext, PathfindingMalus,
     };
+    use crate::entity::entities::PigEntity;
     use crate::world::LevelReader;
 
     struct GridLevel {
@@ -1212,6 +1224,17 @@ mod tests {
         fn height(&self) -> i32 {
             384
         }
+    }
+
+    #[test]
+    fn mob_path_settings_reads_can_open_doors_from_navigation() {
+        init_test_registry();
+        let pig = PigEntity::new(&vanilla_entities::PIG, 1, DVec3::ZERO, Weak::new());
+        pig.mob_base().navigation().lock().set_can_open_doors(true);
+
+        let settings = MobPathSettings::from_mob(&pig);
+
+        assert!(settings.can_open_doors());
     }
 
     #[test]

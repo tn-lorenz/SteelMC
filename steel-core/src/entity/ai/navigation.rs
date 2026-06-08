@@ -62,6 +62,7 @@ pub struct PathNavigation {
     stuck: bool,
     done: bool,
     can_float: bool,
+    can_open_doors: bool,
 }
 
 impl PathNavigation {
@@ -89,6 +90,7 @@ impl PathNavigation {
             stuck: false,
             done: true,
             can_float: false,
+            can_open_doors: false,
         }
     }
 
@@ -166,6 +168,15 @@ impl PathNavigation {
 
     pub const fn set_can_float(&mut self, can_float: bool) {
         self.can_float = can_float;
+    }
+
+    #[must_use]
+    pub const fn can_open_doors(&self) -> bool {
+        self.can_open_doors
+    }
+
+    pub const fn set_can_open_doors(&mut self, can_open_doors: bool) {
+        self.can_open_doors = can_open_doors;
     }
 
     pub const fn tick(&mut self) {
@@ -633,6 +644,17 @@ mod tests {
         navigation.set_can_float(true);
 
         assert!(navigation.can_float());
+    }
+
+    #[test]
+    fn path_navigation_tracks_can_open_doors_flag() {
+        let mut navigation = PathNavigation::new();
+
+        assert!(!navigation.can_open_doors());
+
+        navigation.set_can_open_doors(true);
+
+        assert!(navigation.can_open_doors());
     }
 
     #[test]
