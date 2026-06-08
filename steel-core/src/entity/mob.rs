@@ -66,6 +66,7 @@ const ENTITY_LEASH_ATTACHMENT_POINT: DVec3 = DVec3::new(0.0, 0.5, 0.5);
 const LEASHER_ATTACHMENT_POINT: DVec3 = DVec3::new(0.0, 0.5, 0.0);
 const DELAYED_LEASH_DROP_TICKS: i32 = 100;
 const BODY_ROTATION_MOVING_DISTANCE_SQR: f64 = 2.500_000_3e-7;
+const TARGET_REACH_DISTANCE_SQR: f64 = 2.25;
 const RANDOM_SPAWN_BONUS_ID: Identifier = Identifier::vanilla_static("random_spawn_bonus");
 const RANDOM_SPAWN_BONUS_SCALE: f64 = 0.114_850_000_000_000_01;
 const LEFT_HANDED_SPAWN_CHANCE: f32 = 0.05;
@@ -1591,6 +1592,12 @@ pub trait PathfinderMob: Mob {
         false
     }
 
+    fn can_reach_living_target(&self, target: &dyn LivingEntity) -> bool {
+        let target_pos = target.block_position();
+        self.create_path_to(target_pos, 0)
+            .is_some_and(|path| path_end_node_can_reach_target(&path, target_pos))
+    }
+
     fn tick_pathfinder_path_navigation(&self) {
         let Some(world) = self.level() else {
             return;
@@ -1753,6 +1760,15 @@ pub trait PathfinderMob: Mob {
     }
 }
 
+fn path_end_node_can_reach_target(path: &Path, target: BlockPos) -> bool {
+    let Some(end_node) = path.end_node() else {
+        return false;
+    };
+    let dx = end_node.x - target.x();
+    let dz = end_node.z - target.z();
+    f64::from(dx * dx + dz * dz) <= TARGET_REACH_DISTANCE_SQR
+}
+
 fn path_target_for_mob<M: PathfinderMob + ?Sized>(
     mob: &M,
     level: &dyn LevelReader,
@@ -1890,10 +1906,13 @@ mod tests {
     use steel_utils::locks::SyncMutex;
     use steel_utils::{BlockPos, BlockStateId};
 
-    use super::{can_attempt_equipment_drop, find_ground_path_target_surface};
+    use super::{
+        can_attempt_equipment_drop, find_ground_path_target_surface, path_end_node_can_reach_target,
+    };
     use crate::entity::ai::control::{DEFAULT_LOOK_X_MAX_ROT_ANGLE, DEFAULT_LOOK_Y_MAX_ROT_SPEED};
     use crate::entity::ai::goal::GoalControl;
-    use crate::entity::ai::path::PathType;
+    use crate::entity::ai::node::Node;
+    use crate::entity::ai::path::{Path, PathType};
     use crate::entity::damage::DamageSource;
     use crate::entity::mob::{Mob, MobBase};
     use crate::entity::{Entity, EntityBase, LivingEntity, LivingEntityBase, SharedEntity};
@@ -2200,6 +2219,21 @@ mod tests {
         assert!(!mob.set_target(Some(&target)));
 
         assert!(mob.target().is_none());
+    }
+
+    #[test]
+    fn target_reach_uses_vanilla_horizontal_endpoint_distance() {
+        let reachable = Path::new(vec![Node::new(1, 0, 1)], BlockPos::new(2, 64, 2), false);
+        let too_far = Path::new(vec![Node::new(3, 64, 0)], BlockPos::new(0, 64, 0), false);
+
+        assert!(path_end_node_can_reach_target(
+            &reachable,
+            BlockPos::new(2, 64, 2)
+        ));
+        assert!(!path_end_node_can_reach_target(
+            &too_far,
+            BlockPos::new(0, 64, 0)
+        ));
     }
 
     #[test]
