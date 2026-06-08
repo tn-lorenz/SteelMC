@@ -74,9 +74,30 @@ const MOVE_TOWARDS_CLOSEST_SPACE_DIRECTIONS: [Direction; 5] = [
     Direction::East,
     Direction::Up,
 ];
+const LEASH_SCAN_SIZE: f64 = 32.0;
+const LEASH_SCAN_HALF_SIZE: f64 = LEASH_SCAN_SIZE / 2.0;
 
 fn horizontal_distance(vector: DVec3) -> f64 {
     vector.x.hypot(vector.z)
+}
+
+fn world_aabb_center(aabb: WorldAabb) -> DVec3 {
+    DVec3::new(
+        (aabb.min_x() + aabb.max_x()) / 2.0,
+        (aabb.min_y() + aabb.max_y()) / 2.0,
+        (aabb.min_z() + aabb.max_z()) / 2.0,
+    )
+}
+
+fn leash_scan_area(center: DVec3) -> WorldAabb {
+    WorldAabb::new(
+        center.x - LEASH_SCAN_HALF_SIZE,
+        center.y - LEASH_SCAN_HALF_SIZE,
+        center.z - LEASH_SCAN_HALF_SIZE,
+        center.x + LEASH_SCAN_HALF_SIZE,
+        center.y + LEASH_SCAN_HALF_SIZE,
+        center.z + LEASH_SCAN_HALF_SIZE,
+    )
 }
 
 fn fall_flying_collision_damage(previous_horizontal_speed: f64, new_horizontal_speed: f64) -> f32 {
@@ -1395,6 +1416,75 @@ pub trait Entity: EntityEventSource + Send + Sync {
     /// Called when a player touches this entity during nearby pickup processing.
     fn player_touch(self: Arc<Self>, _player: &Arc<Player>) {}
 
+    /// Finds leashable mobs in vanilla's nearby leash scan whose holder is this entity.
+    fn leashables_leashed_to(&self) -> Vec<SharedEntity> {
+        let Some(world) = self.level() else {
+            return Vec::new();
+        };
+        let holder_id = self.id();
+        let scan_area = leash_scan_area(world_aabb_center(self.bounding_box()));
+        world.get_entities_in_aabb_matching(&scan_area, |entity| {
+            entity.as_mob().is_some_and(|mob| {
+                mob.leash_holder()
+                    .is_some_and(|holder| holder.id() == holder_id)
+            })
+        })
+    }
+
+    /// Drops this entity's leash and all leashables attached to it.
+    fn drop_all_leash_connections(&self, player: Option<&Player>) -> bool {
+        let leashables = self.leashables_leashed_to();
+        let mut dropped = !leashables.is_empty();
+
+        if let Some(mob) = self.as_mob()
+            && mob.is_leashed()
+        {
+            mob.drop_leash();
+            dropped = true;
+        }
+
+        for leashable in leashables {
+            if let Some(mob) = leashable.as_mob() {
+                mob.drop_leash();
+            }
+        }
+
+        if !dropped {
+            return false;
+        }
+
+        if let Some(world) = self.level() {
+            let source_entity = player.map(|player| player as &dyn Entity);
+            world.game_event(
+                &vanilla_game_events::SHEAR,
+                self.block_position(),
+                &GameEventContext::new(source_entity, None),
+            );
+        }
+        true
+    }
+
+    /// Shears off all leash connections reachable from this entity.
+    fn shear_off_all_leash_connections(&self, player: Option<&Player>) -> bool {
+        if !self.drop_all_leash_connections(player) {
+            return false;
+        }
+
+        if let Some(world) = self.level() {
+            let sound_source =
+                player.map_or_else(|| self.sound_source(), |player| player.sound_source());
+            world.play_sound(
+                &sound_events::ITEM_SHEARS_SNIP,
+                sound_source,
+                self.block_position(),
+                1.0,
+                1.0,
+                None,
+            );
+        }
+        true
+    }
+
     /// Handles vanilla entity right-click interaction.
     fn interact(
         &self,
@@ -1422,8 +1512,23 @@ pub trait Entity: EntityEventSource + Send + Sync {
             return InteractionResult::Pass;
         }
 
-        // TODO: Implement secondary-use leash transfer and shears once fence-knot
-        // and shearing foundations exist.
+        // TODO: Implement secondary-use leash transfer and equipment shearing
+        // once fence-knot and shearing foundations exist.
+        let holding_shears = {
+            let inventory = player.inventory.lock();
+            inventory
+                .get_item_in_hand(hand)
+                .is(&vanilla_items::ITEMS.shears)
+        };
+        if holding_shears && self.shear_off_all_leash_connections(Some(player)) {
+            let has_infinite_materials = player.has_infinite_materials();
+            player
+                .inventory
+                .lock()
+                .hurt_item_in_hand(hand, 1, has_infinite_materials);
+            return InteractionResult::Success;
+        }
+
         if let Some(holder) = mob.leash_holder() {
             if holder.id() == player.id() {
                 if player.has_infinite_materials() {

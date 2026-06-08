@@ -370,6 +370,37 @@ impl PlayerInventory {
         result
     }
 
+    /// Damages the held item and records inventory/equipment changes.
+    pub fn hurt_item_in_hand(
+        &mut self,
+        hand: InteractionHand,
+        amount: i32,
+        has_infinite_materials: bool,
+    ) {
+        if amount <= 0 || self.get_item_in_hand(hand).is_empty() {
+            return;
+        }
+
+        let slot = hand_to_equipment_slot(hand);
+        let changed = {
+            let item = self.get_item_in_hand_mut(hand);
+            let previous_item = item.item();
+            let previous_count = item.count();
+            let previous_damage = item.get_damage_value();
+
+            let _ = item.hurt_and_break(amount, has_infinite_materials);
+
+            item.item() != previous_item
+                || item.count() != previous_count
+                || item.get_damage_value() != previous_damage
+        };
+
+        if changed {
+            self.refresh_player_equipment_attribute_modifiers(slot);
+            self.set_changed();
+        }
+    }
+
     /// Damages the held item and converts it to `replacement_item` if it breaks.
     ///
     /// Mirrors vanilla `ItemStack.hurtAndConvertOnBreak` for hand-held player items.
@@ -1400,6 +1431,28 @@ mod tests {
                 EquipmentSlot::MainHand,
                 ItemStack::with_count(&ITEMS.oak_log, 2)
             )]
+        );
+    }
+
+    #[test]
+    fn hurt_item_in_hand_marks_changed_and_dirty_equipment() {
+        init_test_registry();
+
+        let mut inventory = PlayerInventory::new(Weak::new());
+        inventory.set_selected_item(ItemStack::new(&ITEMS.shears));
+        inventory.drain_dirty_equipment_items();
+
+        let before = inventory.get_times_changed();
+        inventory.hurt_item_in_hand(InteractionHand::MainHand, 1, false);
+
+        let main_hand = inventory.get_selected_item();
+        assert!(main_hand.is(&ITEMS.shears));
+        assert_eq!(main_hand.get_damage_value(), 1);
+        let expected = main_hand.copy_with_count(1);
+        assert_ne!(inventory.get_times_changed(), before);
+        assert_eq!(
+            inventory.drain_dirty_equipment_items(),
+            vec![(EquipmentSlot::MainHand, expected)]
         );
     }
 
