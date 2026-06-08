@@ -617,6 +617,13 @@ pub trait PathfinderMob: Mob {
         !self.mob_base().navigation().lock().is_done()
     }
 
+    fn is_panicking(&self) -> bool {
+        self.mob_base()
+            .goal_selector()
+            .lock()
+            .has_running_panic_goal()
+    }
+
     fn create_path_to_targets(
         &self,
         world: &Arc<World>,

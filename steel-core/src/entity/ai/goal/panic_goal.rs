@@ -52,6 +52,10 @@ impl Goal for PanicGoal {
         GoalControls::MOVE
     }
 
+    fn is_panic_goal(&self) -> bool {
+        true
+    }
+
     fn can_use(&mut self, mob: &dyn PathfinderMob) -> bool {
         if !self.should_panic(mob) {
             return false;

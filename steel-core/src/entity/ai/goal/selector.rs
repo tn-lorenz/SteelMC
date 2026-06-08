@@ -87,6 +87,10 @@ pub trait Goal: Send {
         true
     }
 
+    fn is_panic_goal(&self) -> bool {
+        false
+    }
+
     fn start(&mut self, _mob: &dyn PathfinderMob) {}
 
     fn stop(&mut self, _mob: &dyn PathfinderMob) {}
@@ -155,6 +159,10 @@ impl WrappedGoal {
 
     fn requires_update_every_tick(&self) -> bool {
         self.goal.requires_update_every_tick()
+    }
+
+    fn is_panic_goal(&self) -> bool {
+        self.goal.is_panic_goal()
     }
 }
 
@@ -255,6 +263,13 @@ impl GoalSelector {
     #[must_use]
     pub const fn available_goal_count(&self) -> usize {
         self.available_goals.len()
+    }
+
+    #[must_use]
+    pub(crate) fn has_running_panic_goal(&self) -> bool {
+        self.available_goals
+            .iter()
+            .any(|goal| goal.is_running() && goal.is_panic_goal())
     }
 
     #[cfg(test)]
@@ -404,6 +419,7 @@ mod tests {
         requires_update_every_tick: bool,
         tick_count: Option<&'static AtomicUsize>,
         can_use_once: bool,
+        panic_goal: bool,
     }
 
     impl StaticGoal {
@@ -416,6 +432,7 @@ mod tests {
                 requires_update_every_tick: false,
                 tick_count: None,
                 can_use_once: false,
+                panic_goal: false,
             }
         }
 
@@ -443,6 +460,11 @@ mod tests {
             self.tick_count = Some(tick_count);
             self
         }
+
+        const fn as_panic_goal(mut self) -> Self {
+            self.panic_goal = true;
+            self
+        }
     }
 
     impl Goal for StaticGoal {
@@ -467,6 +489,10 @@ mod tests {
 
         fn is_interruptable(&self) -> bool {
             self.interruptable
+        }
+
+        fn is_panic_goal(&self) -> bool {
+            self.panic_goal
         }
 
         fn requires_update_every_tick(&self) -> bool {
@@ -556,5 +582,26 @@ mod tests {
         selector.tick(&mob);
 
         assert_eq!(selector.running_goal_count(), 0);
+    }
+
+    #[test]
+    fn running_panic_goal_is_visible_to_pathfinder_mob() {
+        let mob = TestPathfinderMob::new();
+        mob.mob_base()
+            .goal_selector()
+            .lock()
+            .add_goal(1, StaticGoal::new(GoalControls::MOVE).as_panic_goal());
+
+        assert!(!mob.is_panicking());
+
+        mob.mob_base().goal_selector().lock().tick(&mob);
+
+        assert!(
+            mob.mob_base()
+                .goal_selector()
+                .lock()
+                .has_running_panic_goal()
+        );
+        assert!(mob.is_panicking());
     }
 }
