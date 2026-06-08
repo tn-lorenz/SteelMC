@@ -142,6 +142,7 @@ impl DropChances {
 pub struct MobBase {
     goal_selector: SyncMutex<GoalSelector>,
     target_selector: SyncMutex<GoalSelector>,
+    target: SyncMutex<Option<WeakEntity>>,
     controls: SyncMutex<MobControls>,
     navigation: SyncMutex<PathNavigation>,
     pathfinding_malus: SyncMutex<PathfindingMalus>,
@@ -375,6 +376,7 @@ impl MobBase {
         Self {
             goal_selector: SyncMutex::new(GoalSelector::new()),
             target_selector: SyncMutex::new(GoalSelector::new()),
+            target: SyncMutex::new(None),
             controls: SyncMutex::new(MobControls::new()),
             navigation: SyncMutex::new(PathNavigation::new()),
             pathfinding_malus: SyncMutex::new(pathfinding_malus),
@@ -398,6 +400,33 @@ impl MobBase {
     #[must_use]
     pub const fn target_selector(&self) -> &SyncMutex<GoalSelector> {
         &self.target_selector
+    }
+
+    #[must_use]
+    pub fn target(&self) -> Option<SharedEntity> {
+        let mut target = self.target.lock();
+        let Some(upgraded) = target.as_ref().and_then(WeakEntity::upgrade) else {
+            *target = None;
+            return None;
+        };
+        if !upgraded.is_living_entity() {
+            *target = None;
+            return None;
+        }
+        Some(upgraded)
+    }
+
+    pub fn set_target(&self, target: Option<&SharedEntity>) -> bool {
+        let Some(target) = target else {
+            *self.target.lock() = None;
+            return true;
+        };
+        if !target.is_living_entity() {
+            return false;
+        }
+
+        *self.target.lock() = Some(Arc::downgrade(target));
+        true
     }
 
     #[must_use]
@@ -493,6 +522,18 @@ pub trait Mob: LivingEntity {
 
     fn set_xp_reward(&self, xp_reward: i32) {
         self.mob_base().set_xp_reward(xp_reward);
+    }
+
+    /// Returns vanilla `Mob.getTarget`.
+    fn target(&self) -> Option<SharedEntity> {
+        self.mob_base().target()
+    }
+
+    /// Sets vanilla `Mob.target`.
+    ///
+    /// Returns `false` when the supplied entity is not a living entity.
+    fn set_target(&self, target: Option<&SharedEntity>) -> bool {
+        self.mob_base().set_target(target)
     }
 
     fn base_experience_reward_mob(&self) -> i32 {
@@ -1961,6 +2002,14 @@ mod tests {
             &vanilla_entities::PIG
         }
 
+        fn is_living_entity(&self) -> bool {
+            true
+        }
+
+        fn as_living_entity(&self) -> Option<&dyn LivingEntity> {
+            Some(self)
+        }
+
         fn is_mob(&self) -> bool {
             true
         }
@@ -2104,6 +2153,53 @@ mod tests {
         assert!(!selector.is_control_disabled(GoalControl::Move));
         assert!(selector.is_control_disabled(GoalControl::Jump));
         assert!(!selector.is_control_disabled(GoalControl::Look));
+    }
+
+    #[test]
+    fn mob_target_stores_living_target_weakly() {
+        let mob = DespawnTestMob::new(None, false);
+        let target: SharedEntity =
+            Arc::new(DespawnTestMob::with_position(2, DVec3::ZERO, None, false));
+
+        assert!(mob.set_target(Some(&target)));
+
+        let stored = mob.target().expect("living target should be stored");
+        assert!(Arc::ptr_eq(&stored, &target));
+    }
+
+    #[test]
+    fn mob_target_can_be_cleared() {
+        let mob = DespawnTestMob::new(None, false);
+        let target: SharedEntity =
+            Arc::new(DespawnTestMob::with_position(2, DVec3::ZERO, None, false));
+        assert!(mob.set_target(Some(&target)));
+
+        assert!(mob.set_target(None));
+
+        assert!(mob.target().is_none());
+    }
+
+    #[test]
+    fn mob_target_expires_with_target_entity() {
+        let mob = DespawnTestMob::new(None, false);
+        {
+            let target: SharedEntity =
+                Arc::new(DespawnTestMob::with_position(2, DVec3::ZERO, None, false));
+            assert!(mob.set_target(Some(&target)));
+        }
+
+        assert!(mob.target().is_none());
+    }
+
+    #[test]
+    fn mob_target_rejects_non_living_entities() {
+        let mob = DespawnTestMob::new(None, false);
+        let target: SharedEntity =
+            Arc::new(MobControlVehicleEntity::new(2, &vanilla_entities::OAK_BOAT));
+
+        assert!(!mob.set_target(Some(&target)));
+
+        assert!(mob.target().is_none());
     }
 
     #[test]
