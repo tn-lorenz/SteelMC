@@ -2,6 +2,7 @@ use glam::DVec3;
 
 use super::reduced_tick_delay;
 use super::selector::{Goal, GoalControls};
+use crate::entity::ai::targeting::TargetingConditions;
 use crate::entity::{Animal, PathfinderMob, SharedEntity};
 
 const PARTNER_SEARCH_RANGE: f64 = 8.0;
@@ -31,11 +32,17 @@ impl BreedGoal {
     ) -> Option<SharedEntity> {
         let world = mob.level()?;
         let search_box = mob.bounding_box().inflate(PARTNER_SEARCH_RANGE);
+        let partner_targeting = TargetingConditions::for_non_combat()
+            .range(PARTNER_SEARCH_RANGE)
+            .ignore_line_of_sight();
 
         world.nearest_entity_in_aabb_matching(&search_box, mob.position(), |entity| {
             let Some(candidate) = entity.as_animal() else {
                 return false;
             };
+            if !partner_targeting.test(world.as_ref(), Some(mob), candidate) {
+                return false;
+            }
             if !animal.can_mate(candidate) {
                 return false;
             }
