@@ -25,11 +25,7 @@ impl BreedGoal {
         }
     }
 
-    fn get_free_partner(
-        &self,
-        mob: &dyn PathfinderMob,
-        animal: &dyn Animal,
-    ) -> Option<SharedEntity> {
+    fn get_free_partner(mob: &dyn PathfinderMob, animal: &dyn Animal) -> Option<SharedEntity> {
         let world = mob.level()?;
         let search_box = mob.bounding_box().inflate(PARTNER_SEARCH_RANGE);
         let partner_targeting = TargetingConditions::for_non_combat()
@@ -49,7 +45,7 @@ impl BreedGoal {
 
             !entity
                 .as_pathfinder_mob()
-                .is_some_and(|pathfinder| pathfinder.is_panicking())
+                .is_some_and(PathfinderMob::is_panicking)
         })
     }
 }
@@ -67,7 +63,7 @@ impl Goal for BreedGoal {
             return false;
         }
 
-        self.partner = self.get_free_partner(mob, animal);
+        self.partner = Self::get_free_partner(mob, animal);
         self.partner.is_some()
     }
 
@@ -83,14 +79,12 @@ impl Goal for BreedGoal {
         }
         if partner
             .as_pathfinder_mob()
-            .is_some_and(|pathfinder| pathfinder.is_panicking())
+            .is_some_and(PathfinderMob::is_panicking)
         {
             return false;
         }
 
-        partner
-            .as_animal()
-            .is_some_and(|partner_animal| partner_animal.is_in_love())
+        partner.as_animal().is_some_and(Animal::is_in_love)
     }
 
     fn stop(&mut self, _mob: &dyn PathfinderMob) {
