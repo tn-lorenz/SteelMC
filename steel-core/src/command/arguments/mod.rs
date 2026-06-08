@@ -4,6 +4,7 @@ pub mod bool;
 pub mod domain;
 pub mod enchantment;
 pub mod entity;
+pub mod entity_type;
 pub mod float;
 pub mod gamemode;
 pub mod integer;
