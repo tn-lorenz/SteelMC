@@ -1,5 +1,6 @@
 //! Vanilla-shaped goal selector and movement goals.
 
+mod avoid_entity;
 mod breed_goal;
 mod float_goal;
 mod follow_parent;

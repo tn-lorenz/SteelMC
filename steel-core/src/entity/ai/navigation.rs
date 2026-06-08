@@ -107,6 +107,10 @@ impl PathNavigation {
         self.speed_modifier
     }
 
+    pub const fn set_speed_modifier(&mut self, speed_modifier: f64) {
+        self.speed_modifier = speed_modifier;
+    }
+
     #[must_use]
     pub const fn reach_range(&self) -> i32 {
         self.reach_range
@@ -891,6 +895,15 @@ mod tests {
             DVec3::new(0.5, 64.0, 0.5),
         ));
         assert_eq!(navigation.speed_modifier().to_bits(), 1.0_f64.to_bits());
+    }
+
+    #[test]
+    fn path_navigation_updates_current_speed_modifier() {
+        let mut navigation = PathNavigation::new();
+
+        navigation.set_speed_modifier(1.75);
+
+        assert_eq!(navigation.speed_modifier().to_bits(), 1.75_f64.to_bits());
     }
 
     #[test]
