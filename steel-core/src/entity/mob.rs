@@ -22,7 +22,7 @@ use steel_utils::UuidExt;
 use steel_utils::locks::SyncMutex;
 use steel_utils::random::Random as _;
 use steel_utils::types::InteractionHand;
-use steel_utils::{BlockPos, ChunkPos, Identifier, axis::Axis};
+use steel_utils::{BlockPos, ChunkPos, Identifier, WorldAabb, axis::Axis};
 use uuid::Uuid;
 
 use crate::behavior::{BLOCK_BEHAVIORS, BlockCollisionContext, InteractionResult};
@@ -67,6 +67,8 @@ const LEASHER_ATTACHMENT_POINT: DVec3 = DVec3::new(0.0, 0.5, 0.0);
 const DELAYED_LEASH_DROP_TICKS: i32 = 100;
 const BODY_ROTATION_MOVING_DISTANCE_SQR: f64 = 2.500_000_3e-7;
 const TARGET_REACH_DISTANCE_SQR: f64 = 2.25;
+const DEFAULT_ATTACK_REACH_BASE: f32 = 2.04;
+const DEFAULT_ATTACK_REACH_OFFSET: f32 = 0.6;
 const RANDOM_SPAWN_BONUS_ID: Identifier = Identifier::vanilla_static("random_spawn_bonus");
 const RANDOM_SPAWN_BONUS_SCALE: f64 = 0.114_850_000_000_000_01;
 const LEFT_HANDED_SPAWN_CHANCE: f32 = 0.05;
@@ -1271,6 +1273,40 @@ pub trait Mob: LivingEntity {
         75.0
     }
 
+    /// Returns vanilla `Mob.isWithinMeleeAttackRange`.
+    fn is_within_melee_attack_range(&self, target: &dyn LivingEntity) -> bool {
+        // TODO: Use the held item's ATTACK_RANGE component once it has typed component data.
+        let max_range = default_attack_reach();
+        let min_range = 0.0;
+        let target_hitbox = target.bounding_box();
+        self.attack_bounding_box(max_range)
+            .intersects(target_hitbox)
+            && (min_range <= 0.0
+                || !self
+                    .attack_bounding_box(min_range)
+                    .intersects(target_hitbox))
+    }
+
+    /// Returns vanilla `Mob.getAttackBoundingBox`.
+    fn attack_bounding_box(&self, horizontal_expansion: f64) -> WorldAabb {
+        let own_aabb = self.bounding_box();
+        let base = if let Some(vehicle) = self.vehicle() {
+            let mount_aabb = vehicle.bounding_box();
+            WorldAabb::new(
+                own_aabb.min_x().min(mount_aabb.min_x()),
+                own_aabb.min_y(),
+                own_aabb.min_z().min(mount_aabb.min_z()),
+                own_aabb.max_x().max(mount_aabb.max_x()),
+                own_aabb.max_y(),
+                own_aabb.max_z().max(mount_aabb.max_z()),
+            )
+        } else {
+            own_aabb
+        };
+
+        base.inflate_xyz(horizontal_expansion, 0.0, horizontal_expansion)
+    }
+
     fn set_aggressive(&self, aggressive: bool) {
         self.set_mob_flag(MOB_FLAG_AGGRESSIVE, aggressive);
     }
@@ -1553,6 +1589,10 @@ pub trait Mob: LivingEntity {
 
 fn can_attempt_equipment_drop(drop_chance: f32, preserve: bool, killed_by_player: bool) -> bool {
     drop_chance != 0.0 && (killed_by_player || preserve)
+}
+
+fn default_attack_reach() -> f64 {
+    f64::from(DEFAULT_ATTACK_REACH_BASE).sqrt() - f64::from(DEFAULT_ATTACK_REACH_OFFSET)
 }
 
 fn tick_path_navigation_target<M: Mob + ?Sized>(mob: &M, world: &Arc<World>, game_time: i64) {
@@ -2240,6 +2280,36 @@ mod tests {
         assert!(!mob.set_target(Some(&target)));
 
         assert!(mob.target().is_none());
+    }
+
+    #[test]
+    fn melee_attack_range_uses_vanilla_default_reach() {
+        let mob = DespawnTestMob::new(None, false);
+        let close_target = DespawnTestMob::with_position(2, DVec3::new(1.7, 0.0, 0.0), None, false);
+        let far_target = DespawnTestMob::with_position(3, DVec3::new(1.8, 0.0, 0.0), None, false);
+
+        assert!(mob.is_within_melee_attack_range(&close_target));
+        assert!(!mob.is_within_melee_attack_range(&far_target));
+    }
+
+    #[test]
+    fn melee_attack_range_uses_vehicle_expanded_attack_box() {
+        let mob = Arc::new(DespawnTestMob::with_position(
+            1,
+            DVec3::new(4.0, 0.0, 0.0),
+            None,
+            false,
+        ));
+        let target = DespawnTestMob::with_position(2, DVec3::new(1.1, 0.0, 0.0), None, false);
+
+        assert!(!mob.is_within_melee_attack_range(&target));
+
+        let mob_entity: SharedEntity = mob.clone();
+        let vehicle: SharedEntity =
+            Arc::new(MobControlVehicleEntity::new(3, &vanilla_entities::PIG));
+        EntityBase::restore_passenger_relationship(&vehicle, &mob_entity);
+
+        assert!(mob.is_within_melee_attack_range(&target));
     }
 
     #[test]
