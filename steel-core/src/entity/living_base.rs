@@ -396,6 +396,58 @@ impl LivingTravelInput {
     }
 }
 
+/// Vanilla living-entity body/head rotation state.
+#[derive(Debug, Clone, Copy, PartialEq)]
+pub struct LivingRotationState {
+    y_body_rot: f32,
+    y_body_rot_o: f32,
+    y_head_rot: f32,
+    y_head_rot_o: f32,
+}
+
+impl LivingRotationState {
+    /// Creates default living rotation state.
+    #[must_use]
+    pub const fn new() -> Self {
+        Self {
+            y_body_rot: 0.0,
+            y_body_rot_o: 0.0,
+            y_head_rot: 0.0,
+            y_head_rot_o: 0.0,
+        }
+    }
+
+    /// Returns vanilla `yBodyRot`.
+    #[must_use]
+    pub const fn y_body_rot(self) -> f32 {
+        self.y_body_rot
+    }
+
+    /// Returns vanilla `yBodyRotO`.
+    #[must_use]
+    pub const fn y_body_rot_o(self) -> f32 {
+        self.y_body_rot_o
+    }
+
+    /// Returns vanilla `yHeadRot`.
+    #[must_use]
+    pub const fn y_head_rot(self) -> f32 {
+        self.y_head_rot
+    }
+
+    /// Returns vanilla `yHeadRotO`.
+    #[must_use]
+    pub const fn y_head_rot_o(self) -> f32 {
+        self.y_head_rot_o
+    }
+}
+
+impl Default for LivingRotationState {
+    fn default() -> Self {
+        Self::new()
+    }
+}
+
 #[derive(Debug, Clone)]
 struct LivingEntityState {
     effects_dirty: bool,
@@ -418,6 +470,7 @@ struct LivingEntityState {
     discard_friction: bool,
     jumping: bool,
     travel_input: LivingTravelInput,
+    rotation: LivingRotationState,
     no_jump_delay: i32,
     no_action_time: i32,
 }
@@ -445,6 +498,7 @@ impl LivingEntityState {
             discard_friction: false,
             jumping: false,
             travel_input: LivingTravelInput::ZERO,
+            rotation: LivingRotationState::new(),
             no_jump_delay: 0,
             no_action_time: 0,
         }
@@ -527,6 +581,41 @@ impl LivingEntityBase {
     #[inline]
     pub const fn equipment(&self) -> &SyncMutex<EntityEquipment> {
         &self.equipment
+    }
+
+    /// Returns vanilla living body/head rotation state.
+    #[must_use]
+    pub fn rotation_state(&self) -> LivingRotationState {
+        self.state.lock().rotation
+    }
+
+    /// Returns vanilla `yBodyRot`.
+    #[must_use]
+    pub fn y_body_rot(&self) -> f32 {
+        self.state.lock().rotation.y_body_rot
+    }
+
+    /// Sets vanilla `yBodyRot`.
+    pub fn set_y_body_rot(&self, y_body_rot: f32) {
+        self.state.lock().rotation.y_body_rot = y_body_rot;
+    }
+
+    /// Returns vanilla `yHeadRot`.
+    #[must_use]
+    pub fn y_head_rot(&self) -> f32 {
+        self.state.lock().rotation.y_head_rot
+    }
+
+    /// Sets vanilla `yHeadRot`.
+    pub fn set_y_head_rot(&self, y_head_rot: f32) {
+        self.state.lock().rotation.y_head_rot = y_head_rot;
+    }
+
+    /// Copies current living head/body rotations to their old-rotation fields.
+    pub fn advance_rotation_for_base_tick(&self) {
+        let mut state = self.state.lock();
+        state.rotation.y_head_rot_o = state.rotation.y_head_rot;
+        state.rotation.y_body_rot_o = state.rotation.y_body_rot;
     }
 
     /// Returns vanilla `LivingEntity.absorptionAmount` for non-player living entities.
@@ -1288,6 +1377,33 @@ mod tests {
         assert_eq!(base.fall_flying_ticks(), 2);
         base.tick_fall_flying_state(false);
         assert_eq!(base.fall_flying_ticks(), 0);
+    }
+
+    #[test]
+    fn living_rotation_is_base_tick_snapshot_state() {
+        init_test_registry();
+        let base = LivingEntityBase::new(&vanilla_entities::PIG);
+
+        base.set_y_body_rot(30.0);
+        base.set_y_head_rot(45.0);
+        let rotation = base.rotation_state();
+        assert_eq!(rotation.y_body_rot(), 30.0);
+        assert_eq!(rotation.y_body_rot_o(), 0.0);
+        assert_eq!(rotation.y_head_rot(), 45.0);
+        assert_eq!(rotation.y_head_rot_o(), 0.0);
+
+        base.advance_rotation_for_base_tick();
+        let rotation = base.rotation_state();
+        assert_eq!(rotation.y_body_rot_o(), 30.0);
+        assert_eq!(rotation.y_head_rot_o(), 45.0);
+
+        base.set_y_body_rot(60.0);
+        base.set_y_head_rot(75.0);
+        let rotation = base.rotation_state();
+        assert_eq!(rotation.y_body_rot(), 60.0);
+        assert_eq!(rotation.y_body_rot_o(), 30.0);
+        assert_eq!(rotation.y_head_rot(), 75.0);
+        assert_eq!(rotation.y_head_rot_o(), 45.0);
     }
 
     #[test]

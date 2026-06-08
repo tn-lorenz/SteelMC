@@ -650,8 +650,8 @@ pub use inside_block_effects::{
 };
 pub(crate) use item_based_steering::{ItemBasedSteering, ItemSteerable};
 pub use living_base::{
-    ActiveMobEffect, DEATH_DURATION, LivingEntityBase, LivingTravelInput, MobEffectInstance,
-    MobEffectSyncChange, MobEffectSyncPacket,
+    ActiveMobEffect, DEATH_DURATION, LivingEntityBase, LivingRotationState, LivingTravelInput,
+    MobEffectInstance, MobEffectSyncChange, MobEffectSyncPacket,
 };
 pub use manager::{
     AddEntityError, ChunkEntityLoadResult, EntityMoveError, EntityMoveUpdate, EntityOwnership,
@@ -1287,6 +1287,9 @@ pub trait Entity: EntityEventSource + Send + Sync {
     /// subclasses override tick without calling `super.tick()`.
     fn base_tick(&self) {
         self.base().advance_base_tick_state();
+        if let Some(living) = self.as_living_entity() {
+            living.advance_living_rotation_for_base_tick();
+        }
         self.base().advance_powder_snow_contact_for_base_tick();
         self.refresh_fluid_contact_for_base_tick();
         self.base().reset_fall_distance_in_water();
@@ -1952,6 +1955,12 @@ pub trait Entity: EntityEventSource + Send + Sync {
     /// Sets the entity's rotation as (yaw, pitch) in degrees.
     fn set_rotation(&self, rotation: (f32, f32)) {
         self.base().set_rotation(rotation);
+    }
+
+    /// Returns vanilla `Entity.getYHeadRot`.
+    fn head_yaw(&self) -> f32 {
+        self.as_living_entity()
+            .map_or(0.0, LivingEntity::y_head_rot)
     }
 
     /// Extra spawn-packet data used by vanilla for entity-specific construction.
@@ -3607,6 +3616,36 @@ pub trait LivingEntity: Entity {
     /// living runtime state such as attributes, cached movement speed,
     /// damage cooldown, and death animation counters.
     fn living_base(&self) -> &LivingEntityBase;
+
+    /// Returns vanilla living body/head rotation state.
+    fn living_rotation_state(&self) -> LivingRotationState {
+        self.living_base().rotation_state()
+    }
+
+    /// Returns vanilla `LivingEntity.yBodyRot`.
+    fn y_body_rot(&self) -> f32 {
+        self.living_base().y_body_rot()
+    }
+
+    /// Sets vanilla `LivingEntity.yBodyRot`.
+    fn set_y_body_rot(&self, y_body_rot: f32) {
+        self.living_base().set_y_body_rot(y_body_rot);
+    }
+
+    /// Returns vanilla `LivingEntity.yHeadRot`.
+    fn y_head_rot(&self) -> f32 {
+        self.living_base().y_head_rot()
+    }
+
+    /// Sets vanilla `LivingEntity.yHeadRot`.
+    fn set_y_head_rot(&self, y_head_rot: f32) {
+        self.living_base().set_y_head_rot(y_head_rot);
+    }
+
+    /// Copies current living body/head rotations to vanilla old-rotation state.
+    fn advance_living_rotation_for_base_tick(&self) {
+        self.living_base().advance_rotation_for_base_tick();
+    }
 
     /// Returns a reference to this entity's attribute map.
     fn attributes(&self) -> &SyncMutex<AttributeMap> {
@@ -6320,6 +6359,20 @@ mod tests {
 
         let non_living = PushableTestEntity::shared(2, DVec3::ZERO);
         assert!(non_living.as_living_entity().is_none());
+    }
+
+    #[test]
+    fn head_yaw_uses_living_head_rotation_only() {
+        init_test_registry();
+        let living = LivingFluidTestEntity::new(0.0, 0.0, true);
+        living.set_rotation((35.0, 0.0));
+        living.set_y_head_rot(120.0);
+
+        assert_f32_close(Entity::head_yaw(&living), 120.0);
+
+        let non_living = PushableTestEntity::shared(2, DVec3::ZERO);
+        non_living.set_rotation((35.0, 0.0));
+        assert_f32_close(non_living.head_yaw(), 0.0);
     }
 
     #[test]

@@ -624,6 +624,7 @@ pub struct EntityBaseState {
     last_known_speed: DVec3,
     velocity: DVec3,
     rotation: (f32, f32),
+    old_rotation: (f32, f32),
     pose: EntityPose,
     dimensions: EntityDimensions,
     bounding_box: WorldAabb,
@@ -655,6 +656,7 @@ impl EntityBaseState {
             last_known_speed: DVec3::ZERO,
             velocity: DVec3::ZERO,
             rotation: (0.0, 0.0),
+            old_rotation: (0.0, 0.0),
             pose: EntityPose::Standing,
             dimensions,
             bounding_box: Self::make_bounding_box(position, dimensions),
@@ -721,7 +723,9 @@ impl EntityBaseState {
     /// Sets rotation on this state snapshot.
     #[must_use]
     pub fn with_rotation(mut self, rotation: (f32, f32)) -> Self {
-        self.rotation = normalize_rotation(rotation);
+        let rotation = normalize_rotation(rotation);
+        self.rotation = rotation;
+        self.old_rotation = rotation;
         self
     }
 
@@ -1145,6 +1149,12 @@ impl EntityBase {
         self.state.lock().rotation
     }
 
+    /// Gets vanilla `yRotO`/`xRotO` as (yaw, pitch) in degrees.
+    #[inline]
+    pub fn old_rotation(&self) -> (f32, f32) {
+        self.state.lock().old_rotation
+    }
+
     /// Returns true if the entity is touching the ground.
     #[inline]
     pub fn on_ground(&self) -> bool {
@@ -1416,6 +1426,7 @@ impl EntityBase {
     /// Advances the base-tick movement and relationship state Steel currently implements.
     pub fn advance_base_tick_state(&self) {
         self.clear_in_block_state_for_base_tick();
+        self.set_old_rotation_to_current();
         self.compute_known_speed();
         self.decrement_boarding_cooldown();
         self.process_portal_cooldown();
@@ -1624,6 +1635,23 @@ impl EntityBase {
     pub fn set_old_position(&self, old_position: DVec3) {
         require_finite_position(old_position, "old position");
         self.state.lock().old_position = old_position;
+    }
+
+    /// Sets vanilla `yRotO`/`xRotO` to the current rotation.
+    pub fn set_old_rotation_to_current(&self) {
+        let mut state = self.state.lock();
+        state.old_rotation = state.rotation;
+    }
+
+    /// Sets vanilla `yRotO` to the current yaw without changing `xRotO`.
+    pub fn set_old_yaw_to_current(&self) {
+        let mut state = self.state.lock();
+        state.old_rotation.0 = state.rotation.0;
+    }
+
+    /// Sets vanilla `yRotO`/`xRotO` explicitly.
+    pub fn set_old_rotation(&self, old_rotation: (f32, f32)) {
+        self.state.lock().old_rotation = normalize_rotation(old_rotation);
     }
 
     /// Records a movement segment for vanilla block-contact effects.
@@ -2895,6 +2923,41 @@ mod tests {
         let rotation = base.rotation();
         assert_f32_close(rotation.0, -90.0);
         assert_f32_close(rotation.1, -90.0);
+    }
+
+    #[test]
+    fn with_rotation_initializes_old_rotation_to_current_rotation() {
+        let state = EntityBaseState::new(DVec3::ZERO, EntityDimensions::new(0.25, 0.25, 0.125))
+            .with_rotation((450.0, 120.0));
+
+        assert_f32_close(state.rotation.0, 90.0);
+        assert_f32_close(state.rotation.1, 90.0);
+        assert_eq!(state.old_rotation, state.rotation);
+    }
+
+    #[test]
+    fn old_rotation_is_base_tick_snapshot_state() {
+        let base = EntityBase::new(
+            1,
+            DVec3::ZERO,
+            EntityDimensions::new(0.25, 0.25, 0.125),
+            Weak::<World>::new(),
+        );
+
+        base.set_rotation((30.0, 40.0));
+        assert_eq!(base.old_rotation(), (0.0, 0.0));
+
+        base.advance_base_tick_state();
+        assert_eq!(base.old_rotation(), (30.0, 40.0));
+
+        base.set_rotation((60.0, 70.0));
+        assert_eq!(base.old_rotation(), (30.0, 40.0));
+
+        base.set_old_yaw_to_current();
+        assert_eq!(base.old_rotation(), (60.0, 40.0));
+
+        base.set_old_rotation((450.0, 120.0));
+        assert_eq!(base.old_rotation(), (90.0, 90.0));
     }
 
     #[test]

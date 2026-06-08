@@ -168,7 +168,7 @@ impl EntityTracker {
                 entity.velocity(),
                 entity.on_ground(),
                 entity.rotation(),
-                entity.rotation().0,
+                entity.head_yaw(),
                 entity.entity_type().update_interval,
                 entity.entity_type().track_deltas,
             )),
@@ -387,7 +387,7 @@ impl EntityTracker {
                         position: entity.position(),
                         velocity: entity.velocity(),
                         body_rotation: entity.rotation(),
-                        head_yaw: entity.rotation().0,
+                        head_yaw: entity.head_yaw(),
                         on_ground: entity.on_ground(),
                         needs_velocity_sync: entity.needs_velocity_sync(),
                         has_dirty_entity_data,
@@ -846,12 +846,14 @@ impl EntitySpawnPairing {
         let pos = entity.spawn_position();
         let vel = entity.velocity();
         let (yaw, pitch) = entity.rotation();
+        let head_yaw = entity.head_yaw();
         let entity_type_id = entity.entity_type().id() as i32;
 
         // Convert rotation from degrees to protocol byte format (256th of a full rotation)
         // Uses to_angle_byte which matches vanilla's Mth.packDegrees
         let x_rot = to_angle_byte(pitch);
         let y_rot = to_angle_byte(yaw);
+        let head_y_rot = to_angle_byte(head_yaw);
 
         Self {
             spawn_packet: CAddEntity {
@@ -866,7 +868,7 @@ impl EntitySpawnPairing {
                 velocity_z: vel.z,
                 x_rot,
                 y_rot,
-                head_y_rot: y_rot,
+                head_y_rot,
                 data: entity.spawn_data(),
             },
             entity_data: entity.pack_all_entity_data(),
@@ -1055,7 +1057,7 @@ mod tests {
                 entity.velocity(),
                 entity.on_ground(),
                 entity.rotation(),
-                entity.rotation().0,
+                entity.head_yaw(),
                 entity.entity_type().update_interval,
                 entity.entity_type().track_deltas,
             )),

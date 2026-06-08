@@ -332,6 +332,14 @@ impl PigEntity {
         movement_speed * 0.225 * ItemSteerable::boost_factor(self)
     }
 
+    fn set_ridden_rotation(&self, controller_yaw: f32, controller_pitch: f32) {
+        self.set_rotation((controller_yaw, controller_pitch * 0.5));
+        self.base.set_old_yaw_to_current();
+        let yaw = self.rotation().0;
+        self.set_y_body_rot(yaw);
+        self.set_y_head_rot(yaw);
+    }
+
     fn update_dirty_mob_effect_entity_data(&self) {
         if !self.living_base.take_effects_dirty() {
             return;
@@ -666,7 +674,7 @@ impl LivingEntity for PigEntity {
 
     fn tick_ridden(&self, controller: &Player, _ridden_input: DVec3) {
         let (yaw, pitch) = controller.rotation();
-        self.set_rotation((yaw, pitch * 0.5));
+        self.set_ridden_rotation(yaw, pitch);
         self.tick_boost();
     }
 
@@ -1004,6 +1012,21 @@ mod tests {
         pig.tick_boost();
 
         assert!(pig.ridden_speed() > base_ridden_speed);
+    }
+
+    #[test]
+    fn pig_ridden_rotation_matches_controller_head_and_body_yaw() {
+        init_test_registry();
+
+        let pig = PigEntity::new(&vanilla_entities::PIG, 1, DVec3::ZERO, Weak::new());
+        pig.base().set_old_rotation((7.0, -12.0));
+
+        pig.set_ridden_rotation(450.0, 120.0);
+
+        assert_eq!(pig.rotation(), (90.0, 60.0));
+        assert_eq!(pig.base().old_rotation(), (90.0, -12.0));
+        assert_eq!(pig.y_body_rot(), 90.0);
+        assert_eq!(pig.y_head_rot(), 90.0);
     }
 
     #[test]
