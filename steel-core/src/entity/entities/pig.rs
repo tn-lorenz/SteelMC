@@ -30,8 +30,8 @@ use steel_utils::random::Random as _;
 use steel_utils::{BlockPos, BlockStateId, Identifier};
 
 use crate::entity::ai::goal::{
-    FloatGoal, FollowParentGoal, LookAtPlayerGoal, PanicGoal, RandomLookAroundGoal, TemptGoal,
-    WaterAvoidingRandomStrollGoal,
+    BreedGoal, FloatGoal, FollowParentGoal, LookAtPlayerGoal, PanicGoal, RandomLookAroundGoal,
+    TemptGoal, WaterAvoidingRandomStrollGoal,
 };
 use crate::entity::damage::DamageSource;
 use crate::entity::{
@@ -88,6 +88,10 @@ impl PigEntity {
             .goal_selector()
             .lock()
             .add_goal(1, PanicGoal::new(1.25));
+        mob_base
+            .goal_selector()
+            .lock()
+            .add_goal(3, BreedGoal::new(1.0));
         mob_base.goal_selector().lock().add_goal(
             4,
             TemptGoal::new(
@@ -794,6 +798,21 @@ mod tests {
     }
 
     #[test]
+    fn pig_uses_default_animal_love_mode() {
+        init_test_registry();
+
+        let pig = PigEntity::new(&vanilla_entities::PIG, 1, DVec3::ZERO, Weak::new());
+
+        assert!(pig.can_fall_in_love());
+
+        pig.set_in_love(None);
+
+        assert_eq!(pig.in_love_time(), 600);
+        assert!(!pig.can_fall_in_love());
+        assert!(pig.love_cause_uuid().is_none());
+    }
+
+    #[test]
     fn pig_breeding_offspring_inherits_parent_variant() {
         init_test_registry();
 
@@ -864,10 +883,10 @@ mod tests {
         let pig = PigEntity::new(&vanilla_entities::PIG, 1, DVec3::ZERO, Weak::new());
 
         let selector = pig.mob_base().goal_selector().lock();
-        assert_eq!(selector.available_goal_count(), 8);
+        assert_eq!(selector.available_goal_count(), 9);
         assert_eq!(
             selector.available_goal_priorities(),
-            vec![0, 1, 4, 4, 5, 6, 7, 8]
+            vec![0, 1, 3, 4, 4, 5, 6, 7, 8]
         );
         drop(selector);
         assert!(pig.mob_base().navigation().lock().can_float());

@@ -4,12 +4,20 @@ use std::sync::Arc;
 
 use simdnbt::borrow::NbtCompound as BorrowedNbtCompoundView;
 use simdnbt::owned::{NbtCompound, NbtTag};
+use steel_registry::vanilla_game_rules::MOB_DROPS;
+use steel_utils::entity_events::EntityStatus;
 use steel_utils::locks::SyncMutex;
+use steel_utils::random::Random as _;
 use steel_utils::{Identifier, UuidExt};
 use uuid::Uuid;
 
+use crate::entity::entities::ExperienceOrbEntity;
 use crate::entity::{AgeableMob, ENTITIES, SharedEntity, next_entity_id};
+use crate::player::Player;
 use crate::world::World;
+
+const PARENT_AGE_AFTER_BREEDING: i32 = 6000;
+const IN_LOVE_TIME: i32 = 600;
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
 struct AnimalState {
@@ -108,6 +116,21 @@ pub trait Animal: AgeableMob {
         self.in_love_time() > 0
     }
 
+    /// Returns vanilla `Animal.canFallInLove`.
+    fn can_fall_in_love(&self) -> bool {
+        self.in_love_time() <= 0
+    }
+
+    /// Sets vanilla love mode and records the player that caused it.
+    fn set_in_love(&self, player: Option<&Player>) {
+        self.set_in_love_time(IN_LOVE_TIME);
+        if let Some(player) = player {
+            self.set_love_cause_uuid(Some(player.gameprofile.id));
+        }
+
+        self.broadcast_entity_event(EntityStatus::InLoveHearts);
+    }
+
     /// Resets vanilla love mode without clearing the stored love cause.
     fn reset_love(&self) {
         self.set_in_love_time(0);
@@ -161,6 +184,70 @@ pub trait Animal: AgeableMob {
 
         self.initialize_breed_offspring(partner, offspring_animal);
         Some(offspring)
+    }
+
+    /// Creates, initializes, and inserts vanilla breeding offspring.
+    fn spawn_child_from_breeding(&self, world: &Arc<World>, partner: &dyn Animal) {
+        let Some(offspring) = self.get_breed_offspring(world, partner) else {
+            return;
+        };
+
+        {
+            let Some(offspring_animal) = offspring.as_animal() else {
+                log::error!(
+                    "breeding entity type {} created non-animal offspring",
+                    self.entity_type().key
+                );
+                return;
+            };
+            offspring_animal.set_baby(true);
+            if let Err(error) = offspring_animal.try_set_position(self.position()) {
+                log::error!(
+                    "failed to position breeding offspring {} at parent {}: {error}",
+                    offspring.id(),
+                    self.id()
+                );
+                return;
+            }
+            offspring_animal.set_rotation((0.0, 0.0));
+            offspring_animal.set_old_position_to_current();
+
+            self.finalize_spawn_child_from_breeding(world, partner, Some(offspring_animal));
+        }
+
+        if let Err(error) = world.try_add_entity(offspring) {
+            log::error!(
+                "failed to add breeding offspring for entity {} to world: {error}",
+                self.id()
+            );
+        }
+    }
+
+    /// Applies vanilla breeding side effects after offspring creation.
+    fn finalize_spawn_child_from_breeding(
+        &self,
+        world: &Arc<World>,
+        partner: &dyn Animal,
+        _offspring: Option<&dyn Animal>,
+    ) {
+        if self
+            .love_cause_uuid()
+            .or_else(|| partner.love_cause_uuid())
+            .is_some()
+        {
+            // TODO: Award the animals-bred stat and advancement once those foundations exist.
+        }
+
+        self.set_age(PARENT_AGE_AFTER_BREEDING);
+        partner.set_age(PARENT_AGE_AFTER_BREEDING);
+        self.reset_love();
+        partner.reset_love();
+        self.broadcast_entity_event(EntityStatus::InLoveHearts);
+
+        if world.get_game_rule(&MOB_DROPS).as_bool() == Some(true) {
+            let xp = self.base().random().lock().next_i32_bounded(7) + 1;
+            ExperienceOrbEntity::award(world, self.position(), xp);
+        }
     }
 
     /// Ticks vanilla animal love state.

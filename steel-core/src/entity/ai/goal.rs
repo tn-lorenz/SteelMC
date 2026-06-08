@@ -1,5 +1,6 @@
 //! Vanilla-shaped goal selector and movement goals.
 
+mod breed_goal;
 mod float_goal;
 mod follow_parent;
 mod look_at_player;
@@ -11,6 +12,7 @@ mod selector;
 mod tempt_goal;
 mod water_avoiding_random_stroll;
 
+pub(crate) use breed_goal::BreedGoal;
 pub(crate) use float_goal::FloatGoal;
 pub(crate) use follow_parent::FollowParentGoal;
 pub(crate) use look_at_player::LookAtPlayerGoal;
