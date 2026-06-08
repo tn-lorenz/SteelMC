@@ -1581,11 +1581,7 @@ pub trait PathfinderMob: Mob {
             return None;
         }
 
-        let target = if self.can_path_to_targets_below_surface() {
-            target
-        } else {
-            find_ground_path_target_surface(world.as_ref(), target)
-        };
+        let target = path_target_for_mob(self, world.as_ref(), target);
         let targets = [target];
         self.create_path_to_targets(&world, &targets, reach_range)
     }
@@ -1603,10 +1599,28 @@ pub trait PathfinderMob: Mob {
     }
 
     fn move_to_pos_with_reach(&self, target: DVec3, reach_range: i32, speed_modifier: f64) -> bool {
-        let path = self.create_path_to(
-            BlockPos::containing(target.x, target.y, target.z),
-            reach_range,
-        );
+        let target_pos = BlockPos::containing(target.x, target.y, target.z);
+        let Some(world) = self.level() else {
+            self.mob_base().navigation().lock().stop();
+            return false;
+        };
+        if !world.has_full_chunk(ChunkPos::from_block_pos(target_pos)) {
+            self.mob_base().navigation().lock().stop();
+            return false;
+        }
+
+        let target_pos = path_target_for_mob(self, world.as_ref(), target_pos);
+        let targets = [target_pos];
+        if self
+            .mob_base()
+            .navigation()
+            .lock()
+            .reuse_current_path_to_targets(&targets, speed_modifier, self.position())
+        {
+            return true;
+        }
+
+        let path = self.create_path_to_targets(&world, &targets, reach_range);
         self.move_to_path(path, speed_modifier)
     }
 
@@ -1678,6 +1692,18 @@ pub trait PathfinderMob: Mob {
                 reach_range,
             },
         )
+    }
+}
+
+fn path_target_for_mob<M: PathfinderMob + ?Sized>(
+    mob: &M,
+    level: &dyn LevelReader,
+    target: BlockPos,
+) -> BlockPos {
+    if mob.can_path_to_targets_below_surface() {
+        target
+    } else {
+        find_ground_path_target_surface(level, target)
     }
 }
 

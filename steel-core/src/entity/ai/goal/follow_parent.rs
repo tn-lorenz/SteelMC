@@ -1,6 +1,8 @@
 use crate::entity::ai::goal::selector::{Goal, GoalControls};
 use crate::entity::{PathfinderMob, SharedEntity};
 
+use super::reduced_tick_delay;
+
 const HORIZONTAL_SCAN_RANGE: f64 = 8.0;
 const VERTICAL_SCAN_RANGE: f64 = 4.0;
 const DONT_FOLLOW_IF_CLOSER_THAN_SQR: f64 = 9.0;
@@ -95,7 +97,7 @@ impl Goal for FollowParentGoal {
         if self.time_to_recalc_path > 0 {
             return;
         }
-        self.time_to_recalc_path = 10;
+        self.time_to_recalc_path = reduced_tick_delay(10);
 
         let Some(parent) = &self.parent else {
             return;

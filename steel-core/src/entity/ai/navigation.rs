@@ -242,6 +242,34 @@ impl PathNavigation {
         true
     }
 
+    pub fn reuse_current_path_to_targets(
+        &mut self,
+        targets: &[BlockPos],
+        speed_modifier: f64,
+        mob_position: DVec3,
+    ) -> bool {
+        if targets.is_empty() {
+            return false;
+        }
+        if self.path.as_ref().is_none_or(Path::is_done) {
+            return false;
+        }
+
+        let Some(target_pos) = self.target_pos else {
+            return false;
+        };
+        if !targets.contains(&target_pos) {
+            return false;
+        }
+
+        self.direct_target = None;
+        self.speed_modifier = speed_modifier;
+        self.last_stuck_check = self.tick;
+        self.last_stuck_check_pos = mob_position;
+        self.done = false;
+        true
+    }
+
     pub fn set_direct_target(&mut self, target: DVec3, speed_modifier: f64) {
         self.path = None;
         self.direct_target = Some(target);
@@ -823,6 +851,46 @@ mod tests {
 
         assert_eq!(navigation.path().map(Path::next_node_index), Some(1));
         assert_eq!(navigation.speed_modifier().to_bits(), 1.5_f64.to_bits());
+    }
+
+    #[test]
+    fn path_navigation_reuses_current_path_for_matching_target() {
+        let path = Path::new(
+            vec![Node::new(0, 64, 0), Node::new(4, 64, 0)],
+            BlockPos::new(4, 64, 0),
+            true,
+        );
+        let mut navigation = PathNavigation::new();
+
+        assert!(navigation.move_to(path, 1.0, DVec3::new(0.5, 64.0, 0.5)));
+        assert!(navigation.reuse_current_path_to_targets(
+            &[BlockPos::new(4, 64, 0)],
+            1.25,
+            DVec3::new(1.5, 64.0, 0.5),
+        ));
+
+        assert!(!navigation.is_done());
+        assert_eq!(navigation.speed_modifier().to_bits(), 1.25_f64.to_bits());
+        assert_eq!(
+            navigation.path().map(Path::target),
+            Some(BlockPos::new(4, 64, 0))
+        );
+        assert_eq!(navigation.path().map(Path::next_node_index), Some(0));
+    }
+
+    #[test]
+    fn path_navigation_does_not_reuse_current_path_for_different_target() {
+        let path = Path::new(vec![Node::new(4, 64, 0)], BlockPos::new(4, 64, 0), true);
+        let mut navigation = PathNavigation::new();
+
+        assert!(navigation.move_to(path, 1.0, DVec3::new(0.5, 64.0, 0.5)));
+
+        assert!(!navigation.reuse_current_path_to_targets(
+            &[BlockPos::new(5, 64, 0)],
+            1.25,
+            DVec3::new(0.5, 64.0, 0.5),
+        ));
+        assert_eq!(navigation.speed_modifier().to_bits(), 1.0_f64.to_bits());
     }
 
     #[test]
