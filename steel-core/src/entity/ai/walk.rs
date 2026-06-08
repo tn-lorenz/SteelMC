@@ -49,6 +49,7 @@ impl MobPathSettings {
         let navigation = mob.mob_base().navigation().lock();
         let can_float = navigation.can_float();
         let can_open_doors = navigation.can_open_doors();
+        let can_walk_over_fences = navigation.can_walk_over_fences();
         drop(navigation);
 
         Self {
@@ -67,7 +68,7 @@ impl MobPathSettings {
             can_pass_doors: true,
             can_open_doors,
             can_float,
-            can_walk_over_fences: false,
+            can_walk_over_fences,
         }
     }
 
@@ -1235,6 +1236,20 @@ mod tests {
         let settings = MobPathSettings::from_mob(&pig);
 
         assert!(settings.can_open_doors());
+    }
+
+    #[test]
+    fn mob_path_settings_reads_can_walk_over_fences_from_navigation() {
+        init_test_registry();
+        let pig = PigEntity::new(&vanilla_entities::PIG, 1, DVec3::ZERO, Weak::new());
+        pig.mob_base()
+            .navigation()
+            .lock()
+            .set_can_walk_over_fences(true);
+
+        let settings = MobPathSettings::from_mob(&pig);
+
+        assert!(settings.can_walk_over_fences());
     }
 
     #[test]

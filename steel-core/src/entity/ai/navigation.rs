@@ -63,6 +63,7 @@ pub struct PathNavigation {
     done: bool,
     can_float: bool,
     can_open_doors: bool,
+    can_walk_over_fences: bool,
 }
 
 impl PathNavigation {
@@ -91,6 +92,7 @@ impl PathNavigation {
             done: true,
             can_float: false,
             can_open_doors: false,
+            can_walk_over_fences: false,
         }
     }
 
@@ -177,6 +179,15 @@ impl PathNavigation {
 
     pub const fn set_can_open_doors(&mut self, can_open_doors: bool) {
         self.can_open_doors = can_open_doors;
+    }
+
+    #[must_use]
+    pub const fn can_walk_over_fences(&self) -> bool {
+        self.can_walk_over_fences
+    }
+
+    pub const fn set_can_walk_over_fences(&mut self, can_walk_over_fences: bool) {
+        self.can_walk_over_fences = can_walk_over_fences;
     }
 
     pub const fn tick(&mut self) {
@@ -655,6 +666,17 @@ mod tests {
         navigation.set_can_open_doors(true);
 
         assert!(navigation.can_open_doors());
+    }
+
+    #[test]
+    fn path_navigation_tracks_can_walk_over_fences_flag() {
+        let mut navigation = PathNavigation::new();
+
+        assert!(!navigation.can_walk_over_fences());
+
+        navigation.set_can_walk_over_fences(true);
+
+        assert!(navigation.can_walk_over_fences());
     }
 
     #[test]
