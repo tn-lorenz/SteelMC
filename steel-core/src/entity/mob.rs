@@ -49,6 +49,13 @@ const DEFAULT_EQUIPMENT_DROP_CHANCE: f32 = 0.085;
 const PRESERVE_ITEM_DROP_CHANCE_THRESHOLD: f32 = 1.0;
 const PRESERVE_ITEM_DROP_CHANCE: f32 = 2.0;
 const LEASH_SNAP_DISTANCE: f64 = 12.0;
+const LEASH_ELASTIC_DISTANCE: f64 = 6.0;
+const LEASH_AXIS_SPECIFIC_ELASTICITY: DVec3 = DVec3::new(0.8, 0.2, 0.8);
+const LEASH_SPRING_DAMPENING: f64 = 0.7;
+const LEASH_TORSIONAL_ELASTICITY: f64 = 10.0;
+const LEASH_STIFFNESS: f64 = 0.11;
+const ENTITY_LEASH_ATTACHMENT_POINT: DVec3 = DVec3::new(0.0, 0.5, 0.5);
+const LEASHER_ATTACHMENT_POINT: DVec3 = DVec3::new(0.0, 0.5, 0.0);
 const DELAYED_LEASH_DROP_TICKS: i32 = 100;
 
 #[derive(Debug, Clone, Copy, PartialEq)]
@@ -154,6 +161,18 @@ struct LeashData {
     angular_momentum: f64,
 }
 
+#[derive(Debug, Clone, Copy, PartialEq)]
+struct LeashWrench {
+    force: DVec3,
+    torque: f64,
+}
+
+impl LeashWrench {
+    const fn new(force: DVec3, torque: f64) -> Self {
+        Self { force, torque }
+    }
+}
+
 impl MobHomeRestriction {
     const fn none() -> Self {
         Self {
@@ -237,6 +256,99 @@ impl LeashData {
                 )))
             })
     }
+}
+
+fn leash_dimensions(entity: &dyn Entity) -> DVec3 {
+    let dimensions = entity.base().dimensions();
+    DVec3::new(
+        f64::from(dimensions.width),
+        f64::from(dimensions.height),
+        f64::from(dimensions.width),
+    )
+}
+
+fn leash_bounding_box_center(entity: &dyn Entity) -> DVec3 {
+    let bounding_box = entity.bounding_box();
+    DVec3::new(
+        (bounding_box.min_x() + bounding_box.max_x()) / 2.0,
+        (bounding_box.min_y() + bounding_box.max_y()) / 2.0,
+        (bounding_box.min_z() + bounding_box.max_z()) / 2.0,
+    )
+}
+
+fn leash_holder_movement(entity: &dyn Entity) -> DVec3 {
+    if entity.as_mob().is_some_and(Mob::is_no_ai) {
+        return DVec3::ZERO;
+    }
+
+    entity.known_movement()
+}
+
+fn rotate_y(vector: DVec3, radians: f32) -> DVec3 {
+    let cos = f64::from(radians.cos());
+    let sin = f64::from(radians.sin());
+    DVec3::new(
+        vector.x * cos + vector.z * sin,
+        vector.y,
+        vector.z * cos - vector.x * sin,
+    )
+}
+
+fn axis_specific_leash_elasticity(force: DVec3) -> DVec3 {
+    force * LEASH_AXIS_SPECIFIC_ELASTICITY
+}
+
+fn compute_elastic_interaction(
+    entity: &dyn Entity,
+    holder: &dyn Entity,
+    slack_distance: f64,
+) -> Option<LeashWrench> {
+    let entity_y_rot = entity.rotation().0 * PI / 180.0;
+    let entity_attach_vector = rotate_y(
+        ENTITY_LEASH_ATTACHMENT_POINT * leash_dimensions(entity),
+        -entity_y_rot,
+    );
+    let entity_attach_pos = entity.position() + entity_attach_vector;
+
+    let holder_y_rot = holder.rotation().0 * PI / 180.0;
+    let holder_attach_vector = rotate_y(
+        LEASHER_ATTACHMENT_POINT * leash_dimensions(holder),
+        -holder_y_rot,
+    );
+    let holder_attach_pos = holder.position() + holder_attach_vector;
+
+    compute_dampened_spring_interaction(
+        holder_attach_pos,
+        entity_attach_pos,
+        slack_distance,
+        leash_holder_movement(entity),
+        entity_attach_vector,
+    )
+}
+
+fn compute_dampened_spring_interaction(
+    pivot_point: DVec3,
+    object_position: DVec3,
+    spring_slack: f64,
+    object_motion: DVec3,
+    lever_arm: DVec3,
+) -> Option<LeashWrench> {
+    let distance = object_position.distance(pivot_point);
+    if distance < spring_slack {
+        return None;
+    }
+
+    let mut displacement = (pivot_point - object_position).normalize() * (distance - spring_slack);
+    let torque = torque_from_force(lever_arm, displacement);
+    if object_motion.dot(displacement) >= 0.0 {
+        displacement *= 1.0 - LEASH_SPRING_DAMPENING;
+    }
+
+    Some(LeashWrench::new(displacement, torque))
+}
+
+fn torque_from_force(lever_arm: DVec3, force: DVec3) -> f64 {
+    lever_arm.z * force.x - lever_arm.x * force.z
 }
 
 impl MobBase {
@@ -581,11 +693,16 @@ pub trait Mob: LivingEntity {
     }
 
     fn leash_distance_to(&self, holder: &dyn Entity) -> f64 {
-        self.position().distance(holder.position())
+        leash_bounding_box_center(self.as_entity_event_source())
+            .distance(leash_bounding_box_center(holder))
     }
 
     fn leash_snap_distance(&self) -> f64 {
         LEASH_SNAP_DISTANCE
+    }
+
+    fn leash_elastic_distance(&self) -> f64 {
+        LEASH_ELASTIC_DISTANCE
     }
 
     fn when_leashed_to(&self, holder: &dyn Entity) {
@@ -596,7 +713,83 @@ pub trait Mob: LivingEntity {
         self.drop_leash();
     }
 
+    fn on_elastic_leash_pull(&self) {
+        self.check_fall_distance_accumulation();
+    }
+
     fn close_range_leash_behaviour(&self, _holder: &dyn Entity) {}
+
+    fn check_elastic_interactions(&self, holder: &dyn Entity) -> bool {
+        let Some(wrench) = compute_elastic_interaction(
+            self.as_entity_event_source(),
+            holder,
+            self.leash_elastic_distance(),
+        ) else {
+            return false;
+        };
+
+        {
+            let mut leash_data = self.mob_base().leash_data().lock();
+            let Some(leash_data) = leash_data.as_mut() else {
+                return false;
+            };
+            leash_data.angular_momentum += LEASH_TORSIONAL_ELASTICITY * wrench.torque;
+        }
+
+        let relative_velocity_to_leasher =
+            leash_holder_movement(holder) - leash_holder_movement(self.as_entity_event_source());
+        self.push_impulse(
+            axis_specific_leash_elasticity(wrench.force)
+                + relative_velocity_to_leasher * LEASH_STIFFNESS,
+        );
+        true
+    }
+
+    fn apply_leash_angular_momentum(&self) -> bool {
+        let angular_friction = self.leash_angular_friction();
+        let angular_momentum = {
+            let mut leash_data = self.mob_base().leash_data().lock();
+            let Some(leash_data) = leash_data.as_mut() else {
+                return false;
+            };
+            let angular_momentum = leash_data.angular_momentum;
+            leash_data.angular_momentum *= angular_friction;
+            angular_momentum
+        };
+        self.rotate_by_leash_angular_momentum(angular_momentum);
+        true
+    }
+
+    fn rotate_by_leash_angular_momentum(&self, angular_momentum: f64) {
+        let (yaw, pitch) = self.rotation();
+        self.set_rotation((yaw - angular_momentum as f32, pitch));
+    }
+
+    fn leash_angular_momentum(&self) -> Option<f64> {
+        self.mob_base()
+            .leash_data()
+            .lock()
+            .as_ref()
+            .map(|leash_data| leash_data.angular_momentum)
+    }
+
+    fn leash_angular_friction(&self) -> f64 {
+        if self.on_ground() {
+            let Some(world) = self.level() else {
+                return 0.91;
+            };
+            let Some(pos) = self.block_pos_below_that_affects_movement() else {
+                return 0.91;
+            };
+            return f64::from(world.get_block_state(pos).get_block().config.friction * 0.91);
+        }
+
+        if self.is_in_water() || self.is_in_lava() {
+            return 0.8;
+        }
+
+        0.91
+    }
 
     fn can_have_a_leash_attached_to(&self, holder: &dyn Entity) -> bool {
         self.id() != holder.id()
@@ -645,6 +838,7 @@ pub trait Mob: LivingEntity {
 
             let distance_to = self.leash_distance_to(holder.as_ref());
             self.when_leashed_to(holder.as_ref());
+            let angular_momentum_before_distance_action = self.leash_angular_momentum();
             if distance_to > self.leash_snap_distance() {
                 if let Some(world) = self.level() {
                     world.play_sound_at(
@@ -657,9 +851,20 @@ pub trait Mob: LivingEntity {
                     );
                 }
                 self.leash_too_far_behaviour();
+            } else if distance_to
+                > self.leash_elastic_distance()
+                    - f64::from(holder.base().dimensions().width)
+                    - f64::from(self.base().dimensions().width)
+                && self.check_elastic_interactions(holder.as_ref())
+            {
+                self.on_elastic_leash_pull();
             } else {
-                // TODO: Apply vanilla elastic leash pull and angular momentum.
                 self.close_range_leash_behaviour(holder.as_ref());
+            }
+            if !self.apply_leash_angular_momentum()
+                && let Some(angular_momentum) = angular_momentum_before_distance_action
+            {
+                self.rotate_by_leash_angular_momentum(angular_momentum);
             }
             return;
         }
@@ -1375,7 +1580,7 @@ fn wrap_degrees(mut degrees: f32) -> f32 {
 
 #[cfg(test)]
 mod tests {
-    use std::sync::Weak;
+    use std::sync::{Arc, Weak};
 
     use glam::DVec3;
     use steel_registry::entity_type::EntityTypeRef;
@@ -1387,7 +1592,7 @@ mod tests {
     use super::{can_attempt_equipment_drop, find_ground_path_target_surface};
     use crate::entity::ai::path::PathType;
     use crate::entity::mob::{Mob, MobBase};
-    use crate::entity::{Entity, EntityBase, LivingEntity, LivingEntityBase};
+    use crate::entity::{Entity, EntityBase, LivingEntity, LivingEntityBase, SharedEntity};
     use crate::world::LevelReader;
 
     #[test]
@@ -1450,15 +1655,24 @@ mod tests {
 
     impl DespawnTestMob {
         fn new(nearest_player_distance_sqr: Option<f64>, remove_when_far_away: bool) -> Self {
+            Self::with_position(
+                1,
+                DVec3::ZERO,
+                nearest_player_distance_sqr,
+                remove_when_far_away,
+            )
+        }
+
+        fn with_position(
+            id: i32,
+            position: DVec3,
+            nearest_player_distance_sqr: Option<f64>,
+            remove_when_far_away: bool,
+        ) -> Self {
             init_test_registry();
 
             Self {
-                base: EntityBase::new(
-                    1,
-                    DVec3::ZERO,
-                    vanilla_entities::PIG.dimensions,
-                    Weak::new(),
-                ),
+                base: EntityBase::new(id, position, vanilla_entities::PIG.dimensions, Weak::new()),
                 living_base: LivingEntityBase::new(&vanilla_entities::PIG),
                 mob_base: MobBase::new(),
                 flags: SyncMutex::new(0),
@@ -1536,6 +1750,27 @@ mod tests {
         mob.mob_server_ai_step();
 
         assert_eq!(mob.no_action_time(), 13);
+    }
+
+    #[test]
+    fn mob_tick_leash_applies_default_elastic_pull() {
+        let mob = Arc::new(DespawnTestMob::with_position(1, DVec3::ZERO, None, false));
+        let holder = Arc::new(DespawnTestMob::with_position(
+            2,
+            DVec3::new(7.0, 0.0, 0.0),
+            None,
+            false,
+        ));
+        let holder_entity: SharedEntity = holder.clone();
+        assert!(mob.set_leashed_to(&holder_entity));
+
+        mob.tick_leash();
+
+        assert!(mob.velocity().x > 0.0);
+        assert!(mob.velocity().z < 0.0);
+        assert!(mob.needs_velocity_sync());
+        assert!(mob.rotation().0 < 0.0);
+        assert!(mob.is_leashed());
     }
 
     #[test]

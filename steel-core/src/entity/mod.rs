@@ -1304,7 +1304,7 @@ pub trait Entity: EntityEventSource + Send + Sync {
         if let Some(mob) = self.as_mob() {
             mob.tick_leash();
         }
-        // TODO: Add remaining vanilla baseTick pieces: portal, sprint particles, and full leash physics.
+        // TODO: Add remaining vanilla baseTick pieces: portal and sprint particles.
     }
 
     /// Applies vanilla below-world handling.
