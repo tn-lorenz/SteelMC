@@ -1,6 +1,7 @@
 use glam::DVec3;
 use steel_utils::random::Random as _;
 
+use super::reduced_tick_delay;
 use crate::entity::ai::control::{DEFAULT_LOOK_X_MAX_ROT_ANGLE, DEFAULT_LOOK_Y_MAX_ROT_SPEED};
 use crate::entity::ai::goal::selector::{Goal, GoalControls};
 use crate::entity::ai::targeting::TargetingConditions;
@@ -87,7 +88,7 @@ impl Goal for LookAtPlayerGoal {
     }
 
     fn start(&mut self, mob: &dyn PathfinderMob) {
-        self.look_time = 40 + mob.base().random().lock().next_i32_bounded(40);
+        self.look_time = reduced_tick_delay(40 + mob.base().random().lock().next_i32_bounded(40));
     }
 
     fn stop(&mut self, _mob: &dyn PathfinderMob) {
@@ -119,12 +120,34 @@ impl Goal for LookAtPlayerGoal {
 
 #[cfg(test)]
 mod tests {
+    use std::sync::Weak;
+
+    use glam::DVec3;
+    use steel_registry::{test_support::init_test_registry, vanilla_entities};
+    use steel_utils::random::{Random as _, legacy_random::LegacyRandom};
+
     use super::*;
+    use crate::entity::entities::PigEntity;
 
     #[test]
     fn look_at_player_goal_claims_only_look_control() {
         let goal = LookAtPlayerGoal::new(6.0);
 
         assert_eq!(goal.controls(), GoalControls::LOOK);
+    }
+
+    #[test]
+    fn look_at_player_goal_uses_vanilla_adjusted_look_time() {
+        init_test_registry();
+        let pig = PigEntity::new(&vanilla_entities::PIG, 1, DVec3::ZERO, Weak::new());
+        let mut goal = LookAtPlayerGoal::new(6.0);
+        let seed = 12345;
+        pig.base().random().lock().set_seed(seed);
+        let mut expected_random = LegacyRandom::from_seed(seed as u64);
+        let expected = reduced_tick_delay(40 + expected_random.next_i32_bounded(40));
+
+        goal.start(&pig);
+
+        assert_eq!(goal.look_time, expected);
     }
 }
