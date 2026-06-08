@@ -9,7 +9,8 @@ use glam::DVec3;
 use steel_protocol::packets::game::{
     AnimateAction, CAnimate, CBlockChangedAck, CBlockUpdate, CChangeDifficulty, CGameEvent,
     COpenSignEditor, CPlayerInfoUpdate, CSetEntityMotion, CSetHeldSlot, GameEventType,
-    PlayerAction, SAttack, SPickItemFromBlock, SPlayerAction, SSignUpdate, SUseItem, SUseItemOn,
+    PlayerAction, SAttack, SInteract, SPickItemFromBlock, SPlayerAction, SSignUpdate, SUseItem,
+    SUseItemOn,
 };
 use steel_registry::blocks::block_state_ext::BlockStateExt;
 use steel_registry::blocks::properties::Direction;
@@ -44,6 +45,7 @@ use crate::world::World;
 const CREATIVE_BLOCK_RANGE_MODIFIER_AMOUNT: f64 = 0.5;
 const CREATIVE_ENTITY_RANGE_MODIFIER_AMOUNT: f64 = 2.0;
 const ATTACK_RANGE_BUFFER: f64 = 3.0;
+const ENTITY_INTERACTION_RANGE_BUFFER: f64 = 3.0;
 
 /// Handles using an item on a block.
 ///
@@ -348,6 +350,17 @@ impl Player {
         aabb.distance_to_sqr(self.eye_position()) <= max_range * max_range
     }
 
+    /// Returns true if the target box is within the player's entity interaction range.
+    #[must_use]
+    pub fn is_within_entity_interaction_range_with_buffer(
+        &self,
+        aabb: WorldAabb,
+        buffer: f64,
+    ) -> bool {
+        let max_range = self.entity_interaction_range() + buffer;
+        aabb.distance_to_sqr(self.eye_position()) <= max_range * max_range
+    }
+
     fn cannot_attack(&self, entity: &dyn Entity) -> bool {
         !entity.attackable() || entity.skip_attack_interaction(self)
     }
@@ -420,6 +433,38 @@ impl Player {
         was_hurt
     }
 
+    /// Interacts with an entity using the held item.
+    pub fn interact_on(
+        &self,
+        entity: &dyn Entity,
+        hand: InteractionHand,
+        location: DVec3,
+    ) -> InteractionResult {
+        if self.is_spectator() {
+            // TODO: Open entity menu providers in spectator once that foundation exists.
+            return InteractionResult::Pass;
+        }
+
+        let inventory_access = InventoryAccess::new(self.inventory.clone(), hand);
+        let original_count = inventory_access.with_item(|item| item.count);
+        let result = entity.interact(self, hand, location);
+
+        if self.has_infinite_materials() {
+            inventory_access.with_item(|item| {
+                if item.count < original_count {
+                    item.count = original_count;
+                }
+            });
+        }
+
+        if result.consumes_action() {
+            return result;
+        }
+
+        // TODO: Call item-on-living-entity behavior once that item hook exists.
+        InteractionResult::Pass
+    }
+
     /// Handles a client request to attack an entity.
     pub fn handle_attack(&self, packet: SAttack) {
         if !self.has_client_loaded() || self.is_spectator() {
@@ -454,6 +499,42 @@ impl Player {
         }
 
         let _ = self.attack(&*target);
+    }
+
+    /// Handles a client request to interact with an entity.
+    pub fn handle_interact(&self, packet: SInteract) {
+        if !self.has_client_loaded() {
+            return;
+        }
+
+        let world = self.get_world();
+        let target = world.get_entity_by_id(packet.entity_id);
+        self.set_crouching(packet.using_secondary_action);
+        let Some(target) = target else {
+            return;
+        };
+
+        let target_pos = target.block_position();
+        if !world.world_border_snapshot().is_within_bounds_with_margin(
+            f64::from(target_pos.x()),
+            f64::from(target_pos.z()),
+            0.0,
+        ) {
+            return;
+        }
+
+        if !self.is_within_entity_interaction_range_with_buffer(
+            target.bounding_box(),
+            ENTITY_INTERACTION_RANGE_BUFFER,
+        ) {
+            return;
+        }
+
+        let result = self.interact_on(target.as_ref(), packet.hand, packet.location);
+        if let InteractionResult::Success = result {
+            self.swing(packet.hand, true);
+        }
+        self.broadcast_inventory_changes();
     }
 
     /// Sets the player's game mode and notifies the client.

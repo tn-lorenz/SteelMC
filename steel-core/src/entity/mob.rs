@@ -10,9 +10,10 @@ use steel_registry::vanilla_attributes;
 use steel_registry::vanilla_block_tags::BlockTag;
 use steel_utils::locks::SyncMutex;
 use steel_utils::random::Random as _;
+use steel_utils::types::InteractionHand;
 use steel_utils::{BlockPos, ChunkPos, axis::Axis};
 
-use crate::behavior::{BLOCK_BEHAVIORS, BlockCollisionContext};
+use crate::behavior::{BLOCK_BEHAVIORS, BlockCollisionContext, InteractionResult};
 use crate::entity::ai::control::{MobControls, MoveControlOperation};
 use crate::entity::ai::goal::GoalSelector;
 use crate::entity::ai::navigation::{
@@ -20,8 +21,9 @@ use crate::entity::ai::navigation::{
 };
 use crate::entity::ai::path::{Path, PathType, PathfindingContext, PathfindingMalus};
 use crate::entity::ai::walk::{MobPathSettings, WalkNodeEvaluator, WalkPathEvaluator};
-use crate::entity::{LivingEntity, LivingTravelInput, RemovalReason};
+use crate::entity::{Entity, LivingEntity, LivingTravelInput, RemovalReason};
 use crate::physics::WorldCollisionProvider;
+use crate::player::Player;
 use crate::world::{LevelReader, World};
 
 const MOB_FLAG_NO_AI: i8 = 1;
@@ -125,6 +127,26 @@ pub trait Mob: LivingEntity {
     fn custom_server_ai_step(&self) {}
 
     fn tick_goal_selectors(&self) {}
+
+    /// Handles vanilla `Mob.interact`.
+    fn interact_mob(
+        &self,
+        player: &Player,
+        hand: InteractionHand,
+        _location: DVec3,
+    ) -> InteractionResult {
+        if !Entity::is_alive(self) {
+            return InteractionResult::Pass;
+        }
+
+        // TODO: Handle name tags and spawn eggs once item-on-entity behavior exists.
+        self.mob_interact(player, hand)
+    }
+
+    /// Handles vanilla `Mob.mobInteract`.
+    fn mob_interact(&self, _player: &Player, _hand: InteractionHand) -> InteractionResult {
+        InteractionResult::Pass
+    }
 
     fn remove_when_far_away(&self, _dist_sqr: f64) -> bool {
         true

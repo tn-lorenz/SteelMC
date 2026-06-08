@@ -34,14 +34,14 @@ use steel_registry::{vanilla_attributes, vanilla_fluid_tags, vanilla_items, vani
 use steel_utils::entity_events::EntityStatus;
 use steel_utils::locks::SyncMutex;
 use steel_utils::random::Random as _;
-use steel_utils::types::Difficulty;
+use steel_utils::types::{Difficulty, InteractionHand};
 use steel_utils::{BlockPos, BlockStateId, ChunkPos, Direction, Identifier, WorldAabb, axis::Axis};
 use text_components::TextComponent;
 use uuid::Uuid;
 
 use crate::behavior::{
     BLOCK_BEHAVIORS, BlockCollisionContext, BlockStateBehaviorExt as _, EntityFallOnContext,
-    EntityLandingContext, FLUID_BEHAVIORS,
+    EntityLandingContext, FLUID_BEHAVIORS, InteractionResult,
 };
 use crate::entity::attribute::AttributeMap;
 use crate::fluid::{LavaFluid, get_fluid_state, get_height};
@@ -1320,6 +1320,17 @@ pub trait Entity: EntityEventSource + Send + Sync {
 
     /// Called when a player touches this entity during nearby pickup processing.
     fn player_touch(self: Arc<Self>, _player: &Arc<Player>) {}
+
+    /// Handles vanilla entity right-click interaction.
+    fn interact(
+        &self,
+        _player: &Player,
+        _hand: InteractionHand,
+        _location: DVec3,
+    ) -> InteractionResult {
+        // TODO: Implement default leash and shears interactions once those foundations exist.
+        InteractionResult::Pass
+    }
 
     /// Returns true for entities that implement vanilla living-entity behavior.
     fn is_living_entity(&self) -> bool {

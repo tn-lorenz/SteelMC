@@ -27,8 +27,10 @@ use steel_registry::{
 };
 use steel_utils::locks::SyncMutex;
 use steel_utils::random::Random as _;
+use steel_utils::types::InteractionHand;
 use steel_utils::{BlockPos, BlockStateId, Identifier};
 
+use crate::behavior::InteractionResult;
 use crate::entity::ai::goal::{
     BreedGoal, FloatGoal, FollowParentGoal, LookAtPlayerGoal, PanicGoal, RandomLookAroundGoal,
     TemptGoal, WaterAvoidingRandomStrollGoal,
@@ -40,6 +42,7 @@ use crate::entity::{
     PathfinderMob, SharedEntity,
 };
 use crate::physics::MoveResult;
+use crate::player::Player;
 use crate::world::World;
 
 /// Vanilla pig entity.
@@ -504,6 +507,15 @@ impl Entity for PigEntity {
 
     fn hurt(&self, source: &DamageSource, amount: f32) -> bool {
         LivingEntity::hurt_server(self, source, amount)
+    }
+
+    fn interact(
+        &self,
+        player: &Player,
+        hand: InteractionHand,
+        location: DVec3,
+    ) -> InteractionResult {
+        Mob::interact_mob(self, player, hand, location)
     }
 
     fn save_additional(&self, nbt: &mut NbtCompound) {

@@ -14,7 +14,7 @@ use steel_protocol::packets::game::{
     CBundleDelimiter, SAcceptTeleportation, SAttack, SChangeDifficulty, SChangeGameMode, SChat,
     SChatAck, SChatCommand, SChatSessionUpdate, SChunkBatchReceived, SClientCommand,
     SClientTickEnd, SCommandSuggestion, SContainerButtonClick, SContainerClick, SContainerClose,
-    SContainerSlotStateChanged, SMovePlayerPos, SMovePlayerPosRot, SMovePlayerRot,
+    SContainerSlotStateChanged, SInteract, SMovePlayerPos, SMovePlayerPosRot, SMovePlayerRot,
     SMovePlayerStatusOnly, SMoveVehicle, SPickItemFromBlock, SPlayerAbilities, SPlayerAction,
     SPlayerCommand, SPlayerInput, SPlayerLoad, SSetCarriedItem, SSetCreativeModeSlot, SSignUpdate,
     SSwing, SUseItem, SUseItemOn,
@@ -320,6 +320,9 @@ impl JavaConnection {
             }
             play::S_ATTACK => {
                 player.handle_attack(SAttack::read_packet(data)?);
+            }
+            play::S_INTERACT => {
+                player.handle_interact(SInteract::read_packet(data)?);
             }
             play::S_CUSTOM_PAYLOAD => {
                 player.handle_custom_payload(SCustomPayload::read_packet(data)?);

@@ -84,6 +84,7 @@ mod s_container_button_click;
 mod s_container_click;
 mod s_container_close;
 mod s_container_slot_state_changed;
+mod s_interact;
 mod s_move_player;
 mod s_move_vehicle;
 mod s_pick_item_from_block;
@@ -197,6 +198,7 @@ pub use s_container_button_click::SContainerButtonClick;
 pub use s_container_click::{ClickType, HashedPatchMap, HashedStack, SContainerClick};
 pub use s_container_close::SContainerClose;
 pub use s_container_slot_state_changed::SContainerSlotStateChanged;
+pub use s_interact::SInteract;
 pub use s_move_player::{
     SMovePlayer, SMovePlayerPos, SMovePlayerPosRot, SMovePlayerRot, SMovePlayerStatusOnly,
 };
