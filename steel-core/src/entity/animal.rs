@@ -4,11 +4,11 @@ use std::sync::Arc;
 
 use simdnbt::borrow::NbtCompound as BorrowedNbtCompoundView;
 use simdnbt::owned::{NbtCompound, NbtTag};
-use steel_utils::UuidExt;
 use steel_utils::locks::SyncMutex;
+use steel_utils::{Identifier, UuidExt};
 use uuid::Uuid;
 
-use crate::entity::{AgeableMob, SharedEntity};
+use crate::entity::{AgeableMob, ENTITIES, SharedEntity, next_entity_id};
 use crate::world::World;
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
@@ -121,9 +121,47 @@ pub trait Animal: AgeableMob {
             && partner.is_in_love()
     }
 
+    /// Creates a same-type offspring using the registered entity factory.
+    fn create_breed_offspring(&self, world: &Arc<World>) -> Option<SharedEntity> {
+        ENTITIES.create(
+            self.entity_type(),
+            next_entity_id(),
+            self.position(),
+            Arc::downgrade(world),
+        )
+    }
+
+    /// Returns this animal's breedable variant key when offspring inherit it.
+    fn breed_variant_key(&self) -> Option<&Identifier> {
+        None
+    }
+
+    /// Applies a breedable variant key to offspring that inherit one.
+    fn set_breed_variant_key(&self, _key: &Identifier) -> bool {
+        false
+    }
+
+    /// Applies entity-specific state to freshly created breeding offspring.
+    fn initialize_breed_offspring(&self, _partner: &dyn Animal, _offspring: &dyn Animal) {}
+
     /// Creates this animal's vanilla breeding offspring.
-    fn get_breed_offspring(&self, world: &Arc<World>, partner: &dyn Animal)
-    -> Option<SharedEntity>;
+    fn get_breed_offspring(
+        &self,
+        world: &Arc<World>,
+        partner: &dyn Animal,
+    ) -> Option<SharedEntity> {
+        let offspring = self.create_breed_offspring(world)?;
+        let Some(offspring_animal) = offspring.as_animal() else {
+            log::error!(
+                "breeding entity type {} created non-animal offspring",
+                self.entity_type().key
+            );
+            return None;
+        };
+
+        self.initialize_breed_offspring(partner, offspring_animal);
+        Some(offspring)
+    }
 
     /// Ticks vanilla animal love state.
     fn tick_animal_love(&self) {

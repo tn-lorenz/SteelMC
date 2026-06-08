@@ -37,7 +37,7 @@ use crate::entity::damage::DamageSource;
 use crate::entity::{
     AgeableMob, AgeableMobBase, Animal, AnimalBase, Entity, EntityBase, EntityBaseLoad,
     EntitySyncedData, LivingEntity, LivingEntityBase, Mob, MobBase, MobEffectSyncChange,
-    PathfinderMob, SharedEntity, next_entity_id,
+    PathfinderMob, SharedEntity,
 };
 use crate::physics::MoveResult;
 use crate::world::World;
@@ -252,10 +252,12 @@ impl PigEntity {
         self.entity_data.lock().sound_variant.set(id);
     }
 
-    fn set_variant_by_key(&self, key: &Identifier) {
-        if let Some(id) = REGISTRY.pig_variants.id_from_key(key) {
-            self.set_variant_id_from_usize(id);
-        }
+    fn set_variant_by_key(&self, key: &Identifier) -> bool {
+        let Some(id) = REGISTRY.pig_variants.id_from_key(key) else {
+            return false;
+        };
+        self.set_variant_id_from_usize(id);
+        true
     }
 
     fn set_sound_variant_by_key(&self, key: &Identifier) {
@@ -613,17 +615,31 @@ impl Animal for PigEntity {
         &self.animal_base
     }
 
-    fn get_breed_offspring(
-        &self,
-        world: &Arc<World>,
-        _partner: &dyn Animal,
-    ) -> Option<SharedEntity> {
-        Some(Arc::new(PigEntity::new(
-            self.entity_type,
-            next_entity_id(),
-            self.position(),
-            Arc::downgrade(world),
-        )))
+    fn breed_variant_key(&self) -> Option<&Identifier> {
+        Some(&self.variant().key)
+    }
+
+    fn set_breed_variant_key(&self, key: &Identifier) -> bool {
+        self.set_variant_by_key(key)
+    }
+
+    fn initialize_breed_offspring(&self, partner: &dyn Animal, offspring: &dyn Animal) {
+        let use_self_variant = self.base().random().lock().next_bool();
+        let variant_key = if use_self_variant {
+            self.breed_variant_key()
+        } else {
+            partner.breed_variant_key()
+        };
+        let Some(variant_key) = variant_key else {
+            return;
+        };
+
+        if !offspring.set_breed_variant_key(variant_key) {
+            log::error!(
+                "pig offspring could not inherit breeding variant {}",
+                variant_key
+            );
+        }
     }
 }
 
@@ -775,6 +791,36 @@ mod tests {
 
         assert!(pig.can_mate(&partner));
         assert!(!pig.can_mate(&pig));
+    }
+
+    #[test]
+    fn pig_breeding_offspring_inherits_parent_variant() {
+        init_test_registry();
+
+        let pig = PigEntity::new(&vanilla_entities::PIG, 1, DVec3::ZERO, Weak::new());
+        let partner = PigEntity::new(
+            &vanilla_entities::PIG,
+            2,
+            DVec3::new(1.0, 0.0, 0.0),
+            Weak::new(),
+        );
+        let offspring = PigEntity::new(
+            &vanilla_entities::PIG,
+            3,
+            DVec3::new(2.0, 0.0, 0.0),
+            Weak::new(),
+        );
+        pig.set_variant(&vanilla_pig_variants::WARM);
+        partner.set_variant(&vanilla_pig_variants::COLD);
+        offspring.set_variant(&vanilla_pig_variants::TEMPERATE);
+
+        pig.initialize_breed_offspring(&partner, &offspring);
+
+        let variant_key = &offspring.variant().key;
+        assert!(
+            variant_key == &vanilla_pig_variants::WARM.key
+                || variant_key == &vanilla_pig_variants::COLD.key
+        );
     }
 
     #[test]
