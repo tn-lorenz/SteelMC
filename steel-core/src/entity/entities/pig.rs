@@ -1,9 +1,6 @@
 //! Pig entity implementation.
 //!
-//! This is the first concrete pathfinder mob foundation. Remaining ridden
-//! movement plus loot/leash/home persistence are follow-up systems; this entity
-//! owns the vanilla synchronized data, age state, mob flags, living attributes,
-//! and shared mob control shell.
+//! This is the first concrete pathfinder mob foundation.
 
 use std::str::FromStr;
 use std::sync::{Arc, Weak};
