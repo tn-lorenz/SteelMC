@@ -1,9 +1,9 @@
 //! Pig entity implementation.
 //!
-//! This is the first concrete pathfinder mob foundation. Goal selectors,
-//! breeding, saddle/riding, and loot/leash/home persistence are follow-up
-//! systems; this entity owns the vanilla synchronized data, age state, mob
-//! flags, living attributes, and shared mob control shell.
+//! This is the first concrete pathfinder mob foundation. Remaining ridden
+//! movement plus loot/leash/home persistence are follow-up systems; this entity
+//! owns the vanilla synchronized data, age state, mob flags, living attributes,
+//! and shared mob control shell.
 
 use std::str::FromStr;
 use std::sync::{Arc, Weak};
@@ -440,6 +440,14 @@ impl Entity for PigEntity {
         Some(self)
     }
 
+    fn is_mob(&self) -> bool {
+        true
+    }
+
+    fn as_mob(&self) -> Option<&dyn Mob> {
+        Some(self)
+    }
+
     fn is_animal(&self) -> bool {
         true
     }
@@ -850,6 +858,23 @@ mod tests {
     }
 
     #[test]
+    fn pig_exposes_mob_behavior_without_downcasting() {
+        init_test_registry();
+
+        let pig = PigEntity::new(&vanilla_entities::PIG, 1, DVec3::ZERO, Weak::new());
+        let entity = &pig as &dyn Entity;
+
+        assert!(entity.is_mob());
+        let Some(mob) = entity.as_mob() else {
+            panic!("pig should expose mob behavior");
+        };
+        assert_eq!(
+            mob.equipment_drop_chance(EquipmentSlot::Saddle).to_bits(),
+            0.085_f32.to_bits()
+        );
+    }
+
+    #[test]
     fn pig_exposes_animal_behavior_without_downcasting() {
         init_test_registry();
 
@@ -959,6 +984,31 @@ mod tests {
             Some("minecraft:entity.pig.saddle".to_owned())
         );
         assert!(LivingEntity::equip_sound(&pig, EquipmentSlot::Head, &saddle).is_none());
+    }
+
+    #[test]
+    fn mob_guaranteed_drop_marks_slot_preserved() {
+        init_test_registry();
+
+        let pig = PigEntity::new(&vanilla_entities::PIG, 1, DVec3::ZERO, Weak::new());
+
+        assert_eq!(
+            pig.equipment_drop_chance(EquipmentSlot::Saddle).to_bits(),
+            0.085_f32.to_bits()
+        );
+        assert!(!pig.is_equipment_drop_preserved(EquipmentSlot::Saddle));
+
+        pig.set_guaranteed_drop(EquipmentSlot::Saddle);
+
+        assert_eq!(
+            pig.equipment_drop_chance(EquipmentSlot::Saddle).to_bits(),
+            2.0_f32.to_bits()
+        );
+        assert!(pig.is_equipment_drop_preserved(EquipmentSlot::Saddle));
+        assert_eq!(
+            pig.equipment_drop_chance(EquipmentSlot::Head).to_bits(),
+            0.085_f32.to_bits()
+        );
     }
 
     #[test]

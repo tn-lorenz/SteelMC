@@ -1429,6 +1429,19 @@ pub trait Entity: EntityEventSource + Send + Sync {
         None
     }
 
+    /// Returns true for entities that implement vanilla mob behavior.
+    fn is_mob(&self) -> bool {
+        false
+    }
+
+    /// Returns this entity as a mob when it has mob behavior.
+    ///
+    /// Mirrors vanilla's frequent `instanceof Mob` branches without requiring
+    /// core code to downcast through `Any`.
+    fn as_mob(&self) -> Option<&dyn Mob> {
+        None
+    }
+
     /// Returns true for entities that implement vanilla animal behavior.
     fn is_animal(&self) -> bool {
         false
@@ -3847,7 +3860,9 @@ pub trait LivingEntity: Entity {
         if let Some(sound) = self.equip_sound(slot, &equipped) {
             self.play_sound(sound, 1.0, 1.0);
         }
-        // TODO: Mark guaranteed equipment drops once mob death-loot foundations exist.
+        if let Some(mob) = self.as_mob() {
+            mob.set_guaranteed_drop(slot);
+        }
         // TODO: Emit EQUIP game event once game-event dispatch is implemented.
         InteractionResult::Success
     }

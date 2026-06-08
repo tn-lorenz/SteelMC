@@ -22,6 +22,7 @@ use crate::entity::ai::navigation::{
 use crate::entity::ai::path::{Path, PathType, PathfindingContext, PathfindingMalus};
 use crate::entity::ai::walk::{MobPathSettings, WalkNodeEvaluator, WalkPathEvaluator};
 use crate::entity::{Entity, LivingEntity, LivingTravelInput, RemovalReason};
+use crate::inventory::equipment::EquipmentSlot;
 use crate::physics::WorldCollisionProvider;
 use crate::player::Player;
 use crate::world::{LevelReader, World};
@@ -31,6 +32,34 @@ const MOB_FLAG_LEFT_HANDED: i8 = 2;
 const MOB_FLAG_AGGRESSIVE: i8 = 4;
 const MOVE_CONTROL_MIN_SPEED_SQR: f64 = 2.500_000_3e-7;
 const MOVE_CONTROL_MAX_TURN: f32 = 90.0;
+const DEFAULT_EQUIPMENT_DROP_CHANCE: f32 = 0.085;
+const PRESERVE_ITEM_DROP_CHANCE_THRESHOLD: f32 = 1.0;
+const PRESERVE_ITEM_DROP_CHANCE: f32 = 2.0;
+
+#[derive(Debug, Clone, Copy, PartialEq)]
+struct DropChances {
+    by_equipment: [f32; EquipmentSlot::ALL.len()],
+}
+
+impl DropChances {
+    const DEFAULT: Self = Self {
+        by_equipment: [DEFAULT_EQUIPMENT_DROP_CHANCE; EquipmentSlot::ALL.len()],
+    };
+
+    #[must_use]
+    fn by_equipment(self, slot: EquipmentSlot) -> f32 {
+        self.by_equipment[slot.index()]
+    }
+
+    fn set_guaranteed_drop(&mut self, slot: EquipmentSlot) {
+        self.by_equipment[slot.index()] = PRESERVE_ITEM_DROP_CHANCE;
+    }
+
+    #[must_use]
+    fn is_preserved(self, slot: EquipmentSlot) -> bool {
+        self.by_equipment(slot) > PRESERVE_ITEM_DROP_CHANCE_THRESHOLD
+    }
+}
 
 #[derive(Debug)]
 pub struct MobBase {
@@ -40,6 +69,7 @@ pub struct MobBase {
     navigation: SyncMutex<PathNavigation>,
     pathfinding_malus: SyncMutex<PathfindingMalus>,
     persistence_required: SyncMutex<bool>,
+    drop_chances: SyncMutex<DropChances>,
     home_restriction: SyncMutex<MobHomeRestriction>,
 }
 
@@ -72,6 +102,7 @@ impl MobBase {
             navigation: SyncMutex::new(PathNavigation::new()),
             pathfinding_malus: SyncMutex::new(pathfinding_malus),
             persistence_required: SyncMutex::new(false),
+            drop_chances: SyncMutex::new(DropChances::DEFAULT),
             home_restriction: SyncMutex::new(MobHomeRestriction::none()),
         }
     }
@@ -104,6 +135,10 @@ impl MobBase {
     #[must_use]
     pub const fn persistence_required(&self) -> &SyncMutex<bool> {
         &self.persistence_required
+    }
+
+    const fn drop_chances(&self) -> &SyncMutex<DropChances> {
+        &self.drop_chances
     }
 
     const fn home_restriction(&self) -> &SyncMutex<MobHomeRestriction> {
@@ -169,6 +204,21 @@ pub trait Mob: LivingEntity {
 
     fn set_persistence_required(&self) {
         *self.mob_base().persistence_required().lock() = true;
+    }
+
+    fn equipment_drop_chance(&self, slot: EquipmentSlot) -> f32 {
+        self.mob_base().drop_chances().lock().by_equipment(slot)
+    }
+
+    fn is_equipment_drop_preserved(&self, slot: EquipmentSlot) -> bool {
+        self.mob_base().drop_chances().lock().is_preserved(slot)
+    }
+
+    fn set_guaranteed_drop(&self, slot: EquipmentSlot) {
+        self.mob_base()
+            .drop_chances()
+            .lock()
+            .set_guaranteed_drop(slot);
     }
 
     fn is_within_home(&self) -> bool {
