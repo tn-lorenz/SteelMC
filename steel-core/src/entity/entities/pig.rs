@@ -859,7 +859,8 @@ mod tests {
     use crate::entity::ai::node::Node;
     use crate::entity::ai::path::{Path, PathType};
     use crate::entity::damage::DamageSource;
-    use crate::entity::{Animal, DEATH_DURATION, ItemSteerable, RemovalReason};
+    use crate::entity::mob::LeashAttachment;
+    use crate::entity::{Animal, DEATH_DURATION, ItemSteerable, RemovalReason, SharedEntity};
     use crate::inventory::equipment::EquipmentSlot;
 
     use super::*;
@@ -1381,6 +1382,13 @@ mod tests {
         pig.set_home_to(BlockPos::new(11, 64, -3), 7);
         pig.set_death_loot_table(Some(Identifier::vanilla_static("entities/pig")));
         pig.set_death_loot_table_seed(1234);
+        let leash_holder: SharedEntity = Arc::new(PigEntity::new(
+            &vanilla_entities::PIG,
+            2,
+            DVec3::ZERO,
+            Weak::new(),
+        ));
+        assert!(pig.set_leashed_to(&leash_holder));
         pig.set_no_ai(true);
         pig.set_left_handed(true);
         pig.set_age(-24_000);
@@ -1409,6 +1417,13 @@ mod tests {
             Some("minecraft:entities/pig".to_owned())
         );
         assert_eq!(nbt.long("DeathLootTableSeed"), Some(1234));
+        let Some(leash) = nbt.compound("leash") else {
+            panic!("live leash holder should save as a UUID compound");
+        };
+        assert_eq!(
+            leash.int_array("UUID").map(|value| value.to_vec()),
+            Some(leash_holder.uuid().to_int_array().to_vec())
+        );
         assert_eq!(nbt.byte("NoAI"), Some(1));
         assert_eq!(nbt.byte("LeftHanded"), Some(1));
         assert_eq!(nbt.int("Age"), Some(-24_000));
@@ -1438,6 +1453,10 @@ mod tests {
         nbt.insert("home_pos", NbtTag::IntArray(vec![11, 64, -3]));
         nbt.insert("DeathLootTable", "minecraft:entities/pig");
         nbt.insert("DeathLootTableSeed", 1234_i64);
+        let leash_uuid = Uuid::from_u128(43);
+        let mut leash = NbtCompound::new();
+        leash.insert("UUID", NbtTag::IntArray(leash_uuid.to_int_array().to_vec()));
+        nbt.insert("leash", NbtTag::Compound(leash));
         nbt.insert("NoAI", 1_i8);
         nbt.insert("LeftHanded", 1_i8);
         nbt.insert("Age", -24_000_i32);
@@ -1474,6 +1493,12 @@ mod tests {
             Some("minecraft:entities/pig".to_owned())
         );
         assert_eq!(saved.long("DeathLootTableSeed"), Some(1234));
+        assert!(pig.may_be_leashed());
+        assert!(!pig.is_leashed());
+        assert_eq!(
+            pig.leash_attachment(),
+            Some(LeashAttachment::Entity(leash_uuid))
+        );
         assert!(pig.is_no_ai());
         assert!(pig.is_left_handed());
         assert_eq!(pig.get_age(), -24_000);
@@ -1483,6 +1508,45 @@ mod tests {
         assert_eq!(
             pig.sound_variant().key,
             vanilla_pig_sound_variants::MINI.key
+        );
+    }
+
+    #[test]
+    fn pig_saves_delayed_fence_knot_leash_as_vanilla_block_pos_int_array() {
+        init_test_registry();
+
+        let pig = PigEntity::new(&vanilla_entities::PIG, 1, DVec3::ZERO, Weak::new());
+        pig.set_delayed_leash_attachment(LeashAttachment::FenceKnot(BlockPos::new(4, 65, -9)));
+
+        let mut nbt = NbtCompound::new();
+        pig.save_additional(&mut nbt);
+
+        assert_eq!(
+            nbt.int_array("leash").map(|value| value.to_vec()),
+            Some(vec![4, 65, -9])
+        );
+    }
+
+    #[test]
+    fn pig_loads_delayed_fence_knot_leash_from_vanilla_block_pos_int_array() {
+        init_test_registry();
+
+        let mut nbt = NbtCompound::new();
+        nbt.insert("leash", NbtTag::IntArray(vec![4, 65, -9]));
+
+        let mut bytes = Vec::new();
+        nbt.write(&mut bytes);
+        let borrowed = read_borrowed_compound(&mut Cursor::new(&bytes))
+            .unwrap_or_else(|error| panic!("test nbt should reborrow: {error}"));
+
+        let pig = PigEntity::new(&vanilla_entities::PIG, 1, DVec3::ZERO, Weak::new());
+        pig.load_additional((&borrowed).into());
+
+        assert!(pig.may_be_leashed());
+        assert!(!pig.is_leashed());
+        assert_eq!(
+            pig.leash_attachment(),
+            Some(LeashAttachment::FenceKnot(BlockPos::new(4, 65, -9)))
         );
     }
 

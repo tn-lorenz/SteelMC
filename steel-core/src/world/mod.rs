@@ -20,8 +20,8 @@ use sha2::{Digest, Sha256};
 use steel_protocol::packets::game::{
     CBlockDestruction, CBlockEvent, CGameEvent, CInitializeBorder, CLevelEvent, CPlayerChat,
     CPlayerInfoUpdate, CSetBorderCenter, CSetBorderLerpSize, CSetBorderSize,
-    CSetBorderWarningDelay, CSetBorderWarningDistance, CSetEntityData, CSetEquipment, CSound,
-    CSystemChat, CUpdateAttributes, GameEventType, SoundSource,
+    CSetBorderWarningDelay, CSetBorderWarningDistance, CSetEntityData, CSetEntityLink,
+    CSetEquipment, CSound, CSystemChat, CUpdateAttributes, GameEventType, SoundSource,
 };
 use steel_protocol::utils::ConnectionProtocol;
 use steel_protocol::{
@@ -1446,6 +1446,16 @@ impl World {
                         if let Some(player) = self.players.get_by_entity_id(player_id) {
                             player.send_packet(packet);
                         }
+                    },
+                    entity_link: |entity_id, packet: CSetEntityLink| {
+                        let Ok(encoded) = EncodedPacket::from_bare(
+                            packet,
+                            self.compression,
+                            ConnectionProtocol::Play,
+                        ) else {
+                            return;
+                        };
+                        self.broadcast_to_entity_trackers_encoded(entity_id, encoded, None);
                     },
                 },
             );

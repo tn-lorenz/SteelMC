@@ -9,8 +9,9 @@ use std::sync::Arc;
 use glam::DVec3;
 use rustc_hash::FxHashSet;
 use steel_protocol::packets::game::{
-    AttributeSnapshot, CAddEntity, CRemoveEntities, CSetEntityData, CSetEntityMotion,
-    CSetEquipment, CSetPassengers, CUpdateAttributes, EquipmentSlotItem, to_angle_byte,
+    AttributeSnapshot, CAddEntity, CRemoveEntities, CSetEntityData, CSetEntityLink,
+    CSetEntityMotion, CSetEquipment, CSetPassengers, CUpdateAttributes, EquipmentSlotItem,
+    to_angle_byte,
 };
 use steel_registry::entity_data::DataValue;
 use steel_registry::{RegistryEntry, vanilla_entities};
@@ -41,6 +42,7 @@ pub struct EntityChangeSenders<
     MobEffects,
     Equipment,
     Passengers,
+    EntityLink,
 > {
     /// Broadcasts movement and velocity sync packets.
     pub movement: Movement,
@@ -56,6 +58,8 @@ pub struct EntityChangeSenders<
     pub equipment: Equipment,
     /// Sends passenger updates to a specific player.
     pub passengers: Passengers,
+    /// Broadcasts leash/link holder updates.
+    pub entity_link: EntityLink,
 }
 
 /// Tracking data for a single entity.
@@ -66,6 +70,8 @@ struct TrackedEntity {
     server_entity: SyncMutex<ServerEntityMovementSyncState>,
     /// Last direct passenger ids sent to tracking clients.
     last_passenger_ids: SyncMutex<Vec<i32>>,
+    /// Last leash holder id sent to tracking clients.
+    last_leash_holder_id: SyncMutex<Option<i32>>,
     /// Vanilla client tracking range converted to blocks.
     tracking_range: EntityTrackingRange,
     /// Current chunk used by the player-view predicate.
@@ -167,6 +173,7 @@ impl EntityTracker {
                 entity.entity_type().track_deltas,
             )),
             last_passenger_ids: SyncMutex::new(self.direct_tracked_passenger_ids(entity.as_ref())),
+            last_leash_holder_id: SyncMutex::new(leash_holder_id(entity.as_ref())),
             tracking_range,
             registered_chunk,
             seen_by: SyncRwLock::new(players_to_notify),
@@ -289,6 +296,7 @@ impl EntityTracker {
         MobEffects,
         Equipment,
         Passengers,
+        EntityLink,
     >(
         &self,
         get_players_in_chunk: impl Fn(ChunkPos) -> Vec<i32>,
@@ -301,6 +309,7 @@ impl EntityTracker {
             MobEffects,
             Equipment,
             Passengers,
+            EntityLink,
         >,
     ) where
         Movement: FnMut(i32, EntityMovementSyncPacket),
@@ -310,6 +319,7 @@ impl EntityTracker {
         MobEffects: FnMut(i32, MobEffectSyncPacket),
         Equipment: FnMut(i32, CSetEquipment),
         Passengers: FnMut(i32, CSetPassengers),
+        EntityLink: FnMut(i32, CSetEntityLink),
     {
         let mut dead_entities = Vec::new();
         let mut entities_to_refresh = Vec::new();
@@ -320,6 +330,7 @@ impl EntityTracker {
         let mut attributes_to_broadcast = Vec::new();
         let mut mob_effect_packets_to_send = Vec::new();
         let mut equipment_to_broadcast = Vec::new();
+        let mut entity_links_to_broadcast = Vec::new();
 
         self.entities.iter_sync(|entity_id, tracked| {
             let entity_id = *entity_id;
@@ -435,6 +446,18 @@ impl EntityTracker {
                 equipment_to_broadcast.push((entity_id, dirty_equipment));
             }
 
+            let leash_holder_id = leash_holder_id(entity.as_ref());
+            {
+                let mut last_leash_holder_id = tracked.last_leash_holder_id.lock();
+                if *last_leash_holder_id != leash_holder_id {
+                    entity_links_to_broadcast.push((
+                        entity_id,
+                        CSetEntityLink::new(entity_id, leash_holder_id.unwrap_or_default()),
+                    ));
+                    *last_leash_holder_id = leash_holder_id;
+                }
+            }
+
             true
         });
 
@@ -472,6 +495,10 @@ impl EntityTracker {
 
         for (entity_id, dirty_equipment) in equipment_to_broadcast {
             (senders.equipment)(entity_id, CSetEquipment::new(entity_id, dirty_equipment));
+        }
+
+        for (entity_id, packet) in entity_links_to_broadcast {
+            (senders.entity_link)(entity_id, packet);
         }
     }
 
@@ -756,6 +783,13 @@ impl EntityTracker {
     }
 }
 
+fn leash_holder_id(entity: &dyn Entity) -> Option<i32> {
+    entity
+        .as_mob()
+        .and_then(|mob| mob.leash_holder())
+        .map(|holder| holder.id())
+}
+
 fn is_within_tracking_distance(
     entity_pos: DVec3,
     player_pos: DVec3,
@@ -802,6 +836,7 @@ struct EntitySpawnPairing {
     attributes: Vec<AttributeSnapshot>,
     equipment: Vec<EquipmentSlotItem>,
     passenger_packets: Vec<CSetPassengers>,
+    entity_link_packet: Option<CSetEntityLink>,
 }
 
 impl EntitySpawnPairing {
@@ -838,6 +873,8 @@ impl EntitySpawnPairing {
             attributes: entity.pack_syncable_attributes(),
             equipment: entity.pack_all_equipment(),
             passenger_packets,
+            entity_link_packet: leash_holder_id(entity.as_ref())
+                .map(|holder_id| CSetEntityLink::new(entity.id(), holder_id)),
         }
     }
 
@@ -861,7 +898,9 @@ impl EntitySpawnPairing {
                 bundle.add(packet);
             }
 
-            // TODO: Add leash/link packets when those runtime systems exist.
+            if let Some(packet) = self.entity_link_packet {
+                bundle.add(packet);
+            }
         });
     }
 }
@@ -894,7 +933,7 @@ mod tests {
     };
 
     use super::*;
-    use crate::entity::EntityBase;
+    use crate::entity::{EntityBase, Mob, entities::PigEntity};
     use crate::inventory::equipment::EquipmentSlot;
 
     struct PairingTestEntity {
@@ -1019,6 +1058,7 @@ mod tests {
             last_passenger_ids: SyncMutex::new(
                 tracker.direct_tracked_passenger_ids(entity.as_ref()),
             ),
+            last_leash_holder_id: SyncMutex::new(leash_holder_id(entity.as_ref())),
             tracking_range: EntityTrackingRange::from_client_chunk_range(
                 entity.entity_type().client_tracking_range,
             ),
@@ -1191,6 +1231,7 @@ mod tests {
                 mob_effects: |_, _| {},
                 equipment: |_, _| {},
                 passengers: |_, _| {},
+                entity_link: |_, _| {},
             },
         );
 
@@ -1212,6 +1253,7 @@ mod tests {
                 mob_effects: |_, _| {},
                 equipment: |_, _| {},
                 passengers: |_, _| {},
+                entity_link: |_, _| {},
             },
         );
         assert!(updates.is_empty());
@@ -1244,6 +1286,7 @@ mod tests {
                 mob_effects: |_, _| {},
                 equipment: |entity_id, packet| updates.push((entity_id, packet)),
                 passengers: |_, _| {},
+                entity_link: |_, _| {},
             },
         );
 
@@ -1266,6 +1309,7 @@ mod tests {
                 mob_effects: |_, _| {},
                 equipment: |entity_id, packet| updates.push((entity_id, packet)),
                 passengers: |_, _| {},
+                entity_link: |_, _| {},
             },
         );
         assert!(updates.is_empty());
@@ -1296,6 +1340,7 @@ mod tests {
                 mob_effects: |_, _| {},
                 equipment: |_, _| {},
                 passengers: |_, _| {},
+                entity_link: |_, _| {},
             },
         );
 
@@ -1388,6 +1433,112 @@ mod tests {
     }
 
     #[test]
+    fn spawn_pairing_includes_live_mob_leash_link_packet() {
+        test_support::init_test_registry();
+
+        let tracker = EntityTracker::new();
+        let pig_typed = Arc::new(PigEntity::new(
+            &vanilla_entities::PIG,
+            1,
+            DVec3::ZERO,
+            Weak::new(),
+        ));
+        let holder: SharedEntity = PairingTestEntity::new(2, Vec::new());
+        assert!(pig_typed.set_leashed_to(&holder));
+        let pig: SharedEntity = pig_typed;
+
+        let pairing = tracker.spawn_pairing(&pig, 99);
+
+        assert_eq!(pairing.entity_link_packet, Some(CSetEntityLink::new(1, 2)));
+    }
+
+    #[test]
+    fn send_changes_broadcasts_leash_link_changes_once() {
+        test_support::init_test_registry();
+
+        let tracker = EntityTracker::new();
+        let pig: SharedEntity = Arc::new(PigEntity::new(
+            &vanilla_entities::PIG,
+            1,
+            DVec3::ZERO,
+            Weak::new(),
+        ));
+        let holder: SharedEntity = PairingTestEntity::new(2, Vec::new());
+        track_entity_for_player(&tracker, &pig, 99);
+        let Some(pig_mob) = pig.as_mob() else {
+            panic!("pig should expose mob behavior");
+        };
+
+        let mut updates = Vec::new();
+        tracker.send_changes(
+            |_| Vec::new(),
+            |_| None,
+            EntityChangeSenders {
+                movement: |_, _| {},
+                self_movement: |_, _| {},
+                entity_data: |_, _| {},
+                attributes: |_, _| {},
+                mob_effects: |_, _| {},
+                equipment: |_, _| {},
+                passengers: |_, _| {},
+                entity_link: |entity_id, packet| updates.push((entity_id, packet)),
+            },
+        );
+        assert!(updates.is_empty());
+
+        assert!(pig_mob.set_leashed_to(&holder));
+        tracker.send_changes(
+            |_| Vec::new(),
+            |_| None,
+            EntityChangeSenders {
+                movement: |_, _| {},
+                self_movement: |_, _| {},
+                entity_data: |_, _| {},
+                attributes: |_, _| {},
+                mob_effects: |_, _| {},
+                equipment: |_, _| {},
+                passengers: |_, _| {},
+                entity_link: |entity_id, packet| updates.push((entity_id, packet)),
+            },
+        );
+        assert_eq!(updates, vec![(1, CSetEntityLink::new(1, 2))]);
+
+        updates.clear();
+        tracker.send_changes(
+            |_| Vec::new(),
+            |_| None,
+            EntityChangeSenders {
+                movement: |_, _| {},
+                self_movement: |_, _| {},
+                entity_data: |_, _| {},
+                attributes: |_, _| {},
+                mob_effects: |_, _| {},
+                equipment: |_, _| {},
+                passengers: |_, _| {},
+                entity_link: |entity_id, packet| updates.push((entity_id, packet)),
+            },
+        );
+        assert!(updates.is_empty());
+
+        pig_mob.remove_leash_state();
+        tracker.send_changes(
+            |_| Vec::new(),
+            |_| None,
+            EntityChangeSenders {
+                movement: |_, _| {},
+                self_movement: |_, _| {},
+                entity_data: |_, _| {},
+                attributes: |_, _| {},
+                mob_effects: |_, _| {},
+                equipment: |_, _| {},
+                passengers: |_, _| {},
+                entity_link: |entity_id, packet| updates.push((entity_id, packet)),
+            },
+        );
+        assert_eq!(updates, vec![(1, CSetEntityLink::new(1, 0))]);
+    }
+
+    #[test]
     fn send_changes_broadcasts_passenger_changes_once() {
         test_support::init_test_registry();
 
@@ -1413,6 +1564,7 @@ mod tests {
                 passengers: |player_id, packet| {
                     updates.push((player_id, packet));
                 },
+                entity_link: |_, _| {},
             },
         );
         assert!(updates.is_empty());
@@ -1431,6 +1583,7 @@ mod tests {
                 passengers: |player_id, packet| {
                     updates.push((player_id, packet));
                 },
+                entity_link: |_, _| {},
             },
         );
         assert_eq!(updates.len(), 1);
@@ -1452,6 +1605,7 @@ mod tests {
                 passengers: |player_id, packet| {
                     updates.push((player_id, packet));
                 },
+                entity_link: |_, _| {},
             },
         );
         assert!(updates.is_empty());
@@ -1471,6 +1625,7 @@ mod tests {
                 passengers: |player_id, packet| {
                     updates.push((player_id, packet));
                 },
+                entity_link: |_, _| {},
             },
         );
         assert_eq!(updates.len(), 1);
@@ -1508,6 +1663,7 @@ mod tests {
                 passengers: |player_id, packet| {
                     updates.push((player_id, packet));
                 },
+                entity_link: |_, _| {},
             },
         );
 

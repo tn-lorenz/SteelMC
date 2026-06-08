@@ -11,10 +11,12 @@ use steel_registry::blocks::block_state_ext::BlockStateExt as _;
 use steel_registry::enchantment_effect::EnchantmentEffectComponent;
 use steel_registry::vanilla_attributes;
 use steel_registry::vanilla_block_tags::BlockTag;
+use steel_utils::UuidExt;
 use steel_utils::locks::SyncMutex;
 use steel_utils::random::Random as _;
 use steel_utils::types::InteractionHand;
 use steel_utils::{BlockPos, ChunkPos, Identifier, axis::Axis};
+use uuid::Uuid;
 
 use crate::behavior::{BLOCK_BEHAVIORS, BlockCollisionContext, InteractionResult};
 use crate::entity::ai::control::{MobControls, MoveControlOperation};
@@ -25,7 +27,9 @@ use crate::entity::ai::navigation::{
 use crate::entity::ai::path::{Path, PathType, PathfindingContext, PathfindingMalus};
 use crate::entity::ai::walk::{MobPathSettings, WalkNodeEvaluator, WalkPathEvaluator};
 use crate::entity::damage::DamageSource;
-use crate::entity::{Entity, LivingEntity, LivingTravelInput, RemovalReason};
+use crate::entity::{
+    Entity, LivingEntity, LivingTravelInput, RemovalReason, SharedEntity, WeakEntity,
+};
 use crate::inventory::equipment::EquipmentSlot;
 use crate::physics::WorldCollisionProvider;
 use crate::player::Player;
@@ -39,6 +43,7 @@ const MOVE_CONTROL_MAX_TURN: f32 = 90.0;
 const DEFAULT_EQUIPMENT_DROP_CHANCE: f32 = 0.085;
 const PRESERVE_ITEM_DROP_CHANCE_THRESHOLD: f32 = 1.0;
 const PRESERVE_ITEM_DROP_CHANCE: f32 = 2.0;
+const LEASH_SNAP_DISTANCE: f64 = 12.0;
 
 #[derive(Debug, Clone, Copy, PartialEq)]
 struct DropChances {
@@ -121,6 +126,7 @@ pub struct MobBase {
     home_restriction: SyncMutex<MobHomeRestriction>,
     death_loot_table: SyncMutex<Option<Identifier>>,
     death_loot_table_seed: SyncMutex<i64>,
+    leash_data: SyncMutex<Option<LeashData>>,
 }
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
@@ -129,12 +135,91 @@ struct MobHomeRestriction {
     radius: i32,
 }
 
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+pub enum LeashAttachment {
+    Entity(Uuid),
+    FenceKnot(BlockPos),
+}
+
+#[derive(Debug, Clone)]
+struct LeashData {
+    attachment: LeashAttachment,
+    holder: Option<WeakEntity>,
+    angular_momentum: f64,
+}
+
 impl MobHomeRestriction {
     const fn none() -> Self {
         Self {
             position: BlockPos::ZERO,
             radius: -1,
         }
+    }
+}
+
+impl LeashData {
+    fn from_entity(holder: &SharedEntity) -> Self {
+        Self {
+            attachment: LeashAttachment::Entity(holder.uuid()),
+            holder: Some(Arc::downgrade(holder)),
+            angular_momentum: 0.0,
+        }
+    }
+
+    const fn from_delayed_attachment(attachment: LeashAttachment) -> Self {
+        Self {
+            attachment,
+            holder: None,
+            angular_momentum: 0.0,
+        }
+    }
+
+    fn holder(&self) -> Option<SharedEntity> {
+        self.holder.as_ref().and_then(WeakEntity::upgrade)
+    }
+
+    fn saved_attachment(&self) -> LeashAttachment {
+        self.holder().map_or(self.attachment, |holder| {
+            LeashAttachment::Entity(holder.uuid())
+        })
+    }
+
+    fn set_holder(&mut self, holder: &SharedEntity) {
+        self.attachment = LeashAttachment::Entity(holder.uuid());
+        self.holder = Some(Arc::downgrade(holder));
+        self.angular_momentum = 0.0;
+    }
+
+    fn save(&self, nbt: &mut NbtCompound) {
+        match self.saved_attachment() {
+            LeashAttachment::Entity(uuid) => {
+                let mut leash = NbtCompound::new();
+                leash.insert("UUID", NbtTag::IntArray(uuid.to_int_array().to_vec()));
+                nbt.insert("leash", NbtTag::Compound(leash));
+            }
+            LeashAttachment::FenceKnot(pos) => {
+                nbt.insert("leash", NbtTag::IntArray(vec![pos.x(), pos.y(), pos.z()]));
+            }
+        }
+    }
+
+    fn load(nbt: BorrowedNbtCompoundView<'_, '_>) -> Option<Self> {
+        if let Some(leash) = nbt.compound("leash")
+            && let Some(uuid_array) = leash.int_array("UUID")
+            && let Some(uuid) = Uuid::from_int_array(&uuid_array)
+        {
+            return Some(Self::from_delayed_attachment(LeashAttachment::Entity(uuid)));
+        }
+
+        nbt.int_array("leash")
+            .filter(|position| position.len() == 3)
+            .map(|position| {
+                Self::from_delayed_attachment(LeashAttachment::FenceKnot(BlockPos::new(
+                    position[0],
+                    position[1],
+                    position[2],
+                )))
+            })
     }
 }
 
@@ -157,6 +242,7 @@ impl MobBase {
             home_restriction: SyncMutex::new(MobHomeRestriction::none()),
             death_loot_table: SyncMutex::new(None),
             death_loot_table_seed: SyncMutex::new(0),
+            leash_data: SyncMutex::new(None),
         }
     }
 
@@ -209,6 +295,10 @@ impl MobBase {
     const fn death_loot_table_seed(&self) -> &SyncMutex<i64> {
         &self.death_loot_table_seed
     }
+
+    const fn leash_data(&self) -> &SyncMutex<Option<LeashData>> {
+        &self.leash_data
+    }
 }
 
 impl Default for MobBase {
@@ -259,8 +349,7 @@ pub trait Mob: LivingEntity {
     }
 
     fn requires_custom_persistence(&self) -> bool {
-        // TODO: Include leash persistence once leash runtime exists.
-        self.is_passenger()
+        self.is_passenger() || self.is_leashed()
     }
 
     fn is_persistence_required(&self) -> bool {
@@ -358,6 +447,10 @@ pub trait Mob: LivingEntity {
             i8::from(self.is_persistence_required()),
         );
         self.mob_base().drop_chances().lock().save(nbt);
+        if let Some(leash_data) = self.mob_base().leash_data().lock().as_ref() {
+            leash_data.save(nbt);
+        }
+
         if self.has_home() {
             let home = *self.mob_base().home_restriction().lock();
             nbt.insert("home_radius", home.radius);
@@ -371,6 +464,7 @@ pub trait Mob: LivingEntity {
             );
         }
 
+        nbt.insert("LeftHanded", i8::from(self.is_left_handed()));
         if let Some(loot_table) = self.mob_base().death_loot_table().lock().as_ref() {
             nbt.insert("DeathLootTable", loot_table.to_string());
         }
@@ -378,9 +472,6 @@ pub trait Mob: LivingEntity {
         if loot_table_seed != 0 {
             nbt.insert("DeathLootTableSeed", loot_table_seed);
         }
-
-        // TODO: Persist leash data once that foundation exists.
-        nbt.insert("LeftHanded", i8::from(self.is_left_handed()));
         if self.is_no_ai() {
             nbt.insert("NoAI", i8::from(true));
         }
@@ -392,6 +483,8 @@ pub trait Mob: LivingEntity {
             .byte("PersistenceRequired")
             .is_some_and(|value| value != 0);
         *self.mob_base().drop_chances().lock() = DropChances::load(nbt);
+        *self.mob_base().leash_data().lock() = LeashData::load(nbt);
+        // TODO: Resolve delayed UUID/fence-knot attachments during leash ticks once fence knots exist.
         let home_radius = nbt.int("home_radius").unwrap_or(-1);
         if home_radius >= 0 {
             let home_position = nbt
@@ -405,13 +498,13 @@ pub trait Mob: LivingEntity {
             self.clear_home();
         }
 
+        self.set_left_handed(nbt.byte("LeftHanded").is_some_and(|value| value != 0));
         let death_loot_table = nbt
             .string("DeathLootTable")
             .and_then(|loot_table| loot_table.to_str().as_ref().parse().ok());
         *self.mob_base().death_loot_table().lock() = death_loot_table;
         *self.mob_base().death_loot_table_seed().lock() =
             nbt.long("DeathLootTableSeed").unwrap_or(0);
-        self.set_left_handed(nbt.byte("LeftHanded").is_some_and(|value| value != 0));
         self.set_no_ai(nbt.byte("NoAI").is_some_and(|value| value != 0));
     }
 
@@ -421,6 +514,80 @@ pub trait Mob: LivingEntity {
 
     fn set_death_loot_table_seed(&self, seed: i64) {
         *self.mob_base().death_loot_table_seed().lock() = seed;
+    }
+
+    fn is_leashed(&self) -> bool {
+        self.leash_holder().is_some()
+    }
+
+    fn may_be_leashed(&self) -> bool {
+        self.mob_base().leash_data().lock().is_some()
+    }
+
+    fn leash_holder(&self) -> Option<SharedEntity> {
+        self.mob_base()
+            .leash_data()
+            .lock()
+            .as_ref()
+            .and_then(LeashData::holder)
+    }
+
+    fn leash_attachment(&self) -> Option<LeashAttachment> {
+        self.mob_base()
+            .leash_data()
+            .lock()
+            .as_ref()
+            .map(LeashData::saved_attachment)
+    }
+
+    fn set_delayed_leash_attachment(&self, attachment: LeashAttachment) {
+        *self.mob_base().leash_data().lock() = Some(LeashData::from_delayed_attachment(attachment));
+    }
+
+    fn can_be_leashed(&self) -> bool {
+        // TODO: Return false for enemy mobs once hostile mob foundations exist.
+        true
+    }
+
+    fn leash_distance_to(&self, holder: &dyn Entity) -> f64 {
+        self.position().distance(holder.position())
+    }
+
+    fn leash_snap_distance(&self) -> f64 {
+        LEASH_SNAP_DISTANCE
+    }
+
+    fn can_have_a_leash_attached_to(&self, holder: &dyn Entity) -> bool {
+        self.id() != holder.id()
+            && self.leash_distance_to(holder) <= self.leash_snap_distance()
+            && self.can_be_leashed()
+    }
+
+    fn set_leashed_to(&self, holder: &SharedEntity) -> bool {
+        if self.id() == holder.id() {
+            return false;
+        }
+
+        {
+            let mut leash_data = self.mob_base().leash_data().lock();
+            if let Some(leash_data) = leash_data.as_mut() {
+                leash_data.set_holder(holder);
+            } else {
+                *leash_data = Some(LeashData::from_entity(holder));
+            }
+        }
+
+        if self.is_passenger() {
+            self.stop_riding();
+        }
+        // TODO: Notify old/new leash holders once holder notification hooks exist.
+        true
+    }
+
+    fn remove_leash_state(&self) {
+        if self.mob_base().leash_data().lock().take().is_some() {
+            // TODO: Apply full dropLeash behavior once leash ticking and holder hooks exist.
+        }
     }
 
     fn is_within_home(&self) -> bool {
