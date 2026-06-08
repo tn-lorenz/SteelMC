@@ -654,6 +654,14 @@ impl LivingEntity for PigEntity {
         AgeableMob::is_baby(self)
     }
 
+    fn hurt_sound(&self, _source: &DamageSource) -> Option<SoundEventRef> {
+        Some(self.current_sound_set().hurt_sound)
+    }
+
+    fn death_sound(&self) -> Option<SoundEventRef> {
+        Some(self.current_sound_set().death_sound)
+    }
+
     fn can_use_slot(&self, slot: EquipmentSlot) -> bool {
         slot != EquipmentSlot::Saddle || self.can_use_saddle_slot()
     }
@@ -1195,6 +1203,31 @@ mod tests {
             Some("minecraft:entity.pig.saddle".to_owned())
         );
         assert!(LivingEntity::equip_sound(&pig, EquipmentSlot::Head, &saddle).is_none());
+    }
+
+    #[test]
+    fn pig_hurt_and_death_sounds_use_current_sound_variant() {
+        init_test_registry();
+
+        let pig = PigEntity::new(&vanilla_entities::PIG, 1, DVec3::ZERO, Weak::new());
+        let source = DamageSource::environment(&vanilla_damage_types::GENERIC);
+
+        assert_eq!(
+            LivingEntity::hurt_sound(&pig, &source).map(|sound| &sound.key),
+            Some(&sound_events::ENTITY_PIG_HURT.key)
+        );
+
+        pig.set_sound_variant(&vanilla_pig_sound_variants::BIG);
+        assert_eq!(
+            LivingEntity::death_sound(&pig).map(|sound| &sound.key),
+            Some(&sound_events::ENTITY_PIG_BIG_DEATH.key)
+        );
+
+        pig.set_baby(true);
+        assert_eq!(
+            LivingEntity::hurt_sound(&pig, &source).map(|sound| &sound.key),
+            Some(&sound_events::ENTITY_BABY_PIG_HURT.key)
+        );
     }
 
     #[test]

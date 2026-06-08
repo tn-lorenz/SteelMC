@@ -3706,6 +3706,48 @@ pub trait LivingEntity: Entity {
         false
     }
 
+    /// Returns vanilla `LivingEntity.getSoundVolume`.
+    fn sound_volume(&self) -> f32 {
+        1.0
+    }
+
+    /// Returns vanilla `LivingEntity.getVoicePitch`.
+    fn voice_pitch(&self) -> f32 {
+        let mut random = self.base().random().lock();
+        if self.is_baby() {
+            (random.next_f32() - random.next_f32()) * 0.2 + 1.5
+        } else {
+            (random.next_f32() - random.next_f32()) * 0.2 + 1.0
+        }
+    }
+
+    /// Returns vanilla `LivingEntity.getHurtSound`.
+    fn hurt_sound(&self, _source: &DamageSource) -> Option<SoundEventRef> {
+        Some(&sound_events::ENTITY_GENERIC_HURT)
+    }
+
+    /// Returns vanilla `LivingEntity.getDeathSound`.
+    fn death_sound(&self) -> Option<SoundEventRef> {
+        Some(&sound_events::ENTITY_GENERIC_DEATH)
+    }
+
+    /// Runs vanilla `LivingEntity.makeSound`.
+    fn make_sound(&self, sound: Option<SoundEventRef>) {
+        if let Some(sound) = sound {
+            self.play_sound(sound, self.sound_volume(), self.voice_pitch());
+        }
+    }
+
+    /// Runs vanilla `LivingEntity.playHurtSound`.
+    fn play_hurt_sound(&self, source: &DamageSource) {
+        self.make_sound(self.hurt_sound(source));
+    }
+
+    /// Plays vanilla's death sound for this living entity.
+    fn play_death_sound(&self) {
+        self.make_sound(self.death_sound());
+    }
+
     /// Returns vanilla `LivingEntity.getAgeScale()`.
     fn get_age_scale(&self) -> f32 {
         if self.is_baby() { 0.5 } else { 1.0 }
@@ -3947,8 +3989,14 @@ pub trait LivingEntity: Entity {
         }
 
         if self.is_dead_or_dying() {
+            if took_full_damage {
+                self.play_death_sound();
+            }
             self.die(source);
+        } else if took_full_damage {
+            self.play_hurt_sound(source);
         }
+        // TODO: Play secondary hurt sounds once equipment effects expose them.
 
         let game_time = self.level().map_or(0, |world| world.game_time());
         self.living_base()
