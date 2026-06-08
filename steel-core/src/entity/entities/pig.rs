@@ -663,6 +663,10 @@ impl LivingEntity for PigEntity {
         slot != EquipmentSlot::Saddle || self.can_use_saddle_slot()
     }
 
+    fn can_dispenser_equip_into_slot(&self, slot: EquipmentSlot) -> bool {
+        slot == EquipmentSlot::Saddle || Mob::can_pick_up_loot(self)
+    }
+
     fn equip_sound(&self, slot: EquipmentSlot, _stack: &ItemStack) -> Option<SoundEventRef> {
         (slot == EquipmentSlot::Saddle).then_some(&sound_events::ENTITY_PIG_SADDLE)
     }
@@ -1073,6 +1077,38 @@ mod tests {
             &pig,
             &saddle,
             EquipmentSlot::Saddle
+        ));
+    }
+
+    #[test]
+    fn pig_dispenser_can_equip_saddle_only_when_alive_adult_and_empty() {
+        init_test_registry();
+
+        let pig = PigEntity::new(&vanilla_entities::PIG, 1, DVec3::ZERO, Weak::new());
+        let saddle = ItemStack::new(&ITEMS.saddle);
+
+        assert!(LivingEntity::can_equip_with_dispenser(&pig, &saddle));
+
+        pig.living_base
+            .equipment()
+            .lock()
+            .set(EquipmentSlot::Saddle, ItemStack::new(&ITEMS.saddle));
+        assert!(!LivingEntity::can_equip_with_dispenser(&pig, &saddle));
+
+        let baby = PigEntity::new(&vanilla_entities::PIG, 2, DVec3::ZERO, Weak::new());
+        baby.set_baby(true);
+        assert!(!LivingEntity::can_equip_with_dispenser(&baby, &saddle));
+
+        let dead = PigEntity::new(&vanilla_entities::PIG, 3, DVec3::ZERO, Weak::new());
+        dead.set_health(0.0);
+        assert!(!LivingEntity::can_equip_with_dispenser(&dead, &saddle));
+
+        let unequippable_target =
+            PigEntity::new(&vanilla_entities::PIG, 4, DVec3::ZERO, Weak::new());
+        let stone = ItemStack::new(&ITEMS.stone);
+        assert!(!LivingEntity::can_equip_with_dispenser(
+            &unequippable_target,
+            &stone
         ));
     }
 

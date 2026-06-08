@@ -37,6 +37,7 @@ impl EquippableAllowedEntities {
 pub struct Equippable {
     pub slot: EquipmentSlot,
     pub allowed_entities: Option<EquippableAllowedEntities>,
+    pub dispensable: bool,
     pub swappable: bool,
     pub equip_on_interact: bool,
 }
@@ -67,6 +68,7 @@ impl ReadFrom for Equippable {
         Ok(Self {
             slot: EquipmentSlot::Chest,
             allowed_entities: None,
+            dispensable: true,
             swappable: true,
             equip_on_interact: false,
         })
@@ -89,6 +91,7 @@ impl simdnbt::ToNbtTag for Equippable {
 
         let mut compound = NbtCompound::new();
         compound.insert("slot", self.slot.name());
+        compound.insert("dispensable", i8::from(self.dispensable));
         compound.insert("swappable", i8::from(self.swappable));
         compound.insert("equip_on_interact", i8::from(self.equip_on_interact));
         if let Some(allowed_entities) = self.allowed_entities {
@@ -128,6 +131,11 @@ impl simdnbt::FromNbtTag for Equippable {
         let allowed_entities = compound
             .get("allowed_entities")
             .and_then(parse_allowed_entities_nbt);
+        let dispensable = compound
+            .get("dispensable")
+            .and_then(|tag| tag.byte())
+            .map(|value| value != 0)
+            .unwrap_or(true);
         let swappable = compound
             .get("swappable")
             .and_then(|tag| tag.byte())
@@ -142,6 +150,7 @@ impl simdnbt::FromNbtTag for Equippable {
         Some(Self {
             slot,
             allowed_entities,
+            dispensable,
             swappable,
             equip_on_interact,
         })
@@ -195,11 +204,13 @@ mod tests {
             panic!("carved pumpkin should have equippable data");
         };
         assert!(!pumpkin_equippable.swappable);
+        assert!(pumpkin_equippable.dispensable);
 
         let helmet = ItemStack::new(&ITEMS.diamond_helmet);
         let Some(helmet_equippable) = helmet.get_equippable() else {
             panic!("diamond helmet should have equippable data");
         };
+        assert!(helmet_equippable.dispensable);
         assert!(helmet_equippable.swappable);
         assert!(helmet_equippable.can_be_equipped_by(&PLAYER));
 
@@ -207,6 +218,7 @@ mod tests {
         let Some(saddle_equippable) = saddle.get_equippable() else {
             panic!("saddle should have equippable data");
         };
+        assert!(saddle_equippable.dispensable);
         assert!(saddle_equippable.equip_on_interact);
         assert_eq!(
             saddle_equippable.allowed_entities,

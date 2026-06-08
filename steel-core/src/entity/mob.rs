@@ -208,6 +208,11 @@ pub trait Mob: LivingEntity {
         *self.mob_base().persistence_required().lock() = true;
     }
 
+    /// Returns vanilla `Mob.canPickUpLoot`.
+    fn can_pick_up_loot(&self) -> bool {
+        false
+    }
+
     fn equipment_drop_chance(&self, slot: EquipmentSlot) -> f32 {
         self.mob_base().drop_chances().lock().by_equipment(slot)
     }

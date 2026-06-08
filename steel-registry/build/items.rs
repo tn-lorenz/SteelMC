@@ -389,6 +389,10 @@ fn generate_builder_calls(item: &Item) -> Vec<TokenStream> {
                         _ => continue,
                     };
                     let allowed_entities = generate_allowed_entities(value);
+                    let dispensable = value
+                        .get("dispensable")
+                        .and_then(|v| v.as_bool())
+                        .unwrap_or(true);
                     let swappable = value
                         .get("swappable")
                         .and_then(|v| v.as_bool())
@@ -403,6 +407,7 @@ fn generate_builder_calls(item: &Item) -> Vec<TokenStream> {
                             Some(vanilla_components::Equippable {
                                 slot: #slot_variant,
                                 allowed_entities: #allowed_entities,
+                                dispensable: #dispensable,
                                 swappable: #swappable,
                                 equip_on_interact: #equip_on_interact,
                             }),

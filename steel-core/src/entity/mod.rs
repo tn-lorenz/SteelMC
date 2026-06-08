@@ -3910,6 +3910,31 @@ pub trait LivingEntity: Entity {
         true
     }
 
+    /// Returns the effective vanilla dispenser slot gate for living entities and mobs.
+    fn can_dispenser_equip_into_slot(&self, _slot: EquipmentSlot) -> bool {
+        self.as_mob().is_none_or(Mob::can_pick_up_loot)
+    }
+
+    /// Returns vanilla `LivingEntity.canEquipWithDispenser`.
+    fn can_equip_with_dispenser(&self, item_stack: &ItemStack) -> bool {
+        if !Entity::is_alive(self) || self.is_spectator() {
+            return false;
+        }
+
+        let Some(equippable) = item_stack.get_equippable() else {
+            return false;
+        };
+        if !equippable.dispensable {
+            return false;
+        }
+
+        let slot = equippable.slot;
+        self.can_use_slot(slot)
+            && equippable.can_be_equipped_by(self.entity_type())
+            && !self.has_item_in_slot(slot)
+            && self.can_dispenser_equip_into_slot(slot)
+    }
+
     /// Returns vanilla `LivingEntity.isEquippableInSlot`.
     fn is_equippable_in_slot(&self, item_stack: &ItemStack, slot: EquipmentSlot) -> bool {
         let Some(equippable) = item_stack.get_equippable() else {
