@@ -612,6 +612,10 @@ impl LivingEntity for PigEntity {
             .set(clamped);
     }
 
+    fn is_baby(&self) -> bool {
+        AgeableMob::is_baby(self)
+    }
+
     fn can_use_slot(&self, slot: EquipmentSlot) -> bool {
         slot != EquipmentSlot::Saddle || self.can_use_saddle_slot()
     }
@@ -790,6 +794,7 @@ mod tests {
     use crate::entity::ai::navigation::NavigationTickContext;
     use crate::entity::ai::node::Node;
     use crate::entity::ai::path::{Path, PathType};
+    use crate::entity::damage::DamageSource;
     use crate::entity::{Animal, DEATH_DURATION, RemovalReason};
     use crate::inventory::equipment::EquipmentSlot;
 
@@ -956,6 +961,19 @@ mod tests {
     }
 
     #[test]
+    fn pig_living_is_baby_uses_ageable_state() {
+        init_test_registry();
+
+        let pig = PigEntity::new(&vanilla_entities::PIG, 1, DVec3::ZERO, Weak::new());
+
+        assert!(!LivingEntity::is_baby(&pig));
+
+        pig.set_baby(true);
+
+        assert!(LivingEntity::is_baby(&pig));
+    }
+
+    #[test]
     fn pig_saddled_state_reads_saddle_equipment() {
         init_test_registry();
 
@@ -1009,6 +1027,26 @@ mod tests {
             pig.equipment_drop_chance(EquipmentSlot::Head).to_bits(),
             0.085_f32.to_bits()
         );
+    }
+
+    #[test]
+    fn mob_death_loot_without_world_keeps_preserved_equipment() {
+        init_test_registry();
+
+        let pig = PigEntity::new(&vanilla_entities::PIG, 1, DVec3::ZERO, Weak::new());
+        pig.living_base
+            .equipment()
+            .lock()
+            .set(EquipmentSlot::Saddle, ItemStack::new(&ITEMS.saddle));
+        pig.set_guaranteed_drop(EquipmentSlot::Saddle);
+
+        pig.drop_custom_death_loot_mob(
+            &DamageSource::environment(&vanilla_damage_types::GENERIC),
+            false,
+        );
+
+        assert!(pig.is_saddled());
+        assert!(pig.is_equipment_drop_preserved(EquipmentSlot::Saddle));
     }
 
     #[test]

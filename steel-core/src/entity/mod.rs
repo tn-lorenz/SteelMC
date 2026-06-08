@@ -25,6 +25,7 @@ use steel_registry::vanilla_block_tags::BlockTag;
 use steel_registry::vanilla_blocks;
 use steel_registry::vanilla_entities;
 use steel_registry::vanilla_entity_type_tags::EntityTypeTag;
+use steel_registry::vanilla_game_rules::MOB_DROPS;
 use steel_registry::vanilla_item_tags::ItemTag;
 use steel_registry::{
     REGISTRY, TaggedRegistryExt, sound_events, vanilla_damage_type_tags, vanilla_damage_types,
@@ -3283,6 +3284,11 @@ pub trait LivingEntity: Entity {
         self.get_health() <= 0.0
     }
 
+    /// Returns vanilla `LivingEntity.isBaby()`.
+    fn is_baby(&self) -> bool {
+        false
+    }
+
     /// Returns true if the entity is alive (health > 0).
     fn is_alive(&self) -> bool {
         !self.is_dead_or_dying()
@@ -3605,7 +3611,7 @@ pub trait LivingEntity: Entity {
     }
 
     /// Processes vanilla living death side effects.
-    fn die(&self, _source: &DamageSource) {
+    fn die(&self, source: &DamageSource) {
         if self.is_removed() {
             return;
         }
@@ -3613,10 +3619,37 @@ pub trait LivingEntity: Entity {
             return;
         }
 
-        // TODO: emit death game event, drops, and experience once mob death foundations exist.
+        // TODO: emit death game event once game-event dispatch is implemented.
+        self.drop_all_death_loot(source);
         self.broadcast_entity_event(EntityStatus::Death);
         self.set_pose(EntityPose::Dying);
     }
+
+    /// Returns vanilla `LivingEntity.shouldDropLoot`.
+    fn should_drop_loot(&self, world: &World) -> bool {
+        !self.is_baby() && world.get_game_rule(&MOB_DROPS).as_bool() == Some(true)
+    }
+
+    /// Runs the currently implemented subset of vanilla `LivingEntity.dropAllDeathLoot`.
+    fn drop_all_death_loot(&self, source: &DamageSource) {
+        let Some(world) = self.level() else {
+            return;
+        };
+        if self.should_drop_loot(world.as_ref()) {
+            // TODO: Track lastHurtByPlayerMemoryTime for vanilla player-kill loot.
+            let killed_by_player = false;
+            // TODO: Run entity loot tables here before custom death loot once
+            // entity loot table contexts are available.
+            self.drop_custom_death_loot(source, killed_by_player);
+            if let Some(mob) = self.as_mob() {
+                mob.drop_custom_death_loot_mob(source, killed_by_player);
+            }
+        }
+        // TODO: Drop equipment overrides and experience once those foundations exist.
+    }
+
+    /// Hook for non-mob custom death loot.
+    fn drop_custom_death_loot(&self, _source: &DamageSource, _killed_by_player: bool) {}
 
     /// Ticks the vanilla living death animation and removes the entity at completion.
     fn tick_death(&self) {

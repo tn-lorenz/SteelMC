@@ -157,7 +157,7 @@ pub trait AgeableMob: Mob {
 
     /// Returns whether this mob can naturally age toward adulthood this tick.
     fn can_age_up(&self) -> bool {
-        self.is_baby() && !self.is_age_locked()
+        AgeableMob::is_baby(self) && !self.is_age_locked()
     }
 
     /// Returns vanilla `AgeableMob.getSpeedUpSecondsWhenFeeding`.
@@ -323,11 +323,11 @@ mod tests {
         let mob = TestAgeableMob::new();
 
         mob.set_age(-1);
-        assert!(mob.is_baby());
+        assert!(AgeableMob::is_baby(&mob));
         assert!(*mob.baby.lock());
 
         mob.set_age(0);
-        assert!(!mob.is_baby());
+        assert!(!AgeableMob::is_baby(&mob));
         assert!(!*mob.baby.lock());
     }
 

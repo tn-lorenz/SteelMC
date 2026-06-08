@@ -6,6 +6,7 @@ use std::sync::Arc;
 use glam::DVec3;
 use steel_math::floor;
 use steel_registry::blocks::block_state_ext::BlockStateExt as _;
+use steel_registry::enchantment_effect::EnchantmentEffectComponent;
 use steel_registry::vanilla_attributes;
 use steel_registry::vanilla_block_tags::BlockTag;
 use steel_utils::locks::SyncMutex;
@@ -21,6 +22,7 @@ use crate::entity::ai::navigation::{
 };
 use crate::entity::ai::path::{Path, PathType, PathfindingContext, PathfindingMalus};
 use crate::entity::ai::walk::{MobPathSettings, WalkNodeEvaluator, WalkPathEvaluator};
+use crate::entity::damage::DamageSource;
 use crate::entity::{Entity, LivingEntity, LivingTravelInput, RemovalReason};
 use crate::inventory::equipment::EquipmentSlot;
 use crate::physics::WorldCollisionProvider;
@@ -219,6 +221,62 @@ pub trait Mob: LivingEntity {
             .drop_chances()
             .lock()
             .set_guaranteed_drop(slot);
+    }
+
+    fn drop_custom_death_loot_mob(&self, _source: &DamageSource, killed_by_player: bool) {
+        if self.level().is_none() {
+            return;
+        }
+
+        for slot in EquipmentSlot::ALL {
+            let drop_chance = self.equipment_drop_chance(slot);
+            let preserve = self.is_equipment_drop_preserved(slot);
+            if !can_attempt_equipment_drop(drop_chance, preserve, killed_by_player) {
+                continue;
+            }
+
+            let can_drop_item = {
+                let equipment = self.living_base().equipment().lock();
+                let item_stack = equipment.get_ref(slot);
+                !item_stack.is_empty()
+                    && !item_stack
+                        .has_enchantment_effect(EnchantmentEffectComponent::PreventEquipmentDrop)
+            };
+            if !can_drop_item {
+                continue;
+            }
+
+            // TODO: Apply EquipmentDrops enchantment value effects once damage
+            // sources can resolve their living attacker context.
+            let random_roll = self.base().random().lock().next_f32();
+            if random_roll >= drop_chance {
+                continue;
+            }
+
+            let mut item_stack = {
+                let mut equipment = self.living_base().equipment().lock();
+                let item_stack = equipment.get_ref(slot);
+                if item_stack.is_empty()
+                    || item_stack
+                        .has_enchantment_effect(EnchantmentEffectComponent::PreventEquipmentDrop)
+                {
+                    continue;
+                }
+
+                equipment.take(slot)
+            };
+            if !preserve && item_stack.is_damageable_item() {
+                let max_damage = item_stack.get_max_damage();
+                let damage = {
+                    let mut random = self.base().random().lock();
+                    let inner = random.next_i32_bounded((max_damage - 3).max(1));
+                    max_damage - random.next_i32_bounded(1 + inner)
+                };
+                item_stack.set_damage_value(damage);
+            }
+
+            self.spawn_at_location(item_stack, 0.0);
+        }
     }
 
     fn is_within_home(&self) -> bool {
@@ -568,6 +626,10 @@ pub trait Mob: LivingEntity {
     }
 }
 
+fn can_attempt_equipment_drop(drop_chance: f32, preserve: bool, killed_by_player: bool) -> bool {
+    drop_chance != 0.0 && (killed_by_player || preserve)
+}
+
 fn tick_path_navigation_target<M: Mob + ?Sized>(mob: &M, world: &Arc<World>, game_time: i64) {
     let (target, speed_modifier) = {
         let mut navigation = mob.mob_base().navigation().lock();
@@ -875,11 +937,19 @@ mod tests {
     use steel_utils::locks::SyncMutex;
     use steel_utils::{BlockPos, BlockStateId};
 
-    use super::find_ground_path_target_surface;
+    use super::{can_attempt_equipment_drop, find_ground_path_target_surface};
     use crate::entity::ai::path::PathType;
     use crate::entity::mob::{Mob, MobBase};
     use crate::entity::{Entity, EntityBase, LivingEntity, LivingEntityBase};
     use crate::world::LevelReader;
+
+    #[test]
+    fn equipment_drop_attempt_gate_matches_vanilla_conditions() {
+        assert!(!can_attempt_equipment_drop(0.0, true, true));
+        assert!(!can_attempt_equipment_drop(0.085, false, false));
+        assert!(can_attempt_equipment_drop(0.085, false, true));
+        assert!(can_attempt_equipment_drop(2.0, true, false));
+    }
 
     struct SurfaceLevel {
         default_state: BlockStateId,
