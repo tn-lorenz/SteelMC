@@ -22,7 +22,9 @@ use steel_utils::{BlockPos, ChunkPos, Identifier, axis::Axis};
 use uuid::Uuid;
 
 use crate::behavior::{BLOCK_BEHAVIORS, BlockCollisionContext, InteractionResult};
-use crate::entity::ai::control::{MobControls, MoveControlOperation};
+use crate::entity::ai::control::{
+    BodyRotationInput, MobControls, MoveControlOperation, rotate_if_necessary, rotate_towards,
+};
 use crate::entity::ai::goal::GoalSelector;
 use crate::entity::ai::navigation::{
     NavigationPathRequest, NavigationRecomputeRequest, NavigationTickContext, PathNavigation,
@@ -57,6 +59,7 @@ const LEASH_STIFFNESS: f64 = 0.11;
 const ENTITY_LEASH_ATTACHMENT_POINT: DVec3 = DVec3::new(0.0, 0.5, 0.5);
 const LEASHER_ATTACHMENT_POINT: DVec3 = DVec3::new(0.0, 0.5, 0.0);
 const DELAYED_LEASH_DROP_TICKS: i32 = 100;
+const BODY_ROTATION_MOVING_DISTANCE_SQR: f64 = 2.500_000_3e-7;
 
 #[derive(Debug, Clone, Copy, PartialEq)]
 struct DropChances {
@@ -1252,6 +1255,7 @@ pub trait Mob: LivingEntity {
         };
 
         let mut rotation = self.rotation();
+        rotation.1 = 0.0;
         if look_control.is_looking_at_target() {
             let position = self.position();
             let wanted_position = look_control.wanted_position();
@@ -1260,26 +1264,67 @@ pub trait Mob: LivingEntity {
             let zd = wanted_position.z - position.z;
             let horizontal = xd.hypot(zd);
             if horizontal.abs() > 1.0e-5 || yd.abs() > 1.0e-5 {
-                let target_pitch = (-(yd.atan2(horizontal)) as f32 * 180.0 / PI).clamp(
-                    -look_control.x_max_rot_angle(),
-                    look_control.x_max_rot_angle(),
-                );
-                rotation.1 = rotlerp(rotation.1, target_pitch, look_control.x_max_rot_angle());
+                let target_pitch = -(yd.atan2(horizontal)) as f32 * 180.0 / PI;
+                rotation.1 =
+                    rotate_towards(rotation.1, target_pitch, look_control.x_max_rot_angle());
             }
             if zd.abs() > 1.0e-5 || xd.abs() > 1.0e-5 {
                 let target_yaw = (zd.atan2(xd) as f32 * 180.0 / PI) - 90.0;
-                rotation.0 = rotlerp(rotation.0, target_yaw, look_control.y_max_rot_speed());
+                self.set_y_head_rot(rotate_towards(
+                    self.y_head_rot(),
+                    target_yaw,
+                    look_control.y_max_rot_speed(),
+                ));
             }
         } else {
-            rotation.1 = 0.0;
+            self.set_y_head_rot(rotate_towards(self.y_head_rot(), self.y_body_rot(), 10.0));
         }
 
         self.set_rotation(rotation);
+        self.clamp_head_rotation_to_body_when_pathing();
+    }
+
+    fn clamp_head_rotation_to_body_when_pathing(&self) {
+        if self.mob_base().navigation().lock().is_done() {
+            return;
+        }
+
+        self.set_y_head_rot(rotate_if_necessary(
+            self.y_head_rot(),
+            self.y_body_rot(),
+            self.max_head_y_rot(),
+        ));
     }
 
     fn tick_jump_control(&self) {
         let jumping = self.mob_base().controls().lock().jump_control.tick();
         self.set_jumping(jumping);
+    }
+
+    fn tick_body_rotation_control(&self) {
+        let moving = {
+            let delta = self.position() - self.old_position();
+            delta.x.mul_add(delta.x, delta.z * delta.z) > BODY_ROTATION_MOVING_DISTANCE_SQR
+        };
+        let carrying_mob_passenger = self
+            .first_passenger()
+            .is_some_and(|passenger| passenger.is_mob());
+        let input = BodyRotationInput::new(
+            moving,
+            carrying_mob_passenger,
+            self.rotation().0,
+            self.y_body_rot(),
+            self.y_head_rot(),
+            self.max_head_y_rot(),
+        );
+        let update = self
+            .mob_base()
+            .controls()
+            .lock()
+            .body_rotation_control
+            .tick(input);
+        self.set_y_body_rot(update.y_body_rot());
+        self.set_y_head_rot(update.y_head_rot());
     }
 }
 
@@ -1595,6 +1640,7 @@ mod tests {
     use steel_utils::{BlockPos, BlockStateId};
 
     use super::{can_attempt_equipment_drop, find_ground_path_target_surface};
+    use crate::entity::ai::control::{DEFAULT_LOOK_X_MAX_ROT_ANGLE, DEFAULT_LOOK_Y_MAX_ROT_SPEED};
     use crate::entity::ai::path::PathType;
     use crate::entity::mob::{Mob, MobBase};
     use crate::entity::{Entity, EntityBase, LivingEntity, LivingEntityBase, SharedEntity};
@@ -1755,6 +1801,55 @@ mod tests {
         mob.mob_server_ai_step();
 
         assert_eq!(mob.no_action_time(), 13);
+    }
+
+    #[test]
+    fn mob_look_control_rotates_head_yaw_without_turning_body_yaw() {
+        let mob = DespawnTestMob::new(None, false);
+        mob.set_rotation((0.0, 0.0));
+        mob.set_y_body_rot(0.0);
+        mob.set_y_head_rot(0.0);
+        let position = mob.position();
+        mob.mob_base().controls().lock().look_control.set_look_at(
+            DVec3::new(position.x + 1.0, mob.get_eye_y(), position.z),
+            DEFAULT_LOOK_Y_MAX_ROT_SPEED,
+            DEFAULT_LOOK_X_MAX_ROT_ANGLE,
+        );
+
+        Mob::tick_look_control(&mob);
+
+        assert_eq!(mob.rotation(), (0.0, 0.0));
+        assert_eq!(mob.y_body_rot(), 0.0);
+        assert_eq!(mob.y_head_rot(), -10.0);
+    }
+
+    #[test]
+    fn mob_look_control_returns_head_yaw_toward_body_when_idle() {
+        let mob = DespawnTestMob::new(None, false);
+        mob.set_rotation((0.0, 20.0));
+        mob.set_y_body_rot(90.0);
+        mob.set_y_head_rot(0.0);
+
+        Mob::tick_look_control(&mob);
+
+        assert_eq!(mob.rotation(), (0.0, 0.0));
+        assert_eq!(mob.y_body_rot(), 90.0);
+        assert_eq!(mob.y_head_rot(), 10.0);
+    }
+
+    #[test]
+    fn mob_body_rotation_control_uses_tick_position_delta() {
+        let mob = DespawnTestMob::new(None, false);
+        mob.set_old_position(DVec3::ZERO);
+        mob.base.set_position_local(DVec3::new(1.0, 0.0, 0.0));
+        mob.set_rotation((90.0, 0.0));
+        mob.set_y_body_rot(0.0);
+        mob.set_y_head_rot(200.0);
+
+        Mob::tick_body_rotation_control(&mob);
+
+        assert_eq!(mob.y_body_rot(), 90.0);
+        assert_eq!(mob.y_head_rot(), 165.0);
     }
 
     #[test]

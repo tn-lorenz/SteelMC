@@ -4449,6 +4449,9 @@ pub trait LivingEntity: Entity {
 
     /// Ticks living-entity counters after movement.
     fn tick_living_state(&self) {
+        if let Some(mob) = self.as_mob() {
+            mob.tick_body_rotation_control();
+        }
         self.living_base()
             .tick_fall_flying_state(self.is_fall_flying());
         self.living_base().tick_post_impulse_grace_time();
