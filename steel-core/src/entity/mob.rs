@@ -259,6 +259,16 @@ pub trait Mob: LivingEntity {
         self.mob_flags() & MOB_FLAG_AGGRESSIVE != 0
     }
 
+    /// Returns vanilla `Mob.getMaxHeadXRot`.
+    fn max_head_x_rot(&self) -> f32 {
+        40.0
+    }
+
+    /// Returns vanilla `Mob.getMaxHeadYRot`.
+    fn max_head_y_rot(&self) -> f32 {
+        75.0
+    }
+
     fn set_aggressive(&self, aggressive: bool) {
         self.set_mob_flag(MOB_FLAG_AGGRESSIVE, aggressive);
     }

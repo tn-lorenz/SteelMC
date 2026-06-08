@@ -2,6 +2,7 @@ use glam::DVec3;
 use steel_utils::random::Random as _;
 
 use super::random_pos::default_random_pos;
+use super::reduced_tick_delay;
 use super::selector::{Goal, GoalControls};
 use crate::entity::PathfinderMob;
 
@@ -104,8 +105,4 @@ impl Goal for RandomStrollGoal {
     fn stop(&mut self, mob: &dyn PathfinderMob) {
         mob.mob_base().navigation().lock().stop();
     }
-}
-
-const fn reduced_tick_delay(ticks: i32) -> i32 {
-    (ticks + 1) / 2
 }

@@ -3654,6 +3654,22 @@ pub trait LivingEntity: Entity {
         visitor(equipment.get_ref(slot));
     }
 
+    /// Returns vanilla `LivingEntity.isHolding`.
+    fn is_holding(&self, predicate: &mut dyn FnMut(&ItemStack) -> bool) -> bool {
+        let mut holding = false;
+        self.with_equipment_slot(EquipmentSlot::MainHand, &mut |item_stack| {
+            holding = predicate(item_stack);
+        });
+        if holding {
+            return true;
+        }
+
+        self.with_equipment_slot(EquipmentSlot::OffHand, &mut |item_stack| {
+            holding = predicate(item_stack);
+        });
+        holding
+    }
+
     /// Mutates the item in a vanilla living-entity equipment slot.
     fn with_equipment_slot_mut(
         &self,

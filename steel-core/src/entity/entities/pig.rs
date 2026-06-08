@@ -22,14 +22,15 @@ use steel_registry::vanilla_game_rules::MAX_ENTITY_CRAMMING;
 use steel_registry::vanilla_item_tags::ItemTag;
 use steel_registry::{
     REGISTRY, RegistryEntry, RegistryExt, TaggedRegistryExt, vanilla_attributes,
-    vanilla_damage_types, vanilla_particle_types, vanilla_pig_sound_variants, vanilla_pig_variants,
+    vanilla_damage_types, vanilla_items, vanilla_particle_types, vanilla_pig_sound_variants,
+    vanilla_pig_variants,
 };
 use steel_utils::locks::SyncMutex;
 use steel_utils::random::Random as _;
 use steel_utils::{BlockPos, BlockStateId, Identifier};
 
 use crate::entity::ai::goal::{
-    FloatGoal, FollowParentGoal, LookAtPlayerGoal, PanicGoal, RandomLookAroundGoal,
+    FloatGoal, FollowParentGoal, LookAtPlayerGoal, PanicGoal, RandomLookAroundGoal, TemptGoal,
     WaterAvoidingRandomStrollGoal,
 };
 use crate::entity::damage::DamageSource;
@@ -87,6 +88,26 @@ impl PigEntity {
             .goal_selector()
             .lock()
             .add_goal(1, PanicGoal::new(1.25));
+        mob_base.goal_selector().lock().add_goal(
+            4,
+            TemptGoal::new(
+                1.2,
+                |item_stack| item_stack.is(&vanilla_items::ITEMS.carrot_on_a_stick),
+                false,
+            ),
+        );
+        mob_base.goal_selector().lock().add_goal(
+            4,
+            TemptGoal::new(
+                1.2,
+                |item_stack| {
+                    REGISTRY
+                        .items
+                        .is_in_tag(item_stack.item(), &ItemTag::PIG_FOOD)
+                },
+                false,
+            ),
+        );
         mob_base
             .goal_selector()
             .lock()
@@ -762,8 +783,11 @@ mod tests {
         let pig = PigEntity::new(&vanilla_entities::PIG, 1, DVec3::ZERO, Weak::new());
 
         let selector = pig.mob_base().goal_selector().lock();
-        assert_eq!(selector.available_goal_count(), 6);
-        assert_eq!(selector.available_goal_priorities(), vec![0, 1, 5, 6, 7, 8]);
+        assert_eq!(selector.available_goal_count(), 8);
+        assert_eq!(
+            selector.available_goal_priorities(),
+            vec![0, 1, 4, 4, 5, 6, 7, 8]
+        );
         drop(selector);
         assert!(pig.mob_base().navigation().lock().can_float());
     }
