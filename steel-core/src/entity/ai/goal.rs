@@ -3,6 +3,7 @@
 mod avoid_entity;
 mod breath_air;
 mod breed_goal;
+mod climb_on_top_of_powder_snow;
 mod door_interact;
 mod float_goal;
 mod follow_mob;
