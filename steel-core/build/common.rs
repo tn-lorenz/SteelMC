@@ -80,6 +80,7 @@ pub(crate) fn parse_object_behavior(
 
 const KNOWN_REGISTRIES: &[&str] = &[
     "vanilla_blocks",
+    "vanilla_entities",
     "vanilla_items",
     "vanilla_fluids",
     "sound_events",
@@ -236,6 +237,7 @@ pub(crate) fn generate_arg(
         }
         JsonArgKind::Registry(module) => {
             let name = get_json_str(extra, entry_name, json_key);
+            let name = description_id_registry_name(module, name);
             // vanilla_items uses a LazyLock<Items> struct with field access (ITEMS.stone),
             // while other registries use module-level constants (vanilla_blocks::STONE).
             if module == "vanilla_items" {
@@ -244,9 +246,12 @@ pub(crate) fn generate_arg(
             } else {
                 let module_ident = Ident::new(module, Span::call_site());
                 let const_ident = to_block_ident(name);
-                // vanilla_blocks statics are owned `Block` values; constructors
-                // expect `BlockRef = &'static Block`, so auto-borrow here.
-                if module == "vanilla_blocks" || module == "sound_events" {
+                // These generated statics are owned registry values; constructors
+                // expect typed registry refs, so auto-borrow here.
+                if module == "vanilla_blocks"
+                    || module == "vanilla_entities"
+                    || module == "sound_events"
+                {
                     quote! { &#module_ident::#const_ident }
                 } else {
                     quote! { #module_ident::#const_ident }
@@ -272,6 +277,14 @@ pub(crate) fn generate_arg(
     } else {
         result
     }
+}
+
+fn description_id_registry_name<'a>(module: &str, value: &'a str) -> &'a str {
+    if module == "vanilla_entities" {
+        return value.strip_prefix("entity.minecraft.").unwrap_or(value);
+    }
+
+    value
 }
 
 pub(crate) fn extract_class_name(attr: &syn::Attribute, attribute_name: &str) -> Option<String> {

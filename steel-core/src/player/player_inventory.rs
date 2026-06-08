@@ -14,7 +14,7 @@ use steel_protocol::packets::game::{
 };
 use steel_registry::enchantment_effect::EnchantmentEffectComponent;
 use steel_registry::item_stack::ItemStack;
-use steel_registry::{REGISTRY, RegistryExt};
+use steel_registry::{REGISTRY, RegistryExt, items::ItemRef};
 use steel_utils::random::Random;
 use steel_utils::types::{GameType, InteractionHand};
 
@@ -56,6 +56,13 @@ const fn slot_to_equipment(slot: usize) -> Option<EquipmentSlot> {
         41 => Some(EquipmentSlot::Body),
         42 => Some(EquipmentSlot::Saddle),
         _ => None,
+    }
+}
+
+const fn hand_to_equipment_slot(hand: InteractionHand) -> EquipmentSlot {
+    match hand {
+        InteractionHand::MainHand => EquipmentSlot::MainHand,
+        InteractionHand::OffHand => EquipmentSlot::OffHand,
     }
 }
 
@@ -357,13 +364,50 @@ impl PlayerInventory {
         }
 
         let result = self.get_item_in_hand_mut(hand).split(amount);
-        let slot = match hand {
-            InteractionHand::MainHand => EquipmentSlot::MainHand,
-            InteractionHand::OffHand => EquipmentSlot::OffHand,
-        };
+        let slot = hand_to_equipment_slot(hand);
         self.refresh_player_equipment_attribute_modifiers(slot);
         self.set_changed();
         result
+    }
+
+    /// Damages the held item and converts it to `replacement_item` if it breaks.
+    ///
+    /// Mirrors vanilla `ItemStack.hurtAndConvertOnBreak` for hand-held player items.
+    pub fn hurt_and_convert_item_in_hand_on_break(
+        &mut self,
+        hand: InteractionHand,
+        amount: i32,
+        replacement_item: ItemRef,
+        has_infinite_materials: bool,
+    ) {
+        if amount <= 0 || self.get_item_in_hand(hand).is_empty() {
+            return;
+        }
+
+        let slot = hand_to_equipment_slot(hand);
+        let changed = {
+            let item = self.get_item_in_hand_mut(hand);
+            let previous_item = item.item();
+            let previous_count = item.count();
+            let previous_damage = item.get_damage_value();
+
+            if item.hurt_and_break(amount, has_infinite_materials) && item.is_empty() {
+                item.set_item(&replacement_item.key);
+                item.set_count(1);
+                if item.is_damageable_item() {
+                    item.set_damage_value(0);
+                }
+            }
+
+            item.item() != previous_item
+                || item.count() != previous_count
+                || item.get_damage_value() != previous_damage
+        };
+
+        if changed {
+            self.refresh_player_equipment_attribute_modifiers(slot);
+            self.set_changed();
+        }
     }
 
     /// Swaps the selected main-hand item with the offhand item.
@@ -1356,6 +1400,65 @@ mod tests {
                 EquipmentSlot::MainHand,
                 ItemStack::with_count(&ITEMS.oak_log, 2)
             )]
+        );
+    }
+
+    #[test]
+    fn hurt_and_convert_item_in_hand_damages_without_breaking() {
+        init_test_registry();
+
+        let mut inventory = PlayerInventory::new(Weak::new());
+        inventory.set_offhand_item(ItemStack::new(&ITEMS.carrot_on_a_stick));
+        inventory.drain_dirty_equipment_items();
+
+        let before = inventory.get_times_changed();
+        inventory.hurt_and_convert_item_in_hand_on_break(
+            InteractionHand::OffHand,
+            1,
+            &ITEMS.fishing_rod,
+            false,
+        );
+
+        let offhand = inventory.get_offhand_item();
+        assert!(offhand.is(&ITEMS.carrot_on_a_stick));
+        assert_eq!(offhand.get_damage_value(), 1);
+        let expected = offhand.copy_with_count(1);
+        assert_ne!(inventory.get_times_changed(), before);
+        assert_eq!(
+            inventory.drain_dirty_equipment_items(),
+            vec![(EquipmentSlot::OffHand, expected)]
+        );
+    }
+
+    #[test]
+    fn hurt_and_convert_item_in_hand_replaces_broken_item() {
+        init_test_registry();
+
+        let mut inventory = PlayerInventory::new(Weak::new());
+        inventory.set_selected_item(ItemStack::new(&ITEMS.carrot_on_a_stick));
+        let max_damage = inventory.get_selected_item().get_max_damage();
+        inventory
+            .get_selected_item_mut()
+            .set_damage_value(max_damage - 1);
+        inventory.drain_dirty_equipment_items();
+
+        let before = inventory.get_times_changed();
+        inventory.hurt_and_convert_item_in_hand_on_break(
+            InteractionHand::MainHand,
+            7,
+            &ITEMS.fishing_rod,
+            false,
+        );
+
+        let main_hand = inventory.get_selected_item();
+        assert!(main_hand.is(&ITEMS.fishing_rod));
+        assert_eq!(main_hand.count(), 1);
+        assert_eq!(main_hand.get_damage_value(), 0);
+        let expected = main_hand.copy_with_count(1);
+        assert_ne!(inventory.get_times_changed(), before);
+        assert_eq!(
+            inventory.drain_dirty_equipment_items(),
+            vec![(EquipmentSlot::MainHand, expected)]
         );
     }
 
