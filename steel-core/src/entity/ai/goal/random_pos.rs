@@ -52,6 +52,32 @@ pub(super) fn default_random_pos_towards(
     })
 }
 
+pub(super) fn default_random_pos_away(
+    mob: &dyn PathfinderMob,
+    horizontal_dist: i32,
+    vertical_dist: i32,
+    avoid_pos: DVec3,
+) -> Option<DVec3> {
+    let dir_away = mob.position() - avoid_pos;
+    let restrict = mob_restricted(mob, f64::from(horizontal_dist));
+    generate_random_pos(mob, || {
+        let direction = {
+            let mut random = mob.base().random().lock();
+            generate_random_direction_within_radians(
+                &mut *random,
+                0.0,
+                f64::from(horizontal_dist),
+                vertical_dist,
+                0,
+                dir_away.x,
+                dir_away.z,
+                FRAC_PI_2,
+            )
+        }?;
+        default_random_pos_toward_direction(mob, f64::from(horizontal_dist), restrict, direction)
+    })
+}
+
 pub(super) fn land_random_pos(
     mob: &dyn PathfinderMob,
     horizontal_dist: i32,
@@ -290,6 +316,24 @@ mod tests {
         );
 
         assert_eq!(direction, Some(BlockPos::new(15, -5, 13)));
+    }
+
+    #[test]
+    fn random_direction_within_radians_points_away_from_avoid_pos() {
+        let mut random = LegacyRandom::from_seed(0);
+
+        let direction = generate_random_direction_within_radians(
+            &mut random,
+            0.0,
+            16.0,
+            7,
+            0,
+            -1.0,
+            0.0,
+            FRAC_PI_2,
+        );
+
+        assert_eq!(direction, Some(BlockPos::new(-16, -5, -14)));
     }
 
     #[test]
