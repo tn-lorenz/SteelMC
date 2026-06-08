@@ -61,6 +61,7 @@ pub struct PathNavigation {
     time_last_recompute: i64,
     stuck: bool,
     done: bool,
+    can_float: bool,
 }
 
 impl PathNavigation {
@@ -87,6 +88,7 @@ impl PathNavigation {
             time_last_recompute: 0,
             stuck: false,
             done: true,
+            can_float: false,
         }
     }
 
@@ -151,6 +153,15 @@ impl PathNavigation {
     #[must_use]
     pub const fn has_delayed_recomputation(&self) -> bool {
         self.has_delayed_recomputation
+    }
+
+    #[must_use]
+    pub const fn can_float(&self) -> bool {
+        self.can_float
+    }
+
+    pub const fn set_can_float(&mut self, can_float: bool) {
+        self.can_float = can_float;
     }
 
     pub const fn tick(&mut self) {
@@ -579,6 +590,17 @@ mod tests {
             mob_speed,
             game_time,
         }
+    }
+
+    #[test]
+    fn path_navigation_tracks_can_float_flag() {
+        let mut navigation = PathNavigation::new();
+
+        assert!(!navigation.can_float());
+
+        navigation.set_can_float(true);
+
+        assert!(navigation.can_float());
     }
 
     #[test]

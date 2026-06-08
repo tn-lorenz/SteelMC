@@ -61,7 +61,7 @@ impl MobPathSettings {
             malus,
             can_pass_doors: true,
             can_open_doors: false,
-            can_float: false,
+            can_float: mob.mob_base().navigation().lock().can_float(),
             can_walk_over_fences: false,
         }
     }

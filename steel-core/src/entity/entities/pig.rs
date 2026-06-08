@@ -29,7 +29,7 @@ use steel_utils::random::Random as _;
 use steel_utils::{BlockPos, BlockStateId, Identifier};
 
 use crate::entity::ai::goal::{
-    LookAtPlayerGoal, RandomLookAroundGoal, WaterAvoidingRandomStrollGoal,
+    FloatGoal, LookAtPlayerGoal, RandomLookAroundGoal, WaterAvoidingRandomStrollGoal,
 };
 use crate::entity::damage::DamageSource;
 use crate::entity::{
@@ -78,6 +78,10 @@ impl PigEntity {
         let animal_base = AnimalBase::new();
         let mut entity_data = PigEntityData::new();
         living_base.initialize_synced_data(&mut entity_data);
+        mob_base
+            .goal_selector()
+            .lock()
+            .add_goal(0, FloatGoal::new(&mob_base));
         mob_base
             .goal_selector()
             .lock()
@@ -749,8 +753,10 @@ mod tests {
         let pig = PigEntity::new(&vanilla_entities::PIG, 1, DVec3::ZERO, Weak::new());
 
         let selector = pig.mob_base().goal_selector().lock();
-        assert_eq!(selector.available_goal_count(), 3);
-        assert_eq!(selector.available_goal_priorities(), vec![6, 7, 8]);
+        assert_eq!(selector.available_goal_count(), 4);
+        assert_eq!(selector.available_goal_priorities(), vec![0, 6, 7, 8]);
+        drop(selector);
+        assert!(pig.mob_base().navigation().lock().can_float());
     }
 
     #[test]
