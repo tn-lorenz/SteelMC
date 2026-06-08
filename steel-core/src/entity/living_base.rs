@@ -19,6 +19,7 @@ use steel_registry::vanilla_attributes;
 use steel_registry::vanilla_entity_data::VanillaLivingEntityData;
 use steel_registry::vanilla_mob_effects;
 use steel_utils::locks::SyncMutex;
+use steel_utils::types::InteractionHand;
 use steel_utils::{BlockPos, Identifier};
 use uuid::Uuid;
 
@@ -28,6 +29,8 @@ use crate::inventory::equipment::{EntityEquipment, EquipmentSlot};
 
 /// Duration in ticks of the death animation before entity removal.
 pub const DEATH_DURATION: i32 = 20;
+/// Vanilla default `SwingAnimation` duration in ticks.
+pub const DEFAULT_SWING_DURATION: i32 = 6;
 const INFINITE_EFFECT_DURATION: i32 = -1;
 const MIN_EFFECT_AMPLIFIER: i32 = 0;
 const MAX_EFFECT_AMPLIFIER: i32 = 255;
@@ -448,6 +451,66 @@ impl Default for LivingRotationState {
     }
 }
 
+/// Vanilla arm-swing animation state stored on `LivingEntity`.
+#[derive(Debug, Clone, Copy, PartialEq)]
+pub struct LivingSwingState {
+    swinging: bool,
+    swinging_arm: Option<InteractionHand>,
+    swing_time: i32,
+    old_attack_anim: f32,
+    attack_anim: f32,
+}
+
+impl LivingSwingState {
+    /// Creates empty vanilla swing animation state.
+    #[must_use]
+    pub const fn new() -> Self {
+        Self {
+            swinging: false,
+            swinging_arm: None,
+            swing_time: 0,
+            old_attack_anim: 0.0,
+            attack_anim: 0.0,
+        }
+    }
+
+    /// Returns vanilla `LivingEntity.swinging`.
+    #[must_use]
+    pub const fn swinging(self) -> bool {
+        self.swinging
+    }
+
+    /// Returns vanilla `LivingEntity.swingingArm`.
+    #[must_use]
+    pub const fn swinging_arm(self) -> Option<InteractionHand> {
+        self.swinging_arm
+    }
+
+    /// Returns vanilla `LivingEntity.swingTime`.
+    #[must_use]
+    pub const fn swing_time(self) -> i32 {
+        self.swing_time
+    }
+
+    /// Returns vanilla `LivingEntity.oAttackAnim`.
+    #[must_use]
+    pub const fn old_attack_anim(self) -> f32 {
+        self.old_attack_anim
+    }
+
+    /// Returns vanilla `LivingEntity.attackAnim`.
+    #[must_use]
+    pub const fn attack_anim(self) -> f32 {
+        self.attack_anim
+    }
+}
+
+impl Default for LivingSwingState {
+    fn default() -> Self {
+        Self::new()
+    }
+}
+
 #[derive(Debug, Clone)]
 struct LivingEntityState {
     effects_dirty: bool,
@@ -472,6 +535,7 @@ struct LivingEntityState {
     jumping: bool,
     travel_input: LivingTravelInput,
     rotation: LivingRotationState,
+    swing: LivingSwingState,
     no_jump_delay: i32,
     no_action_time: i32,
 }
@@ -501,6 +565,7 @@ impl LivingEntityState {
             jumping: false,
             travel_input: LivingTravelInput::ZERO,
             rotation: LivingRotationState::new(),
+            swing: LivingSwingState::new(),
             no_jump_delay: 0,
             no_action_time: 0,
         }
@@ -592,6 +657,12 @@ impl LivingEntityBase {
         self.state.lock().rotation
     }
 
+    /// Returns vanilla arm-swing animation state.
+    #[must_use]
+    pub fn swing_state(&self) -> LivingSwingState {
+        self.state.lock().swing
+    }
+
     /// Returns vanilla `yBodyRot`.
     #[must_use]
     pub fn y_body_rot(&self) -> f32 {
@@ -619,6 +690,44 @@ impl LivingEntityBase {
         let mut state = self.state.lock();
         state.rotation.y_head_rot_o = state.rotation.y_head_rot;
         state.rotation.y_body_rot_o = state.rotation.y_body_rot;
+    }
+
+    /// Copies current attack animation to vanilla `oAttackAnim`.
+    pub fn advance_attack_animation_for_base_tick(&self) {
+        let mut state = self.state.lock();
+        state.swing.old_attack_anim = state.swing.attack_anim;
+    }
+
+    /// Starts vanilla `LivingEntity.swing` state if the swing gate allows it.
+    pub fn start_swing(&self, hand: InteractionHand, current_swing_duration: i32) -> bool {
+        let mut state = self.state.lock();
+        let swing = &mut state.swing;
+        if swing.swinging && swing.swing_time < current_swing_duration / 2 && swing.swing_time >= 0
+        {
+            return false;
+        }
+
+        swing.swing_time = -1;
+        swing.swinging = true;
+        swing.swinging_arm = Some(hand);
+        true
+    }
+
+    /// Updates vanilla `LivingEntity.swingTime` and `attackAnim`.
+    pub fn update_swing_time(&self, current_swing_duration: i32) {
+        let mut state = self.state.lock();
+        let swing = &mut state.swing;
+        if swing.swinging {
+            swing.swing_time += 1;
+            if swing.swing_time >= current_swing_duration {
+                swing.swing_time = 0;
+                swing.swinging = false;
+            }
+        } else {
+            swing.swing_time = 0;
+        }
+
+        swing.attack_anim = swing.swing_time as f32 / current_swing_duration as f32;
     }
 
     /// Returns vanilla `LivingEntity.absorptionAmount` for non-player living entities.
@@ -1237,14 +1346,14 @@ mod tests {
         vanilla_damage_types, vanilla_entities, vanilla_entity_data::PlayerEntityData,
         vanilla_items, vanilla_mob_effects,
     };
-    use steel_utils::BlockPos;
+    use steel_utils::{BlockPos, types::InteractionHand};
 
     use crate::entity::damage::DamageSource;
     use crate::inventory::equipment::EquipmentSlot;
 
     use super::{
-        ActiveMobEffect, LivingEntityBase, LivingTravelInput, MobEffectInstance,
-        MobEffectSyncChange,
+        ActiveMobEffect, DEFAULT_SWING_DURATION, LivingEntityBase, LivingTravelInput,
+        MobEffectInstance, MobEffectSyncChange,
     };
 
     #[test]
@@ -1418,6 +1527,64 @@ mod tests {
         assert_eq!(rotation.y_body_rot_o(), 30.0);
         assert_eq!(rotation.y_head_rot(), 75.0);
         assert_eq!(rotation.y_head_rot_o(), 45.0);
+    }
+
+    #[test]
+    fn living_swing_uses_vanilla_restart_gate() {
+        init_test_registry();
+        let base = LivingEntityBase::new(&vanilla_entities::PIG);
+
+        assert!(base.start_swing(InteractionHand::MainHand, DEFAULT_SWING_DURATION));
+        let state = base.swing_state();
+        assert!(state.swinging());
+        assert_eq!(state.swinging_arm(), Some(InteractionHand::MainHand));
+        assert_eq!(state.swing_time(), -1);
+
+        base.update_swing_time(DEFAULT_SWING_DURATION);
+        assert!(!base.start_swing(InteractionHand::OffHand, DEFAULT_SWING_DURATION));
+        assert_eq!(
+            base.swing_state().swinging_arm(),
+            Some(InteractionHand::MainHand)
+        );
+
+        for _ in 0..3 {
+            base.update_swing_time(DEFAULT_SWING_DURATION);
+        }
+        assert!(base.start_swing(InteractionHand::OffHand, DEFAULT_SWING_DURATION));
+        let state = base.swing_state();
+        assert_eq!(state.swinging_arm(), Some(InteractionHand::OffHand));
+        assert_eq!(state.swing_time(), -1);
+    }
+
+    #[test]
+    fn living_swing_time_updates_attack_animation() {
+        init_test_registry();
+        let base = LivingEntityBase::new(&vanilla_entities::PIG);
+
+        assert!(base.start_swing(InteractionHand::MainHand, DEFAULT_SWING_DURATION));
+        base.update_swing_time(DEFAULT_SWING_DURATION);
+        base.update_swing_time(DEFAULT_SWING_DURATION);
+        let state = base.swing_state();
+        assert!(state.swinging());
+        assert_eq!(state.swing_time(), 1);
+        assert_eq!(
+            state.attack_anim().to_bits(),
+            (1.0_f32 / DEFAULT_SWING_DURATION as f32).to_bits()
+        );
+
+        base.advance_attack_animation_for_base_tick();
+        assert_eq!(
+            base.swing_state().old_attack_anim().to_bits(),
+            (1.0_f32 / DEFAULT_SWING_DURATION as f32).to_bits()
+        );
+
+        for _ in 0..5 {
+            base.update_swing_time(DEFAULT_SWING_DURATION);
+        }
+        let state = base.swing_state();
+        assert!(!state.swinging());
+        assert_eq!(state.swing_time(), 0);
+        assert_eq!(state.attack_anim().to_bits(), 0.0_f32.to_bits());
     }
 
     #[test]

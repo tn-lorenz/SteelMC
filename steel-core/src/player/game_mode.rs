@@ -7,10 +7,9 @@ use std::sync::Arc;
 
 use glam::DVec3;
 use steel_protocol::packets::game::{
-    AnimateAction, CAnimate, CBlockChangedAck, CBlockUpdate, CChangeDifficulty, CGameEvent,
-    COpenSignEditor, CPlayerInfoUpdate, CSetEntityMotion, CSetHeldSlot, GameEventType,
-    PlayerAction, SAttack, SInteract, SPickItemFromBlock, SPlayerAction, SSignUpdate, SUseItem,
-    SUseItemOn,
+    CBlockChangedAck, CBlockUpdate, CChangeDifficulty, CGameEvent, COpenSignEditor,
+    CPlayerInfoUpdate, CSetEntityMotion, CSetHeldSlot, GameEventType, PlayerAction, SAttack,
+    SInteract, SPickItemFromBlock, SPlayerAction, SSignUpdate, SUseItem, SUseItemOn,
 };
 use steel_registry::blocks::block_state_ext::BlockStateExt;
 use steel_registry::blocks::properties::Direction;
@@ -733,17 +732,9 @@ impl Player {
         });
     }
 
-    /// Triggers arm swing animation and broadcasts it to nearby players.
+    /// Triggers arm swing animation and broadcasts it to tracking players.
     pub fn swing(&self, hand: InteractionHand, update_self: bool) {
-        let action = match hand {
-            InteractionHand::MainHand => AnimateAction::SwingMainHand,
-            InteractionHand::OffHand => AnimateAction::SwingOffHand,
-        };
-        let packet = CAnimate::new(self.id(), action);
-
-        let chunk = *self.last_chunk_pos.lock();
-        let exclude = if update_self { None } else { Some(self.id()) };
-        self.get_world().broadcast_to_nearby(chunk, packet, exclude);
+        LivingEntity::swing(self, hand, update_self);
     }
 
     /// Handles the use of an item on a block.

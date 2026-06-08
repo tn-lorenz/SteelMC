@@ -8,7 +8,8 @@ use rustc_hash::FxHashSet;
 use simdnbt::borrow::NbtCompound as BorrowedNbtCompoundView;
 use simdnbt::owned::NbtCompound;
 use steel_protocol::packets::game::{
-    AttributeSnapshot, CDamageEvent, CEntityEvent, CHurtAnimation, EquipmentSlotItem, SoundSource,
+    AnimateAction, AttributeSnapshot, CAnimate, CDamageEvent, CEntityEvent, CHurtAnimation,
+    EquipmentSlotItem, SoundSource,
 };
 use steel_registry::blocks::{
     block_state_ext::BlockStateExt as _, properties::BlockStateProperties,
@@ -655,8 +656,9 @@ pub use inside_block_effects::{
 };
 pub(crate) use item_based_steering::{ItemBasedSteering, ItemSteerable};
 pub use living_base::{
-    ActiveMobEffect, DEATH_DURATION, LivingEntityBase, LivingRotationState, LivingTravelInput,
-    MobEffectInstance, MobEffectSyncChange, MobEffectSyncPacket,
+    ActiveMobEffect, DEATH_DURATION, DEFAULT_SWING_DURATION, LivingEntityBase, LivingRotationState,
+    LivingSwingState, LivingTravelInput, MobEffectInstance, MobEffectSyncChange,
+    MobEffectSyncPacket,
 };
 pub use manager::{
     AddEntityError, ChunkEntityLoadResult, EntityMoveError, EntityMoveUpdate, EntityOwnership,
@@ -1297,6 +1299,7 @@ pub trait Entity: EntityEventSource + Send + Sync {
         self.base().advance_base_tick_state();
         if let Some(living) = self.as_living_entity() {
             living.advance_living_rotation_for_base_tick();
+            living.advance_attack_animation_for_base_tick();
         }
         self.base().advance_powder_snow_contact_for_base_tick();
         self.refresh_fluid_contact_for_base_tick();
@@ -3656,6 +3659,59 @@ pub trait LivingEntity: Entity {
         self.living_base().advance_rotation_for_base_tick();
     }
 
+    /// Copies current attack animation to vanilla old attack-animation state.
+    fn advance_attack_animation_for_base_tick(&self) {
+        self.living_base().advance_attack_animation_for_base_tick();
+    }
+
+    /// Returns vanilla arm-swing animation state.
+    fn living_swing_state(&self) -> LivingSwingState {
+        self.living_base().swing_state()
+    }
+
+    /// Returns vanilla `LivingEntity.getCurrentSwingDuration`.
+    fn current_swing_duration(&self) -> i32 {
+        // TODO: Use the held item's SWING_ANIMATION component once it has typed component data.
+        let swing_duration = DEFAULT_SWING_DURATION;
+        if let Some(haste) = self.mob_effect(vanilla_mob_effects::HASTE) {
+            swing_duration - (1 + haste.amplifier())
+        } else if let Some(mining_fatigue) = self.mob_effect(vanilla_mob_effects::MINING_FATIGUE) {
+            swing_duration + (1 + mining_fatigue.amplifier()) * 2
+        } else {
+            swing_duration
+        }
+    }
+
+    /// Runs vanilla `LivingEntity.swing`.
+    fn swing(&self, hand: InteractionHand, update_self: bool) {
+        if !self
+            .living_base()
+            .start_swing(hand, self.current_swing_duration())
+        {
+            return;
+        }
+
+        let Some(world) = self.level() else {
+            return;
+        };
+        let action = match hand {
+            InteractionHand::MainHand => AnimateAction::SwingMainHand,
+            InteractionHand::OffHand => AnimateAction::SwingOffHand,
+        };
+        let packet = CAnimate::new(self.id(), action);
+        let exclude = if update_self { None } else { Some(self.id()) };
+        world.broadcast_to_entity_trackers(self.id(), packet.clone(), exclude);
+        if update_self && let Some(player) = self.as_player() {
+            player.send_packet(packet);
+        }
+    }
+
+    /// Runs vanilla `LivingEntity.updateSwingTime`.
+    fn update_swing_time(&self) {
+        self.living_base()
+            .update_swing_time(self.current_swing_duration());
+    }
+
     /// Returns a reference to this entity's attribute map.
     fn attributes(&self) -> &SyncMutex<AttributeMap> {
         self.living_base().attributes()
@@ -4637,6 +4693,7 @@ pub trait LivingEntity: Entity {
         }
         self.living_base()
             .tick_fall_flying_state(self.is_fall_flying());
+        self.update_swing_time();
         self.living_base().tick_post_impulse_grace_time();
         self.living_base().tick_last_hurt_by_player_memory();
     }
@@ -5651,6 +5708,7 @@ mod tests {
         vanilla_mob_effects,
     };
     use steel_utils::locks::SyncMutex;
+    use steel_utils::types::InteractionHand;
     use steel_utils::{BlockPos, Direction, Identifier};
     use uuid::Uuid;
 
@@ -5660,9 +5718,9 @@ mod tests {
     use crate::inventory::equipment::EquipmentSlot;
 
     use super::{
-        DAMAGE_KNOCKBACK_POWER, Entity, EntityBase, EntityFluidContact, EntityLevelCallback,
-        EntityMoveError, EntitySyncedData, EntityVerticalMovementStateUpdate, LivingEntity,
-        LivingEntityBase, LivingTravelInput, RemovalReason, SharedEntity,
+        DAMAGE_KNOCKBACK_POWER, DEFAULT_SWING_DURATION, Entity, EntityBase, EntityFluidContact,
+        EntityLevelCallback, EntityMoveError, EntitySyncedData, EntityVerticalMovementStateUpdate,
+        LivingEntity, LivingEntityBase, LivingTravelInput, RemovalReason, SharedEntity,
         closest_open_space_direction, fall_damage_reset_clip_target, fall_flying_collision_damage,
         fall_flying_free_fall_interval, get_input_vector, should_apply_resolved_movement,
         start_riding_entities, transfer_leashables_to_holder, trapdoor_usable_as_ladder_state,
@@ -6061,6 +6119,36 @@ mod tests {
 
         assert!(entity.living_base().last_hurt_by_player_uuid().is_none());
         assert_eq!(entity.last_hurt_by_player_memory_time(), 0);
+    }
+
+    #[test]
+    fn living_tick_state_updates_swing_time() {
+        init_test_registry();
+
+        let entity = LivingFluidTestEntity::new(0.0, 0.0, true);
+        entity.swing(InteractionHand::MainHand, false);
+        assert_eq!(entity.living_swing_state().swing_time(), -1);
+
+        entity.tick_living_state();
+
+        let swing = entity.living_swing_state();
+        assert!(swing.swinging());
+        assert_eq!(swing.swing_time(), 0);
+        assert_eq!(swing.attack_anim().to_bits(), 0.0_f32.to_bits());
+    }
+
+    #[test]
+    fn current_swing_duration_uses_vanilla_dig_effects() {
+        init_test_registry();
+
+        let entity = LivingFluidTestEntity::new(0.0, 0.0, true);
+        assert_eq!(entity.current_swing_duration(), DEFAULT_SWING_DURATION);
+
+        entity.set_mob_effect(vanilla_mob_effects::MINING_FATIGUE, 2);
+        assert_eq!(entity.current_swing_duration(), DEFAULT_SWING_DURATION + 6);
+
+        entity.set_mob_effect(vanilla_mob_effects::HASTE, 1);
+        assert_eq!(entity.current_swing_duration(), DEFAULT_SWING_DURATION - 2);
     }
 
     #[test]
