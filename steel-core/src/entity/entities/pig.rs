@@ -729,7 +729,7 @@ impl AgeableMob for PigEntity {
     }
 
     fn age_boundary_changed(&self, _baby: bool) {
-        // TODO: Refresh dimensions when baby/adult size changes.
+        self.refresh_dimensions();
     }
 }
 
@@ -1286,6 +1286,63 @@ mod tests {
         pig.set_age(0);
         assert!(!pig.is_baby());
         assert!(!*pig.entity_data.lock().ageable_mob().baby.get());
+    }
+
+    #[test]
+    fn pig_age_boundary_refreshes_dimensions() {
+        init_test_registry();
+
+        let pig = PigEntity::new(&vanilla_entities::PIG, 1, DVec3::ZERO, Weak::new());
+        let adult_dimensions = vanilla_entities::PIG.dimensions;
+
+        assert_eq!(pig.base().dimensions(), adult_dimensions);
+
+        pig.set_age(-1);
+        let baby_dimensions = adult_dimensions.scale(0.5);
+        assert_eq!(pig.base().dimensions(), baby_dimensions);
+        assert_eq!(
+            pig.bounding_box().width().to_bits(),
+            f64::from(baby_dimensions.width).to_bits()
+        );
+        assert_eq!(
+            pig.bounding_box().height().to_bits(),
+            f64::from(baby_dimensions.height).to_bits()
+        );
+
+        pig.set_age(0);
+        assert_eq!(pig.base().dimensions(), adult_dimensions);
+        assert_eq!(
+            pig.bounding_box().width().to_bits(),
+            f64::from(adult_dimensions.width).to_bits()
+        );
+        assert_eq!(
+            pig.bounding_box().height().to_bits(),
+            f64::from(adult_dimensions.height).to_bits()
+        );
+    }
+
+    #[test]
+    fn pig_scale_attribute_refreshes_dimensions() {
+        init_test_registry();
+
+        let pig = PigEntity::new(&vanilla_entities::PIG, 1, DVec3::ZERO, Weak::new());
+        let adult_dimensions = vanilla_entities::PIG.dimensions;
+
+        pig.attributes()
+            .lock()
+            .set_base_value(vanilla_attributes::SCALE, 2.0);
+        LivingEntity::refresh_dirty_attributes(&pig);
+
+        let scaled_dimensions = adult_dimensions.scale(2.0);
+        assert_eq!(pig.base().dimensions(), scaled_dimensions);
+        assert_eq!(
+            pig.bounding_box().width().to_bits(),
+            f64::from(scaled_dimensions.width).to_bits()
+        );
+        assert_eq!(
+            pig.bounding_box().height().to_bits(),
+            f64::from(scaled_dimensions.height).to_bits()
+        );
     }
 
     #[test]

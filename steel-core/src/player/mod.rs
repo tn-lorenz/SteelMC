@@ -1577,7 +1577,12 @@ impl Entity for Player {
     }
 
     fn dimensions_for_pose(&self, pose: EntityPose) -> EntityDimensions {
-        Player::dimensions_for_pose(pose)
+        let dimensions = Player::dimensions_for_pose(pose);
+        if pose == EntityPose::Sleeping || self.entity_type().fixed {
+            dimensions
+        } else {
+            dimensions.scale(LivingEntity::get_scale(self))
+        }
     }
 
     fn hurt(&self, source: &DamageSource, amount: f32) -> bool {

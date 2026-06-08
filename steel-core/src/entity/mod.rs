@@ -2370,7 +2370,24 @@ pub trait Entity: EntityEventSource + Send + Sync {
 
     /// Returns vanilla dimensions for a physical pose.
     fn dimensions_for_pose(&self, _pose: EntityPose) -> EntityDimensions {
-        self.entity_type().dimensions
+        let dimensions = self.entity_type().dimensions;
+        let Some(living) = self.as_living_entity() else {
+            return dimensions;
+        };
+
+        if self.entity_type().fixed {
+            dimensions
+        } else {
+            dimensions.scale(living.get_age_scale() * living.get_scale())
+        }
+    }
+
+    /// Refreshes dimensions for the current physical pose.
+    fn refresh_dimensions(&self) {
+        let pose = self.pose();
+        self.base()
+            .set_pose_and_dimensions(pose, self.dimensions_for_pose(pose));
+        // TODO: Fudge position after growth once free-position probing exists.
     }
 
     /// Sets the physical pose and synchronized pose metadata.
@@ -3310,6 +3327,19 @@ pub trait LivingEntity: Entity {
     /// Returns vanilla `LivingEntity.isBaby()`.
     fn is_baby(&self) -> bool {
         false
+    }
+
+    /// Returns vanilla `LivingEntity.getAgeScale()`.
+    fn get_age_scale(&self) -> f32 {
+        if self.is_baby() { 0.5 } else { 1.0 }
+    }
+
+    /// Returns vanilla `LivingEntity.getScale()`.
+    fn get_scale(&self) -> f32 {
+        self.attributes()
+            .lock()
+            .get_value(vanilla_attributes::SCALE)
+            .unwrap_or(1.0) as f32
     }
 
     /// Returns true if the entity is alive (health > 0).
@@ -4925,8 +4955,9 @@ pub trait LivingEntity: Entity {
                 if self.get_absorption_amount() > max {
                     self.set_absorption_amount(max);
                 }
+            } else if attr.key == vanilla_attributes::SCALE.key {
+                self.refresh_dimensions();
             }
-            // TODO: SCALE → refreshDimensions()
             // TODO: WAYPOINT_TRANSMIT_RANGE → waypoint manager
         }
     }
