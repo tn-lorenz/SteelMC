@@ -519,6 +519,10 @@ pub trait Mob: LivingEntity {
     }
 
     fn ambient_sound_interval(&self) -> i32 {
+        if let Some(animal) = self.as_animal() {
+            return animal.ambient_sound_interval_animal();
+        }
+
         80
     }
 

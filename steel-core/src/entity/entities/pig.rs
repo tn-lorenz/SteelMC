@@ -1239,6 +1239,7 @@ mod tests {
         init_test_registry();
 
         let pig = PigEntity::new(&vanilla_entities::PIG, 1, DVec3::ZERO, Weak::new());
+        assert_eq!(Mob::ambient_sound_interval(&pig), 120);
 
         assert_eq!(
             Mob::ambient_sound(&pig).map(|sound| &sound.key),
