@@ -3777,6 +3777,10 @@ impl LevelReader for World {
         sky_light
     }
 
+    fn ambient_light(&self) -> f32 {
+        self.dimension_type.ambient_light
+    }
+
     fn min_y(&self) -> i32 {
         self.get_min_y()
     }
@@ -3793,6 +3797,10 @@ impl LevelReader for Arc<World> {
 
     fn raw_brightness(&self, pos: BlockPos, sky_darkening: u8) -> u8 {
         self.as_ref().raw_brightness(pos, sky_darkening)
+    }
+
+    fn ambient_light(&self) -> f32 {
+        self.as_ref().ambient_light()
     }
 
     fn min_y(&self) -> i32 {

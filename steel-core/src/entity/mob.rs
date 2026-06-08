@@ -1379,8 +1379,9 @@ fn tick_path_navigation_target<M: Mob + ?Sized>(mob: &M, world: &Arc<World>, gam
 }
 
 pub trait PathfinderMob: Mob {
-    fn get_walk_target_value(&self, _pos: BlockPos) -> f32 {
-        0.0
+    fn get_walk_target_value(&self, pos: BlockPos) -> f32 {
+        self.as_animal()
+            .map_or(0.0, |animal| animal.animal_walk_target_value(pos))
     }
 
     fn can_update_path(&self) -> bool {

@@ -4,20 +4,22 @@ use std::sync::Arc;
 
 use simdnbt::borrow::NbtCompound as BorrowedNbtCompoundView;
 use simdnbt::owned::{NbtCompound, NbtTag};
+use steel_registry::blocks::block_state_ext::BlockStateExt as _;
 use steel_registry::item_stack::ItemStack;
+use steel_registry::vanilla_blocks;
 use steel_registry::vanilla_game_rules::MOB_DROPS;
 use steel_utils::entity_events::EntityStatus;
 use steel_utils::locks::SyncMutex;
 use steel_utils::random::Random as _;
 use steel_utils::types::InteractionHand;
-use steel_utils::{Identifier, UuidExt};
+use steel_utils::{BlockPos, Identifier, UuidExt};
 use uuid::Uuid;
 
 use crate::behavior::InteractionResult;
 use crate::entity::entities::ExperienceOrbEntity;
 use crate::entity::{AgeableMob, AgeableMobBase, ENTITIES, Mob, SharedEntity, next_entity_id};
 use crate::player::Player;
-use crate::world::World;
+use crate::world::{LevelReader as _, World};
 
 const PARENT_AGE_AFTER_BREEDING: i32 = 6000;
 const IN_LOVE_TIME: i32 = 600;
@@ -150,6 +152,19 @@ pub trait Animal: AgeableMob {
     /// Returns whether the stack is valid food for this animal.
     fn is_food(&self, _item_stack: &ItemStack) -> bool {
         false
+    }
+
+    /// Returns vanilla `Animal.getWalkTargetValue`.
+    fn animal_walk_target_value(&self, pos: BlockPos) -> f32 {
+        let Some(world) = self.level() else {
+            return 0.0;
+        };
+
+        if world.get_block_state(pos.below()).get_block() == &vanilla_blocks::GRASS_BLOCK {
+            10.0
+        } else {
+            world.pathfinding_cost_from_light_levels(pos)
+        }
     }
 
     /// Plays this animal's vanilla eating sound.

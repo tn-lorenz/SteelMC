@@ -1232,6 +1232,10 @@ impl LevelReader for WorldGenRegion<'_> {
         sky_light.max(self.block_light_at(pos))
     }
 
+    fn ambient_light(&self) -> f32 {
+        self.context.world().dimension_type.ambient_light
+    }
+
     fn min_y(&self) -> i32 {
         WorldGenRegion::min_y(self)
     }
