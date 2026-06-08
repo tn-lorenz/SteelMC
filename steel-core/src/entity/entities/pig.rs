@@ -859,6 +859,7 @@ mod tests {
     use crate::entity::ai::node::Node;
     use crate::entity::ai::path::{Path, PathType};
     use crate::entity::damage::DamageSource;
+    use crate::entity::entities::LeashFenceKnotEntity;
     use crate::entity::mob::LeashAttachment;
     use crate::entity::{Animal, DEATH_DURATION, ItemSteerable, RemovalReason, SharedEntity};
     use crate::inventory::equipment::EquipmentSlot;
@@ -1517,6 +1518,28 @@ mod tests {
 
         let pig = PigEntity::new(&vanilla_entities::PIG, 1, DVec3::ZERO, Weak::new());
         pig.set_delayed_leash_attachment(LeashAttachment::FenceKnot(BlockPos::new(4, 65, -9)));
+
+        let mut nbt = NbtCompound::new();
+        pig.save_additional(&mut nbt);
+
+        assert_eq!(
+            nbt.int_array("leash").map(|value| value.to_vec()),
+            Some(vec![4, 65, -9])
+        );
+    }
+
+    #[test]
+    fn pig_saves_live_fence_knot_leash_as_vanilla_block_pos_int_array() {
+        init_test_registry();
+
+        let pig = PigEntity::new(&vanilla_entities::PIG, 1, DVec3::ZERO, Weak::new());
+        let knot: SharedEntity = Arc::new(LeashFenceKnotEntity::new_attached(
+            &vanilla_entities::LEASH_KNOT,
+            2,
+            BlockPos::new(4, 65, -9),
+            Weak::new(),
+        ));
+        assert!(pig.set_leashed_to(&knot));
 
         let mut nbt = NbtCompound::new();
         pig.save_additional(&mut nbt);

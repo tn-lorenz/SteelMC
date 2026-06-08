@@ -204,6 +204,15 @@ impl Entity for ItemFrameEntity {
         direction_3d_data_value(*self.entity_data.lock().hanging_entity.direction.get())
     }
 
+    fn spawn_position(&self) -> DVec3 {
+        let block_pos = *self.block_pos.lock();
+        DVec3::new(
+            f64::from(block_pos.x()),
+            f64::from(block_pos.y()),
+            f64::from(block_pos.z()),
+        )
+    }
+
     fn is_pickable(&self) -> bool {
         true
     }

@@ -28,6 +28,7 @@ use crate::entity::ai::navigation::{
 use crate::entity::ai::path::{Path, PathType, PathfindingContext, PathfindingMalus};
 use crate::entity::ai::walk::{MobPathSettings, WalkNodeEvaluator, WalkPathEvaluator};
 use crate::entity::damage::DamageSource;
+use crate::entity::entities::LeashFenceKnotEntity;
 use crate::entity::{
     Entity, LivingEntity, LivingTravelInput, RemovalReason, SharedEntity, WeakEntity,
 };
@@ -162,8 +163,12 @@ impl MobHomeRestriction {
 
 impl LeashData {
     fn from_entity(holder: &SharedEntity) -> Self {
+        let attachment = holder.as_leash_fence_knot().map_or_else(
+            || LeashAttachment::Entity(holder.uuid()),
+            |knot| LeashAttachment::FenceKnot(knot.block_pos()),
+        );
         Self {
-            attachment: LeashAttachment::Entity(holder.uuid()),
+            attachment,
             holder: Some(Arc::downgrade(holder)),
             angular_momentum: 0.0,
         }
@@ -183,12 +188,18 @@ impl LeashData {
 
     fn saved_attachment(&self) -> LeashAttachment {
         self.holder().map_or(self.attachment, |holder| {
-            LeashAttachment::Entity(holder.uuid())
+            holder.as_leash_fence_knot().map_or_else(
+                || LeashAttachment::Entity(holder.uuid()),
+                |knot| LeashAttachment::FenceKnot(knot.block_pos()),
+            )
         })
     }
 
     fn set_holder(&mut self, holder: &SharedEntity) {
-        self.attachment = LeashAttachment::Entity(holder.uuid());
+        self.attachment = holder.as_leash_fence_knot().map_or_else(
+            || LeashAttachment::Entity(holder.uuid()),
+            |knot| LeashAttachment::FenceKnot(knot.block_pos()),
+        );
         self.holder = Some(Arc::downgrade(holder));
         self.angular_momentum = 0.0;
     }
@@ -503,8 +514,6 @@ pub trait Mob: LivingEntity {
             .is_some_and(|value| value != 0);
         *self.mob_base().drop_chances().lock() = DropChances::load(nbt);
         *self.mob_base().leash_data().lock() = LeashData::load(nbt);
-        // TODO: Resolve delayed fence-knot attachments during leash ticks once
-        // `LeashFenceKnotEntity` exists.
         let home_radius = nbt.int("home_radius").unwrap_or(-1);
         if home_radius >= 0 {
             let home_position = nbt
@@ -631,9 +640,16 @@ pub trait Mob: LivingEntity {
                     self.remove_leash_state();
                 }
             }
-            LeashAttachment::FenceKnot(_pos) => {
-                // TODO: Resolve delayed fence-knot leashes once
-                // `LeashFenceKnotEntity` exists.
+            LeashAttachment::FenceKnot(pos) => {
+                if let Some(holder) = LeashFenceKnotEntity::get_or_create_knot(&world, pos) {
+                    let _ = self.set_leashed_to(&holder);
+                    return;
+                }
+
+                if self.tick_count() > DELAYED_LEASH_DROP_TICKS {
+                    let _ = self.spawn_at_location(ItemStack::new(&vanilla_items::ITEMS.lead), 0.0);
+                    self.remove_leash_state();
+                }
             }
         }
     }

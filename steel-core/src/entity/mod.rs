@@ -55,7 +55,7 @@ use crate::world::game_event_context::GameEventContext;
 use crate::world::{ClipBlockShape, ClipFluid, World};
 use crate::{entity::damage::DamageSource, player::Player};
 
-use entities::{ExperienceOrbEntity, ItemEntity};
+use entities::{ExperienceOrbEntity, ItemEntity, LeashFenceKnotEntity};
 
 /// Global counter for allocating unique entity IDs.
 ///
@@ -787,6 +787,15 @@ pub trait Entity: EntityEventSource + Send + Sync {
         self.base().position()
     }
 
+    /// Gets the position to send in this entity's add-entity packet.
+    ///
+    /// Mirrors vanilla `Entity.getAddEntityPacket()` overloads. Most entities
+    /// spawn at their current position; block-attached entities can override
+    /// this with the backing block position used by the vanilla packet.
+    fn spawn_position(&self) -> DVec3 {
+        self.position()
+    }
+
     /// Gets the entity's current block position.
     fn block_position(&self) -> BlockPos {
         let position = self.position();
@@ -1413,6 +1422,11 @@ pub trait Entity: EntityEventSource + Send + Sync {
 
     /// Gets the entity as an `ExperienceOrbEntity` if it is one.
     fn as_experience_orb(self: Arc<Self>) -> Option<Arc<ExperienceOrbEntity>> {
+        None
+    }
+
+    /// Returns this entity as a leash fence knot when it has that behavior.
+    fn as_leash_fence_knot(&self) -> Option<&LeashFenceKnotEntity> {
         None
     }
 

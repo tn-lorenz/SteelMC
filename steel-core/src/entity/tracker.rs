@@ -843,7 +843,7 @@ impl EntitySpawnPairing {
     fn from_entity(entity: &SharedEntity, passenger_packets: Vec<CSetPassengers>) -> Self {
         entity.update_data_before_sync();
 
-        let pos = entity.position();
+        let pos = entity.spawn_position();
         let vel = entity.velocity();
         let (yaw, pitch) = entity.rotation();
         let entity_type_id = entity.entity_type().id() as i32;
@@ -931,9 +931,13 @@ mod tests {
     use steel_registry::{
         entity_type::EntityTypeRef, test_support, vanilla_entities, vanilla_items,
     };
+    use steel_utils::BlockPos;
 
     use super::*;
-    use crate::entity::{EntityBase, Mob, entities::PigEntity};
+    use crate::entity::{
+        EntityBase, Mob,
+        entities::{LeashFenceKnotEntity, PigEntity},
+    };
     use crate::inventory::equipment::EquipmentSlot;
 
     struct PairingTestEntity {
@@ -1202,6 +1206,23 @@ mod tests {
         assert_eq!(pairing.equipment.len(), 1);
         assert_eq!(pairing.equipment[0].slot, EquipmentSlot::Chest);
         assert_eq!(pairing.equipment[0].item_stack, stack);
+    }
+
+    #[test]
+    fn spawn_pairing_uses_entity_spawn_packet_position() {
+        test_support::init_test_registry();
+
+        let entity: SharedEntity = Arc::new(LeashFenceKnotEntity::new_attached(
+            &vanilla_entities::LEASH_KNOT,
+            1,
+            BlockPos::new(4, 65, -9),
+            Weak::new(),
+        ));
+        let pairing = EntitySpawnPairing::from_entity(&entity, Vec::new());
+
+        assert_eq!(pairing.spawn_packet.x, 4.0);
+        assert_eq!(pairing.spawn_packet.y, 65.0);
+        assert_eq!(pairing.spawn_packet.z, -9.0);
     }
 
     #[test]
