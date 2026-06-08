@@ -3266,6 +3266,12 @@ pub trait LivingEntity: Entity {
         target.can_be_seen_as_enemy()
     }
 
+    /// Returns vanilla `LivingEntity.getLastDamageSource()`.
+    fn last_damage_source(&self) -> Option<DamageSource> {
+        let game_time = self.level().map_or(0, |world| world.game_time());
+        self.living_base().last_damage_source(game_time)
+    }
+
     /// Returns vanilla `LivingEntity.hasLineOfSight()`.
     fn has_line_of_sight(&self, target: &dyn Entity) -> bool {
         self.has_line_of_sight_with(
@@ -3371,6 +3377,10 @@ pub trait LivingEntity: Entity {
         if self.is_dead_or_dying() {
             self.die(source);
         }
+
+        let game_time = self.level().map_or(0, |world| world.game_time());
+        self.living_base()
+            .record_last_damage_source(source, game_time);
 
         true
     }

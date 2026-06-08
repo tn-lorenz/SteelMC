@@ -22,6 +22,7 @@ use steel_utils::locks::SyncMutex;
 use steel_utils::{BlockPos, Identifier};
 
 use crate::entity::attribute::{AttributeMap, AttributeModifier, AttributeModifierOperation};
+use crate::entity::damage::DamageSource;
 use crate::inventory::equipment::{EntityEquipment, EquipmentSlot};
 
 /// Duration in ticks of the death animation before entity removal.
@@ -394,12 +395,14 @@ impl LivingTravelInput {
     }
 }
 
-#[derive(Debug, Clone, Copy, PartialEq)]
+#[derive(Debug, Clone)]
 struct LivingEntityState {
     effects_dirty: bool,
     death_processed: bool,
     invulnerable_time: i32,
     last_hurt: f32,
+    last_damage_source: Option<DamageSource>,
+    last_damage_stamp: i64,
     absorption_amount: f32,
     death_time: i32,
     speed: f32,
@@ -423,6 +426,8 @@ impl LivingEntityState {
             death_processed: false,
             invulnerable_time: 0,
             last_hurt: 0.0,
+            last_damage_source: None,
+            last_damage_stamp: 0,
             absorption_amount: 0.0,
             death_time: 0,
             speed,
@@ -1045,6 +1050,22 @@ impl LivingEntityBase {
         }
     }
 
+    /// Records vanilla `LivingEntity.lastDamageSource` after successful damage.
+    pub fn record_last_damage_source(&self, source: &DamageSource, game_time: i64) {
+        let mut state = self.state.lock();
+        state.last_damage_source = Some(source.clone());
+        state.last_damage_stamp = game_time;
+    }
+
+    /// Returns vanilla `LivingEntity.getLastDamageSource()`.
+    pub fn last_damage_source(&self, game_time: i64) -> Option<DamageSource> {
+        let mut state = self.state.lock();
+        if game_time - state.last_damage_stamp > 40 {
+            state.last_damage_source = None;
+        }
+        state.last_damage_source.clone()
+    }
+
     /// Marks death side effects as processed.
     ///
     /// Returns `false` if they were already processed.
@@ -1076,11 +1097,12 @@ impl LivingEntityBase {
 mod tests {
     use steel_registry::{
         item_stack::ItemStack, test_support::init_test_registry, vanilla_attributes,
-        vanilla_entities, vanilla_entity_data::PlayerEntityData, vanilla_items,
-        vanilla_mob_effects,
+        vanilla_damage_types, vanilla_entities, vanilla_entity_data::PlayerEntityData,
+        vanilla_items, vanilla_mob_effects,
     };
     use steel_utils::BlockPos;
 
+    use crate::entity::damage::DamageSource;
     use crate::inventory::equipment::EquipmentSlot;
 
     use super::{
@@ -1117,6 +1139,26 @@ mod tests {
             LivingEntityBase::calculate_fall_damage(4.0, 1.0, 3.0, 1.0),
             1
         );
+    }
+
+    #[test]
+    fn last_damage_source_expires_after_vanilla_window() {
+        init_test_registry();
+        let base = LivingEntityBase::new(&vanilla_entities::PIG);
+        let source = DamageSource::environment(&vanilla_damage_types::GENERIC);
+
+        assert!(base.last_damage_source(0).is_none());
+
+        base.record_last_damage_source(&source, 10);
+
+        let last_source = base
+            .last_damage_source(50)
+            .expect("last damage source should remain valid for 40 ticks");
+        assert!(std::ptr::eq(
+            last_source.damage_type,
+            &vanilla_damage_types::GENERIC
+        ));
+        assert!(base.last_damage_source(51).is_none());
     }
 
     #[test]
