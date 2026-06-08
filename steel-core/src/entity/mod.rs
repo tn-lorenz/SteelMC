@@ -1273,7 +1273,10 @@ pub trait Entity: EntityEventSource + Send + Sync {
         self.base().dampen_fall_distance_in_lava();
         self.check_below_world();
         self.sync_base_fire_freeze_entity_data();
-        // TODO: Add remaining vanilla baseTick pieces: portal, sprint particles, and leash tick.
+        if let Some(mob) = self.as_mob() {
+            mob.tick_leash();
+        }
+        // TODO: Add remaining vanilla baseTick pieces: portal, sprint particles, and full leash physics.
     }
 
     /// Applies vanilla below-world handling.

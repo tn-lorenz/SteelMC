@@ -46,6 +46,7 @@ const DEFAULT_EQUIPMENT_DROP_CHANCE: f32 = 0.085;
 const PRESERVE_ITEM_DROP_CHANCE_THRESHOLD: f32 = 1.0;
 const PRESERVE_ITEM_DROP_CHANCE: f32 = 2.0;
 const LEASH_SNAP_DISTANCE: f64 = 12.0;
+const DELAYED_LEASH_DROP_TICKS: i32 = 100;
 
 #[derive(Debug, Clone, Copy, PartialEq)]
 struct DropChances {
@@ -502,7 +503,8 @@ pub trait Mob: LivingEntity {
             .is_some_and(|value| value != 0);
         *self.mob_base().drop_chances().lock() = DropChances::load(nbt);
         *self.mob_base().leash_data().lock() = LeashData::load(nbt);
-        // TODO: Resolve delayed UUID/fence-knot attachments during leash ticks once fence knots exist.
+        // TODO: Resolve delayed fence-knot attachments during leash ticks once
+        // `LeashFenceKnotEntity` exists.
         let home_radius = nbt.int("home_radius").unwrap_or(-1);
         if home_radius >= 0 {
             let home_position = nbt
@@ -600,6 +602,40 @@ pub trait Mob: LivingEntity {
         }
         // TODO: Notify old/new leash holders once holder notification hooks exist.
         true
+    }
+
+    fn tick_leash(&self) {
+        if self.leash_holder().is_some() {
+            // TODO: Apply full vanilla leash physics, snap distance, gamerule
+            // drops, and holder notifications.
+            return;
+        }
+
+        let Some(attachment) = self.leash_attachment() else {
+            return;
+        };
+
+        let Some(world) = self.level() else {
+            return;
+        };
+
+        match attachment {
+            LeashAttachment::Entity(uuid) => {
+                if let Some(holder) = world.get_entity_by_uuid(&uuid) {
+                    let _ = self.set_leashed_to(&holder);
+                    return;
+                }
+
+                if self.tick_count() > DELAYED_LEASH_DROP_TICKS {
+                    let _ = self.spawn_at_location(ItemStack::new(&vanilla_items::ITEMS.lead), 0.0);
+                    self.remove_leash_state();
+                }
+            }
+            LeashAttachment::FenceKnot(_pos) => {
+                // TODO: Resolve delayed fence-knot leashes once
+                // `LeashFenceKnotEntity` exists.
+            }
+        }
     }
 
     fn drop_leash(&self) {
