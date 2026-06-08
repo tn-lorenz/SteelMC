@@ -15,6 +15,7 @@ mod random_pos;
 mod random_stroll;
 mod selector;
 mod tempt_goal;
+mod try_find_water;
 mod water_avoiding_random_stroll;
 
 pub(crate) use breed_goal::BreedGoal;
