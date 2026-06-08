@@ -12,6 +12,7 @@ const BABY_START_AGE: i32 = -24_000;
 struct AgeableMobState {
     age: i32,
     forced_age: i32,
+    forced_age_timer: i32,
 }
 
 impl AgeableMobState {
@@ -19,6 +20,7 @@ impl AgeableMobState {
         Self {
             age: 0,
             forced_age: 0,
+            forced_age_timer: 0,
         }
     }
 }
@@ -61,6 +63,28 @@ impl AgeableMobBase {
     /// Sets vanilla `AgeableMob.forcedAge`.
     pub fn set_forced_age(&self, forced_age: i32) {
         self.state.lock().forced_age = forced_age;
+    }
+
+    /// Returns vanilla `AgeableMob.forcedAgeTimer`.
+    #[must_use]
+    pub fn forced_age_timer(&self) -> i32 {
+        self.state.lock().forced_age_timer
+    }
+
+    /// Sets vanilla `AgeableMob.forcedAgeTimer`.
+    pub fn set_forced_age_timer(&self, forced_age_timer: i32) {
+        self.state.lock().forced_age_timer = forced_age_timer;
+    }
+
+    /// Adds to vanilla `AgeableMob.forcedAge`.
+    pub fn add_forced_age(&self, delta: i32) {
+        self.state.lock().forced_age += delta;
+    }
+
+    /// Returns vanilla `AgeableMob.getSpeedUpSecondsWhenFeeding`.
+    #[must_use]
+    pub fn get_speed_up_seconds_when_feeding(ticks_until_adult: i32) -> i32 {
+        ((ticks_until_adult / 20) as f32 * 0.1) as i32
     }
 }
 
@@ -121,9 +145,49 @@ pub trait AgeableMob: Mob {
         self.ageable_base().set_forced_age(forced_age);
     }
 
+    /// Returns vanilla `AgeableMob.forcedAgeTimer`.
+    fn forced_age_timer(&self) -> i32 {
+        self.ageable_base().forced_age_timer()
+    }
+
+    /// Sets vanilla `AgeableMob.forcedAgeTimer`.
+    fn set_forced_age_timer(&self, forced_age_timer: i32) {
+        self.ageable_base().set_forced_age_timer(forced_age_timer);
+    }
+
     /// Returns whether this mob can naturally age toward adulthood this tick.
     fn can_age_up(&self) -> bool {
         self.is_baby() && !self.is_age_locked()
+    }
+
+    /// Returns vanilla `AgeableMob.getSpeedUpSecondsWhenFeeding`.
+    fn get_speed_up_seconds_when_feeding(ticks_until_adult: i32) -> i32
+    where
+        Self: Sized,
+    {
+        AgeableMobBase::get_speed_up_seconds_when_feeding(ticks_until_adult)
+    }
+
+    /// Applies vanilla `AgeableMob.ageUp`.
+    fn age_up(&self, seconds: i32, forced: bool) {
+        let old_age = self.get_age();
+        let mut age = old_age + seconds * 20;
+        if age > 0 {
+            age = 0;
+        }
+
+        let delta = age - old_age;
+        self.set_age(age);
+        if forced {
+            self.ageable_base().add_forced_age(delta);
+            if self.forced_age_timer() == 0 {
+                self.set_forced_age_timer(40);
+            }
+        }
+
+        if self.get_age() == 0 {
+            self.set_age(self.forced_age());
+        }
     }
 
     /// Ticks vanilla age progression.
@@ -289,5 +353,37 @@ mod tests {
         mob.tick_ageable_mob();
 
         assert_eq!(mob.get_age(), -2);
+    }
+
+    #[test]
+    fn age_up_adds_forced_age_and_timer() {
+        let mob = TestAgeableMob::new();
+
+        mob.set_age(-100);
+        mob.age_up(1, true);
+
+        assert_eq!(mob.get_age(), -80);
+        assert_eq!(mob.forced_age(), 20);
+        assert_eq!(mob.forced_age_timer(), 40);
+    }
+
+    #[test]
+    fn age_up_applies_forced_age_when_reaching_adulthood() {
+        let mob = TestAgeableMob::new();
+
+        mob.set_age(-10);
+        mob.age_up(1, true);
+
+        assert_eq!(mob.get_age(), 10);
+        assert_eq!(mob.forced_age(), 10);
+    }
+
+    #[test]
+    fn feeding_speed_up_seconds_matches_vanilla_integer_order() {
+        assert_eq!(
+            TestAgeableMob::get_speed_up_seconds_when_feeding(24_000),
+            120
+        );
+        assert_eq!(TestAgeableMob::get_speed_up_seconds_when_feeding(199), 0);
     }
 }

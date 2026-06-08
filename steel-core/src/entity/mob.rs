@@ -148,6 +148,12 @@ pub trait Mob: LivingEntity {
         InteractionResult::Pass
     }
 
+    /// Applies vanilla `Mob.usePlayerItem`.
+    fn use_player_item(&self, player: &Player, hand: InteractionHand) {
+        player.inventory.lock().shrink_item_in_hand(hand, 1);
+        // TODO: Apply USE_REMAINDER components once item use-remainder support exists.
+    }
+
     fn remove_when_far_away(&self, _dist_sqr: f64) -> bool {
         true
     }

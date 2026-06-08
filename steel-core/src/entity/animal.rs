@@ -4,15 +4,18 @@ use std::sync::Arc;
 
 use simdnbt::borrow::NbtCompound as BorrowedNbtCompoundView;
 use simdnbt::owned::{NbtCompound, NbtTag};
+use steel_registry::item_stack::ItemStack;
 use steel_registry::vanilla_game_rules::MOB_DROPS;
 use steel_utils::entity_events::EntityStatus;
 use steel_utils::locks::SyncMutex;
 use steel_utils::random::Random as _;
+use steel_utils::types::InteractionHand;
 use steel_utils::{Identifier, UuidExt};
 use uuid::Uuid;
 
+use crate::behavior::InteractionResult;
 use crate::entity::entities::ExperienceOrbEntity;
-use crate::entity::{AgeableMob, ENTITIES, SharedEntity, next_entity_id};
+use crate::entity::{AgeableMob, AgeableMobBase, ENTITIES, Mob, SharedEntity, next_entity_id};
 use crate::player::Player;
 use crate::world::World;
 
@@ -142,6 +145,47 @@ pub trait Animal: AgeableMob {
             && self.entity_type() == partner.entity_type()
             && self.is_in_love()
             && partner.is_in_love()
+    }
+
+    /// Returns whether the stack is valid food for this animal.
+    fn is_food(&self, _item_stack: &ItemStack) -> bool {
+        false
+    }
+
+    /// Plays this animal's vanilla eating sound.
+    fn play_eating_sound(&self) {}
+
+    /// Handles vanilla `Animal.mobInteract`.
+    fn mob_interact_animal(&self, player: &Player, hand: InteractionHand) -> InteractionResult {
+        let item_stack = {
+            let inventory = player.inventory.lock();
+            let item_stack = inventory.get_item_in_hand(hand);
+            item_stack.copy_with_count(item_stack.count())
+        };
+
+        if !self.is_food(&item_stack) {
+            return InteractionResult::Pass;
+        }
+
+        let age = self.get_age();
+        if age == 0 && self.can_fall_in_love() {
+            Mob::use_player_item(self, player, hand);
+            self.set_in_love(Some(player));
+            self.play_eating_sound();
+            return InteractionResult::Success;
+        }
+
+        if self.can_age_up() {
+            Mob::use_player_item(self, player, hand);
+            self.age_up(
+                AgeableMobBase::get_speed_up_seconds_when_feeding(-age),
+                true,
+            );
+            self.play_eating_sound();
+            return InteractionResult::Success;
+        }
+
+        InteractionResult::Pass
     }
 
     /// Creates a same-type offspring using the registered entity factory.

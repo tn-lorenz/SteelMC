@@ -335,6 +335,21 @@ impl PlayerInventory {
         }
     }
 
+    /// Shrinks the item in the specified hand and records inventory/equipment changes.
+    pub fn shrink_item_in_hand(&mut self, hand: InteractionHand, amount: i32) {
+        if amount <= 0 || self.get_item_in_hand(hand).is_empty() {
+            return;
+        }
+
+        self.get_item_in_hand_mut(hand).shrink(amount);
+        let slot = match hand {
+            InteractionHand::MainHand => EquipmentSlot::MainHand,
+            InteractionHand::OffHand => EquipmentSlot::OffHand,
+        };
+        self.refresh_player_equipment_attribute_modifiers(slot);
+        self.set_changed();
+    }
+
     /// Swaps the selected main-hand item with the offhand item.
     ///
     /// Returns true when the visible hand contents changed.
@@ -1267,6 +1282,42 @@ mod tests {
 
         assert_eq!(dirty_items, vec![(EquipmentSlot::MainHand, selected)]);
         assert!(inventory.drain_dirty_equipment_items().is_empty());
+    }
+
+    #[test]
+    fn shrink_item_in_hand_marks_changed_and_dirty_equipment() {
+        init_test_registry();
+
+        let mut inventory = PlayerInventory::new(Weak::new());
+        inventory.set_selected_item(ItemStack::with_count(&ITEMS.oak_log, 3));
+        inventory.set_offhand_item(ItemStack::with_count(&ITEMS.shield, 2));
+        inventory.drain_dirty_equipment_items();
+
+        let before = inventory.get_times_changed();
+        inventory.shrink_item_in_hand(InteractionHand::MainHand, 1);
+
+        assert_eq!(inventory.get_selected_item().count(), 2);
+        assert_ne!(inventory.get_times_changed(), before);
+        assert_eq!(
+            inventory.drain_dirty_equipment_items(),
+            vec![(
+                EquipmentSlot::MainHand,
+                ItemStack::with_count(&ITEMS.oak_log, 2)
+            )]
+        );
+
+        let before = inventory.get_times_changed();
+        inventory.shrink_item_in_hand(InteractionHand::OffHand, 1);
+
+        assert_eq!(inventory.get_offhand_item().count(), 1);
+        assert_ne!(inventory.get_times_changed(), before);
+        assert_eq!(
+            inventory.drain_dirty_equipment_items(),
+            vec![(
+                EquipmentSlot::OffHand,
+                ItemStack::with_count(&ITEMS.shield, 1)
+            )]
+        );
     }
 
     #[test]

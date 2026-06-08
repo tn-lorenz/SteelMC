@@ -631,6 +631,10 @@ impl Animal for PigEntity {
         &self.animal_base
     }
 
+    fn is_food(&self, item_stack: &ItemStack) -> bool {
+        PigEntity::is_food(self, item_stack)
+    }
+
     fn breed_variant_key(&self) -> Option<&Identifier> {
         Some(&self.variant().key)
     }
@@ -678,6 +682,10 @@ impl Mob for PigEntity {
 
     fn remove_when_far_away(&self, dist_sqr: f64) -> bool {
         Animal::remove_when_far_away_animal(self, dist_sqr)
+    }
+
+    fn mob_interact(&self, player: &Player, hand: InteractionHand) -> InteractionResult {
+        Animal::mob_interact_animal(self, player, hand)
     }
 
     fn mob_flags(&self) -> i8 {
