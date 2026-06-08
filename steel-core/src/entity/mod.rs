@@ -15,6 +15,7 @@ use steel_registry::blocks::{
     shapes::is_shape_full_block,
 };
 use steel_registry::data_components::vanilla_components::GLIDER;
+use steel_registry::enchantment_effect::EnchantmentEffectComponent;
 use steel_registry::entity_data::{DataValue, EntityPose};
 use steel_registry::entity_type::{EntityAttachment, EntityDimensions, EntityTypeRef};
 use steel_registry::fluid::FluidState;
@@ -1547,6 +1548,68 @@ pub trait Entity: EntityEventSource + Send + Sync {
         true
     }
 
+    /// Runs vanilla `Entity.attemptToShearEquipment`.
+    fn attempt_to_shear_equipment(&self, player: &Player, hand: InteractionHand) -> bool {
+        let Some(mob) = self.as_mob() else {
+            return false;
+        };
+        if !mob.can_shear_equipment(player) || player.is_secondary_use_active() {
+            return false;
+        }
+
+        let has_infinite_materials = player.has_infinite_materials();
+        for slot in EquipmentSlot::ALL {
+            let sheared = {
+                let mut equipment = mob.living_base().equipment().lock();
+                let item_stack = equipment.get_ref(slot);
+                let Some(equippable) = item_stack.get_equippable() else {
+                    continue;
+                };
+                if !equippable.can_be_sheared
+                    || !has_infinite_materials
+                        && item_stack
+                            .has_enchantment_effect(EnchantmentEffectComponent::PreventArmorChange)
+                {
+                    continue;
+                }
+
+                let shearing_sound = equippable.shearing_sound;
+                (equipment.take(slot), shearing_sound)
+            };
+            let (item_stack, shearing_sound) = sheared;
+            if item_stack.is_empty() {
+                continue;
+            }
+
+            player
+                .inventory
+                .lock()
+                .hurt_item_in_hand(hand, 1, has_infinite_materials);
+            mob.refresh_equipment_attribute_modifiers(slot);
+            mob.set_guaranteed_drop(slot);
+            mob.set_persistence_required();
+
+            if let Some(world) = self.level() {
+                world.game_event(
+                    &vanilla_game_events::SHEAR,
+                    self.block_position(),
+                    &GameEventContext::new(Some(player), None),
+                );
+            }
+            self.play_sound(shearing_sound, 1.0, 1.0);
+
+            let dimensions = self.base().dimensions();
+            let spawn_offset = dimensions
+                .attachments
+                .get_average(EntityAttachment::Passenger, dimensions);
+            let _ = self.spawn_at_location_with_offset(item_stack, spawn_offset);
+            // TODO: Trigger PLAYER_SHEARED_EQUIPMENT once advancement criteria exist.
+            return true;
+        }
+
+        false
+    }
+
     /// Handles vanilla entity right-click interaction.
     fn interact(
         &self,
@@ -1592,8 +1655,6 @@ pub trait Entity: EntityEventSource + Send + Sync {
             return InteractionResult::Success;
         }
 
-        // TODO: Implement equipment shearing once equippable component data
-        // includes `can_be_sheared` and shearing sound.
         let holding_shears = {
             let inventory = player.inventory.lock();
             inventory
@@ -1606,6 +1667,9 @@ pub trait Entity: EntityEventSource + Send + Sync {
                 .inventory
                 .lock()
                 .hurt_item_in_hand(hand, 1, has_infinite_materials);
+            return InteractionResult::Success;
+        }
+        if holding_shears && self.attempt_to_shear_equipment(player, hand) {
             return InteractionResult::Success;
         }
 
@@ -3476,6 +3540,16 @@ pub trait Entity: EntityEventSource + Send + Sync {
         world.spawn_item(DVec3::new(pos.x, pos.y + y_offset, pos.z), item)
     }
 
+    /// Spawns an item at this entity's location plus a vanilla attachment offset.
+    fn spawn_at_location_with_offset(
+        &self,
+        item: ItemStack,
+        offset: DVec3,
+    ) -> Option<Arc<entities::ItemEntity>> {
+        let world = self.level()?;
+        world.spawn_item(self.position() + offset, item)
+    }
+
     // === Persistence Methods ===
     // These mirror vanilla's Entity.addAdditionalSaveData/readAdditionalSaveData.
 
@@ -4203,8 +4277,9 @@ pub trait LivingEntity: Entity {
     }
 
     /// Returns the equip sound Steel can currently resolve for this entity.
-    fn equip_sound(&self, _slot: EquipmentSlot, _stack: &ItemStack) -> Option<SoundEventRef> {
-        None
+    fn equip_sound(&self, slot: EquipmentSlot, stack: &ItemStack) -> Option<SoundEventRef> {
+        let equippable = stack.get_equippable()?;
+        (slot == equippable.slot).then_some(equippable.equip_sound)
     }
 
     /// Runs vanilla's equippable `ItemStack.interactLivingEntity` branch.

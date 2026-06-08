@@ -132,6 +132,17 @@ impl EntityAttachments {
         rotate_attachment_point(point, yaw_degrees)
     }
 
+    #[must_use]
+    pub fn get_average(self, attachment: EntityAttachment, dimensions: EntityDimensions) -> DVec3 {
+        let Some(points) = self.points(attachment) else {
+            return fallback_point(attachment, dimensions);
+        };
+
+        points.iter().fold(DVec3::ZERO, |sum, point| {
+            sum + point.scaled(self.scale_x, self.scale_y, self.scale_z)
+        }) / points.len() as f64
+    }
+
     fn points(self, attachment: EntityAttachment) -> Option<&'static [EntityAttachmentPoint]> {
         let points = match attachment {
             EntityAttachment::Passenger => self.passenger,
@@ -392,6 +403,29 @@ mod tests {
                 .attachments
                 .get_clamped(EntityAttachment::WardenChest, 0, 0.0, dimensions),
             glam::DVec3::new(0.0, 0.9, 0.0),
+        );
+    }
+
+    #[test]
+    fn attachment_average_uses_unrotated_scaled_points() {
+        const PASSENGERS: [EntityAttachmentPoint; 2] = [
+            EntityAttachmentPoint::new(0.0, 0.5, 0.0),
+            EntityAttachmentPoint::new(1.0, 0.75, -0.5),
+        ];
+        const ZERO: [EntityAttachmentPoint; 1] = [EntityAttachmentPoint::new(0.0, 0.0, 0.0)];
+        let dimensions = EntityDimensions::new_with_attachments(
+            1.0,
+            2.0,
+            1.7,
+            EntityAttachments::new(&PASSENGERS, &ZERO, &ZERO, &ZERO),
+        )
+        .scale(2.0);
+
+        assert_vec3_close(
+            dimensions
+                .attachments
+                .get_average(EntityAttachment::Passenger, dimensions),
+            glam::DVec3::new(1.0, 1.25, -0.5),
         );
     }
 

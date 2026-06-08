@@ -482,6 +482,11 @@ pub trait Mob: LivingEntity {
         InteractionResult::Pass
     }
 
+    /// Returns vanilla `Mob.canShearEquipment`.
+    fn can_shear_equipment(&self, _player: &Player) -> bool {
+        !self.is_vehicle()
+    }
+
     /// Applies vanilla `Mob.usePlayerItem`.
     fn use_player_item(&self, player: &Player, hand: InteractionHand) {
         player.inventory.lock().shrink_item_in_hand(hand, 1);

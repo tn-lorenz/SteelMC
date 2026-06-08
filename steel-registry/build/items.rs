@@ -1,10 +1,12 @@
-use std::{collections::BTreeMap, fs};
+use std::{collections::BTreeMap, fs, str::FromStr};
 
+use crate::generator_functions::generate_sound_event_ref;
 use heck::ToShoutySnakeCase;
 use proc_macro2::{Ident, Span, TokenStream};
 use quote::quote;
 use serde::Deserialize;
 use serde_json::Value;
+use steel_utils::Identifier;
 
 #[derive(Deserialize, Clone, Debug, Default)]
 #[serde(rename_all = "camelCase")]
@@ -113,6 +115,17 @@ fn entity_type_ref_token(s: &str) -> Option<TokenStream> {
 
     let ident = Ident::new(&path.to_shouty_snake_case(), Span::call_site());
     Some(quote! { &vanilla_entities::#ident })
+}
+
+fn sound_event_ref_token(value: &Value, field: &str, default: &str) -> TokenStream {
+    let sound = value
+        .get(field)
+        .and_then(|value| value.as_str())
+        .unwrap_or(default);
+    let id = Identifier::from_str(sound).unwrap_or_else(|error| {
+        panic!("invalid sound event id {sound:?} in equippable field {field}: {error}")
+    });
+    generate_sound_event_ref(&id)
 }
 
 fn attribute_ref_token(s: &str) -> Option<TokenStream> {
@@ -389,6 +402,11 @@ fn generate_builder_calls(item: &Item) -> Vec<TokenStream> {
                         _ => continue,
                     };
                     let allowed_entities = generate_allowed_entities(value);
+                    let equip_sound = sound_event_ref_token(
+                        value,
+                        "equip_sound",
+                        "minecraft:item.armor.equip_generic",
+                    );
                     let dispensable = value
                         .get("dispensable")
                         .and_then(|v| v.as_bool())
@@ -397,19 +415,36 @@ fn generate_builder_calls(item: &Item) -> Vec<TokenStream> {
                         .get("swappable")
                         .and_then(|v| v.as_bool())
                         .unwrap_or(true);
+                    let damage_on_hurt = value
+                        .get("damage_on_hurt")
+                        .and_then(|v| v.as_bool())
+                        .unwrap_or(true);
                     let equip_on_interact = value
                         .get("equip_on_interact")
                         .and_then(|v| v.as_bool())
                         .unwrap_or(false);
+                    let can_be_sheared = value
+                        .get("can_be_sheared")
+                        .and_then(|v| v.as_bool())
+                        .unwrap_or(false);
+                    let shearing_sound = sound_event_ref_token(
+                        value,
+                        "shearing_sound",
+                        "minecraft:item.shears.snip",
+                    );
                     builder_calls.push(quote! {
                         .builder_set(
                             vanilla_components::EQUIPPABLE,
                             Some(vanilla_components::Equippable {
                                 slot: #slot_variant,
+                                equip_sound: #equip_sound,
                                 allowed_entities: #allowed_entities,
                                 dispensable: #dispensable,
                                 swappable: #swappable,
+                                damage_on_hurt: #damage_on_hurt,
                                 equip_on_interact: #equip_on_interact,
+                                can_be_sheared: #can_be_sheared,
+                                shearing_sound: #shearing_sound,
                             }),
                         )
                     });
