@@ -6,6 +6,7 @@ use simdnbt::borrow::NbtCompound as BorrowedNbtCompoundView;
 use simdnbt::owned::{NbtCompound, NbtTag};
 use steel_registry::blocks::block_state_ext::BlockStateExt as _;
 use steel_registry::item_stack::ItemStack;
+use steel_registry::vanilla_block_tags::BlockTag;
 use steel_registry::vanilla_blocks;
 use steel_registry::vanilla_game_rules::MOB_DROPS;
 use steel_utils::entity_events::EntityStatus;
@@ -17,9 +18,11 @@ use uuid::Uuid;
 
 use crate::behavior::InteractionResult;
 use crate::entity::entities::ExperienceOrbEntity;
-use crate::entity::{AgeableMob, AgeableMobBase, ENTITIES, Mob, SharedEntity, next_entity_id};
+use crate::entity::{
+    AgeableMob, AgeableMobBase, ENTITIES, EntitySpawnReason, Mob, SharedEntity, next_entity_id,
+};
 use crate::player::Player;
-use crate::world::{LevelReader as _, World};
+use crate::world::{LevelReader, World};
 
 const PARENT_AGE_AFTER_BREEDING: i32 = 6000;
 const IN_LOVE_TIME: i32 = 600;
@@ -175,6 +178,32 @@ pub trait Animal: AgeableMob {
         } else {
             world.pathfinding_cost_from_light_levels(pos)
         }
+    }
+
+    /// Returns vanilla `Animal.isBrightEnoughToSpawn`.
+    fn is_bright_enough_to_spawn(level: &dyn LevelReader, pos: BlockPos) -> bool
+    where
+        Self: Sized,
+    {
+        level.raw_brightness(pos, 0) > 8
+    }
+
+    /// Returns vanilla `Animal.checkAnimalSpawnRules`.
+    fn check_animal_spawn_rules(
+        level: &dyn LevelReader,
+        spawn_reason: EntitySpawnReason,
+        pos: BlockPos,
+    ) -> bool
+    where
+        Self: Sized,
+    {
+        let bright_enough = spawn_reason.ignores_light_requirements()
+            || Self::is_bright_enough_to_spawn(level, pos);
+        level
+            .get_block_state(pos.below())
+            .get_block()
+            .has_tag(&BlockTag::ANIMALS_SPAWNABLE_ON)
+            && bright_enough
     }
 
     /// Plays this animal's vanilla eating sound.
@@ -361,5 +390,94 @@ pub trait Animal: AgeableMob {
         {
             self.set_love_cause_uuid(Some(uuid));
         }
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use steel_registry::{REGISTRY, test_support::init_test_registry, vanilla_blocks};
+    use steel_utils::BlockStateId;
+
+    use super::*;
+    use crate::entity::entities::PigEntity;
+
+    struct SpawnRuleLevel {
+        below_pos: BlockPos,
+        below_state: BlockStateId,
+        raw_brightness: u8,
+    }
+
+    impl LevelReader for SpawnRuleLevel {
+        fn get_block_state(&self, pos: BlockPos) -> BlockStateId {
+            if pos == self.below_pos {
+                return self.below_state;
+            }
+
+            REGISTRY.blocks.get_default_state_id(&vanilla_blocks::AIR)
+        }
+
+        fn raw_brightness(&self, _pos: BlockPos, _sky_darkening: u8) -> u8 {
+            self.raw_brightness
+        }
+
+        fn min_y(&self) -> i32 {
+            -64
+        }
+
+        fn height(&self) -> i32 {
+            384
+        }
+    }
+
+    fn spawn_rule_level(block_below: BlockStateId, raw_brightness: u8) -> SpawnRuleLevel {
+        SpawnRuleLevel {
+            below_pos: BlockPos::new(0, 63, 0),
+            below_state: block_below,
+            raw_brightness,
+        }
+    }
+
+    #[test]
+    fn animal_spawn_rules_require_spawnable_block_tag() {
+        init_test_registry();
+        let level = spawn_rule_level(vanilla_blocks::STONE.default_state(), 15);
+
+        assert!(!<PigEntity as Animal>::check_animal_spawn_rules(
+            &level,
+            EntitySpawnReason::Natural,
+            BlockPos::new(0, 64, 0)
+        ));
+    }
+
+    #[test]
+    fn animal_spawn_rules_require_raw_brightness_above_eight() {
+        init_test_registry();
+        let level = spawn_rule_level(vanilla_blocks::GRASS_BLOCK.default_state(), 8);
+
+        assert!(!<PigEntity as Animal>::check_animal_spawn_rules(
+            &level,
+            EntitySpawnReason::Natural,
+            BlockPos::new(0, 64, 0)
+        ));
+
+        let level = spawn_rule_level(vanilla_blocks::GRASS_BLOCK.default_state(), 9);
+
+        assert!(<PigEntity as Animal>::check_animal_spawn_rules(
+            &level,
+            EntitySpawnReason::Natural,
+            BlockPos::new(0, 64, 0)
+        ));
+    }
+
+    #[test]
+    fn animal_spawn_rules_trial_spawner_ignores_light() {
+        init_test_registry();
+        let level = spawn_rule_level(vanilla_blocks::GRASS_BLOCK.default_state(), 0);
+
+        assert!(<PigEntity as Animal>::check_animal_spawn_rules(
+            &level,
+            EntitySpawnReason::TrialSpawner,
+            BlockPos::new(0, 64, 0)
+        ));
     }
 }
