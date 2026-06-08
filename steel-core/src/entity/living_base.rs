@@ -5,7 +5,7 @@
 //! embed this struct and expose it via `LivingEntity::living_base()`, just like
 //! `EntityBase` is used for core `Entity` fields.
 
-use std::array;
+use std::{array, sync::Arc};
 
 use rustc_hash::FxHashMap;
 use steel_protocol::packets::game::{CRemoveMobEffect, CUpdateMobEffect, MobEffectPacketFlags};
@@ -25,6 +25,7 @@ use uuid::Uuid;
 
 use crate::entity::attribute::{AttributeMap, AttributeModifier, AttributeModifierOperation};
 use crate::entity::damage::DamageSource;
+use crate::entity::{LivingEntity, SharedEntity, WeakEntity};
 use crate::inventory::equipment::{EntityEquipment, EquipmentSlot};
 
 /// Duration in ticks of the death animation before entity removal.
@@ -519,6 +520,10 @@ struct LivingEntityState {
     last_hurt: f32,
     last_hurt_by_player: Option<Uuid>,
     last_hurt_by_player_memory_time: i32,
+    last_hurt_by_mob: Option<WeakEntity>,
+    last_hurt_by_mob_timestamp: i32,
+    last_hurt_mob: Option<WeakEntity>,
+    last_hurt_mob_timestamp: i32,
     last_damage_source: Option<DamageSource>,
     last_damage_stamp: i64,
     absorption_amount: f32,
@@ -549,6 +554,10 @@ impl LivingEntityState {
             last_hurt: 0.0,
             last_hurt_by_player: None,
             last_hurt_by_player_memory_time: 0,
+            last_hurt_by_mob: None,
+            last_hurt_by_mob_timestamp: 0,
+            last_hurt_mob: None,
+            last_hurt_mob_timestamp: 0,
             last_damage_source: None,
             last_damage_stamp: 0,
             absorption_amount: 0.0,
@@ -1302,6 +1311,46 @@ impl LivingEntityBase {
         self.state.lock().last_hurt_by_player
     }
 
+    /// Returns vanilla `LivingEntity.lastHurtByMob`, if still resolvable.
+    #[must_use]
+    pub fn last_hurt_by_mob(&self) -> Option<SharedEntity> {
+        let mut state = self.state.lock();
+        living_entity_from_weak(&mut state.last_hurt_by_mob)
+    }
+
+    /// Returns vanilla `LivingEntity.lastHurtByMobTimestamp`.
+    #[must_use]
+    pub fn last_hurt_by_mob_timestamp(&self) -> i32 {
+        self.state.lock().last_hurt_by_mob_timestamp
+    }
+
+    /// Sets vanilla `LivingEntity.lastHurtByMob` and timestamp.
+    pub fn set_last_hurt_by_mob(&self, target: Option<&SharedEntity>, tick_count: i32) {
+        let mut state = self.state.lock();
+        state.last_hurt_by_mob = weak_living_entity(target);
+        state.last_hurt_by_mob_timestamp = tick_count;
+    }
+
+    /// Returns vanilla `LivingEntity.lastHurtMob`, if still resolvable.
+    #[must_use]
+    pub fn last_hurt_mob(&self) -> Option<SharedEntity> {
+        let mut state = self.state.lock();
+        living_entity_from_weak(&mut state.last_hurt_mob)
+    }
+
+    /// Returns vanilla `LivingEntity.lastHurtMobTimestamp`.
+    #[must_use]
+    pub fn last_hurt_mob_timestamp(&self) -> i32 {
+        self.state.lock().last_hurt_mob_timestamp
+    }
+
+    /// Sets vanilla `LivingEntity.lastHurtMob` and timestamp.
+    pub fn set_last_hurt_mob(&self, target: Option<&SharedEntity>, tick_count: i32) {
+        let mut state = self.state.lock();
+        state.last_hurt_mob = weak_living_entity(target);
+        state.last_hurt_mob_timestamp = tick_count;
+    }
+
     /// Ticks vanilla last-hurt-by-player memory.
     pub fn tick_last_hurt_by_player_memory(&self) {
         let mut state = self.state.lock();
@@ -1309,6 +1358,23 @@ impl LivingEntityBase {
             state.last_hurt_by_player_memory_time -= 1;
         } else {
             state.last_hurt_by_player = None;
+        }
+    }
+
+    /// Ticks vanilla living combat-memory cleanup.
+    pub fn tick_living_combat_memory(&self, tick_count: i32) {
+        if self
+            .last_hurt_mob()
+            .is_some_and(|target| living_is_dead(&target))
+        {
+            self.set_last_hurt_mob(None, tick_count);
+        }
+
+        let Some(hurt_by) = self.last_hurt_by_mob() else {
+            return;
+        };
+        if living_is_dead(&hurt_by) || tick_count - self.last_hurt_by_mob_timestamp() > 100 {
+            self.set_last_hurt_by_mob(None, tick_count);
         }
     }
 
@@ -1337,6 +1403,29 @@ impl LivingEntityBase {
     pub fn reset_death_state(&self) {
         self.state.lock().reset_death_state();
     }
+}
+
+fn weak_living_entity(target: Option<&SharedEntity>) -> Option<WeakEntity> {
+    let target = target?;
+    target.is_living_entity().then(|| Arc::downgrade(target))
+}
+
+fn living_entity_from_weak(entity: &mut Option<WeakEntity>) -> Option<SharedEntity> {
+    let Some(upgraded) = entity.as_ref().and_then(WeakEntity::upgrade) else {
+        *entity = None;
+        return None;
+    };
+    if !upgraded.is_living_entity() {
+        *entity = None;
+        return None;
+    }
+    Some(upgraded)
+}
+
+fn living_is_dead(entity: &SharedEntity) -> bool {
+    entity
+        .as_living_entity()
+        .is_none_or(|living| !LivingEntity::is_alive(living))
 }
 
 #[cfg(test)]

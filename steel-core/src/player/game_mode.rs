@@ -33,7 +33,7 @@ use crate::command::commands::gamemode::get_gamemode_translation;
 use crate::enchantment_helper::{self, EnchantmentDamageContext, EnchantmentPostAttackContext};
 use crate::entity::attribute::{AttributeModifier, AttributeModifierOperation};
 use crate::entity::damage::DamageSource;
-use crate::entity::{Entity, LivingEntity};
+use crate::entity::{Entity, LivingEntity, SharedEntity};
 use crate::inventory::equipment::EquipmentSlot;
 use crate::inventory::menu::Menu;
 use crate::player::Player;
@@ -368,7 +368,8 @@ impl Player {
     ///
     /// Returns `true` if the target accepted damage.
     #[must_use]
-    pub fn attack(&self, entity: &dyn Entity) -> bool {
+    pub fn attack(&self, target: &SharedEntity) -> bool {
+        let entity = target.as_ref();
         if self.cannot_attack(entity) {
             return false;
         }
@@ -414,6 +415,7 @@ impl Player {
         let old_movement = entity.velocity();
         let was_hurt = entity.hurt(&damage_source, total_damage);
         if was_hurt {
+            self.set_last_hurt_mob(Some(target));
             let sprint_knockback = if knockback_attack { 0.5 } else { 0.0 };
             self.cause_extra_knockback(
                 entity,
@@ -497,7 +499,7 @@ impl Player {
             return;
         }
 
-        let _ = self.attack(&*target);
+        let _ = self.attack(&target);
     }
 
     /// Handles a client request to interact with an entity.

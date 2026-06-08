@@ -3929,6 +3929,66 @@ pub trait LivingEntity: Entity {
         self.living_base().last_hurt_by_player_uuid()
     }
 
+    /// Returns vanilla `LivingEntity.lastHurtByMob`.
+    fn last_hurt_by_mob(&self) -> Option<SharedEntity> {
+        self.living_base().last_hurt_by_mob()
+    }
+
+    /// Returns vanilla `LivingEntity.lastHurtByMobTimestamp`.
+    fn last_hurt_by_mob_timestamp(&self) -> i32 {
+        self.living_base().last_hurt_by_mob_timestamp()
+    }
+
+    /// Sets vanilla `LivingEntity.lastHurtByMob`.
+    fn set_last_hurt_by_mob(&self, target: Option<&SharedEntity>) {
+        self.living_base()
+            .set_last_hurt_by_mob(target, self.tick_count());
+    }
+
+    /// Returns vanilla `LivingEntity.lastHurtMob`.
+    fn last_hurt_mob(&self) -> Option<SharedEntity> {
+        self.living_base().last_hurt_mob()
+    }
+
+    /// Returns vanilla `LivingEntity.lastHurtMobTimestamp`.
+    fn last_hurt_mob_timestamp(&self) -> i32 {
+        self.living_base().last_hurt_mob_timestamp()
+    }
+
+    /// Sets vanilla `LivingEntity.lastHurtMob`.
+    fn set_last_hurt_mob(&self, target: Option<&SharedEntity>) {
+        self.living_base()
+            .set_last_hurt_mob(target, self.tick_count());
+    }
+
+    /// Resolves vanilla `LivingEntity.resolveMobResponsibleForDamage`.
+    fn resolve_mob_responsible_for_damage(&self, source: &DamageSource) {
+        if source.is(&vanilla_damage_type_tags::DamageTypeTag::NO_ANGER) {
+            return;
+        }
+        if std::ptr::eq(source.damage_type, &vanilla_damage_types::WIND_CHARGE)
+            && REGISTRY.entity_types.is_in_tag(
+                self.entity_type(),
+                &EntityTypeTag::NO_ANGER_FROM_WIND_CHARGE,
+            )
+        {
+            return;
+        }
+
+        let Some(entity_id) = source.causing_entity_id else {
+            return;
+        };
+        let Some(world) = self.level() else {
+            return;
+        };
+        let Some(entity) = world.get_entity_by_id(entity_id) else {
+            return;
+        };
+        if entity.is_living_entity() {
+            self.set_last_hurt_by_mob(Some(&entity));
+        }
+    }
+
     /// Resolves vanilla `LivingEntity.resolvePlayerResponsibleForDamage`.
     fn resolve_player_responsible_for_damage(&self, source: &DamageSource) {
         let Some(entity_id) = source.causing_entity_id else {
@@ -4037,6 +4097,7 @@ pub trait LivingEntity: Entity {
 
         self.before_actually_hurt(source, effective_amount);
         self.actually_hurt(source, effective_amount);
+        self.resolve_mob_responsible_for_damage(source);
         self.resolve_player_responsible_for_damage(source);
 
         if took_full_damage {
@@ -4696,6 +4757,8 @@ pub trait LivingEntity: Entity {
         self.update_swing_time();
         self.living_base().tick_post_impulse_grace_time();
         self.living_base().tick_last_hurt_by_player_memory();
+        self.living_base()
+            .tick_living_combat_memory(self.tick_count());
     }
 
     /// Mirrors vanilla `LivingEntity.canGlideUsing()`.
@@ -6149,6 +6212,49 @@ mod tests {
 
         entity.set_mob_effect(vanilla_mob_effects::HASTE, 1);
         assert_eq!(entity.current_swing_duration(), DEFAULT_SWING_DURATION - 2);
+    }
+
+    #[test]
+    fn living_combat_memory_stores_and_expires_last_hurt_by_mob() {
+        init_test_registry();
+
+        let entity = LivingFluidTestEntity::new(0.0, 0.0, true);
+        let attacker: SharedEntity = Arc::new(LivingFluidTestEntity::new(0.0, 0.0, true));
+        entity.advance_tick_count();
+
+        entity.set_last_hurt_by_mob(Some(&attacker));
+
+        let Some(stored_attacker) = entity.last_hurt_by_mob() else {
+            panic!("last hurt-by mob should be stored");
+        };
+        assert_eq!(stored_attacker.uuid(), attacker.uuid());
+        assert_eq!(entity.last_hurt_by_mob_timestamp(), 1);
+
+        entity.living_base().tick_living_combat_memory(101);
+        assert!(entity.last_hurt_by_mob().is_some());
+
+        entity.living_base().tick_living_combat_memory(102);
+        assert!(entity.last_hurt_by_mob().is_none());
+        assert_eq!(entity.last_hurt_by_mob_timestamp(), 102);
+    }
+
+    #[test]
+    fn living_combat_memory_clears_dead_last_hurt_mob() {
+        init_test_registry();
+
+        let entity = LivingFluidTestEntity::new(0.0, 0.0, true);
+        let target = Arc::new(LivingFluidTestEntity::new(0.0, 0.0, true));
+        let target_entity: SharedEntity = target.clone();
+
+        entity.set_last_hurt_mob(Some(&target_entity));
+        assert!(entity.last_hurt_mob().is_some());
+        assert_eq!(entity.last_hurt_mob_timestamp(), 0);
+
+        target.set_health(0.0);
+        entity.living_base().tick_living_combat_memory(1);
+
+        assert!(entity.last_hurt_mob().is_none());
+        assert_eq!(entity.last_hurt_mob_timestamp(), 1);
     }
 
     #[test]
