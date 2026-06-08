@@ -568,7 +568,9 @@ fn apply_effects_from_block_movements(entity: &dyn Entity, movements: &[EntityMo
     finish_inside_block_effects(entity, &mut effect_collector, before_effects);
 }
 
+mod ageable;
 pub(crate) mod ai;
+mod animal;
 pub mod attribute;
 mod base;
 mod block_effects;
@@ -591,6 +593,8 @@ mod ticking;
 mod tracker;
 
 use crate::portal::TeleportTransition;
+pub(crate) use ageable::{AgeableMob, AgeableMobBase};
+pub(crate) use animal::{Animal, AnimalBase};
 pub use base::{
     DEFAULT_MAX_AIR_SUPPLY, DEFAULT_TICKS_REQUIRED_TO_FREEZE, EntityAmethystStepSound, EntityBase,
     EntityBaseLoad, EntityBaseSaveData, EntityBaseState, EntityFireFreezeState,
@@ -1314,6 +1318,19 @@ pub trait Entity: EntityEventSource + Send + Sync {
     /// Mirrors vanilla's frequent `instanceof PathfinderMob` branches without
     /// requiring core code to downcast through `Any`.
     fn as_pathfinder_mob(&self) -> Option<&dyn PathfinderMob> {
+        None
+    }
+
+    /// Returns true for entities that implement vanilla animal behavior.
+    fn is_animal(&self) -> bool {
+        false
+    }
+
+    /// Returns this entity as an animal when it has animal behavior.
+    ///
+    /// Mirrors vanilla's frequent `instanceof Animal` branches without
+    /// requiring core code to downcast through `Any`.
+    fn as_animal(&self) -> Option<&dyn Animal> {
         None
     }
 
@@ -3201,6 +3218,7 @@ pub trait LivingEntity: Entity {
             return false;
         };
 
+        self.before_actually_hurt(source, effective_amount);
         self.actually_hurt(source, effective_amount);
 
         if took_full_damage {
@@ -3218,6 +3236,9 @@ pub trait LivingEntity: Entity {
 
         true
     }
+
+    /// Hook before applying damage after vanilla reductions.
+    fn before_actually_hurt(&self, _source: &DamageSource, _amount: f32) {}
 
     /// Applies damage after vanilla reductions.
     fn actually_hurt(&self, _source: &DamageSource, amount: f32) {
@@ -3344,6 +3365,15 @@ pub trait LivingEntity: Entity {
         // TODO: emit death game event, drops, and experience once mob death foundations exist.
         self.broadcast_entity_event(EntityStatus::Death);
         self.set_pose(EntityPose::Dying);
+    }
+
+    /// Ticks the vanilla living death animation and removes the entity at completion.
+    fn tick_death(&self) {
+        let death_time = self.living_base().increment_death_time();
+        if death_time >= DEATH_DURATION && !self.is_removed() {
+            self.broadcast_entity_event(EntityStatus::Poof);
+            self.set_removed(RemovalReason::Killed);
+        }
     }
 
     /// Gets the absorption amount (extra health from effects like absorption).

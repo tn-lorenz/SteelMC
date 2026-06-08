@@ -751,6 +751,38 @@ impl WorldEntityManager {
     }
 
     #[must_use]
+    /// Gets live entities whose bounding boxes intersect `aabb` and match `predicate`.
+    pub fn get_entities_in_aabb_matching(
+        &self,
+        aabb: &WorldAabb,
+        mut predicate: impl FnMut(&dyn Entity) -> bool,
+    ) -> Vec<SharedEntity> {
+        self.get_entities_in_aabb(aabb)
+            .into_iter()
+            .filter(|entity| predicate(entity.as_ref()))
+            .collect()
+    }
+
+    #[must_use]
+    /// Gets the nearest live entity whose bounding box intersects `aabb` and matches `predicate`.
+    pub fn nearest_entity_in_aabb_matching(
+        &self,
+        aabb: &WorldAabb,
+        origin: DVec3,
+        mut predicate: impl FnMut(&dyn Entity) -> bool,
+    ) -> Option<SharedEntity> {
+        self.get_entities_in_aabb(aabb)
+            .into_iter()
+            .filter(|entity| predicate(entity.as_ref()))
+            .min_by(|first, second| {
+                first
+                    .position()
+                    .distance_squared(origin)
+                    .total_cmp(&second.position().distance_squared(origin))
+            })
+    }
+
+    #[must_use]
     /// Gets live entities whose bounding boxes intersect `aabb`.
     pub fn get_entities_in_aabb(&self, aabb: &WorldAabb) -> Vec<SharedEntity> {
         let min_section = SectionPos::from_entity_pos(DVec3::new(
@@ -1225,6 +1257,62 @@ mod tests {
         let result = manager.on_chunk_loaded(chunk);
         assert!(result.restored.is_empty());
         assert!(!result.needs_save);
+    }
+
+    #[test]
+    fn aabb_matching_query_filters_accessible_entities() {
+        let manager = WorldEntityManager::new();
+        load_chunk(&manager, ChunkPos::new(0, 0));
+
+        let first = entity(1, 1, DVec3::new(1.0, 64.0, 1.0));
+        let second = entity(2, 2, DVec3::new(3.0, 64.0, 1.0));
+        let outside = entity(3, 3, DVec3::new(30.0, 64.0, 1.0));
+        assert!(
+            manager
+                .add_live_entity(first, EntityOwnership::ManagerOwned)
+                .is_ok()
+        );
+        assert!(
+            manager
+                .add_live_entity(second.clone(), EntityOwnership::ManagerOwned)
+                .is_ok()
+        );
+        assert!(matches!(
+            manager.add_live_entity(outside, EntityOwnership::ManagerOwned),
+            Err(AddEntityError::ChunkNotLoaded { .. })
+        ));
+
+        let aabb = WorldAabb::new(0.0, 63.0, 0.0, 5.0, 66.0, 3.0);
+        let result = manager.get_entities_in_aabb_matching(&aabb, |entity| entity.id() == 2);
+
+        assert_eq!(result.len(), 1);
+        assert!(Arc::ptr_eq(&result[0], &second));
+    }
+
+    #[test]
+    fn nearest_aabb_matching_query_returns_closest_match() {
+        let manager = WorldEntityManager::new();
+        load_chunk(&manager, ChunkPos::new(0, 0));
+
+        let near_filtered_out = entity(1, 1, DVec3::new(1.0, 64.0, 1.0));
+        let near_match = entity(2, 2, DVec3::new(3.0, 64.0, 1.0));
+        let far_match = entity(3, 3, DVec3::new(8.0, 64.0, 1.0));
+        for entity in [near_filtered_out, near_match.clone(), far_match] {
+            assert!(
+                manager
+                    .add_live_entity(entity, EntityOwnership::ManagerOwned)
+                    .is_ok()
+            );
+        }
+
+        let aabb = WorldAabb::new(0.0, 63.0, 0.0, 10.0, 66.0, 3.0);
+        let result =
+            manager.nearest_entity_in_aabb_matching(&aabb, DVec3::ZERO, |entity| entity.id() > 1);
+
+        let Some(result) = result else {
+            panic!("nearest matching entity should be found");
+        };
+        assert!(Arc::ptr_eq(&result, &near_match));
     }
 
     #[test]

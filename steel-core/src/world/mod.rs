@@ -3613,6 +3613,73 @@ impl World {
         self.entity_manager.get_entities_in_aabb(aabb)
     }
 
+    /// Gets entities intersecting the given bounding box and matching `predicate`.
+    ///
+    /// Only returns entities in loaded chunks.
+    #[must_use]
+    pub fn get_entities_in_aabb_matching(
+        &self,
+        aabb: &WorldAabb,
+        predicate: impl FnMut(&dyn Entity) -> bool,
+    ) -> Vec<SharedEntity> {
+        self.entity_manager
+            .get_entities_in_aabb_matching(aabb, predicate)
+    }
+
+    /// Gets the nearest entity intersecting the given bounding box and matching `predicate`.
+    ///
+    /// Only returns entities in loaded chunks.
+    #[must_use]
+    pub fn nearest_entity_in_aabb_matching(
+        &self,
+        aabb: &WorldAabb,
+        origin: DVec3,
+        predicate: impl FnMut(&dyn Entity) -> bool,
+    ) -> Option<SharedEntity> {
+        self.entity_manager
+            .nearest_entity_in_aabb_matching(aabb, origin, predicate)
+    }
+
+    /// Gets the nearest player to `position` within `max_distance`.
+    #[must_use]
+    pub fn nearest_player(
+        &self,
+        position: DVec3,
+        max_distance: f64,
+        mut predicate: impl FnMut(&Player) -> bool,
+    ) -> Option<Arc<Player>> {
+        let max_distance_sqr = max_distance * max_distance;
+        let mut nearest: Option<(Arc<Player>, f64)> = None;
+        self.players.iter_players(|_, player| {
+            if predicate(player) {
+                let distance_sqr = player.position().distance_squared(position);
+                if distance_sqr <= max_distance_sqr
+                    && nearest
+                        .as_ref()
+                        .is_none_or(|(_, current)| distance_sqr < *current)
+                {
+                    nearest = Some((player.clone(), distance_sqr));
+                }
+            }
+            true
+        });
+        nearest.map(|(player, _)| player)
+    }
+
+    /// Gets the squared distance to the nearest player, if any player is present.
+    #[must_use]
+    pub fn nearest_player_distance_sqr(&self, position: DVec3) -> Option<f64> {
+        let mut nearest = None;
+        self.players.iter_players(|_, player| {
+            let distance_sqr = player.position().distance_squared(position);
+            if nearest.is_none_or(|current| distance_sqr < current) {
+                nearest = Some(distance_sqr);
+            }
+            true
+        });
+        nearest
+    }
+
     /// Gets entities matching vanilla's pushable entity selector for `pusher`.
     ///
     /// Vanilla also checks team collision rules; Steel has no teams yet, so this

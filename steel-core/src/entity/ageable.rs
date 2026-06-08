@@ -1,0 +1,293 @@
+//! Shared vanilla `AgeableMob` state and hooks.
+
+use simdnbt::borrow::NbtCompound as BorrowedNbtCompoundView;
+use simdnbt::owned::NbtCompound;
+use steel_utils::locks::SyncMutex;
+
+use crate::entity::{Entity, Mob};
+
+const BABY_START_AGE: i32 = -24_000;
+
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+struct AgeableMobState {
+    age: i32,
+    forced_age: i32,
+}
+
+impl AgeableMobState {
+    const fn new() -> Self {
+        Self {
+            age: 0,
+            forced_age: 0,
+        }
+    }
+}
+
+/// Runtime fields shared by vanilla ageable mobs.
+#[derive(Debug)]
+pub struct AgeableMobBase {
+    state: SyncMutex<AgeableMobState>,
+}
+
+impl AgeableMobBase {
+    /// Creates default ageable runtime state.
+    #[must_use]
+    pub const fn new() -> Self {
+        Self {
+            state: SyncMutex::new(AgeableMobState::new()),
+        }
+    }
+
+    /// Returns vanilla `AgeableMob.age`.
+    #[must_use]
+    pub fn age(&self) -> i32 {
+        self.state.lock().age
+    }
+
+    /// Sets vanilla `AgeableMob.age`, returning whether the baby/adult boundary changed.
+    pub fn set_age(&self, age: i32) -> bool {
+        let mut state = self.state.lock();
+        let old_age = state.age;
+        state.age = age;
+        old_age < 0 && age >= 0 || old_age >= 0 && age < 0
+    }
+
+    /// Returns vanilla `AgeableMob.forcedAge`.
+    #[must_use]
+    pub fn forced_age(&self) -> i32 {
+        self.state.lock().forced_age
+    }
+
+    /// Sets vanilla `AgeableMob.forcedAge`.
+    pub fn set_forced_age(&self, forced_age: i32) {
+        self.state.lock().forced_age = forced_age;
+    }
+}
+
+impl Default for AgeableMobBase {
+    fn default() -> Self {
+        Self::new()
+    }
+}
+
+/// Vanilla-shaped behavior shared by entities that extend `AgeableMob`.
+pub trait AgeableMob: Mob {
+    /// Returns shared ageable runtime state.
+    fn ageable_base(&self) -> &AgeableMobBase;
+
+    /// Returns the synchronized vanilla age-lock flag.
+    fn is_age_locked(&self) -> bool;
+
+    /// Sets the synchronized vanilla age-lock flag.
+    fn set_age_locked(&self, age_locked: bool);
+
+    /// Sets the synchronized baby flag.
+    fn set_synced_baby(&self, baby: bool);
+
+    /// Hook called after the baby/adult boundary changes.
+    fn age_boundary_changed(&self, _baby: bool) {}
+
+    /// Returns vanilla `AgeableMob.age`.
+    fn get_age(&self) -> i32 {
+        self.ageable_base().age()
+    }
+
+    /// Sets vanilla `AgeableMob.age` and updates synchronized baby state.
+    fn set_age(&self, age: i32) {
+        if self.ageable_base().set_age(age) {
+            let baby = age < 0;
+            self.set_synced_baby(baby);
+            self.age_boundary_changed(baby);
+        }
+    }
+
+    /// Returns whether this ageable mob is a baby.
+    fn is_baby(&self) -> bool {
+        self.get_age() < 0
+    }
+
+    /// Sets the vanilla baby state using the `AgeableMob` start age.
+    fn set_baby(&self, baby: bool) {
+        self.set_age(if baby { BABY_START_AGE } else { 0 });
+    }
+
+    /// Returns vanilla `AgeableMob.forcedAge`.
+    fn forced_age(&self) -> i32 {
+        self.ageable_base().forced_age()
+    }
+
+    /// Sets vanilla `AgeableMob.forcedAge`.
+    fn set_forced_age(&self, forced_age: i32) {
+        self.ageable_base().set_forced_age(forced_age);
+    }
+
+    /// Returns whether this mob can naturally age toward adulthood this tick.
+    fn can_age_up(&self) -> bool {
+        self.is_baby() && !self.is_age_locked()
+    }
+
+    /// Ticks vanilla age progression.
+    fn tick_ageable_mob(&self) {
+        if !Entity::is_alive(self) {
+            return;
+        }
+
+        let age = self.get_age();
+        if self.can_age_up() {
+            self.set_age(age + 1);
+        } else if age > 0 {
+            self.set_age(age - 1);
+        }
+    }
+
+    /// Saves vanilla ageable mob fields.
+    fn save_ageable_mob(&self, nbt: &mut NbtCompound) {
+        nbt.insert("Age", self.get_age());
+        nbt.insert("ForcedAge", self.forced_age());
+        nbt.insert("AgeLocked", i8::from(self.is_age_locked()));
+    }
+
+    /// Loads vanilla ageable mob fields.
+    fn load_ageable_mob(&self, nbt: BorrowedNbtCompoundView<'_, '_>) {
+        self.set_age(nbt.int("Age").unwrap_or(0));
+        self.set_forced_age(nbt.int("ForcedAge").unwrap_or(0));
+        self.set_age_locked(nbt.byte("AgeLocked").is_some_and(|value| value != 0));
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use std::sync::Weak;
+
+    use glam::DVec3;
+    use steel_registry::entity_type::EntityTypeRef;
+    use steel_registry::{test_support::init_test_registry, vanilla_entities};
+
+    use super::*;
+    use crate::entity::{EntityBase, LivingEntity, LivingEntityBase, MobBase};
+
+    struct TestAgeableMob {
+        base: EntityBase,
+        living_base: LivingEntityBase,
+        mob_base: MobBase,
+        ageable_base: AgeableMobBase,
+        mob_flags: SyncMutex<i8>,
+        health: SyncMutex<f32>,
+        baby: SyncMutex<bool>,
+        age_locked: SyncMutex<bool>,
+    }
+
+    impl TestAgeableMob {
+        fn new() -> Self {
+            init_test_registry();
+            Self {
+                base: EntityBase::new(
+                    1,
+                    DVec3::ZERO,
+                    vanilla_entities::PIG.dimensions,
+                    Weak::new(),
+                ),
+                living_base: LivingEntityBase::new(&vanilla_entities::PIG),
+                mob_base: MobBase::new(),
+                ageable_base: AgeableMobBase::new(),
+                mob_flags: SyncMutex::new(0),
+                health: SyncMutex::new(10.0),
+                baby: SyncMutex::new(false),
+                age_locked: SyncMutex::new(false),
+            }
+        }
+    }
+
+    impl Entity for TestAgeableMob {
+        fn base(&self) -> &EntityBase {
+            &self.base
+        }
+
+        fn entity_type(&self) -> EntityTypeRef {
+            &vanilla_entities::PIG
+        }
+    }
+
+    impl LivingEntity for TestAgeableMob {
+        fn living_base(&self) -> &LivingEntityBase {
+            &self.living_base
+        }
+
+        fn get_health(&self) -> f32 {
+            *self.health.lock()
+        }
+
+        fn set_health(&self, health: f32) {
+            *self.health.lock() = health;
+        }
+    }
+
+    impl Mob for TestAgeableMob {
+        fn mob_base(&self) -> &MobBase {
+            &self.mob_base
+        }
+
+        fn mob_flags(&self) -> i8 {
+            *self.mob_flags.lock()
+        }
+
+        fn set_mob_flags(&self, flags: i8) {
+            *self.mob_flags.lock() = flags;
+        }
+    }
+
+    impl AgeableMob for TestAgeableMob {
+        fn ageable_base(&self) -> &AgeableMobBase {
+            &self.ageable_base
+        }
+
+        fn is_age_locked(&self) -> bool {
+            *self.age_locked.lock()
+        }
+
+        fn set_age_locked(&self, age_locked: bool) {
+            *self.age_locked.lock() = age_locked;
+        }
+
+        fn set_synced_baby(&self, baby: bool) {
+            *self.baby.lock() = baby;
+        }
+    }
+
+    #[test]
+    fn age_boundary_updates_synced_baby_flag() {
+        let mob = TestAgeableMob::new();
+
+        mob.set_age(-1);
+        assert!(mob.is_baby());
+        assert!(*mob.baby.lock());
+
+        mob.set_age(0);
+        assert!(!mob.is_baby());
+        assert!(!*mob.baby.lock());
+    }
+
+    #[test]
+    fn age_tick_grows_babies_and_reduces_positive_forced_age() {
+        let mob = TestAgeableMob::new();
+
+        mob.set_age(-2);
+        mob.tick_ageable_mob();
+        assert_eq!(mob.get_age(), -1);
+
+        mob.set_age(2);
+        mob.tick_ageable_mob();
+        assert_eq!(mob.get_age(), 1);
+    }
+
+    #[test]
+    fn age_lock_blocks_baby_growth() {
+        let mob = TestAgeableMob::new();
+
+        mob.set_age(-2);
+        mob.set_age_locked(true);
+        mob.tick_ageable_mob();
+
+        assert_eq!(mob.get_age(), -2);
+    }
+}

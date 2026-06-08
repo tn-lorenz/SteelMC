@@ -14,41 +14,29 @@ use simdnbt::owned::NbtCompound;
 use steel_macros::entity_behavior;
 use steel_protocol::packets::game::{AttributeSnapshot, EquipmentSlotItem, SoundSource};
 use steel_registry::entity_type::EntityTypeRef;
+use steel_registry::item_stack::ItemStack;
 use steel_registry::pig_sound_variant::{PigAge, PigSoundVariantRef};
 use steel_registry::pig_variant::PigVariantRef;
 use steel_registry::vanilla_entity_data::PigEntityData;
 use steel_registry::vanilla_game_rules::MAX_ENTITY_CRAMMING;
+use steel_registry::vanilla_item_tags::ItemTag;
 use steel_registry::{
-    REGISTRY, RegistryEntry, RegistryExt, vanilla_attributes, vanilla_damage_types,
-    vanilla_particle_types, vanilla_pig_sound_variants, vanilla_pig_variants,
+    REGISTRY, RegistryEntry, RegistryExt, TaggedRegistryExt, vanilla_attributes,
+    vanilla_damage_types, vanilla_particle_types, vanilla_pig_sound_variants, vanilla_pig_variants,
 };
 use steel_utils::locks::SyncMutex;
 use steel_utils::random::Random as _;
 use steel_utils::{BlockPos, BlockStateId, Identifier};
 
-use crate::entity::ai::goal::WaterAvoidingRandomStrollGoal;
+use crate::entity::ai::goal::{RandomLookAroundGoal, WaterAvoidingRandomStrollGoal};
 use crate::entity::damage::DamageSource;
 use crate::entity::{
-    Entity, EntityBase, EntityBaseLoad, EntitySyncedData, LivingEntity, LivingEntityBase, Mob,
-    MobBase, MobEffectSyncChange, PathfinderMob, SharedEntity,
+    AgeableMob, AgeableMobBase, Animal, AnimalBase, Entity, EntityBase, EntityBaseLoad,
+    EntitySyncedData, LivingEntity, LivingEntityBase, Mob, MobBase, MobEffectSyncChange,
+    PathfinderMob, SharedEntity,
 };
 use crate::physics::MoveResult;
 use crate::world::World;
-
-#[derive(Debug)]
-struct PigAgeState {
-    age: i32,
-    forced_age: i32,
-}
-
-impl PigAgeState {
-    const fn new() -> Self {
-        Self {
-            age: 0,
-            forced_age: 0,
-        }
-    }
-}
 
 /// Vanilla pig entity.
 #[entity_behavior(class = "Pig")]
@@ -57,8 +45,9 @@ pub struct PigEntity {
     entity_type: EntityTypeRef,
     living_base: LivingEntityBase,
     mob_base: MobBase,
+    ageable_base: AgeableMobBase,
+    animal_base: AnimalBase,
     entity_data: SyncMutex<PigEntityData>,
-    age_state: SyncMutex<PigAgeState>,
 }
 
 impl PigEntity {
@@ -83,79 +72,72 @@ impl PigEntity {
     fn new_with_base(base: EntityBase, entity_type: EntityTypeRef) -> Self {
         let living_base = LivingEntityBase::new(entity_type);
         let mob_base = MobBase::new();
+        let ageable_base = AgeableMobBase::new();
+        let animal_base = AnimalBase::new();
         let mut entity_data = PigEntityData::new();
         living_base.initialize_synced_data(&mut entity_data);
         mob_base
             .goal_selector()
             .lock()
             .add_goal(6, WaterAvoidingRandomStrollGoal::new(1.0));
+        mob_base
+            .goal_selector()
+            .lock()
+            .add_goal(8, RandomLookAroundGoal::new());
 
         Self {
             base,
             entity_type,
             living_base,
             mob_base,
+            ageable_base,
+            animal_base,
             entity_data: SyncMutex::new(entity_data),
-            age_state: SyncMutex::new(PigAgeState::new()),
         }
     }
 
     /// Returns the vanilla age counter. Negative values are babies.
     #[must_use]
     pub fn get_age(&self) -> i32 {
-        self.age_state.lock().age
+        AgeableMob::get_age(self)
     }
 
     /// Sets the vanilla age counter and updates the synchronized baby flag.
     pub fn set_age(&self, age: i32) {
-        let boundary_changed = {
-            let mut state = self.age_state.lock();
-            let old_age = state.age;
-            state.age = age;
-            old_age < 0 && age >= 0 || old_age >= 0 && age < 0
-        };
-
-        if boundary_changed {
-            self.entity_data.lock().ageable_mob_mut().baby.set(age < 0);
-            // TODO: Refresh dimensions when baby/adult size changes.
-        }
+        AgeableMob::set_age(self, age);
     }
 
     /// Returns whether this pig is a baby.
     #[must_use]
     pub fn is_baby(&self) -> bool {
-        self.get_age() < 0
+        AgeableMob::is_baby(self)
     }
 
     /// Sets the vanilla baby state using the `AgeableMob` start age.
     pub fn set_baby(&self, baby: bool) {
-        self.set_age(if baby { -24_000 } else { 0 });
+        AgeableMob::set_baby(self, baby);
     }
 
     /// Returns vanilla `AgeableMob.forcedAge`.
     #[must_use]
     pub fn forced_age(&self) -> i32 {
-        self.age_state.lock().forced_age
+        AgeableMob::forced_age(self)
     }
 
     /// Sets vanilla `AgeableMob.forcedAge`.
     pub fn set_forced_age(&self, forced_age: i32) {
-        self.age_state.lock().forced_age = forced_age;
+        AgeableMob::set_forced_age(self, forced_age);
     }
 
     /// Returns the synchronized vanilla age-lock flag.
     #[must_use]
     pub fn is_age_locked(&self) -> bool {
-        *self.entity_data.lock().ageable_mob().age_locked.get()
+        AgeableMob::is_age_locked(self)
     }
 
     /// Sets the synchronized vanilla age-lock flag.
     pub fn set_age_locked(&self, age_locked: bool) {
-        self.entity_data
-            .lock()
-            .ageable_mob_mut()
-            .age_locked
-            .set(age_locked);
+        AgeableMob::set_age_locked(self, age_locked);
     }
 
     /// Returns the current pig variant registry ID stored in synced data.
@@ -251,23 +233,6 @@ impl PigEntity {
         }
     }
 
-    fn can_age_up(&self) -> bool {
-        self.is_baby() && !self.is_age_locked()
-    }
-
-    fn tick_ageable_mob(&self) {
-        if !Entity::is_alive(self) {
-            return;
-        }
-
-        let age = self.get_age();
-        if self.can_age_up() {
-            self.set_age(age + 1);
-        } else if age > 0 {
-            self.set_age(age - 1);
-        }
-    }
-
     fn update_dirty_mob_effect_entity_data(&self) {
         if !self.living_base.take_effects_dirty() {
             return;
@@ -355,6 +320,14 @@ impl PigEntity {
         let threshold = (max_cramming - 1) as usize;
         pushable_count > threshold && non_passenger_count > threshold
     }
+
+    /// Returns whether the stack is vanilla pig food.
+    #[must_use]
+    pub fn is_food(&self, item_stack: &ItemStack) -> bool {
+        REGISTRY
+            .items
+            .is_in_tag(item_stack.item(), &ItemTag::PIG_FOOD)
+    }
 }
 
 impl Entity for PigEntity {
@@ -372,7 +345,7 @@ impl Entity for PigEntity {
         self.tick_mob_effects();
 
         if self.is_dead_or_dying() {
-            // TODO: Add LivingEntity.tickDeath removal once shared death ticking exists.
+            LivingEntity::tick_death(self);
             self.tick_living_state();
             return;
         }
@@ -401,6 +374,14 @@ impl Entity for PigEntity {
     }
 
     fn as_pathfinder_mob(&self) -> Option<&dyn PathfinderMob> {
+        Some(self)
+    }
+
+    fn is_animal(&self) -> bool {
+        true
+    }
+
+    fn as_animal(&self) -> Option<&dyn Animal> {
         Some(self)
     }
 
@@ -486,9 +467,8 @@ impl Entity for PigEntity {
             nbt.insert("NoAI", i8::from(true));
         }
 
-        nbt.insert("Age", self.get_age());
-        nbt.insert("ForcedAge", self.forced_age());
-        nbt.insert("AgeLocked", i8::from(self.is_age_locked()));
+        self.save_ageable_mob(nbt);
+        self.save_animal(nbt);
         nbt.insert("variant", self.variant().key.to_string());
         nbt.insert("sound_variant", self.sound_variant().key.to_string());
     }
@@ -501,9 +481,8 @@ impl Entity for PigEntity {
             self.set_no_ai(no_ai != 0);
         }
 
-        self.set_age(nbt.int("Age").unwrap_or(0));
-        self.set_forced_age(nbt.int("ForcedAge").unwrap_or(0));
-        self.set_age_locked(nbt.byte("AgeLocked").is_some_and(|value| value != 0));
+        self.load_ageable_mob(nbt);
+        self.load_animal(nbt);
 
         if let Some(variant) = nbt.string("variant")
             && let Ok(key) = Identifier::from_str(variant.to_str().as_ref())
@@ -541,6 +520,10 @@ impl LivingEntity for PigEntity {
         Mob::mob_server_ai_step(self);
     }
 
+    fn before_actually_hurt(&self, _source: &DamageSource, _amount: f32) {
+        Animal::reset_love(self);
+    }
+
     fn ai_step(&self) -> Option<MoveResult> {
         let result = self.default_ai_step();
 
@@ -553,8 +536,41 @@ impl LivingEntity for PigEntity {
             self.push_entities(&world);
         }
 
-        self.tick_ageable_mob();
+        AgeableMob::tick_ageable_mob(self);
+        Animal::tick_animal_love(self);
         result
+    }
+}
+
+impl AgeableMob for PigEntity {
+    fn ageable_base(&self) -> &AgeableMobBase {
+        &self.ageable_base
+    }
+
+    fn is_age_locked(&self) -> bool {
+        *self.entity_data.lock().ageable_mob().age_locked.get()
+    }
+
+    fn set_age_locked(&self, age_locked: bool) {
+        self.entity_data
+            .lock()
+            .ageable_mob_mut()
+            .age_locked
+            .set(age_locked);
+    }
+
+    fn set_synced_baby(&self, baby: bool) {
+        self.entity_data.lock().ageable_mob_mut().baby.set(baby);
+    }
+
+    fn age_boundary_changed(&self, _baby: bool) {
+        // TODO: Refresh dimensions when baby/adult size changes.
+    }
+}
+
+impl Animal for PigEntity {
+    fn animal_base(&self) -> &AnimalBase {
+        &self.animal_base
     }
 }
 
@@ -571,8 +587,12 @@ impl Mob for PigEntity {
         PathfinderMob::tick_pathfinder_path_navigation(self);
     }
 
-    fn remove_when_far_away(&self, _dist_sqr: f64) -> bool {
-        false
+    fn custom_server_ai_step(&self) {
+        Animal::custom_server_ai_step_animal(self);
+    }
+
+    fn remove_when_far_away(&self, dist_sqr: f64) -> bool {
+        Animal::remove_when_far_away_animal(self, dist_sqr)
     }
 
     fn mob_flags(&self) -> i8 {
@@ -592,12 +612,16 @@ mod tests {
     use std::string::ToString;
 
     use simdnbt::borrow::read_compound as read_borrowed_compound;
+    use simdnbt::owned::NbtTag;
     use steel_registry::test_support::init_test_registry;
-    use steel_registry::vanilla_entities;
+    use steel_registry::{vanilla_entities, vanilla_items::ITEMS};
+    use steel_utils::UuidExt;
+    use uuid::Uuid;
 
     use crate::entity::ai::navigation::NavigationTickContext;
     use crate::entity::ai::node::Node;
     use crate::entity::ai::path::{Path, PathType};
+    use crate::entity::{Animal, DEATH_DURATION, RemovalReason};
 
     use super::*;
 
@@ -664,6 +688,21 @@ mod tests {
     }
 
     #[test]
+    fn pig_exposes_animal_behavior_without_downcasting() {
+        init_test_registry();
+
+        let pig = PigEntity::new(&vanilla_entities::PIG, 1, DVec3::ZERO, Weak::new());
+        let entity = &pig as &dyn Entity;
+
+        assert!(entity.is_animal());
+        let Some(animal) = entity.as_animal() else {
+            panic!("pig should expose animal behavior");
+        };
+        animal.set_in_love_time(5);
+        assert_eq!(animal.in_love_time(), 5);
+    }
+
+    #[test]
     fn pig_mob_ai_increments_no_action_time() {
         init_test_registry();
 
@@ -698,14 +737,14 @@ mod tests {
     }
 
     #[test]
-    fn pig_registers_vanilla_random_stroll_goal_foundation() {
+    fn pig_registers_vanilla_passive_goal_foundations() {
         init_test_registry();
 
         let pig = PigEntity::new(&vanilla_entities::PIG, 1, DVec3::ZERO, Weak::new());
 
         assert_eq!(
             pig.mob_base().goal_selector().lock().available_goal_count(),
-            1
+            2
         );
     }
 
@@ -831,5 +870,100 @@ mod tests {
             pig.get_pathfinding_malus(PathType::Fire).to_bits(),
             (-1.0_f32).to_bits()
         );
+    }
+
+    #[test]
+    fn pig_uses_vanilla_pig_food_tag() {
+        init_test_registry();
+
+        let pig = PigEntity::new(&vanilla_entities::PIG, 1, DVec3::ZERO, Weak::new());
+
+        assert!(pig.is_food(&ItemStack::new(&ITEMS.carrot)));
+        assert!(!pig.is_food(&ItemStack::new(&ITEMS.stone)));
+    }
+
+    #[test]
+    fn pig_saves_vanilla_animal_love_data() {
+        init_test_registry();
+
+        let pig = PigEntity::new(&vanilla_entities::PIG, 1, DVec3::ZERO, Weak::new());
+        let love_cause = Uuid::from_u128(42);
+        pig.set_in_love_time(123);
+        pig.set_love_cause_uuid(Some(love_cause));
+
+        let mut nbt = NbtCompound::new();
+        pig.save_additional(&mut nbt);
+
+        assert_eq!(nbt.int("InLove"), Some(123));
+        assert_eq!(
+            nbt.int_array("LoveCause").map(|value| value.to_vec()),
+            Some(love_cause.to_int_array().to_vec())
+        );
+    }
+
+    #[test]
+    fn pig_loads_vanilla_animal_love_data() {
+        init_test_registry();
+
+        let love_cause = Uuid::from_u128(42);
+        let mut nbt = NbtCompound::new();
+        nbt.insert("InLove", 321_i32);
+        nbt.insert(
+            "LoveCause",
+            NbtTag::IntArray(love_cause.to_int_array().to_vec()),
+        );
+
+        let mut bytes = Vec::new();
+        nbt.write(&mut bytes);
+        let borrowed = read_borrowed_compound(&mut Cursor::new(&bytes))
+            .unwrap_or_else(|error| panic!("test nbt should reborrow: {error}"));
+
+        let pig = PigEntity::new(&vanilla_entities::PIG, 1, DVec3::ZERO, Weak::new());
+        pig.load_additional((&borrowed).into());
+
+        assert_eq!(pig.in_love_time(), 321);
+        assert_eq!(pig.love_cause_uuid(), Some(love_cause));
+    }
+
+    #[test]
+    fn pig_animal_love_ticks_only_for_adults() {
+        init_test_registry();
+
+        let pig = PigEntity::new(&vanilla_entities::PIG, 1, DVec3::ZERO, Weak::new());
+        pig.set_in_love_time(2);
+        Animal::tick_animal_love(&pig);
+        assert_eq!(pig.in_love_time(), 1);
+
+        pig.set_age(-1);
+        pig.set_in_love_time(20);
+        Animal::tick_animal_love(&pig);
+        assert_eq!(pig.in_love_time(), 0);
+    }
+
+    #[test]
+    fn pig_damage_resets_vanilla_animal_love_time() {
+        init_test_registry();
+
+        let pig = PigEntity::new(&vanilla_entities::PIG, 1, DVec3::ZERO, Weak::new());
+        let source = DamageSource::environment(&vanilla_damage_types::GENERIC);
+        pig.set_in_love_time(20);
+
+        assert!(pig.hurt_server(&source, 1.0));
+
+        assert_eq!(pig.in_love_time(), 0);
+    }
+
+    #[test]
+    fn pig_death_tick_removes_after_vanilla_death_duration() {
+        init_test_registry();
+
+        let pig = PigEntity::new(&vanilla_entities::PIG, 1, DVec3::ZERO, Weak::new());
+        pig.set_health(0.0);
+
+        for _ in 0..DEATH_DURATION {
+            pig.tick();
+        }
+
+        assert_eq!(pig.removal_reason(), Some(RemovalReason::Killed));
     }
 }

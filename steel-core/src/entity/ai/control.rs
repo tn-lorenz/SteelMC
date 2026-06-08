@@ -2,8 +2,8 @@
 
 use glam::DVec3;
 
-const DEFAULT_LOOK_Y_MAX_ROT_SPEED: f32 = 10.0;
-const DEFAULT_LOOK_X_MAX_ROT_ANGLE: f32 = 40.0;
+pub(crate) const DEFAULT_LOOK_Y_MAX_ROT_SPEED: f32 = 10.0;
+pub(crate) const DEFAULT_LOOK_X_MAX_ROT_ANGLE: f32 = 40.0;
 
 #[derive(Debug, Clone, Copy, PartialEq)]
 pub enum MoveControlOperation {

@@ -20,7 +20,7 @@ use crate::entity::ai::navigation::{
 };
 use crate::entity::ai::path::{Path, PathType, PathfindingContext, PathfindingMalus};
 use crate::entity::ai::walk::{MobPathSettings, WalkNodeEvaluator, WalkPathEvaluator};
-use crate::entity::{Entity, LivingEntity, LivingTravelInput, RemovalReason};
+use crate::entity::{LivingEntity, LivingTravelInput, RemovalReason};
 use crate::physics::WorldCollisionProvider;
 use crate::world::{LevelReader, World};
 
@@ -220,16 +220,7 @@ pub trait Mob: LivingEntity {
 
     fn nearest_player_distance_sqr(&self) -> Option<f64> {
         let world = self.level()?;
-        let position = self.position();
-        let mut nearest = None;
-        world.players.iter_players(|_, player| {
-            let distance_sqr = player.position().distance_squared(position);
-            if nearest.is_none_or(|current| distance_sqr < current) {
-                nearest = Some(distance_sqr);
-            }
-            true
-        });
-        nearest
+        world.nearest_player_distance_sqr(self.position())
     }
 
     fn get_pathfinding_malus(&self, path_type: PathType) -> f32 {
