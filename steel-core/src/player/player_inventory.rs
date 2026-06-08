@@ -350,6 +350,22 @@ impl PlayerInventory {
         self.set_changed();
     }
 
+    /// Splits items from the specified hand and records inventory/equipment changes.
+    pub fn split_item_in_hand(&mut self, hand: InteractionHand, amount: i32) -> ItemStack {
+        if amount <= 0 || self.get_item_in_hand(hand).is_empty() {
+            return ItemStack::empty();
+        }
+
+        let result = self.get_item_in_hand_mut(hand).split(amount);
+        let slot = match hand {
+            InteractionHand::MainHand => EquipmentSlot::MainHand,
+            InteractionHand::OffHand => EquipmentSlot::OffHand,
+        };
+        self.refresh_player_equipment_attribute_modifiers(slot);
+        self.set_changed();
+        result
+    }
+
     /// Swaps the selected main-hand item with the offhand item.
     ///
     /// Returns true when the visible hand contents changed.
@@ -1316,6 +1332,29 @@ mod tests {
             vec![(
                 EquipmentSlot::OffHand,
                 ItemStack::with_count(&ITEMS.shield, 1)
+            )]
+        );
+    }
+
+    #[test]
+    fn split_item_in_hand_marks_changed_and_dirty_equipment() {
+        init_test_registry();
+
+        let mut inventory = PlayerInventory::new(Weak::new());
+        inventory.set_selected_item(ItemStack::with_count(&ITEMS.oak_log, 3));
+        inventory.drain_dirty_equipment_items();
+
+        let before = inventory.get_times_changed();
+        let split = inventory.split_item_in_hand(InteractionHand::MainHand, 1);
+
+        assert_eq!(split, ItemStack::with_count(&ITEMS.oak_log, 1));
+        assert_eq!(inventory.get_selected_item().count(), 2);
+        assert_ne!(inventory.get_times_changed(), before);
+        assert_eq!(
+            inventory.drain_dirty_equipment_items(),
+            vec![(
+                EquipmentSlot::MainHand,
+                ItemStack::with_count(&ITEMS.oak_log, 2)
             )]
         );
     }

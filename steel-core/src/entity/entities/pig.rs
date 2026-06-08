@@ -17,13 +17,14 @@ use steel_registry::entity_type::EntityTypeRef;
 use steel_registry::item_stack::ItemStack;
 use steel_registry::pig_sound_variant::{PigAge, PigSoundVariantRef};
 use steel_registry::pig_variant::PigVariantRef;
+use steel_registry::sound_event::SoundEventRef;
 use steel_registry::vanilla_entity_data::PigEntityData;
 use steel_registry::vanilla_game_rules::MAX_ENTITY_CRAMMING;
 use steel_registry::vanilla_item_tags::ItemTag;
 use steel_registry::{
-    REGISTRY, RegistryEntry, RegistryExt, TaggedRegistryExt, vanilla_attributes,
-    vanilla_damage_types, vanilla_items, vanilla_particle_types, vanilla_pig_sound_variants,
-    vanilla_pig_variants,
+    REGISTRY, RegistryEntry, RegistryExt, TaggedRegistryExt, sound_events, vanilla_attributes,
+    vanilla_damage_types, vanilla_entities, vanilla_items, vanilla_particle_types,
+    vanilla_pig_sound_variants, vanilla_pig_variants,
 };
 use steel_utils::locks::SyncMutex;
 use steel_utils::random::Random as _;
@@ -41,6 +42,7 @@ use crate::entity::{
     EntitySyncedData, LivingEntity, LivingEntityBase, Mob, MobBase, MobEffectSyncChange,
     PathfinderMob, SharedEntity,
 };
+use crate::inventory::equipment::EquipmentSlot;
 use crate::physics::MoveResult;
 use crate::player::Player;
 use crate::world::World;
@@ -282,6 +284,18 @@ impl PigEntity {
         }
     }
 
+    /// Returns whether this pig has a saddle equipped.
+    #[must_use]
+    pub fn is_saddled(&self) -> bool {
+        LivingEntity::has_item_in_slot(self, EquipmentSlot::Saddle)
+    }
+
+    /// Returns whether this pig can currently use the saddle equipment slot.
+    #[must_use]
+    pub fn can_use_saddle_slot(&self) -> bool {
+        Entity::is_alive(self) && !self.is_baby()
+    }
+
     fn update_dirty_mob_effect_entity_data(&self) {
         if !self.living_base.take_effects_dirty() {
             return;
@@ -446,6 +460,22 @@ impl Entity for PigEntity {
         Entity::is_alive(self) && !self.is_spectator() && !self.on_climbable()
     }
 
+    fn controlling_passenger(&self) -> Option<SharedEntity> {
+        if !self.is_saddled() {
+            return None;
+        }
+
+        let passenger = self.first_passenger()?;
+        let is_controller = passenger.entity_type() == &vanilla_entities::PLAYER
+            && passenger.as_living_entity().is_some_and(|living| {
+                let mut is_holding_carrot_on_a_stick =
+                    |item_stack: &ItemStack| item_stack.is(&vanilla_items::ITEMS.carrot_on_a_stick);
+                living.is_holding(&mut is_holding_carrot_on_a_stick)
+            });
+
+        is_controller.then_some(passenger)
+    }
+
     fn is_effective_ai(&self) -> bool {
         self.is_server_driven_movement() && !self.is_no_ai()
     }
@@ -574,6 +604,14 @@ impl LivingEntity for PigEntity {
             .set(clamped);
     }
 
+    fn can_use_slot(&self, slot: EquipmentSlot) -> bool {
+        slot != EquipmentSlot::Saddle || self.can_use_saddle_slot()
+    }
+
+    fn equip_sound(&self, slot: EquipmentSlot, _stack: &ItemStack) -> Option<SoundEventRef> {
+        (slot == EquipmentSlot::Saddle).then_some(&sound_events::ENTITY_PIG_SADDLE)
+    }
+
     fn server_ai_step(&self) {
         Mob::mob_server_ai_step(self);
     }
@@ -635,6 +673,10 @@ impl Animal for PigEntity {
         PigEntity::is_food(self, item_stack)
     }
 
+    fn play_eating_sound(&self) {
+        self.play_sound(self.current_sound_set().eat_sound, 1.0, 1.0);
+    }
+
     fn breed_variant_key(&self) -> Option<&Identifier> {
         Some(&self.variant().key)
     }
@@ -685,7 +727,33 @@ impl Mob for PigEntity {
     }
 
     fn mob_interact(&self, player: &Player, hand: InteractionHand) -> InteractionResult {
-        Animal::mob_interact_animal(self, player, hand)
+        let item_stack = {
+            let inventory = player.inventory.lock();
+            let item_stack = inventory.get_item_in_hand(hand);
+            item_stack.copy_with_count(item_stack.count())
+        };
+        let has_food = PigEntity::is_food(self, &item_stack);
+
+        if !has_food && self.is_saddled() && !self.is_vehicle() && !player.is_secondary_use_active()
+        {
+            if let Some(world) = self.level()
+                && let Some(vehicle) = world.get_entity_by_id(self.id())
+            {
+                player.start_riding(&vehicle);
+            }
+            return InteractionResult::Success;
+        }
+
+        let interaction_result = Animal::mob_interact_animal(self, player, hand);
+        if interaction_result.consumes_action() {
+            return interaction_result;
+        }
+
+        if LivingEntity::is_equippable_in_slot(self, &item_stack, EquipmentSlot::Saddle) {
+            return LivingEntity::interact_living_entity_with_equippable(self, player, hand);
+        }
+
+        InteractionResult::Pass
     }
 
     fn mob_flags(&self) -> i8 {
@@ -715,6 +783,7 @@ mod tests {
     use crate::entity::ai::node::Node;
     use crate::entity::ai::path::{Path, PathType};
     use crate::entity::{Animal, DEATH_DURATION, RemovalReason};
+    use crate::inventory::equipment::EquipmentSlot;
 
     use super::*;
 
@@ -830,6 +899,66 @@ mod tests {
         assert_eq!(pig.in_love_time(), 600);
         assert!(!pig.can_fall_in_love());
         assert!(pig.love_cause_uuid().is_none());
+    }
+
+    #[test]
+    fn pig_saddle_slot_requires_alive_adult() {
+        init_test_registry();
+
+        let pig = PigEntity::new(&vanilla_entities::PIG, 1, DVec3::ZERO, Weak::new());
+        let saddle = ItemStack::new(&ITEMS.saddle);
+
+        assert!(LivingEntity::is_equippable_in_slot(
+            &pig,
+            &saddle,
+            EquipmentSlot::Saddle
+        ));
+
+        pig.set_baby(true);
+        assert!(!LivingEntity::is_equippable_in_slot(
+            &pig,
+            &saddle,
+            EquipmentSlot::Saddle
+        ));
+
+        pig.set_baby(false);
+        pig.set_health(0.0);
+        assert!(!LivingEntity::is_equippable_in_slot(
+            &pig,
+            &saddle,
+            EquipmentSlot::Saddle
+        ));
+    }
+
+    #[test]
+    fn pig_saddled_state_reads_saddle_equipment() {
+        init_test_registry();
+
+        let pig = PigEntity::new(&vanilla_entities::PIG, 1, DVec3::ZERO, Weak::new());
+
+        assert!(!pig.is_saddled());
+
+        pig.living_base
+            .equipment()
+            .lock()
+            .set(EquipmentSlot::Saddle, ItemStack::new(&ITEMS.saddle));
+
+        assert!(pig.is_saddled());
+    }
+
+    #[test]
+    fn pig_saddle_equip_sound_uses_vanilla_sound() {
+        init_test_registry();
+
+        let pig = PigEntity::new(&vanilla_entities::PIG, 1, DVec3::ZERO, Weak::new());
+        let saddle = ItemStack::new(&ITEMS.saddle);
+
+        assert_eq!(
+            LivingEntity::equip_sound(&pig, EquipmentSlot::Saddle, &saddle)
+                .map(|sound| sound.key.to_string()),
+            Some("minecraft:entity.pig.saddle".to_owned())
+        );
+        assert!(LivingEntity::equip_sound(&pig, EquipmentSlot::Head, &saddle).is_none());
     }
 
     #[test]

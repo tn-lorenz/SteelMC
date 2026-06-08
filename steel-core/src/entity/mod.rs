@@ -3770,6 +3770,88 @@ pub trait LivingEntity: Entity {
         visitor(equipment.get_mut(slot));
     }
 
+    /// Returns whether this entity currently has an item in `slot`.
+    fn has_item_in_slot(&self, slot: EquipmentSlot) -> bool {
+        let mut has_item = false;
+        self.with_equipment_slot(slot, &mut |item_stack| {
+            has_item = !item_stack.is_empty();
+        });
+        has_item
+    }
+
+    /// Returns whether vanilla allows this entity to use `slot`.
+    fn can_use_slot(&self, _slot: EquipmentSlot) -> bool {
+        true
+    }
+
+    /// Returns vanilla `LivingEntity.isEquippableInSlot`.
+    fn is_equippable_in_slot(&self, item_stack: &ItemStack, slot: EquipmentSlot) -> bool {
+        let Some(equippable) = item_stack.get_equippable() else {
+            return slot == EquipmentSlot::MainHand && self.can_use_slot(EquipmentSlot::MainHand);
+        };
+
+        slot == equippable.slot
+            && self.can_use_slot(equippable.slot)
+            && equippable.can_be_equipped_by(self.entity_type())
+    }
+
+    /// Returns the equip sound Steel can currently resolve for this entity.
+    fn equip_sound(&self, _slot: EquipmentSlot, _stack: &ItemStack) -> Option<SoundEventRef> {
+        None
+    }
+
+    /// Runs vanilla's equippable `ItemStack.interactLivingEntity` branch.
+    fn interact_living_entity_with_equippable(
+        &self,
+        player: &Player,
+        hand: InteractionHand,
+    ) -> InteractionResult {
+        let item_stack = {
+            let inventory = player.inventory.lock();
+            let item_stack = inventory.get_item_in_hand(hand);
+            item_stack.copy_with_count(item_stack.count())
+        };
+        let Some(equippable) = item_stack.get_equippable() else {
+            return InteractionResult::Pass;
+        };
+        if !equippable.equip_on_interact {
+            return InteractionResult::Pass;
+        }
+
+        let slot = equippable.slot;
+        if !self.is_equippable_in_slot(&item_stack, slot) || !Entity::is_alive(self) {
+            return InteractionResult::Pass;
+        }
+
+        let equipped = {
+            let mut equipment = self.living_base().equipment().lock();
+            if !equipment.get_ref(slot).is_empty() {
+                return InteractionResult::Pass;
+            }
+
+            let mut inventory = player.inventory.lock();
+            if !self.is_equippable_in_slot(inventory.get_item_in_hand(hand), slot) {
+                return InteractionResult::Pass;
+            }
+
+            let equipped = inventory.split_item_in_hand(hand, 1);
+            if equipped.is_empty() {
+                return InteractionResult::Pass;
+            }
+
+            equipment.set(slot, equipped);
+            equipment.get_ref(slot).copy_with_count(1)
+        };
+
+        self.refresh_equipment_attribute_modifiers(slot);
+        if let Some(sound) = self.equip_sound(slot, &equipped) {
+            self.play_sound(sound, 1.0, 1.0);
+        }
+        // TODO: Mark guaranteed equipment drops once mob death-loot foundations exist.
+        // TODO: Emit EQUIP game event once game-event dispatch is implemented.
+        InteractionResult::Success
+    }
+
     /// Refreshes transient item attribute modifiers for one equipment slot.
     fn refresh_equipment_attribute_modifiers(&self, slot: EquipmentSlot) {
         self.with_equipment_slot(slot, &mut |item_stack| {
