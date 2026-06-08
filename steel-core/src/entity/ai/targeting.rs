@@ -110,8 +110,8 @@ impl TargetingConditions {
         }
 
         if self.check_line_of_sight
-            && targeter.as_pathfinder_mob().is_some()
-            && !targeter.has_line_of_sight(target)
+            && let Some(pathfinder) = targeter.as_pathfinder_mob()
+            && !pathfinder.has_line_of_sight_cached(target)
         {
             return false;
         }

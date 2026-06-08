@@ -10,5 +10,6 @@ pub mod navigation;
 pub mod node;
 pub mod path;
 pub mod pathfinder;
+pub(crate) mod sensing;
 pub(crate) mod targeting;
 pub mod walk;

@@ -34,6 +34,7 @@ use crate::entity::ai::navigation::{
     NavigationPathRequest, NavigationRecomputeRequest, NavigationTickContext, PathNavigation,
 };
 use crate::entity::ai::path::{Path, PathType, PathfindingContext, PathfindingMalus};
+use crate::entity::ai::sensing::Sensing;
 use crate::entity::ai::walk::{MobPathSettings, WalkNodeEvaluator, WalkPathEvaluator};
 use crate::entity::attribute::{AttributeModifier, AttributeModifierOperation};
 use crate::entity::damage::DamageSource;
@@ -146,6 +147,7 @@ pub struct MobBase {
     goal_selector: SyncMutex<GoalSelector>,
     target_selector: SyncMutex<GoalSelector>,
     target: SyncMutex<Option<WeakEntity>>,
+    sensing: SyncMutex<Sensing>,
     controls: SyncMutex<MobControls>,
     navigation: SyncMutex<PathNavigation>,
     pathfinding_malus: SyncMutex<PathfindingMalus>,
@@ -380,6 +382,7 @@ impl MobBase {
             goal_selector: SyncMutex::new(GoalSelector::new()),
             target_selector: SyncMutex::new(GoalSelector::new()),
             target: SyncMutex::new(None),
+            sensing: SyncMutex::new(Sensing::new()),
             controls: SyncMutex::new(MobControls::new()),
             navigation: SyncMutex::new(PathNavigation::new()),
             pathfinding_malus: SyncMutex::new(pathfinding_malus),
@@ -403,6 +406,11 @@ impl MobBase {
     #[must_use]
     pub const fn target_selector(&self) -> &SyncMutex<GoalSelector> {
         &self.target_selector
+    }
+
+    #[must_use]
+    pub(crate) const fn sensing(&self) -> &SyncMutex<Sensing> {
+        &self.sensing
     }
 
     #[must_use]
@@ -1342,6 +1350,7 @@ pub trait Mob: LivingEntity {
 
     fn mob_server_ai_step(&self) {
         self.increment_no_action_time();
+        self.mob_base().sensing().lock().tick();
         if self.tick_count() % 5 == 0 {
             self.update_control_flags();
         }
@@ -1622,6 +1631,13 @@ pub trait PathfinderMob: Mob {
     fn get_walk_target_value(&self, pos: BlockPos) -> f32 {
         self.as_animal()
             .map_or(0.0, |animal| animal.animal_walk_target_value(pos))
+    }
+
+    fn has_line_of_sight_cached(&self, target: &dyn Entity) -> bool {
+        self.mob_base()
+            .sensing()
+            .lock()
+            .has_line_of_sight(target.id(), || self.has_line_of_sight(target))
     }
 
     fn can_update_path(&self) -> bool {
