@@ -14,7 +14,7 @@ use steel_registry::vanilla_block_tags::BlockTag;
 use steel_utils::locks::SyncMutex;
 use steel_utils::random::Random as _;
 use steel_utils::types::InteractionHand;
-use steel_utils::{BlockPos, ChunkPos, axis::Axis};
+use steel_utils::{BlockPos, ChunkPos, Identifier, axis::Axis};
 
 use crate::behavior::{BLOCK_BEHAVIORS, BlockCollisionContext, InteractionResult};
 use crate::entity::ai::control::{MobControls, MoveControlOperation};
@@ -119,6 +119,8 @@ pub struct MobBase {
     can_pick_up_loot: SyncMutex<bool>,
     drop_chances: SyncMutex<DropChances>,
     home_restriction: SyncMutex<MobHomeRestriction>,
+    death_loot_table: SyncMutex<Option<Identifier>>,
+    death_loot_table_seed: SyncMutex<i64>,
 }
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
@@ -153,6 +155,8 @@ impl MobBase {
             can_pick_up_loot: SyncMutex::new(false),
             drop_chances: SyncMutex::new(DropChances::DEFAULT),
             home_restriction: SyncMutex::new(MobHomeRestriction::none()),
+            death_loot_table: SyncMutex::new(None),
+            death_loot_table_seed: SyncMutex::new(0),
         }
     }
 
@@ -196,6 +200,14 @@ impl MobBase {
 
     const fn home_restriction(&self) -> &SyncMutex<MobHomeRestriction> {
         &self.home_restriction
+    }
+
+    const fn death_loot_table(&self) -> &SyncMutex<Option<Identifier>> {
+        &self.death_loot_table
+    }
+
+    const fn death_loot_table_seed(&self) -> &SyncMutex<i64> {
+        &self.death_loot_table_seed
     }
 }
 
@@ -359,7 +371,15 @@ pub trait Mob: LivingEntity {
             );
         }
 
-        // TODO: Persist leash and death-loot data once those foundations exist.
+        if let Some(loot_table) = self.mob_base().death_loot_table().lock().as_ref() {
+            nbt.insert("DeathLootTable", loot_table.to_string());
+        }
+        let loot_table_seed = *self.mob_base().death_loot_table_seed().lock();
+        if loot_table_seed != 0 {
+            nbt.insert("DeathLootTableSeed", loot_table_seed);
+        }
+
+        // TODO: Persist leash data once that foundation exists.
         nbt.insert("LeftHanded", i8::from(self.is_left_handed()));
         if self.is_no_ai() {
             nbt.insert("NoAI", i8::from(true));
@@ -385,8 +405,22 @@ pub trait Mob: LivingEntity {
             self.clear_home();
         }
 
+        let death_loot_table = nbt
+            .string("DeathLootTable")
+            .and_then(|loot_table| loot_table.to_str().as_ref().parse().ok());
+        *self.mob_base().death_loot_table().lock() = death_loot_table;
+        *self.mob_base().death_loot_table_seed().lock() =
+            nbt.long("DeathLootTableSeed").unwrap_or(0);
         self.set_left_handed(nbt.byte("LeftHanded").is_some_and(|value| value != 0));
         self.set_no_ai(nbt.byte("NoAI").is_some_and(|value| value != 0));
+    }
+
+    fn set_death_loot_table(&self, loot_table: Option<Identifier>) {
+        *self.mob_base().death_loot_table().lock() = loot_table;
+    }
+
+    fn set_death_loot_table_seed(&self, seed: i64) {
+        *self.mob_base().death_loot_table_seed().lock() = seed;
     }
 
     fn is_within_home(&self) -> bool {
