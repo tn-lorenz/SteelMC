@@ -16,7 +16,8 @@ use steel_registry::sound_event::SoundEventRef;
 use steel_registry::vanilla_block_tags::BlockTag;
 use steel_registry::vanilla_game_rules::ENTITY_DROPS;
 use steel_registry::{
-    REGISTRY, RegistryExt, sound_events, vanilla_attributes, vanilla_game_events, vanilla_items,
+    REGISTRY, RegistryExt, sound_events, vanilla_attributes, vanilla_damage_types,
+    vanilla_game_events, vanilla_items,
 };
 use steel_utils::UuidExt;
 use steel_utils::locks::SyncMutex;
@@ -26,6 +27,7 @@ use steel_utils::{BlockPos, ChunkPos, Identifier, WorldAabb, axis::Axis};
 use uuid::Uuid;
 
 use crate::behavior::{BLOCK_BEHAVIORS, BlockCollisionContext, InteractionResult};
+use crate::enchantment_helper::{self, EnchantmentDamageContext, EnchantmentPostAttackContext};
 use crate::entity::ai::control::{
     BodyRotationInput, MobControls, MoveControlOperation, rotate_if_necessary, rotate_towards,
 };
@@ -1281,6 +1283,119 @@ pub trait Mob: LivingEntity {
         75.0
     }
 
+    /// Handles vanilla `Mob.doHurtTarget`.
+    #[must_use]
+    fn do_hurt_target(&self, target: &SharedEntity) -> bool {
+        LivingEntity::refresh_equipment_attribute_modifiers(self, EquipmentSlot::MainHand);
+        let weapon_item = {
+            let mut main_hand = ItemStack::empty();
+            self.with_equipment_slot(EquipmentSlot::MainHand, &mut |item_stack| {
+                main_hand = item_stack.copy_with_count(item_stack.count());
+            });
+            main_hand
+        };
+        let attack_damage = self
+            .attributes()
+            .lock()
+            .required_value(vanilla_attributes::ATTACK_DAMAGE) as f32;
+        let damage_source = self.mob_attack_damage_source();
+        let enchantment_context = EnchantmentDamageContext::new(
+            target.entity_type(),
+            Some(self.entity_type()),
+            Some(self.entity_type()),
+            &damage_source,
+        );
+        let damage =
+            enchantment_helper::modify_damage(&weapon_item, &enchantment_context, attack_damage);
+        // TODO: Apply item attack damage bonuses once item combat behavior exposes them.
+
+        let old_movement = target.velocity();
+        let was_hurt = target.hurt(&damage_source, damage);
+        if was_hurt {
+            self.cause_extra_knockback(
+                target.as_ref(),
+                self.get_attack_knockback(target.as_ref(), &weapon_item, &damage_source),
+                old_movement,
+            );
+            // TODO: Run ItemStack.hurtEnemy once weapon durability hooks exist.
+            let post_attack_context = EnchantmentPostAttackContext::new(
+                target.as_ref(),
+                Some(self.as_entity_event_source()),
+                Some(self.as_entity_event_source()),
+                &damage_source,
+            );
+            enchantment_helper::do_post_attack_effects_from_item(
+                &weapon_item,
+                &post_attack_context,
+            );
+            self.set_last_hurt_mob(Some(target));
+            self.play_attack_sound();
+        }
+
+        // TODO: Run post-piercing attack effects once that enchantment hook exists.
+        was_hurt
+    }
+
+    /// Returns the damage source used by vanilla `DamageSources.mobAttack`.
+    fn mob_attack_damage_source(&self) -> DamageSource {
+        // TODO: Use the held item's DAMAGE_TYPE component once it has typed component data.
+        DamageSource::environment(&vanilla_damage_types::MOB_ATTACK)
+            .with_causing_entity(self.id())
+            .with_direct_entity(self.id())
+            .with_source_position(self.position())
+    }
+
+    /// Returns vanilla `LivingEntity.getKnockback` for mob attacks.
+    fn get_attack_knockback(
+        &self,
+        target: &dyn Entity,
+        weapon_item: &ItemStack,
+        damage_source: &DamageSource,
+    ) -> f64 {
+        let attack_knockback = self
+            .attributes()
+            .lock()
+            .required_value(vanilla_attributes::ATTACK_KNOCKBACK);
+        let enchantment_context = EnchantmentDamageContext::new(
+            target.entity_type(),
+            Some(self.entity_type()),
+            Some(self.entity_type()),
+            damage_source,
+        );
+        let modified = enchantment_helper::modify_knockback(
+            weapon_item,
+            &enchantment_context,
+            attack_knockback as f32,
+        );
+        f64::from(modified) / 2.0
+    }
+
+    /// Applies vanilla `LivingEntity.causeExtraKnockback`.
+    fn cause_extra_knockback(
+        &self,
+        target: &dyn Entity,
+        knockback_amount: f64,
+        _old_movement: DVec3,
+    ) {
+        if knockback_amount <= 0.0 {
+            return;
+        }
+        let Some(living_target) = target.as_living_entity() else {
+            return;
+        };
+
+        let yaw_radians = self.rotation().0.to_radians();
+        let yaw_sin = f64::from(yaw_radians.sin());
+        let yaw_cos = f64::from(yaw_radians.cos());
+        living_target.knockback(knockback_amount, yaw_sin, -yaw_cos);
+
+        let velocity = self.velocity();
+        self.set_velocity(DVec3::new(velocity.x * 0.6, velocity.y, velocity.z * 0.6));
+    }
+
+    /// Plays vanilla `LivingEntity.playAttackSound`.
+    fn play_attack_sound(&self) {}
+
     /// Returns vanilla `Mob.isWithinMeleeAttackRange`.
     fn is_within_melee_attack_range(&self, target: &dyn LivingEntity) -> bool {
         // TODO: Use the held item's ATTACK_RANGE component once it has typed component data.
@@ -1960,7 +2075,8 @@ mod tests {
     use steel_registry::entity_type::EntityTypeRef;
     use steel_registry::vanilla_entities;
     use steel_registry::{
-        REGISTRY, test_support::init_test_registry, vanilla_blocks, vanilla_damage_types,
+        REGISTRY, test_support::init_test_registry, vanilla_attributes, vanilla_blocks,
+        vanilla_damage_types,
     };
     use steel_utils::locks::SyncMutex;
     use steel_utils::{BlockPos, BlockStateId};
@@ -2029,6 +2145,7 @@ mod tests {
 
     struct DespawnTestMob {
         base: EntityBase,
+        entity_type: EntityTypeRef,
         living_base: LivingEntityBase,
         mob_base: MobBase,
         flags: SyncMutex<i8>,
@@ -2054,11 +2171,28 @@ mod tests {
             nearest_player_distance_sqr: Option<f64>,
             remove_when_far_away: bool,
         ) -> Self {
+            Self::with_entity_type(
+                id,
+                position,
+                &vanilla_entities::PIG,
+                nearest_player_distance_sqr,
+                remove_when_far_away,
+            )
+        }
+
+        fn with_entity_type(
+            id: i32,
+            position: DVec3,
+            entity_type: EntityTypeRef,
+            nearest_player_distance_sqr: Option<f64>,
+            remove_when_far_away: bool,
+        ) -> Self {
             init_test_registry();
 
             Self {
-                base: EntityBase::new(id, position, vanilla_entities::PIG.dimensions, Weak::new()),
-                living_base: LivingEntityBase::new(&vanilla_entities::PIG),
+                base: EntityBase::new(id, position, entity_type.dimensions, Weak::new()),
+                entity_type,
+                living_base: LivingEntityBase::new(entity_type),
                 mob_base: MobBase::new(),
                 flags: SyncMutex::new(0),
                 health: SyncMutex::new(10.0),
@@ -2079,7 +2213,7 @@ mod tests {
         }
 
         fn entity_type(&self) -> EntityTypeRef {
-            &vanilla_entities::PIG
+            self.entity_type
         }
 
         fn is_living_entity(&self) -> bool {
@@ -2100,6 +2234,10 @@ mod tests {
 
         fn controlling_passenger(&self) -> Option<SharedEntity> {
             self.controlling_passenger.lock().clone()
+        }
+
+        fn hurt(&self, source: &DamageSource, amount: f32) -> bool {
+            LivingEntity::hurt_server(self, source, amount)
         }
     }
 
@@ -2371,6 +2509,66 @@ mod tests {
         LivingEntity::play_hurt_sound(&mob, &source);
 
         assert_eq!(mob.mob_base().ambient_sound_time(), -80);
+    }
+
+    #[test]
+    fn mob_do_hurt_target_applies_attack_damage_and_records_target() {
+        let mob = DespawnTestMob::with_entity_type(
+            1,
+            DVec3::ZERO,
+            &vanilla_entities::ZOMBIE,
+            None,
+            false,
+        );
+        mob.attributes()
+            .lock()
+            .set_base_value(vanilla_attributes::ATTACK_DAMAGE, 4.0);
+        let target = Arc::new(DespawnTestMob::with_position(
+            2,
+            DVec3::new(1.0, 0.0, 0.0),
+            None,
+            false,
+        ));
+        let target_entity: SharedEntity = target.clone();
+
+        assert!(mob.do_hurt_target(&target_entity));
+
+        assert_eq!(target.get_health().to_bits(), 6.0_f32.to_bits());
+        let stored_target = mob
+            .last_hurt_mob()
+            .expect("successful mob attack should record target");
+        assert!(Arc::ptr_eq(&stored_target, &target_entity));
+    }
+
+    #[test]
+    fn mob_do_hurt_target_applies_vanilla_extra_knockback() {
+        let mob = DespawnTestMob::with_entity_type(
+            1,
+            DVec3::ZERO,
+            &vanilla_entities::ZOMBIE,
+            None,
+            false,
+        );
+        {
+            let mut attributes = mob.attributes().lock();
+            attributes.set_base_value(vanilla_attributes::ATTACK_DAMAGE, 4.0);
+            attributes.set_base_value(vanilla_attributes::ATTACK_KNOCKBACK, 2.0);
+        }
+        mob.set_velocity(DVec3::new(1.0, 0.0, 1.0));
+        let target = Arc::new(DespawnTestMob::with_position(
+            2,
+            DVec3::new(1.0, 0.0, 0.0),
+            None,
+            false,
+        ));
+        let target_entity: SharedEntity = target.clone();
+
+        assert!(mob.do_hurt_target(&target_entity));
+
+        assert_eq!(mob.velocity().x.to_bits(), 0.6_f64.to_bits());
+        assert_eq!(mob.velocity().z.to_bits(), 0.6_f64.to_bits());
+        assert!(target.velocity().length_squared() > 0.0);
+        assert!(target.needs_velocity_sync());
     }
 
     #[test]
