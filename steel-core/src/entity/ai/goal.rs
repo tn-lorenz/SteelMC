@@ -8,6 +8,7 @@ mod door_interact;
 mod float_goal;
 mod follow_mob;
 mod follow_parent;
+mod interact;
 mod leap_at_target;
 mod look_at_player;
 mod move_to_block;
