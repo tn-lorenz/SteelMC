@@ -1419,6 +1419,14 @@ pub trait Entity: EntityEventSource + Send + Sync {
         None
     }
 
+    /// Returns this entity as a player when it is the concrete server player.
+    ///
+    /// Mirrors vanilla player-only branches without requiring core code to
+    /// downcast through `Any`.
+    fn as_player(&self) -> Option<&Player> {
+        None
+    }
+
     /// Returns true for mobs with pathfinding navigation.
     fn is_pathfinder_mob(&self) -> bool {
         false
@@ -4324,6 +4332,32 @@ pub trait LivingEntity: Entity {
         }
     }
 
+    /// Mirrors vanilla `LivingEntity.tickRidden()`.
+    fn tick_ridden(&self, _controller: &Player, _ridden_input: DVec3) {}
+
+    /// Mirrors vanilla `LivingEntity.getRiddenInput()`.
+    fn ridden_input(&self, _controller: &Player, self_input: DVec3) -> DVec3 {
+        self_input
+    }
+
+    /// Mirrors vanilla `LivingEntity.getRiddenSpeed()`.
+    fn ridden_speed(&self, _controller: &Player) -> f32 {
+        self.get_speed()
+    }
+
+    /// Mirrors vanilla `LivingEntity.travelRidden()`.
+    fn travel_ridden(&self, controller: &Player, self_input: DVec3) -> Option<MoveResult> {
+        let ridden_input = self.ridden_input(controller, self_input);
+        self.tick_ridden(controller, ridden_input);
+        if self.can_simulate_movement() {
+            self.set_speed(self.ridden_speed(controller));
+            return self.travel(ridden_input);
+        }
+
+        self.set_velocity(DVec3::ZERO);
+        None
+    }
+
     /// Default vanilla-shaped `LivingEntity.aiStep()` movement foundation for overrides.
     ///
     /// This covers the shared travel state Steel currently has; mob AI and
@@ -4346,20 +4380,28 @@ pub trait LivingEntity: Entity {
 
         self.handle_living_jump();
 
-        if !self.can_simulate_movement() || !self.is_effective_ai() {
-            return None;
-        }
-
         if self.is_fall_flying() {
             self.update_fall_flying();
         }
 
         let input = self.travel_input();
-        self.travel(DVec3::new(
+        let input = DVec3::new(
             f64::from(input.sideways()),
             f64::from(input.vertical()),
             f64::from(input.forward()),
-        ))
+        );
+        if Entity::is_alive(self)
+            && let Some(controller_entity) = self.controlling_passenger()
+            && let Some(controller) = controller_entity.as_player()
+        {
+            return self.travel_ridden(controller, input);
+        }
+
+        if !self.can_simulate_movement() || !self.is_effective_ai() {
+            return None;
+        }
+
+        self.travel(input)
     }
 
     /// Mirrors vanilla `LivingEntity.aiStep()`.

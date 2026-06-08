@@ -23,8 +23,8 @@ use steel_registry::vanilla_game_rules::MAX_ENTITY_CRAMMING;
 use steel_registry::vanilla_item_tags::ItemTag;
 use steel_registry::{
     REGISTRY, RegistryEntry, RegistryExt, TaggedRegistryExt, sound_events, vanilla_attributes,
-    vanilla_damage_types, vanilla_entities, vanilla_items, vanilla_particle_types,
-    vanilla_pig_sound_variants, vanilla_pig_variants,
+    vanilla_damage_types, vanilla_items, vanilla_particle_types, vanilla_pig_sound_variants,
+    vanilla_pig_variants,
 };
 use steel_utils::locks::SyncMutex;
 use steel_utils::random::Random as _;
@@ -518,12 +518,11 @@ impl Entity for PigEntity {
         }
 
         let passenger = self.first_passenger()?;
-        let is_controller = passenger.entity_type() == &vanilla_entities::PLAYER
-            && passenger.as_living_entity().is_some_and(|living| {
-                let mut is_holding_carrot_on_a_stick =
-                    |item_stack: &ItemStack| item_stack.is(&vanilla_items::ITEMS.carrot_on_a_stick);
-                living.is_holding(&mut is_holding_carrot_on_a_stick)
-            });
+        let is_controller = passenger.as_player().is_some_and(|player| {
+            let mut is_holding_carrot_on_a_stick =
+                |item_stack: &ItemStack| item_stack.is(&vanilla_items::ITEMS.carrot_on_a_stick);
+            player.is_holding(&mut is_holding_carrot_on_a_stick)
+        });
 
         is_controller.then_some(passenger)
     }
@@ -670,6 +669,20 @@ impl LivingEntity for PigEntity {
 
     fn server_ai_step(&self) {
         Mob::mob_server_ai_step(self);
+    }
+
+    fn tick_ridden(&self, controller: &Player, _ridden_input: DVec3) {
+        let (yaw, pitch) = controller.rotation();
+        self.set_rotation((yaw, pitch * 0.5));
+        self.tick_boost();
+    }
+
+    fn ridden_input(&self, _controller: &Player, _self_input: DVec3) -> DVec3 {
+        DVec3::new(0.0, 0.0, 1.0)
+    }
+
+    fn ridden_speed(&self, _controller: &Player) -> f32 {
+        PigEntity::ridden_speed(self)
     }
 
     fn before_actually_hurt(&self, _source: &DamageSource, _amount: f32) {

@@ -1334,6 +1334,10 @@ impl Entity for Player {
         Some(self)
     }
 
+    fn as_player(&self) -> Option<&Player> {
+        Some(self)
+    }
+
     fn is_alive(&self) -> bool {
         !self.is_removed() && self.get_health() > 0.0
     }
