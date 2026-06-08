@@ -3,6 +3,7 @@
 mod avoid_entity;
 mod breath_air;
 mod breed_goal;
+mod door_interact;
 mod float_goal;
 mod follow_mob;
 mod follow_parent;
@@ -11,6 +12,7 @@ mod look_at_player;
 mod move_to_block;
 mod move_towards_restriction;
 mod move_towards_target;
+mod open_door;
 mod panic_goal;
 mod random_look_around;
 mod random_pos;
