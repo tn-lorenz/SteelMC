@@ -809,12 +809,15 @@ impl Player {
             }
         }
 
+        self.clear_fire();
+        self.set_ticks_frozen(0);
+
         if world.get_game_rule(&IMMEDIATE_RESPAWN) == GameRuleValue::Bool(true) {
             self.respawn();
         }
     }
 
-    /// TODO: bed/respawn anchor, cross-world, potion clearing, noRespawnBlockAvailable
+    /// TODO: bed/respawn anchor, cross-world, noRespawnBlockAvailable
     ///
     /// # Panics
     /// If the player dies in a world that doesn't exist.
@@ -824,28 +827,9 @@ impl Player {
             return;
         }
 
-        self.living_base.reset_death_state();
-
-        let was_removed = self.base.clear_removed();
         let world = self.get_world();
-
-        // Respawn-specific state: reset health and pose
-        {
-            let mut entity_data = self.entity_data.lock();
-            entity_data
-                .living_entity_mut()
-                .health
-                .set(self.get_max_health());
-            entity_data.base_mut().pose.set(EntityPose::Standing);
-        }
-
-        // Reset food data to defaults
-        *self.food_data.lock() = FoodData::new();
-
-        // Clear transient attribute modifiers (sprint, potion effects, etc.)
-        self.attributes().lock().remove_all_transient();
-
-        self.health_sync.lock().reset_for_respawn();
+        self.reset_state_for_death_respawn();
+        let was_removed = self.base.clear_removed();
 
         // TODO: bed/respawn anchor lookup, send NO_RESPAWN_BLOCK_AVAILABLE if missing
 
@@ -888,6 +872,39 @@ impl Player {
 
         // Shared spawn (teleport, abilities, weather, time, chunk tracking reset)
         let _ = player_arc.spawn(spawn, (0.0, 0.0), ResetReason::Respawn);
+    }
+
+    fn reset_state_for_death_respawn(&self) {
+        self.close_container();
+        self.detach_relationships_for_respawn();
+
+        self.attributes().lock().remove_all_transient();
+        self.living_base.reset_for_player_respawn();
+        self.base
+            .reset_for_player_respawn(Self::dimensions_for_pose(EntityPose::Standing));
+
+        self.set_health(self.get_max_health());
+        self.set_pose(EntityPose::Standing);
+        self.reset_entity_state();
+        self.sync_base_entity_data();
+        self.update_dirty_mob_effect_entity_data();
+
+        *self.food_data.lock() = FoodData::new();
+        *self.block_breaking.lock() = BlockBreakingManager::new();
+        *self.teleport_state.lock() = TeleportState::new();
+        *self.tick_state.lock() = PlayerTickState::new();
+        *self.last_item_in_main_hand.lock() = ItemStack::empty();
+        self.health_sync.lock().reset_for_respawn();
+        self.clear_pending_root_vehicle();
+        self.movement.lock().reset_last_known_client_movement();
+    }
+
+    fn detach_relationships_for_respawn(&self) {
+        for passenger in self.passengers() {
+            passenger.stop_riding();
+        }
+        self.stop_riding();
+        self.base.set_boarding_cooldown(0);
     }
 
     /// Handles client commands, requestStats and `RequestGameRuleValues` are still todo
