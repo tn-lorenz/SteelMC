@@ -1259,6 +1259,36 @@ mod tests {
     }
 
     #[test]
+    fn pig_uses_vanilla_animal_experience_reward() {
+        init_test_registry();
+
+        let pig = PigEntity::new(&vanilla_entities::PIG, 1, DVec3::ZERO, Weak::new());
+
+        for _ in 0..16 {
+            let reward = LivingEntity::base_experience_reward(&pig);
+            assert!((1..=3).contains(&reward));
+        }
+    }
+
+    #[test]
+    fn pig_baby_and_consumed_experience_follow_living_rules() {
+        init_test_registry();
+
+        let pig = PigEntity::new(&vanilla_entities::PIG, 1, DVec3::ZERO, Weak::new());
+        assert!(LivingEntity::should_drop_experience(&pig));
+        assert!(!LivingEntity::was_experience_consumed(&pig));
+
+        LivingEntity::skip_drop_experience(&pig);
+        assert!(LivingEntity::was_experience_consumed(&pig));
+
+        pig.living_base().reset_death_state();
+        assert!(!LivingEntity::was_experience_consumed(&pig));
+
+        pig.set_baby(true);
+        assert!(!LivingEntity::should_drop_experience(&pig));
+    }
+
+    #[test]
     fn mob_guaranteed_drop_marks_slot_preserved() {
         init_test_registry();
 

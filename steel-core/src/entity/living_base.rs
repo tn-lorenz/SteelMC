@@ -459,6 +459,7 @@ struct LivingEntityState {
     last_damage_source: Option<DamageSource>,
     last_damage_stamp: i64,
     absorption_amount: f32,
+    skip_drop_experience: bool,
     death_time: i32,
     speed: f32,
     current_impulse_context_reset_grace_time: i32,
@@ -487,6 +488,7 @@ impl LivingEntityState {
             last_damage_source: None,
             last_damage_stamp: 0,
             absorption_amount: 0.0,
+            skip_drop_experience: false,
             death_time: 0,
             speed,
             current_impulse_context_reset_grace_time: 0,
@@ -510,6 +512,7 @@ impl LivingEntityState {
         self.invulnerable_time = 0;
         self.last_hurt = 0.0;
         self.absorption_amount = 0.0;
+        self.skip_drop_experience = false;
     }
 }
 
@@ -627,6 +630,17 @@ impl LivingEntityBase {
     /// Sets vanilla `LivingEntity.absorptionAmount` for non-player living entities.
     pub fn set_absorption_amount(&self, amount: f32) {
         self.state.lock().absorption_amount = amount.max(0.0);
+    }
+
+    /// Runs vanilla `LivingEntity.skipDropExperience`.
+    pub fn skip_drop_experience(&self) {
+        self.state.lock().skip_drop_experience = true;
+    }
+
+    /// Returns vanilla `LivingEntity.wasExperienceConsumed`.
+    #[must_use]
+    pub fn was_experience_consumed(&self) -> bool {
+        self.state.lock().skip_drop_experience
     }
 
     /// Returns vanilla `LivingEntity.noActionTime`.

@@ -153,6 +153,7 @@ pub struct MobBase {
     death_loot_table_seed: SyncMutex<i64>,
     leash_data: SyncMutex<Option<LeashData>>,
     ambient_sound_time: SyncMutex<i32>,
+    xp_reward: SyncMutex<i32>,
 }
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
@@ -385,6 +386,7 @@ impl MobBase {
             death_loot_table_seed: SyncMutex::new(0),
             leash_data: SyncMutex::new(None),
             ambient_sound_time: SyncMutex::new(0),
+            xp_reward: SyncMutex::new(0),
         }
     }
 
@@ -457,6 +459,15 @@ impl MobBase {
         *ambient_sound_time += 1;
         previous
     }
+
+    #[must_use]
+    pub fn xp_reward(&self) -> i32 {
+        *self.xp_reward.lock()
+    }
+
+    pub fn set_xp_reward(&self, xp_reward: i32) {
+        *self.xp_reward.lock() = xp_reward;
+    }
 }
 
 impl Default for MobBase {
@@ -475,6 +486,37 @@ pub trait Mob: LivingEntity {
     fn custom_server_ai_step(&self) {}
 
     fn tick_goal_selectors(&self) {}
+
+    fn xp_reward(&self) -> i32 {
+        self.mob_base().xp_reward()
+    }
+
+    fn set_xp_reward(&self, xp_reward: i32) {
+        self.mob_base().set_xp_reward(xp_reward);
+    }
+
+    fn base_experience_reward_mob(&self) -> i32 {
+        let xp_reward = self.xp_reward();
+        if xp_reward <= 0 {
+            return xp_reward;
+        }
+
+        let mut result = xp_reward;
+        for slot in EquipmentSlot::ALL {
+            if !slot.can_increase_experience() {
+                continue;
+            }
+
+            let should_increase = {
+                let equipment = self.living_base().equipment().lock();
+                !equipment.get_ref(slot).is_empty() && self.equipment_drop_chance(slot) <= 1.0
+            };
+            if should_increase {
+                result += 1 + self.base().random().lock().next_i32_bounded(3);
+            }
+        }
+        result
+    }
 
     fn ambient_sound_interval(&self) -> i32 {
         80

@@ -154,6 +154,11 @@ pub trait Animal: AgeableMob {
         false
     }
 
+    /// Returns vanilla `Animal.getBaseExperienceReward`.
+    fn base_experience_reward_animal(&self) -> i32 {
+        1 + self.base().random().lock().next_i32_bounded(3)
+    }
+
     /// Returns vanilla `Animal.getWalkTargetValue`.
     fn animal_walk_target_value(&self, pos: BlockPos) -> f32 {
         let Some(world) = self.level() else {

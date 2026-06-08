@@ -4145,6 +4145,42 @@ pub trait LivingEntity: Entity {
         !self.is_baby() && world.get_game_rule(&MOB_DROPS).as_bool() == Some(true)
     }
 
+    /// Returns vanilla `LivingEntity.shouldDropExperience`.
+    fn should_drop_experience(&self) -> bool {
+        !self.is_baby()
+    }
+
+    /// Returns vanilla `LivingEntity.isAlwaysExperienceDropper`.
+    fn is_always_experience_dropper(&self) -> bool {
+        false
+    }
+
+    /// Runs vanilla `LivingEntity.skipDropExperience`.
+    fn skip_drop_experience(&self) {
+        self.living_base().skip_drop_experience();
+    }
+
+    /// Returns vanilla `LivingEntity.wasExperienceConsumed`.
+    fn was_experience_consumed(&self) -> bool {
+        self.living_base().was_experience_consumed()
+    }
+
+    /// Returns vanilla `LivingEntity.getBaseExperienceReward`.
+    fn base_experience_reward(&self) -> i32 {
+        if let Some(animal) = self.as_animal() {
+            return animal.base_experience_reward_animal();
+        }
+
+        self.as_mob().map_or(0, Mob::base_experience_reward_mob)
+    }
+
+    /// Returns vanilla `LivingEntity.getExperienceReward`.
+    fn experience_reward(&self, _world: &World, _killer_entity_id: Option<i32>) -> i32 {
+        // TODO: Apply EnchantmentHelper.processMobExperience once enchantment
+        // value-effect hooks can receive the killer/living-entity context.
+        self.base_experience_reward()
+    }
+
     /// Runs the currently implemented subset of vanilla `LivingEntity.dropAllDeathLoot`.
     fn drop_all_death_loot(&self, source: &DamageSource) {
         let Some(world) = self.level() else {
@@ -4158,7 +4194,28 @@ pub trait LivingEntity: Entity {
                 mob.drop_custom_death_loot_mob(source, killed_by_player);
             }
         }
-        // TODO: Drop equipment overrides and experience once those foundations exist.
+        self.drop_experience(&world, source.causing_entity_id);
+        // TODO: Drop non-mob equipment overrides once those foundations exist.
+    }
+
+    /// Runs vanilla `LivingEntity.dropExperience`.
+    fn drop_experience(&self, world: &Arc<World>, killer_entity_id: Option<i32>) {
+        if self.was_experience_consumed() {
+            return;
+        }
+
+        let should_drop = self.is_always_experience_dropper()
+            || self.last_hurt_by_player_memory_time() > 0
+                && self.should_drop_experience()
+                && world.get_game_rule(&MOB_DROPS).as_bool() == Some(true);
+        if !should_drop {
+            return;
+        }
+
+        let reward = self.experience_reward(world, killer_entity_id);
+        if reward > 0 {
+            ExperienceOrbEntity::award(world, self.position(), reward);
+        }
     }
 
     /// Resolves the loot table used by vanilla `LivingEntity.dropFromLootTable`.

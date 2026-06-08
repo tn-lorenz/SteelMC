@@ -71,6 +71,12 @@ impl EquipmentSlot {
         }
     }
 
+    /// Returns vanilla `EquipmentSlot.canIncreaseExperience`.
+    #[must_use]
+    pub const fn can_increase_experience(self) -> bool {
+        !matches!(self.slot_type(), EquipmentSlotType::Saddle)
+    }
+
     /// Returns the index of this slot for array storage (0-7).
     #[must_use]
     pub const fn index(self) -> usize {
@@ -309,5 +315,15 @@ mod tests {
         }
         assert_eq!(EquipmentSlot::by_id(-1), None);
         assert_eq!(EquipmentSlot::by_id(8), None);
+    }
+
+    #[test]
+    fn only_saddle_slot_does_not_increase_experience() {
+        for slot in EquipmentSlot::ALL {
+            assert_eq!(
+                slot.can_increase_experience(),
+                slot != EquipmentSlot::Saddle
+            );
+        }
     }
 }
