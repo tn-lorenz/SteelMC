@@ -23,7 +23,7 @@ impl AvoidEntityGoal {
             max_dist,
             walk_speed_modifier,
             sprint_speed_modifier,
-            |_, _| true,
+            |target, _| no_creative_or_spectator(target),
         )
     }
 
@@ -120,6 +120,12 @@ impl Goal for AvoidEntityGoal {
     }
 }
 
+fn no_creative_or_spectator(target: &dyn LivingEntity) -> bool {
+    target
+        .as_player()
+        .is_none_or(|player| !target.is_spectator() && !player.has_infinite_materials())
+}
+
 #[cfg(test)]
 mod tests {
     use std::sync::{Arc, Weak};
@@ -135,6 +141,14 @@ mod tests {
         let goal = AvoidEntityGoal::new(8.0, 1.0, 1.2);
 
         assert_eq!(goal.controls(), GoalControls::MOVE);
+    }
+
+    #[test]
+    fn avoid_entity_default_selector_allows_non_player_living_entities() {
+        init_test_registry();
+        let pig = PigEntity::new(&vanilla_entities::PIG, 1, DVec3::ZERO, Weak::new());
+
+        assert!(no_creative_or_spectator(&pig));
     }
 
     #[test]
