@@ -65,6 +65,7 @@ pub struct PathNavigation {
     can_open_doors: bool,
     can_walk_over_fences: bool,
     avoid_sun: bool,
+    can_path_to_targets_below_surface: bool,
 }
 
 impl PathNavigation {
@@ -95,6 +96,7 @@ impl PathNavigation {
             can_open_doors: false,
             can_walk_over_fences: false,
             avoid_sun: false,
+            can_path_to_targets_below_surface: false,
         }
     }
 
@@ -199,6 +201,18 @@ impl PathNavigation {
 
     pub const fn set_avoid_sun(&mut self, avoid_sun: bool) {
         self.avoid_sun = avoid_sun;
+    }
+
+    #[must_use]
+    pub const fn can_path_to_targets_below_surface(&self) -> bool {
+        self.can_path_to_targets_below_surface
+    }
+
+    pub const fn set_can_path_to_targets_below_surface(
+        &mut self,
+        can_path_to_targets_below_surface: bool,
+    ) {
+        self.can_path_to_targets_below_surface = can_path_to_targets_below_surface;
     }
 
     pub const fn tick(&mut self) {
@@ -732,6 +746,17 @@ mod tests {
         navigation.set_avoid_sun(true);
 
         assert!(navigation.avoid_sun());
+    }
+
+    #[test]
+    fn path_navigation_tracks_can_path_to_targets_below_surface_flag() {
+        let mut navigation = PathNavigation::new();
+
+        assert!(!navigation.can_path_to_targets_below_surface());
+
+        navigation.set_can_path_to_targets_below_surface(true);
+
+        assert!(navigation.can_path_to_targets_below_surface());
     }
 
     #[test]

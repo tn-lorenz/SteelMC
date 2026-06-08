@@ -1589,7 +1589,10 @@ pub trait PathfinderMob: Mob {
     }
 
     fn can_path_to_targets_below_surface(&self) -> bool {
-        false
+        self.mob_base()
+            .navigation()
+            .lock()
+            .can_path_to_targets_below_surface()
     }
 
     fn can_reach_living_target(&self, target: &dyn LivingEntity) -> bool {
@@ -1915,7 +1918,9 @@ mod tests {
     use crate::entity::ai::path::{Path, PathType};
     use crate::entity::damage::DamageSource;
     use crate::entity::mob::{Mob, MobBase};
-    use crate::entity::{Entity, EntityBase, LivingEntity, LivingEntityBase, SharedEntity};
+    use crate::entity::{
+        Entity, EntityBase, LivingEntity, LivingEntityBase, PathfinderMob, SharedEntity,
+    };
     use crate::world::LevelReader;
 
     #[test]
@@ -2078,6 +2083,8 @@ mod tests {
         }
     }
 
+    impl PathfinderMob for DespawnTestMob {}
+
     struct MobControlVehicleEntity {
         base: EntityBase,
         entity_type: EntityTypeRef,
@@ -2113,6 +2120,20 @@ mod tests {
         );
         assert_eq!(malus.get(PathType::Fire).to_bits(), (-1.0_f32).to_bits());
         assert_eq!(malus.get(PathType::Water).to_bits(), 8.0_f32.to_bits());
+    }
+
+    #[test]
+    fn pathfinder_mob_reads_below_surface_capability_from_navigation() {
+        let mob = DespawnTestMob::new(None, false);
+
+        assert!(!mob.can_path_to_targets_below_surface());
+
+        mob.mob_base()
+            .navigation()
+            .lock()
+            .set_can_path_to_targets_below_surface(true);
+
+        assert!(mob.can_path_to_targets_below_surface());
     }
 
     #[test]
