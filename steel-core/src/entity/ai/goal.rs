@@ -6,6 +6,7 @@ mod breed_goal;
 mod float_goal;
 mod follow_mob;
 mod follow_parent;
+mod leap_at_target;
 mod look_at_player;
 mod move_to_block;
 mod move_towards_restriction;
