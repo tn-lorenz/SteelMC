@@ -346,7 +346,20 @@ pub trait Mob: LivingEntity {
             i8::from(self.is_persistence_required()),
         );
         self.mob_base().drop_chances().lock().save(nbt);
-        // TODO: Persist leash, home, and death-loot data once those foundations exist.
+        if self.has_home() {
+            let home = *self.mob_base().home_restriction().lock();
+            nbt.insert("home_radius", home.radius);
+            nbt.insert(
+                "home_pos",
+                NbtTag::IntArray(vec![
+                    home.position.x(),
+                    home.position.y(),
+                    home.position.z(),
+                ]),
+            );
+        }
+
+        // TODO: Persist leash and death-loot data once those foundations exist.
         nbt.insert("LeftHanded", i8::from(self.is_left_handed()));
         if self.is_no_ai() {
             nbt.insert("NoAI", i8::from(true));
@@ -359,6 +372,19 @@ pub trait Mob: LivingEntity {
             .byte("PersistenceRequired")
             .is_some_and(|value| value != 0);
         *self.mob_base().drop_chances().lock() = DropChances::load(nbt);
+        let home_radius = nbt.int("home_radius").unwrap_or(-1);
+        if home_radius >= 0 {
+            let home_position = nbt
+                .int_array("home_pos")
+                .filter(|position| position.len() == 3)
+                .map_or(BlockPos::ZERO, |position| {
+                    BlockPos::new(position[0], position[1], position[2])
+                });
+            self.set_home_to(home_position, home_radius);
+        } else {
+            self.clear_home();
+        }
+
         self.set_left_handed(nbt.byte("LeftHanded").is_some_and(|value| value != 0));
         self.set_no_ai(nbt.byte("NoAI").is_some_and(|value| value != 0));
     }

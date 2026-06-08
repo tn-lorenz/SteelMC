@@ -1378,6 +1378,7 @@ mod tests {
         pig.set_can_pick_up_loot(true);
         pig.set_persistence_required();
         pig.set_guaranteed_drop(EquipmentSlot::Saddle);
+        pig.set_home_to(BlockPos::new(11, 64, -3), 7);
         pig.set_no_ai(true);
         pig.set_left_handed(true);
         pig.set_age(-24_000);
@@ -1396,6 +1397,11 @@ mod tests {
         };
         assert_eq!(drop_chances.float("saddle"), Some(2.0));
         assert_eq!(drop_chances.float("head"), None);
+        assert_eq!(nbt.int("home_radius"), Some(7));
+        assert_eq!(
+            nbt.int_array("home_pos").map(|value| value.to_vec()),
+            Some(vec![11, 64, -3])
+        );
         assert_eq!(nbt.byte("NoAI"), Some(1));
         assert_eq!(nbt.byte("LeftHanded"), Some(1));
         assert_eq!(nbt.int("Age"), Some(-24_000));
@@ -1421,6 +1427,8 @@ mod tests {
         let mut drop_chances = NbtCompound::new();
         drop_chances.insert("saddle", 2.0_f32);
         nbt.insert("drop_chances", NbtTag::Compound(drop_chances));
+        nbt.insert("home_radius", 7_i32);
+        nbt.insert("home_pos", NbtTag::IntArray(vec![11, 64, -3]));
         nbt.insert("NoAI", 1_i8);
         nbt.insert("LeftHanded", 1_i8);
         nbt.insert("Age", -24_000_i32);
@@ -1447,6 +1455,9 @@ mod tests {
             pig.equipment_drop_chance(EquipmentSlot::Head).to_bits(),
             0.085_f32.to_bits()
         );
+        assert!(pig.has_home());
+        assert_eq!(pig.home_radius(), 7);
+        assert_eq!(pig.home_position(), BlockPos::new(11, 64, -3));
         assert!(pig.is_no_ai());
         assert!(pig.is_left_handed());
         assert_eq!(pig.get_age(), -24_000);
