@@ -906,6 +906,11 @@ pub trait Entity: EntityEventSource + Send + Sync {
         false
     }
 
+    /// Returns whether vanilla lets this entity interact with its loaded level.
+    fn can_interact_with_level(&self) -> bool {
+        self.is_alive() && !self.is_removed() && !self.is_spectator()
+    }
+
     /// Returns vanilla `Entity.isInvisible()`.
     fn is_invisible(&self) -> bool {
         self.synced_data()
@@ -5308,13 +5313,12 @@ mod tests {
 
     impl LeashNotificationTestEntity {
         fn new(id: i32) -> Arc<Self> {
+            Self::with_position(id, DVec3::ZERO)
+        }
+
+        fn with_position(id: i32, position: DVec3) -> Arc<Self> {
             Arc::new(Self {
-                base: EntityBase::new(
-                    id,
-                    DVec3::ZERO,
-                    vanilla_entities::ITEM.dimensions,
-                    Weak::new(),
-                ),
+                base: EntityBase::new(id, position, vanilla_entities::ITEM.dimensions, Weak::new()),
                 holder_notifications: SyncMutex::new(Vec::new()),
                 removed_notifications: SyncMutex::new(Vec::new()),
             })
@@ -6684,6 +6688,33 @@ mod tests {
         mob.tick_leash();
 
         assert_eq!(holder_typed.holder_notifications(), vec![3]);
+        assert!(mob.is_leashed());
+        assert!(holder_typed.removed_notifications().is_empty());
+    }
+
+    #[test]
+    fn tick_leash_snaps_live_holder_past_snap_distance() {
+        init_test_registry();
+
+        let holder_typed =
+            LeashNotificationTestEntity::with_position(1, DVec3::new(13.0, 0.0, 0.0));
+        let holder: SharedEntity = holder_typed.clone();
+        let leashable: SharedEntity = Arc::new(PigEntity::new(
+            &vanilla_entities::PIG,
+            3,
+            DVec3::ZERO,
+            Weak::new(),
+        ));
+        let Some(mob) = leashable.as_mob() else {
+            panic!("pig should expose mob behavior");
+        };
+        assert!(mob.set_leashed_to(&holder));
+
+        mob.tick_leash();
+
+        assert_eq!(holder_typed.holder_notifications(), vec![3]);
+        assert_eq!(holder_typed.removed_notifications(), vec![3]);
+        assert!(!mob.is_leashed());
     }
 
     #[test]

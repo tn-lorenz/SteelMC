@@ -7,11 +7,13 @@ use glam::DVec3;
 use simdnbt::borrow::NbtCompound as BorrowedNbtCompoundView;
 use simdnbt::owned::{NbtCompound, NbtTag};
 use steel_math::floor;
+use steel_protocol::packets::game::SoundSource;
 use steel_registry::blocks::block_state_ext::BlockStateExt as _;
 use steel_registry::enchantment_effect::EnchantmentEffectComponent;
 use steel_registry::item_stack::ItemStack;
 use steel_registry::vanilla_block_tags::BlockTag;
-use steel_registry::{vanilla_attributes, vanilla_game_events, vanilla_items};
+use steel_registry::vanilla_game_rules::ENTITY_DROPS;
+use steel_registry::{sound_events, vanilla_attributes, vanilla_game_events, vanilla_items};
 use steel_utils::UuidExt;
 use steel_utils::locks::SyncMutex;
 use steel_utils::random::Random as _;
@@ -586,6 +588,16 @@ pub trait Mob: LivingEntity {
         LEASH_SNAP_DISTANCE
     }
 
+    fn when_leashed_to(&self, holder: &dyn Entity) {
+        holder.notify_leash_holder(self.as_entity_event_source());
+    }
+
+    fn leash_too_far_behaviour(&self) {
+        self.drop_leash();
+    }
+
+    fn close_range_leash_behaviour(&self, _holder: &dyn Entity) {}
+
     fn can_have_a_leash_attached_to(&self, holder: &dyn Entity) -> bool {
         self.id() != holder.id()
             && self.leash_distance_to(holder) <= self.leash_snap_distance()
@@ -620,9 +632,35 @@ pub trait Mob: LivingEntity {
 
     fn tick_leash(&self) {
         if let Some(holder) = self.leash_holder() {
-            holder.notify_leash_holder(self.as_entity_event_source());
-            // TODO: Apply full vanilla leash physics, snap distance, gamerule
-            // drops, and distance behavior.
+            if !self.can_interact_with_level() || !holder.can_interact_with_level() {
+                if let Some(world) = self.level()
+                    && world.get_game_rule(&ENTITY_DROPS).as_bool() == Some(true)
+                {
+                    self.drop_leash();
+                } else {
+                    self.remove_leash();
+                }
+                return;
+            }
+
+            let distance_to = self.leash_distance_to(holder.as_ref());
+            self.when_leashed_to(holder.as_ref());
+            if distance_to > self.leash_snap_distance() {
+                if let Some(world) = self.level() {
+                    world.play_sound_at(
+                        &sound_events::ITEM_LEAD_BREAK,
+                        SoundSource::Neutral,
+                        holder.position(),
+                        1.0,
+                        1.0,
+                        None,
+                    );
+                }
+                self.leash_too_far_behaviour();
+            } else {
+                // TODO: Apply vanilla elastic leash pull and angular momentum.
+                self.close_range_leash_behaviour(holder.as_ref());
+            }
             return;
         }
 
