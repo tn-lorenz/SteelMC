@@ -246,6 +246,13 @@ impl PathNavigation {
         collision: &mut impl WalkNodeCollision,
         request: NavigationPathRequest<'_>,
     ) -> Option<Path> {
+        if let Some(path) = self.reusable_current_path(request.targets) {
+            // Vanilla returns the current `Path` instance here. Steel's
+            // navigation API returns owned paths, so reuse copies the path
+            // state instead of running the pathfinder again.
+            return Some(path.clone());
+        }
+
         let mut context =
             PathfindingContext::with_cache(level, request.mob_position, &mut self.path_type_cache);
         let mut path = self.path_finder.find_path(
@@ -264,6 +271,16 @@ impl PathNavigation {
         self.reach_range = request.reach_range;
         self.reset_stuck_timeout();
         Some(path)
+    }
+
+    fn reusable_current_path(&self, targets: &[BlockPos]) -> Option<&Path> {
+        let path = self.path.as_ref()?;
+        if path.is_done() {
+            return None;
+        }
+
+        let target_pos = self.target_pos?;
+        targets.contains(&target_pos).then_some(path)
     }
 
     fn trim_path_for_avoid_sun(
@@ -1044,6 +1061,52 @@ mod tests {
             Some(BlockPos::new(4, 64, 0))
         );
         assert_eq!(navigation.path().map(Path::next_node_index), Some(0));
+    }
+
+    #[test]
+    fn create_path_reuses_current_path_for_matching_target() {
+        let mut path = Path::new(
+            vec![
+                Node::new(0, 64, 0),
+                Node::new(1, 64, 0),
+                Node::new(2, 64, 0),
+            ],
+            BlockPos::new(2, 64, 0),
+            true,
+        );
+        path.set_next_node_index(1);
+        let mut navigation = PathNavigation::new();
+        assert!(navigation.move_to(path, 1.0, DVec3::new(0.5, 64.0, 0.5)));
+
+        let level = GridLevel::new(BlockStateId(0));
+        let malus = PathfindingMalus::new();
+        let mut evaluator = WalkNodeEvaluator::new(MobPathSettings::new(
+            1,
+            1,
+            1,
+            BlockPos::new(0, 64, 0),
+            &malus,
+        ));
+        let mut no_collision = |_aabb: WorldAabb| false;
+
+        let reused = navigation.create_path(
+            &mut evaluator,
+            &level,
+            &mut no_collision,
+            NavigationPathRequest {
+                mob_position: BlockPos::new(0, 64, 0),
+                targets: &[BlockPos::new(2, 64, 0)],
+                max_path_length: 16.0,
+                reach_range: 0,
+            },
+        );
+
+        let Some(reused) = reused else {
+            panic!("matching active path should be reused");
+        };
+        assert_eq!(reused.target(), BlockPos::new(2, 64, 0));
+        assert_eq!(reused.next_node_index(), 1);
+        assert_eq!(navigation.path().map(Path::next_node_index), Some(1));
     }
 
     #[test]
