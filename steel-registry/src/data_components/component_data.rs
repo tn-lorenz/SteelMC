@@ -3,7 +3,10 @@
 //! This module provides the core types for storing component values in an ABI-stable way.
 //! Vanilla components get dedicated enum variants for zero-cost access, while plugin
 //! components use the `Other` variant with opaque bytes.
-use super::components::{Equippable, ItemAttributeModifiers, ItemEnchantments, Tool};
+use super::components::{
+    AttackRange, DamageTypeComponent, Equippable, ItemAttributeModifiers, ItemEnchantments,
+    PiercingWeapon, Tool, Weapon,
+};
 use text_components::TextComponent;
 
 /// Discriminant for [`ComponentData`] variants.
@@ -16,7 +19,11 @@ pub enum ComponentDataDiscriminant {
     Bool,
     I32,
     Float,
+    DamageType,
     Tool,
+    Weapon,
+    AttackRange,
+    PiercingWeapon,
     Equippable,
     AttributeModifiers,
     Enchantments,
@@ -65,10 +72,18 @@ pub enum ComponentData {
     I32(i32),
     /// Float component (e.g., PotionDurationScale)
     Float(f32),
+    /// minecraft:damage_type
+    DamageType(DamageTypeComponent),
 
     // ==================== Complex structured components ====================
     /// minecraft:tool
     Tool(Tool),
+    /// minecraft:weapon
+    Weapon(Weapon),
+    /// minecraft:attack_range
+    AttackRange(AttackRange),
+    /// minecraft:piercing_weapon
+    PiercingWeapon(PiercingWeapon),
     /// minecraft:equippable
     Equippable(Equippable),
     /// minecraft:attribute_modifiers
@@ -113,7 +128,11 @@ impl ComponentData {
             Self::Bool(_) => ComponentDataDiscriminant::Bool,
             Self::I32(_) => ComponentDataDiscriminant::I32,
             Self::Float(_) => ComponentDataDiscriminant::Float,
+            Self::DamageType(_) => ComponentDataDiscriminant::DamageType,
             Self::Tool(_) => ComponentDataDiscriminant::Tool,
+            Self::Weapon(_) => ComponentDataDiscriminant::Weapon,
+            Self::AttackRange(_) => ComponentDataDiscriminant::AttackRange,
+            Self::PiercingWeapon(_) => ComponentDataDiscriminant::PiercingWeapon,
             Self::Equippable(_) => ComponentDataDiscriminant::Equippable,
             Self::AttributeModifiers(_) => ComponentDataDiscriminant::AttributeModifiers,
             Self::Enchantments(_) => ComponentDataDiscriminant::Enchantments,
@@ -138,9 +157,13 @@ impl ComponentData {
             Self::Bool(v) => v.hash_component(&mut hasher),
             Self::I32(v) => v.hash_component(&mut hasher),
             Self::Float(v) => v.hash_component(&mut hasher),
+            Self::DamageType(v) => v.hash_component(&mut hasher),
 
             // Complex types
             Self::Tool(v) => v.hash_component(&mut hasher),
+            Self::Weapon(v) => v.hash_component(&mut hasher),
+            Self::AttackRange(v) => v.hash_component(&mut hasher),
+            Self::PiercingWeapon(v) => v.hash_component(&mut hasher),
             Self::Equippable(v) => v.hash_component(&mut hasher),
             Self::AttributeModifiers(v) => v.hash_component(&mut hasher),
             Self::Enchantments(v) => v.hash_component(&mut hasher),
@@ -275,6 +298,26 @@ impl Component for f32 {
     }
 }
 
+impl Component for DamageTypeComponent {
+    fn into_data(self) -> ComponentData {
+        ComponentData::DamageType(self)
+    }
+
+    fn from_data(data: ComponentData) -> Option<Self> {
+        match data {
+            ComponentData::DamageType(v) => Some(v),
+            _ => None,
+        }
+    }
+
+    fn from_data_ref(data: &ComponentData) -> Option<&Self> {
+        match data {
+            ComponentData::DamageType(v) => Some(v),
+            _ => None,
+        }
+    }
+}
+
 impl Component for Tool {
     fn into_data(self) -> ComponentData {
         ComponentData::Tool(self)
@@ -290,6 +333,66 @@ impl Component for Tool {
     fn from_data_ref(data: &ComponentData) -> Option<&Self> {
         match data {
             ComponentData::Tool(v) => Some(v),
+            _ => None,
+        }
+    }
+}
+
+impl Component for Weapon {
+    fn into_data(self) -> ComponentData {
+        ComponentData::Weapon(self)
+    }
+
+    fn from_data(data: ComponentData) -> Option<Self> {
+        match data {
+            ComponentData::Weapon(v) => Some(v),
+            _ => None,
+        }
+    }
+
+    fn from_data_ref(data: &ComponentData) -> Option<&Self> {
+        match data {
+            ComponentData::Weapon(v) => Some(v),
+            _ => None,
+        }
+    }
+}
+
+impl Component for AttackRange {
+    fn into_data(self) -> ComponentData {
+        ComponentData::AttackRange(self)
+    }
+
+    fn from_data(data: ComponentData) -> Option<Self> {
+        match data {
+            ComponentData::AttackRange(v) => Some(v),
+            _ => None,
+        }
+    }
+
+    fn from_data_ref(data: &ComponentData) -> Option<&Self> {
+        match data {
+            ComponentData::AttackRange(v) => Some(v),
+            _ => None,
+        }
+    }
+}
+
+impl Component for PiercingWeapon {
+    fn into_data(self) -> ComponentData {
+        ComponentData::PiercingWeapon(self)
+    }
+
+    fn from_data(data: ComponentData) -> Option<Self> {
+        match data {
+            ComponentData::PiercingWeapon(v) => Some(v),
+            _ => None,
+        }
+    }
+
+    fn from_data_ref(data: &ComponentData) -> Option<&Self> {
+        match data {
+            ComponentData::PiercingWeapon(v) => Some(v),
             _ => None,
         }
     }

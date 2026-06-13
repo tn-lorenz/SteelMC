@@ -56,7 +56,7 @@ pub use game_profile::{GameProfile, GameProfileAction};
 use std::sync::{Arc, Weak};
 use steel_protocol::packets::game::{
     AttributeSnapshot, CEntityEvent, CPlayerCombatKill, CRespawn, CSetHealth, CSetHeldSlot,
-    CSetTime, ClientCommandAction, EquipmentSlotItem, SoundSource,
+    CSetPassengers, CSetTime, ClientCommandAction, EquipmentSlotItem, SoundSource,
 };
 use steel_registry::RegistryEntry;
 use steel_registry::blocks::block_state_ext::BlockStateExt as _;
@@ -84,8 +84,9 @@ use text_components::{content::Resolvable, custom::CustomData};
 use crate::config::RuntimeConfig;
 use crate::entity::damage::DamageSource;
 use crate::entity::{
-    DEATH_DURATION, Entity, EntityBase, EntitySyncedData, LivingEntity, LivingEntityBase,
-    MobEffectSyncChange, RemovalReason, SharedEntity, equipment_items_to_packet_items,
+    DEATH_DURATION, Entity, EntityBase, EntityEventSource, EntitySyncedData, LivingEntity,
+    LivingEntityBase, MobEffectSyncChange, MobEffectSyncPacket, RemovalReason, SharedEntity,
+    equipment_items_to_packet_items, start_riding_entities,
 };
 use crate::fluid::get_fluid_state;
 use crate::inventory::{SyncPlayerInv, equipment::EquipmentSlot};
@@ -1299,6 +1300,50 @@ impl Player {
             }
         }
     }
+
+    fn passenger_ids_for_packet(entity: &dyn Entity) -> Vec<i32> {
+        entity
+            .passengers()
+            .iter()
+            .map(|passenger| passenger.id())
+            .collect()
+    }
+
+    fn send_mob_effect_sync_packet(&self, packet: MobEffectSyncPacket) {
+        match packet {
+            MobEffectSyncPacket::Update(packet) => self.send_packet(packet),
+            MobEffectSyncPacket::Remove(packet) => self.send_packet(packet),
+        }
+    }
+
+    fn send_active_effects_for_vehicle(&self, vehicle: &dyn Entity) {
+        let Some(living_vehicle) = vehicle.as_living_entity() else {
+            return;
+        };
+        for effect in living_vehicle.active_mob_effects() {
+            self.send_mob_effect_sync_packet(
+                MobEffectSyncChange::Update {
+                    effect,
+                    blend_for_self: false,
+                }
+                .packet(vehicle.id(), false),
+            );
+        }
+    }
+
+    fn remove_active_effects_for_vehicle(&self, vehicle: &dyn Entity) {
+        let Some(living_vehicle) = vehicle.as_living_entity() else {
+            return;
+        };
+        for effect in living_vehicle.active_mob_effects() {
+            self.send_mob_effect_sync_packet(
+                MobEffectSyncChange::Remove {
+                    effect: effect.effect(),
+                }
+                .packet(vehicle.id(), false),
+            );
+        }
+    }
 }
 
 /// Why the player is being reset and spawned into a world.
@@ -1321,6 +1366,48 @@ impl Entity for Player {
 
     fn entity_type(&self) -> EntityTypeRef {
         &vanilla_entities::PLAYER
+    }
+
+    fn stop_riding(&self) {
+        let old_vehicle = self.vehicle();
+        self.base().stop_riding();
+        let Some(old_vehicle) = old_vehicle else {
+            return;
+        };
+
+        self.remove_active_effects_for_vehicle(old_vehicle.as_ref());
+        self.send_packet(CSetPassengers::new(
+            old_vehicle.id(),
+            Self::passenger_ids_for_packet(old_vehicle.as_ref()),
+        ));
+    }
+
+    fn start_riding(&self, entity_to_ride: &SharedEntity) -> bool {
+        let Some(world) = self.level() else {
+            return false;
+        };
+        let Some(passenger) = world.get_entity_by_id(self.id()) else {
+            return false;
+        };
+        if !start_riding_entities(&passenger, entity_to_ride) {
+            return false;
+        }
+
+        entity_to_ride.position_rider(self.as_entity_event_source());
+        let position = self.position();
+        let (yaw, pitch) = self.rotation();
+        if let Err(error) = self.teleport(position.x, position.y, position.z, yaw, pitch) {
+            panic!(
+                "failed to synchronize player {} mounted position: {error}",
+                self.id()
+            );
+        }
+        self.send_active_effects_for_vehicle(entity_to_ride.as_ref());
+        self.send_packet(CSetPassengers::new(
+            entity_to_ride.id(),
+            Self::passenger_ids_for_packet(entity_to_ride.as_ref()),
+        ));
+        true
     }
 
     fn broadcast_to_player(&self, player: &Player) -> bool {

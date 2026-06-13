@@ -688,7 +688,10 @@ pub type SharedEntity = Arc<dyn Entity>;
 /// Type alias for a weak entity reference.
 pub type WeakEntity = Weak<dyn Entity>;
 
-fn start_riding_entities(passenger: &SharedEntity, entity_to_ride: &SharedEntity) -> bool {
+pub(crate) fn start_riding_entities(
+    passenger: &SharedEntity,
+    entity_to_ride: &SharedEntity,
+) -> bool {
     if !entity_to_ride.could_accept_passenger() {
         return false;
     }
@@ -4465,6 +4468,11 @@ pub trait LivingEntity: Entity {
     /// Returns vanilla `LivingEntity.getEffect()`.
     fn mob_effect(&self, effect: MobEffectRef) -> Option<ActiveMobEffect> {
         self.living_base().mob_effect(effect)
+    }
+
+    /// Returns all active vanilla mob effects.
+    fn active_mob_effects(&self) -> Vec<ActiveMobEffect> {
+        self.living_base().active_mob_effects()
     }
 
     /// Sets active vanilla mob-effect state.

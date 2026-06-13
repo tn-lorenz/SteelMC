@@ -238,6 +238,12 @@ impl EntityRegistryLock {
     pub fn set(&self, registry: EntityRegistry) -> Result<(), EntityRegistry> {
         self.0.set(registry)
     }
+
+    /// Returns the initialized registry, if entity factories have been installed.
+    #[must_use]
+    pub fn get(&self) -> Option<&EntityRegistry> {
+        self.0.get()
+    }
 }
 
 /// Global entity registry.

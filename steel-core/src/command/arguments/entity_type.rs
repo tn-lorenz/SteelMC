@@ -7,6 +7,7 @@ use crate::command::{
     arguments::{CommandArgument, SuggestionContext},
     context::CommandContext,
 };
+use crate::entity::ENTITIES;
 
 /// A vanilla `EntitySummonArgument`, restricted to summonable entity types.
 pub struct EntitySummonArgument;
@@ -27,7 +28,14 @@ impl EntitySummonArgument {
         REGISTRY
             .entity_types
             .by_key(&key)
-            .filter(|entity_type| entity_type.summonable)
+            .filter(|entity_type| Self::can_summon(entity_type))
+    }
+
+    fn can_summon(entity_type: EntityTypeRef) -> bool {
+        entity_type.summonable
+            && ENTITIES
+                .get()
+                .is_some_and(|registry| registry.has_factory(entity_type))
     }
 }
 
@@ -56,7 +64,7 @@ impl CommandArgument for EntitySummonArgument {
         REGISTRY
             .entity_types
             .iter()
-            .filter(|(_, entity_type)| entity_type.summonable)
+            .filter(|(_, entity_type)| Self::can_summon(entity_type))
             .map(|(_, entity_type)| SuggestionEntry::new(entity_type.key.to_string()))
             .filter(|suggestion| {
                 suggestion

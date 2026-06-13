@@ -1109,10 +1109,7 @@ impl World {
         old_state: BlockStateId,
         new_state: BlockStateId,
     ) {
-        if !self.block_collision_shape_changed(pos, old_state, new_state) {
-            return;
-        }
-
+        let collision_shape_changed = self.block_collision_shape_changed(pos, old_state, new_state);
         let game_time = self.game_time();
         for entity_id in self.navigating_mob_ids() {
             let Some(entity) = self.entity_manager.get_by_id(entity_id) else {
@@ -1123,6 +1120,13 @@ impl World {
                 self.untrack_navigating_mob(entity_id);
                 continue;
             };
+            {
+                let mut navigation = pathfinder.mob_base().navigation().lock();
+                navigation.invalidate_path_type(pos);
+            }
+            if !collision_shape_changed {
+                continue;
+            }
             if !pathfinder.is_path_finding() {
                 continue;
             }

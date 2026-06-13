@@ -12,13 +12,15 @@ use steel_utils::{
 
 use crate::{
     REGISTRY, RegistryEntry, RegistryExt,
+    damage_type::DamageTypeRef,
     data_components::{
         Component, ComponentData, ComponentPatchEntry, DataComponentMap, DataComponentPatch,
         DataComponentType,
         vanilla_components::{
-            ATTRIBUTE_MODIFIERS, DAMAGE, ENCHANTMENTS, EQUIPPABLE, Equippable,
-            ItemAttributeModifiers, ItemEnchantments, MAX_DAMAGE, MAX_STACK_SIZE, TOOL, Tool,
-            UNBREAKABLE,
+            ATTACK_RANGE, ATTRIBUTE_MODIFIERS, AttackRange, DAMAGE, DAMAGE_TYPE, ENCHANTMENTS,
+            EQUIPPABLE, Equippable, ItemAttributeModifiers, ItemEnchantments, MAX_DAMAGE,
+            MAX_STACK_SIZE, MINIMUM_ATTACK_CHARGE, PIERCING_WEAPON, TOOL, Tool, UNBREAKABLE,
+            WEAPON, Weapon,
         },
     },
     enchantment_effect::EnchantmentEffectComponent,
@@ -362,6 +364,36 @@ impl ItemStack {
     #[must_use]
     pub fn get_tool(&self) -> Option<&Tool> {
         self.get(TOOL)
+    }
+
+    /// Gets the Weapon component if present.
+    #[must_use]
+    pub fn get_weapon(&self) -> Option<&Weapon> {
+        self.get(WEAPON)
+    }
+
+    /// Gets the AttackRange component if present.
+    #[must_use]
+    pub fn get_attack_range(&self) -> Option<&AttackRange> {
+        self.get(ATTACK_RANGE)
+    }
+
+    /// Returns vanilla `DataComponents.MINIMUM_ATTACK_CHARGE`, defaulting to 0.
+    #[must_use]
+    pub fn minimum_attack_charge(&self) -> f32 {
+        self.get(MINIMUM_ATTACK_CHARGE).copied().unwrap_or(0.0)
+    }
+
+    /// Gets the vanilla damage type component if present.
+    #[must_use]
+    pub fn get_damage_type(&self) -> Option<DamageTypeRef> {
+        self.get(DAMAGE_TYPE).map(|component| component.damage_type)
+    }
+
+    /// Returns whether this item has the vanilla piercing weapon component.
+    #[must_use]
+    pub fn is_piercing_weapon(&self) -> bool {
+        self.has(PIERCING_WEAPON)
     }
 
     /// Returns the mining speed for the given block state ID.

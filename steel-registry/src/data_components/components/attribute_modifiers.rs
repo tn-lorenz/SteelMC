@@ -301,8 +301,12 @@ impl HashComponent for ItemAttributeModifierEntry {
         push_hash_entry(&mut entries, "id", &self.id.to_string());
         push_hash_entry(&mut entries, "amount", &self.amount);
         push_hash_entry(&mut entries, "operation", self.operation.name());
-        push_hash_entry(&mut entries, "slot", self.slot.name());
-        push_hash_entry(&mut entries, "display", &self.display);
+        if self.slot != EquipmentSlotGroup::Any {
+            push_hash_entry(&mut entries, "slot", self.slot.name());
+        }
+        if !matches!(self.display, ItemAttributeModifierDisplay::Default) {
+            push_hash_entry(&mut entries, "display", &self.display);
+        }
 
         sort_map_entries(&mut entries);
         hasher.start_map();

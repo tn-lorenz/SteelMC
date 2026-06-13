@@ -219,6 +219,10 @@ impl PathNavigation {
         self.tick = self.tick.wrapping_add(1);
     }
 
+    pub fn invalidate_path_type(&mut self, pos: BlockPos) {
+        self.path_type_cache.invalidate(pos);
+    }
+
     pub fn stop(&mut self) {
         self.path = None;
         self.direct_target = None;

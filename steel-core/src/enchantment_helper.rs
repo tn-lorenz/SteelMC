@@ -10,6 +10,7 @@ use steel_utils::random::Random;
 
 use crate::entity::damage::DamageSource;
 use crate::entity::{Entity, MobEffectInstance};
+use crate::inventory::equipment::EquipmentSlot;
 
 #[derive(Debug, Clone, Copy)]
 pub(crate) struct EnchantmentDamageContext<'a> {
@@ -106,11 +107,40 @@ pub(crate) fn modify_knockback(
     )
 }
 
+pub(crate) fn modify_smash_damage_per_fallen_block(
+    item: &ItemStack,
+    context: &EnchantmentDamageContext<'_>,
+    damage: f32,
+) -> f32 {
+    apply_value_effects(
+        item,
+        EnchantmentEffectComponent::SmashDamagePerFallenBlock,
+        context,
+        damage,
+    )
+}
+
 pub(crate) fn do_post_attack_effects_from_item(
     item: &ItemStack,
     context: &EnchantmentPostAttackContext<'_>,
 ) {
     apply_post_attack_effects(item, EnchantmentTarget::Attacker, context);
+}
+
+pub(crate) fn do_post_attack_effects_with_item_source(
+    victim: &dyn Entity,
+    source: &ItemStack,
+    context: &EnchantmentPostAttackContext<'_>,
+) {
+    if let Some(living_victim) = victim.as_living_entity() {
+        for slot in EquipmentSlot::ALL {
+            living_victim.with_equipment_slot(slot, &mut |item| {
+                apply_post_attack_effects(item, EnchantmentTarget::Victim, context);
+            });
+        }
+    }
+
+    apply_post_attack_effects(source, EnchantmentTarget::Attacker, context);
 }
 
 fn apply_value_effects(

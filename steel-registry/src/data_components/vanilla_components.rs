@@ -13,8 +13,9 @@ pub use crate::equipment::{EquipmentSlot, EquipmentSlotGroup};
 
 // Re-export component types for convenience
 pub use super::components::{
-    Equippable, EquippableAllowedEntities, ItemAttributeModifierDisplay,
-    ItemAttributeModifierEntry, ItemAttributeModifiers, ItemEnchantments, Tool, ToolRule,
+    AttackRange, DamageTypeComponent, Equippable, EquippableAllowedEntities,
+    ItemAttributeModifierDisplay, ItemAttributeModifierEntry, ItemAttributeModifiers,
+    ItemEnchantments, PiercingWeapon, Tool, ToolRule, Weapon,
 };
 
 // ==================== Fully Implemented Components ====================
@@ -42,6 +43,12 @@ pub const UNBREAKABLE: DataComponentType<()> =
 
 pub const TOOL: DataComponentType<Tool> =
     DataComponentType::new(Identifier::vanilla_static("tool"));
+
+pub const WEAPON: DataComponentType<Weapon> =
+    DataComponentType::new(Identifier::vanilla_static("weapon"));
+
+pub const ATTACK_RANGE: DataComponentType<AttackRange> =
+    DataComponentType::new(Identifier::vanilla_static("attack_range"));
 
 pub const EQUIPPABLE: DataComponentType<Equippable> =
     DataComponentType::new(Identifier::vanilla_static("equippable"));
@@ -71,10 +78,10 @@ pub const CUSTOM_DATA: DataComponentType<()> =
 pub const USE_EFFECTS: DataComponentType<()> =
     DataComponentType::new(Identifier::vanilla_static("use_effects"));
 
-pub const MINIMUM_ATTACK_CHARGE: DataComponentType<()> =
+pub const MINIMUM_ATTACK_CHARGE: DataComponentType<f32> =
     DataComponentType::new(Identifier::vanilla_static("minimum_attack_charge"));
 
-pub const DAMAGE_TYPE: DataComponentType<()> =
+pub const DAMAGE_TYPE: DataComponentType<DamageTypeComponent> =
     DataComponentType::new(Identifier::vanilla_static("damage_type"));
 
 pub const ITEM_MODEL: DataComponentType<()> =
@@ -123,12 +130,6 @@ pub const USE_COOLDOWN: DataComponentType<()> =
 pub const DAMAGE_RESISTANT: DataComponentType<()> =
     DataComponentType::new(Identifier::vanilla_static("damage_resistant"));
 
-pub const WEAPON: DataComponentType<()> =
-    DataComponentType::new(Identifier::vanilla_static("weapon"));
-
-pub const ATTACK_RANGE: DataComponentType<()> =
-    DataComponentType::new(Identifier::vanilla_static("attack_range"));
-
 pub const ENCHANTABLE: DataComponentType<()> =
     DataComponentType::new(Identifier::vanilla_static("enchantable"));
 
@@ -141,7 +142,7 @@ pub const DEATH_PROTECTION: DataComponentType<()> =
 pub const BLOCKS_ATTACKS: DataComponentType<()> =
     DataComponentType::new(Identifier::vanilla_static("blocks_attacks"));
 
-pub const PIERCING_WEAPON: DataComponentType<()> =
+pub const PIERCING_WEAPON: DataComponentType<PiercingWeapon> =
     DataComponentType::new(Identifier::vanilla_static("piercing_weapon"));
 
 pub const KINETIC_WEAPON: DataComponentType<()> =
@@ -442,9 +443,9 @@ pub fn register_vanilla_data_components(registry: &mut DataComponentRegistry) {
     // 6: custom_name
     registry.register(CUSTOM_NAME, ComponentDataDiscriminant::TextComponent);
     // 7: minimum_attack_charge
-    register_stub!(registry, MINIMUM_ATTACK_CHARGE.key.clone());
+    registry.register(MINIMUM_ATTACK_CHARGE, ComponentDataDiscriminant::Float);
     // 8: damage_type
-    register_stub!(registry, DAMAGE_TYPE.key.clone());
+    registry.register(DAMAGE_TYPE, ComponentDataDiscriminant::DamageType);
     // 9: item_name
     registry.register(ITEM_NAME, ComponentDataDiscriminant::TextComponent);
     // 10: item_model
@@ -494,9 +495,9 @@ pub fn register_vanilla_data_components(registry: &mut DataComponentRegistry) {
     // 28: tool
     registry.register(TOOL, ComponentDataDiscriminant::Tool);
     // 29: weapon
-    register_stub!(registry, WEAPON.key.clone());
+    registry.register(WEAPON, ComponentDataDiscriminant::Weapon);
     // 30: attack_range
-    register_stub!(registry, ATTACK_RANGE.key.clone());
+    registry.register(ATTACK_RANGE, ComponentDataDiscriminant::AttackRange);
     // 31: enchantable
     register_stub!(registry, ENCHANTABLE.key.clone());
     // 32: equippable
@@ -512,7 +513,7 @@ pub fn register_vanilla_data_components(registry: &mut DataComponentRegistry) {
     // 37: blocks_attacks
     register_stub!(registry, BLOCKS_ATTACKS.key.clone());
     // 38: piercing_weapon
-    register_stub!(registry, PIERCING_WEAPON.key.clone());
+    registry.register(PIERCING_WEAPON, ComponentDataDiscriminant::PiercingWeapon);
     // 39: kinetic_weapon
     register_stub!(registry, KINETIC_WEAPON.key.clone());
     // 40: swing_animation

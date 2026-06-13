@@ -837,6 +837,12 @@ impl LivingEntityBase {
         self.active_mob_effects.lock().get(&effect).cloned()
     }
 
+    /// Returns all active vanilla mob effects.
+    #[must_use]
+    pub fn active_mob_effects(&self) -> Vec<ActiveMobEffect> {
+        self.active_mob_effects.lock().values().cloned().collect()
+    }
+
     /// Adds or updates active vanilla mob-effect state.
     pub fn add_mob_effect(&self, effect: MobEffectInstance) -> bool {
         let effect_key = effect.effect;

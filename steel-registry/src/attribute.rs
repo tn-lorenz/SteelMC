@@ -63,8 +63,7 @@ impl WriteTo for AttributeModifierOperation {
 impl ReadFrom for AttributeModifierOperation {
     fn read(data: &mut std::io::Cursor<&[u8]>) -> std::io::Result<Self> {
         let id = VarInt::read(data)?.0;
-        Self::from_id(id)
-            .ok_or_else(|| std::io::Error::other(format!("Unknown attribute operation id: {id}")))
+        Ok(Self::from_id(id).unwrap_or(Self::AddValue))
     }
 }
 

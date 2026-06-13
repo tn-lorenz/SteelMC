@@ -13,6 +13,7 @@ use steel_protocol::packets::game::{
 };
 use steel_registry::blocks::block_state_ext::BlockStateExt;
 use steel_registry::blocks::properties::Direction;
+use steel_registry::damage_type::DamageType;
 use steel_registry::entity_type::EntityTypeRef;
 use steel_registry::item_stack::ItemStack;
 use steel_registry::{REGISTRY, vanilla_attributes, vanilla_damage_types, vanilla_entities};
@@ -217,11 +218,24 @@ impl Player {
         DVec3::new(position.x, self.get_eye_y(), position.z)
     }
 
-    fn attack_damage_source(&self) -> DamageSource {
-        DamageSource::environment(&vanilla_damage_types::PLAYER_ATTACK)
+    fn damage_source_for_attack_type(&self, damage_type: &'static DamageType) -> DamageSource {
+        DamageSource::environment(damage_type)
             .with_causing_entity(self.id())
             .with_direct_entity(self.id())
             .with_source_position(self.position())
+    }
+
+    fn attack_damage_source(&self, attacking_item: &ItemStack) -> DamageSource {
+        if let Some(damage_type) = attacking_item.get_damage_type() {
+            return self.damage_source_for_attack_type(damage_type);
+        }
+        if let Some(source) = ITEM_BEHAVIORS
+            .get_behavior(attacking_item.item())
+            .get_item_damage_source(self)
+        {
+            return source;
+        }
+        self.damage_source_for_attack_type(&vanilla_damage_types::PLAYER_ATTACK)
     }
 
     /// Ticks vanilla attack-strength recovery and resets it on main-hand item changes.
@@ -342,12 +356,36 @@ impl Player {
             .required_value(vanilla_attributes::ENTITY_INTERACTION_RANGE)
     }
 
-    /// Returns true if the target box is within the player's default attack range.
+    /// Returns true if the target box is within the player's attack range for `item_stack`.
     #[must_use]
-    pub fn is_within_attack_range_with_buffer(&self, aabb: WorldAabb, buffer: f64) -> bool {
-        // TODO: Use the held item's ATTACK_RANGE component once it has typed component data.
-        let max_range = self.entity_interaction_range() + buffer;
-        aabb.distance_to_sqr(self.eye_position()) <= max_range * max_range
+    pub fn is_within_attack_range_with_buffer(
+        &self,
+        item_stack: &ItemStack,
+        aabb: WorldAabb,
+        buffer: f64,
+    ) -> bool {
+        let distance = aabb.distance_to_sqr(self.eye_position()).sqrt();
+        let (min_reach, max_reach, hitbox_margin) =
+            if let Some(attack_range) = item_stack.get_attack_range() {
+                if self.game_mode() == GameType::Creative {
+                    (
+                        attack_range.min_creative_reach,
+                        attack_range.max_creative_reach,
+                        attack_range.hitbox_margin,
+                    )
+                } else {
+                    (
+                        attack_range.min_reach,
+                        attack_range.max_reach,
+                        attack_range.hitbox_margin,
+                    )
+                }
+            } else {
+                (0.0, self.entity_interaction_range() as f32, 0.0)
+            };
+        let min_reach = f64::from(min_reach) - f64::from(hitbox_margin) - buffer;
+        let max_reach = f64::from(max_reach) + f64::from(hitbox_margin) + buffer;
+        distance >= min_reach && distance <= max_reach
     }
 
     /// Returns true if the target box is within the player's entity interaction range.
@@ -392,7 +430,7 @@ impl Player {
         let attack_strength_delay = Self::attack_strength_delay_from_speed(attack_speed);
         let attack_strength_scale =
             self.attack_strength_scale_for_delay(0.5, attack_strength_delay);
-        let damage_source = self.attack_damage_source();
+        let damage_source = self.attack_damage_source(&attacking_item);
         let enchantment_context = EnchantmentDamageContext::new(
             entity.entity_type(),
             Some(self.entity_type()),
@@ -402,7 +440,10 @@ impl Player {
         let enchanted_damage =
             enchantment_helper::modify_damage(&attacking_item, &enchantment_context, attack_damage);
         let magic_boost = attack_strength_scale * (enchanted_damage - attack_damage);
-        let base_damage = attack_damage * Self::base_damage_scale_factor(attack_strength_scale);
+        let mut base_damage = attack_damage * Self::base_damage_scale_factor(attack_strength_scale);
+        base_damage += ITEM_BEHAVIORS
+            .get_behavior(attacking_item.item())
+            .get_attack_damage_bonus(self, entity, base_damage, &damage_source);
         let total_damage = base_damage + magic_boost;
         let full_strength_attack = attack_strength_scale > 0.9;
         let knockback_attack = self.is_sprinting() && full_strength_attack;
@@ -424,15 +465,62 @@ impl Player {
                     + sprint_knockback,
                 old_movement,
             );
-            let post_attack_context =
-                EnchantmentPostAttackContext::new(entity, Some(self), Some(self), &damage_source);
-            enchantment_helper::do_post_attack_effects_from_item(
-                &attacking_item,
+            self.item_attack_interaction(entity, &damage_source, true);
+        }
+
+        was_hurt
+    }
+
+    fn item_attack_interaction(
+        &self,
+        entity: &dyn Entity,
+        damage_source: &DamageSource,
+        apply_to_target: bool,
+    ) {
+        let post_attack_context =
+            EnchantmentPostAttackContext::new(entity, Some(self), Some(self), damage_source);
+        let (source_item, item_hurt_enemy) = {
+            let mut inventory = self.inventory.lock();
+            inventory.mutate_item_in_hand(InteractionHand::MainHand, |stack| {
+                if stack.is_empty() {
+                    return (ItemStack::empty(), false);
+                }
+                let behavior = ITEM_BEHAVIORS.get_behavior(stack.item());
+                if let Some(living_target) = entity.as_living_entity() {
+                    behavior.hurt_enemy(stack, living_target, self);
+                }
+                let source_item = stack.copy_with_count(stack.count());
+                (source_item, stack.get_weapon().is_some())
+            })
+        };
+
+        if apply_to_target {
+            enchantment_helper::do_post_attack_effects_with_item_source(
+                entity,
+                &source_item,
                 &post_attack_context,
             );
         }
 
-        was_hurt
+        if !item_hurt_enemy {
+            return;
+        }
+
+        let Some(living_target) = entity.as_living_entity() else {
+            return;
+        };
+        let has_infinite_materials = self.has_infinite_materials();
+        let mut inventory = self.inventory.lock();
+        inventory.mutate_item_in_hand(InteractionHand::MainHand, |stack| {
+            if stack.is_empty() {
+                return;
+            }
+            let behavior = ITEM_BEHAVIORS.get_behavior(stack.item());
+            behavior.post_hurt_enemy(stack, living_target, self);
+            if let Some(damage) = behavior.item_damage_per_attack(stack) {
+                stack.hurt_and_break(damage, has_infinite_materials);
+            }
+        });
     }
 
     /// Interacts with an entity using the held item.
@@ -463,8 +551,37 @@ impl Player {
             return result;
         }
 
-        // TODO: Call item-on-living-entity behavior once that item hook exists.
-        InteractionResult::Pass
+        if inventory_access.with_item(|item| item.is_empty()) {
+            return InteractionResult::Pass;
+        }
+        let Some(living_entity) = entity.as_living_entity() else {
+            return InteractionResult::Pass;
+        };
+        let result = living_entity.interact_living_entity_with_equippable(self, hand);
+        if self.has_infinite_materials() {
+            inventory_access.with_item(|item| {
+                if item.count < original_count {
+                    item.count = original_count;
+                }
+            });
+        }
+        if result.consumes_action() {
+            return result;
+        }
+
+        let item_ref = inventory_access.with_item(|item| item.item());
+        let item_behavior = ITEM_BEHAVIORS.get_behavior(item_ref);
+        let result = inventory_access.with_item(|item| {
+            item_behavior.interact_living_entity(item, self, living_entity, hand)
+        });
+        if self.has_infinite_materials() {
+            inventory_access.with_item(|item| {
+                if item.count < original_count {
+                    item.count = original_count;
+                }
+            });
+        }
+        result
     }
 
     /// Handles a client request to attack an entity.
@@ -487,11 +604,23 @@ impl Player {
             return;
         }
 
-        if !self.is_within_attack_range_with_buffer(target.bounding_box(), ATTACK_RANGE_BUFFER) {
+        let main_hand_item = {
+            let inventory = self.inventory.lock();
+            let stack = inventory.get_item_in_hand(InteractionHand::MainHand);
+            stack.copy_with_count(stack.count())
+        };
+
+        if !self.is_within_attack_range_with_buffer(
+            &main_hand_item,
+            target.bounding_box(),
+            ATTACK_RANGE_BUFFER,
+        ) {
             return;
         }
 
-        if Self::is_invalid_attack_target(self.id(), target.id(), target.entity_type()) {
+        if !main_hand_item.is_piercing_weapon()
+            && Self::is_invalid_attack_target(self.id(), target.id(), target.entity_type())
+        {
             self.disconnect(Self::invalid_entity_attacked_message());
             log::warn!(
                 "Player {} tried to attack an invalid entity",
@@ -500,7 +629,28 @@ impl Player {
             return;
         }
 
+        if main_hand_item.is_piercing_weapon() {
+            // TODO: Route to vanilla `PiercingWeapon.attack` once Steel has the entity sweep/raycast foundation.
+            return;
+        }
+        if self.cannot_attack_with_item(&main_hand_item, 5) {
+            return;
+        }
+
         let _ = self.attack(&target);
+    }
+
+    fn cannot_attack_with_item(&self, item_stack: &ItemStack, tolerance: i32) -> bool {
+        let required_strength = item_stack.minimum_attack_charge();
+        if required_strength <= 0.0 {
+            return false;
+        }
+
+        let optimistic_strength = {
+            let ticker = self.tick_state.lock().attack_strength_ticker() + tolerance;
+            ticker as f32 / self.current_item_attack_strength_delay()
+        };
+        optimistic_strength < required_strength
     }
 
     fn is_invalid_attack_target(

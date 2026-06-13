@@ -128,6 +128,19 @@ fn sound_event_ref_token(value: &Value, field: &str, default: &str) -> TokenStre
     generate_sound_event_ref(&id)
 }
 
+fn damage_type_ref_token(value: &str) -> TokenStream {
+    let id = Identifier::from_str(value)
+        .unwrap_or_else(|error| panic!("invalid damage_type component id {value:?}: {error}"));
+    assert_eq!(
+        id.namespace.as_ref(),
+        "minecraft",
+        "vanilla item damage_type references must use the minecraft namespace: {id}"
+    );
+
+    let ident = Ident::new(&id.path.to_shouty_snake_case(), Span::call_site());
+    quote! { &crate::vanilla_damage_types::#ident }
+}
+
 fn optional_identifier_token(value: &Value, field: &str) -> TokenStream {
     value
         .get(field)
@@ -281,6 +294,127 @@ fn generate_attribute_modifier_display(value: Option<&Value>) -> TokenStream {
         "default" => quote! { vanilla_components::ItemAttributeModifierDisplay::Default },
         "hidden" => quote! { vanilla_components::ItemAttributeModifierDisplay::Hidden },
         _ => panic!("unknown item attribute modifier display type: {display_type}"),
+    }
+}
+
+fn generate_weapon_component(value: &Value) -> TokenStream {
+    let item_damage_per_attack = value
+        .get("item_damage_per_attack")
+        .and_then(Value::as_i64)
+        .unwrap_or(1) as i32;
+    let disable_blocking_for_seconds = value
+        .get("disable_blocking_for_seconds")
+        .and_then(Value::as_f64)
+        .unwrap_or(0.0) as f32;
+
+    quote! {
+        vanilla_components::Weapon {
+            item_damage_per_attack: #item_damage_per_attack,
+            disable_blocking_for_seconds: #disable_blocking_for_seconds,
+        }
+    }
+}
+
+fn generate_attack_range_component(value: &Value) -> TokenStream {
+    let min_reach = value
+        .get("min_reach")
+        .and_then(Value::as_f64)
+        .unwrap_or(0.0) as f32;
+    let max_reach = value
+        .get("max_reach")
+        .and_then(Value::as_f64)
+        .unwrap_or(3.0) as f32;
+    let min_creative_reach = value
+        .get("min_creative_reach")
+        .and_then(Value::as_f64)
+        .unwrap_or(0.0) as f32;
+    let max_creative_reach = value
+        .get("max_creative_reach")
+        .and_then(Value::as_f64)
+        .unwrap_or(5.0) as f32;
+    let hitbox_margin = value
+        .get("hitbox_margin")
+        .and_then(Value::as_f64)
+        .unwrap_or(0.3) as f32;
+    let mob_factor = value
+        .get("mob_factor")
+        .and_then(Value::as_f64)
+        .unwrap_or(1.0) as f32;
+
+    quote! {
+        vanilla_components::AttackRange {
+            min_reach: #min_reach,
+            max_reach: #max_reach,
+            min_creative_reach: #min_creative_reach,
+            max_creative_reach: #max_creative_reach,
+            hitbox_margin: #hitbox_margin,
+            mob_factor: #mob_factor,
+        }
+    }
+}
+
+fn optional_sound_event_holder_token(value: &Value, field: &str) -> TokenStream {
+    let Some(value) = value.get(field) else {
+        return quote! { None };
+    };
+
+    if let Some(sound) = value.as_str() {
+        let id = Identifier::from_str(sound).unwrap_or_else(|error| {
+            panic!("invalid sound event id {sound:?} in piercing weapon field {field}: {error}")
+        });
+        let sound = generate_sound_event_ref(&id);
+        return quote! { Some(crate::sound_event::SoundEventHolder::registry(#sound)) };
+    }
+
+    let Some(sound) = value.as_object() else {
+        panic!("piercing weapon field {field} must be a sound id string or direct sound object");
+    };
+    let sound_id_value = sound
+        .get("sound_id")
+        .and_then(Value::as_str)
+        .unwrap_or_else(|| panic!("direct piercing weapon sound field {field} missing sound_id"));
+    Identifier::from_str(sound_id_value).unwrap_or_else(|error| {
+        panic!(
+            "invalid direct piercing weapon sound id {sound_id_value:?} in field {field}: {error}"
+        )
+    });
+    let sound_id = identifier_token(sound_id_value);
+    let fixed_range = sound.get("range").map_or_else(
+        || quote! { None },
+        |range| {
+            let range = range.as_f64().unwrap_or_else(|| {
+                panic!("direct piercing weapon sound field {field} range must be a number")
+            }) as f32;
+            quote! { Some(#range) }
+        },
+    );
+    quote! {
+        Some(crate::sound_event::SoundEventHolder::Direct {
+            sound_id: #sound_id,
+            fixed_range: #fixed_range,
+        })
+    }
+}
+
+fn generate_piercing_weapon_component(value: &Value) -> TokenStream {
+    let deals_knockback = value
+        .get("deals_knockback")
+        .and_then(Value::as_bool)
+        .unwrap_or(true);
+    let dismounts = value
+        .get("dismounts")
+        .and_then(Value::as_bool)
+        .unwrap_or(false);
+    let sound = optional_sound_event_holder_token(value, "sound");
+    let hit_sound = optional_sound_event_holder_token(value, "hit_sound");
+
+    quote! {
+        vanilla_components::PiercingWeapon {
+            deals_knockback: #deals_knockback,
+            dismounts: #dismounts,
+            sound: #sound,
+            hit_sound: #hit_sound,
+        }
     }
 }
 
@@ -478,6 +612,44 @@ fn generate_builder_calls(item: &Item) -> Vec<TokenStream> {
                         .builder_set(vanilla_components::ATTRIBUTE_MODIFIERS, Some(#modifiers))
                     });
                 }
+            }
+            "minecraft:minimum_attack_charge" => {
+                let val = value
+                    .as_f64()
+                    .expect("minimum_attack_charge component must be a number")
+                    as f32;
+                builder_calls.push(
+                    quote! { .builder_set(vanilla_components::MINIMUM_ATTACK_CHARGE, Some(#val)) },
+                );
+            }
+            "minecraft:damage_type" => {
+                let damage_type = value
+                    .as_str()
+                    .expect("damage_type component must be an identifier string");
+                let damage_type = damage_type_ref_token(damage_type);
+                builder_calls.push(quote! {
+                    .builder_set(
+                        vanilla_components::DAMAGE_TYPE,
+                        Some(vanilla_components::DamageTypeComponent::new(#damage_type)),
+                    )
+                });
+            }
+            "minecraft:weapon" => {
+                let weapon = generate_weapon_component(value);
+                builder_calls
+                    .push(quote! { .builder_set(vanilla_components::WEAPON, Some(#weapon)) });
+            }
+            "minecraft:attack_range" => {
+                let attack_range = generate_attack_range_component(value);
+                builder_calls.push(
+                    quote! { .builder_set(vanilla_components::ATTACK_RANGE, Some(#attack_range)) },
+                );
+            }
+            "minecraft:piercing_weapon" => {
+                let piercing_weapon = generate_piercing_weapon_component(value);
+                builder_calls.push(
+                    quote! { .builder_set(vanilla_components::PIERCING_WEAPON, Some(#piercing_weapon)) },
+                );
             }
             _ => {
                 // TODO: Implement more

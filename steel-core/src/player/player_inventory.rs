@@ -420,6 +420,31 @@ impl PlayerInventory {
         }
     }
 
+    /// Mutates the held item and records inventory/equipment changes if its stack state changed.
+    pub fn mutate_item_in_hand<R>(
+        &mut self,
+        hand: InteractionHand,
+        f: impl FnOnce(&mut ItemStack) -> R,
+    ) -> R {
+        let slot = hand_to_equipment_slot(hand);
+        let previous_item = self.get_item_in_hand(hand).item();
+        let previous_count = self.get_item_in_hand(hand).count();
+        let previous_damage = self.get_item_in_hand(hand).get_damage_value();
+
+        let result = f(self.get_item_in_hand_mut(hand));
+
+        let item = self.get_item_in_hand(hand);
+        let changed = item.item() != previous_item
+            || item.count() != previous_count
+            || item.get_damage_value() != previous_damage;
+        if changed {
+            self.refresh_player_equipment_attribute_modifiers(slot);
+            self.set_changed();
+        }
+
+        result
+    }
+
     /// Damages the held item and converts it to `replacement_item` if it breaks.
     ///
     /// Mirrors vanilla `ItemStack.hurtAndConvertOnBreak` for hand-held player items.
