@@ -773,34 +773,29 @@ impl ChunkStorage {
         bytes
     }
 
-    fn custom_name_from_persistent(
-        bytes: &[u8],
-        uuid: uuid::Uuid,
-    ) -> Result<Option<TextComponent>, ()> {
+    fn custom_name_from_persistent(bytes: &[u8], uuid: uuid::Uuid) -> Option<TextComponent> {
         if bytes.is_empty() {
-            return Ok(None);
+            return None;
         }
 
         let Ok(root) = read_borrowed_compound(&mut Cursor::new(bytes)) else {
             tracing::warn!(
                 ?uuid,
-                "Failed to parse entity custom name NBT, skipping entity"
+                "Failed to parse entity custom name NBT, defaulting to no custom name"
             );
-            return Err(());
+            return None;
         };
         let root = simdnbt::borrow::NbtCompound::from(&root);
-        let Some(tag) = root.get("CustomName") else {
-            return Ok(None);
-        };
+        let tag = root.get("CustomName")?;
         let custom_name = TextComponent::from_nbt(&tag.to_owned());
         if custom_name.is_none() {
             tracing::warn!(
                 ?uuid,
-                "Failed to decode entity custom name, skipping entity"
+                "Failed to decode entity custom name, defaulting to no custom name"
             );
-            return Err(());
+            return None;
         }
-        Ok(custom_name)
+        custom_name
     }
 
     fn compound_to_persistent(compound: &NbtCompound) -> Vec<u8> {
@@ -813,32 +808,31 @@ impl ChunkStorage {
         bytes
     }
 
-    fn compound_from_persistent(bytes: &[u8], uuid: uuid::Uuid) -> Option<NbtCompound> {
+    fn compound_from_persistent(bytes: &[u8], uuid: uuid::Uuid) -> NbtCompound {
         if bytes.is_empty() {
-            return Some(NbtCompound::new());
+            return NbtCompound::new();
         }
 
         let Ok(compound) = read_borrowed_compound(&mut Cursor::new(bytes)) else {
             tracing::warn!(
                 ?uuid,
-                "Failed to parse entity custom data NBT, skipping entity"
+                "Failed to parse entity custom data NBT, defaulting to empty custom data"
             );
-            return None;
+            return NbtCompound::new();
         };
-        Some(simdnbt::borrow::NbtCompound::from(&compound).to_owned())
+        simdnbt::borrow::NbtCompound::from(&compound).to_owned()
     }
 
     fn save_data_from_persistent(
         persistent: &PersistentEntity,
         uuid: uuid::Uuid,
-    ) -> Option<EntityBaseSaveData> {
-        Some(EntityBaseSaveData {
+    ) -> EntityBaseSaveData {
+        EntityBaseSaveData {
             air_supply: persistent.air_supply,
             portal_cooldown: persistent.portal_cooldown,
             no_gravity: persistent.no_gravity,
             invulnerable: persistent.invulnerable,
-            custom_name: Self::custom_name_from_persistent(&persistent.custom_name_nbt, uuid)
-                .ok()?,
+            custom_name: Self::custom_name_from_persistent(&persistent.custom_name_nbt, uuid),
             custom_name_visible: persistent.custom_name_visible,
             silent: persistent.silent,
             glowing: persistent.glowing,
@@ -848,8 +842,8 @@ impl ChunkStorage {
                 .take(MAX_ENTITY_TAGS)
                 .cloned()
                 .collect(),
-            custom_data: Self::compound_from_persistent(&persistent.custom_data_nbt, uuid)?,
-        })
+            custom_data: Self::compound_from_persistent(&persistent.custom_data_nbt, uuid),
+        }
     }
 
     fn clamp_loaded_entity_position(pos: DVec3) -> DVec3 {
@@ -1359,7 +1353,7 @@ impl ChunkStorage {
 
         // Look up entity type
         let entity_type = REGISTRY.entity_types.by_key(&persistent.entity_type)?;
-        let save_data = Self::save_data_from_persistent(persistent, uuid)?;
+        let save_data = Self::save_data_from_persistent(persistent, uuid);
 
         // Parse NBT from bytes (or use empty compound data)
         let nbt_bytes = if persistent.nbt_data.is_empty() {

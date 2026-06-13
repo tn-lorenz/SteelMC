@@ -202,9 +202,13 @@ crate::impl_tagged_registry!(EnchantmentRegistry, enchantments_by_key, "enchantm
 
 #[cfg(test)]
 mod tests {
-    use crate::enchantment_effect::{EnchantmentEffectComponent, EnchantmentTarget};
+    use crate::enchantment_effect::{
+        DamageSourcePredicate, EnchantmentEffectComponent, EnchantmentEffectRequirements,
+        EnchantmentEntityEffect, EnchantmentTarget,
+    };
     use crate::equipment::EquipmentSlot;
     use crate::vanilla_enchantments;
+    use steel_utils::Identifier;
 
     #[test]
     fn binding_curse_has_prevent_armor_change_effect() {
@@ -261,5 +265,73 @@ mod tests {
         assert_eq!(effects.len(), 1);
         assert_eq!(effects[0].enchanted, EnchantmentTarget::Attacker);
         assert_eq!(effects[0].affected, EnchantmentTarget::Victim);
+    }
+
+    #[test]
+    fn frost_walker_damage_immunity_preserves_damage_source_requirements() {
+        assert!(
+            vanilla_enchantments::FROST_WALKER
+                .effects
+                .has(EnchantmentEffectComponent::DamageImmunity)
+        );
+
+        let effects = vanilla_enchantments::FROST_WALKER.effects.damage_immunity;
+        assert_eq!(effects.len(), 1);
+        let Some(requirements) = effects[0].requirements else {
+            panic!("Frost Walker damage immunity should have requirements");
+        };
+        let EnchantmentEffectRequirements::DamageSourceProperties(DamageSourcePredicate {
+            tags,
+            is_direct,
+        }) = requirements
+        else {
+            panic!("Frost Walker damage immunity should use damage-source requirements");
+        };
+
+        assert_eq!(*is_direct, None);
+        assert!(tags.iter().any(|tag| {
+            tag.tag == Identifier::vanilla_static("burn_from_stepping") && tag.expected
+        }));
+        assert!(tags.iter().any(|tag| {
+            tag.tag == Identifier::vanilla_static("bypasses_invulnerability") && !tag.expected
+        }));
+    }
+
+    #[test]
+    fn lunge_post_piercing_attack_preserves_entity_effects() {
+        assert!(
+            vanilla_enchantments::LUNGE
+                .effects
+                .has(EnchantmentEffectComponent::PostPiercingAttack)
+        );
+
+        let effects = vanilla_enchantments::LUNGE.effects.post_piercing_attack;
+        assert_eq!(effects.len(), 1);
+        let EnchantmentEntityEffect::AllOf(children) = &effects[0].effect else {
+            panic!("Lunge post-piercing effect should be an all_of entity effect");
+        };
+
+        assert_eq!(children.len(), 4);
+        assert!(
+            children
+                .iter()
+                .any(|effect| matches!(effect, EnchantmentEntityEffect::ChangeItemDamage { .. }))
+        );
+        assert!(
+            children
+                .iter()
+                .any(|effect| matches!(effect, EnchantmentEntityEffect::ApplyExhaustion { .. }))
+        );
+        assert!(
+            children
+                .iter()
+                .any(|effect| matches!(effect, EnchantmentEntityEffect::ApplyImpulse { .. }))
+        );
+        assert!(
+            children
+                .iter()
+                .any(|effect| matches!(effect, EnchantmentEntityEffect::PlaySound { .. }))
+        );
+        assert!(effects[0].requirements.is_some());
     }
 }

@@ -59,7 +59,7 @@ use crate::physics::{
 };
 use crate::world::game_event_context::GameEventContext;
 use crate::world::{ClipBlockShape, ClipFluid, World};
-use crate::{entity::damage::DamageSource, player::Player};
+use crate::{enchantment_helper, entity::damage::DamageSource, player::Player};
 
 use entities::{ExperienceOrbEntity, ItemEntity, LeashFenceKnotEntity};
 
@@ -1053,6 +1053,15 @@ pub trait Entity: EntityEventSource + Send + Sync {
         None
     }
 
+    /// Returns whether this entity can control a vehicle it is riding.
+    ///
+    /// Mirrors vanilla `Entity.canControlVehicle`.
+    fn can_control_vehicle(&self) -> bool {
+        !REGISTRY
+            .entity_types
+            .is_in_tag(self.entity_type(), &EntityTypeTag::NON_CONTROLLING_RIDER)
+    }
+
     /// Returns whether this entity currently has a controlling passenger.
     ///
     /// Mirrors vanilla `Entity.hasControllingPassenger`.
@@ -1670,7 +1679,7 @@ pub trait Entity: EntityEventSource + Send + Sync {
                 );
             }
             self.play_sound(&sound_events::ITEM_LEAD_TIED, 1.0, 1.0);
-            return InteractionResult::Success;
+            return InteractionResult::SuccessServer;
         }
 
         let holding_shears = {
@@ -1741,7 +1750,7 @@ pub trait Entity: EntityEventSource + Send + Sync {
 
         self.play_sound(&sound_events::ITEM_LEAD_TIED, 1.0, 1.0);
         player.inventory.lock().shrink_item_in_hand(hand, 1);
-        InteractionResult::Success
+        InteractionResult::SuccessServer
     }
 
     /// Returns true for entities that implement vanilla living-entity behavior.
@@ -4059,6 +4068,7 @@ pub trait LivingEntity: Entity {
     /// Returns whether this living entity ignores a damage source.
     fn is_invulnerable_to(&self, source: &DamageSource) -> bool {
         self.default_is_invulnerable_to(source)
+            || enchantment_helper::is_immune_to_damage(self, source)
     }
 
     /// Main vanilla living-entity damage entry point.

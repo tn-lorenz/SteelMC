@@ -82,6 +82,7 @@ use text_components::translation::TranslatedMessage;
 use text_components::{content::Resolvable, custom::CustomData};
 
 use crate::config::RuntimeConfig;
+use crate::enchantment_helper;
 use crate::entity::damage::DamageSource;
 use crate::entity::{
     DEATH_DURATION, Entity, EntityBase, EntityEventSource, EntitySyncedData, LivingEntity,
@@ -1749,7 +1750,9 @@ impl LivingEntity for Player {
     }
 
     fn is_invulnerable_to(&self, source: &DamageSource) -> bool {
-        if self.default_is_invulnerable_to(source) {
+        if self.default_is_invulnerable_to(source)
+            || enchantment_helper::is_immune_to_damage(self, source)
+        {
             return true;
         }
 

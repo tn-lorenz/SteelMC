@@ -200,7 +200,7 @@ mod tests {
 
     use glam::DVec3;
     use steel_registry::{test_support::init_test_registry, vanilla_entities};
-    use steel_utils::random::{Random as _, legacy_random::LegacyRandom};
+    use steel_utils::random::legacy_random::LegacyRandom;
 
     use super::*;
     use crate::entity::Entity as _;

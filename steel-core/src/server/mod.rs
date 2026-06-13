@@ -283,10 +283,6 @@ fn restore_root_vehicle_for_player(
         return;
     };
 
-    let player_entity: SharedEntity = player.clone();
-    EntityBase::restore_passenger_relationship(&attach_entity, &player_entity);
-    attach_entity.position_rider(player.as_ref());
-
     if let Err(error) = world.register_loaded_entity_tree(&entities) {
         tracing::warn!(
             player = %player.gameprofile.name,
@@ -297,6 +293,10 @@ fn restore_root_vehicle_for_player(
         discard_restored_entities(&entities);
         return;
     }
+
+    let player_entity: SharedEntity = player.clone();
+    EntityBase::restore_passenger_relationship(&attach_entity, &player_entity);
+    attach_entity.position_rider(player.as_ref());
 
     world.mark_chunk_dirty(root_chunk);
     for entity in &entities {

@@ -2,6 +2,8 @@
 
 use glam::DVec3;
 use steel_math::floor;
+use steel_registry::REGISTRY;
+use steel_registry::vanilla_block_tags::BlockTag;
 use steel_utils::BlockPos;
 
 use crate::entity::ai::path::{Path, PathType, PathTypeCache, PathfindingContext};
@@ -259,7 +261,7 @@ impl PathNavigation {
 
         let mut context =
             PathfindingContext::with_cache(level, request.mob_position, &mut self.path_type_cache);
-        let mut path = self.path_finder.find_path(
+        let path = self.path_finder.find_path(
             evaluator,
             &mut context,
             collision,
@@ -270,7 +272,6 @@ impl PathNavigation {
                 max_visited_nodes_multiplier: self.max_visited_nodes_multiplier,
             },
         )?;
-        self.trim_path_for_avoid_sun(level, request.mob_position, &mut path);
         self.target_pos = Some(path.target());
         self.reach_range = request.reach_range;
         self.reset_stuck_timeout();
@@ -290,10 +291,16 @@ impl PathNavigation {
     fn trim_path_for_avoid_sun(
         &self,
         level: &dyn LevelReader,
-        mob_position: BlockPos,
+        mob_position: DVec3,
         path: &mut Path,
     ) {
-        if !self.avoid_sun || level.can_see_sky(mob_position) {
+        if !self.avoid_sun
+            || level.can_see_sky(BlockPos::containing(
+                mob_position.x,
+                mob_position.y + 0.5,
+                mob_position.z,
+            ))
+        {
             return;
         }
 
@@ -308,7 +315,46 @@ impl PathNavigation {
         }
     }
 
-    pub fn move_to(&mut self, path: Path, speed_modifier: f64, mob_position: DVec3) -> bool {
+    fn trim_path(&self, level: &dyn LevelReader, mob_position: DVec3, path: &mut Path) {
+        Self::trim_path_for_cauldrons(level, path);
+        self.trim_path_for_avoid_sun(level, mob_position, path);
+    }
+
+    fn trim_path_for_cauldrons(level: &dyn LevelReader, path: &mut Path) {
+        for index in 0..path.node_count() {
+            let Some(node) = path.node(index).cloned() else {
+                continue;
+            };
+            let Some(block) = REGISTRY
+                .blocks
+                .by_state_id(level.get_block_state(node.as_block_pos()))
+            else {
+                continue;
+            };
+            if !block.has_tag(&BlockTag::CAULDRONS) {
+                continue;
+            }
+
+            let _ = path.replace_node(index, node.clone_and_move(node.x, node.y + 1, node.z));
+            let Some(next_node) = path.node(index + 1).cloned() else {
+                continue;
+            };
+            if node.y >= next_node.y {
+                let _ = path.replace_node(
+                    index + 1,
+                    node.clone_and_move(next_node.x, node.y + 1, next_node.z),
+                );
+            }
+        }
+    }
+
+    pub fn move_to(
+        &mut self,
+        level: &dyn LevelReader,
+        mut path: Path,
+        speed_modifier: f64,
+        mob_position: DVec3,
+    ) -> bool {
         self.direct_target = None;
         if path.node_count() == 0 {
             self.path = None;
@@ -321,6 +367,10 @@ impl PathNavigation {
             .as_ref()
             .is_some_and(|current| path.same_as(current));
         if !same_as_current {
+            self.trim_path(level, mob_position, &mut path);
+            self.path = Some(path);
+        } else if let Some(mut path) = self.path.take() {
+            self.trim_path(level, mob_position, &mut path);
             self.path = Some(path);
         }
         if self.path.as_ref().is_none_or(Path::is_done) {
@@ -338,6 +388,7 @@ impl PathNavigation {
 
     pub fn reuse_current_path_to_targets(
         &mut self,
+        level: &dyn LevelReader,
         targets: &[BlockPos],
         speed_modifier: f64,
         mob_position: DVec3,
@@ -353,6 +404,15 @@ impl PathNavigation {
             return false;
         };
         if !targets.contains(&target_pos) {
+            return false;
+        }
+
+        if let Some(mut path) = self.path.take() {
+            self.trim_path(level, mob_position, &mut path);
+            self.path = Some(path);
+        }
+        if self.path.as_ref().is_none_or(Path::is_done) {
+            self.done = true;
             return false;
         }
 
@@ -761,6 +821,21 @@ mod tests {
         }
     }
 
+    fn empty_level() -> GridLevel {
+        init_test_registry();
+        GridLevel::new(REGISTRY.blocks.get_default_state_id(&vanilla_blocks::AIR))
+    }
+
+    fn move_to(
+        navigation: &mut PathNavigation,
+        path: Path,
+        speed_modifier: f64,
+        mob_position: DVec3,
+    ) -> bool {
+        let level = empty_level();
+        navigation.move_to(&level, path, speed_modifier, mob_position)
+    }
+
     #[test]
     fn path_navigation_tracks_can_float_flag() {
         let mut navigation = PathNavigation::new();
@@ -832,7 +907,7 @@ mod tests {
         let mut navigation = PathNavigation::new();
         navigation.set_avoid_sun(true);
 
-        navigation.trim_path_for_avoid_sun(&level, BlockPos::new(0, 64, 0), &mut path);
+        navigation.trim_path_for_avoid_sun(&level, DVec3::new(0.5, 64.0, 0.5), &mut path);
 
         assert_eq!(path.node_count(), 2);
         assert_eq!(path.node_pos(1), Some(BlockPos::new(1, 64, 0)));
@@ -851,9 +926,57 @@ mod tests {
         let mut navigation = PathNavigation::new();
         navigation.set_avoid_sun(true);
 
-        navigation.trim_path_for_avoid_sun(&level, BlockPos::new(0, 64, 0), &mut path);
+        navigation.trim_path_for_avoid_sun(&level, DVec3::new(0.5, 64.0, 0.5), &mut path);
 
         assert_eq!(path.node_count(), 2);
+    }
+
+    #[test]
+    fn move_to_trims_path_over_cauldrons() {
+        init_test_registry();
+
+        let air = REGISTRY.blocks.get_default_state_id(&vanilla_blocks::AIR);
+        let cauldron = REGISTRY
+            .blocks
+            .get_default_state_id(&vanilla_blocks::CAULDRON);
+        let level = GridLevel::new(air).with(BlockPos::new(0, 64, 0), cauldron);
+        let path = Path::new(
+            vec![Node::new(0, 64, 0), Node::new(1, 64, 0)],
+            BlockPos::new(1, 64, 0),
+            true,
+        );
+        let mut navigation = PathNavigation::new();
+
+        assert!(navigation.move_to(&level, path, 1.0, DVec3::new(0.5, 64.0, 0.5)));
+
+        assert_eq!(
+            navigation.path().and_then(|path| path.node_pos(0)),
+            Some(BlockPos::new(0, 65, 0))
+        );
+        assert_eq!(
+            navigation.path().and_then(|path| path.node_pos(1)),
+            Some(BlockPos::new(1, 65, 0))
+        );
+    }
+
+    #[test]
+    fn move_to_trims_avoid_sun_path() {
+        let level = empty_level().with_sky(BlockPos::new(2, 64, 0));
+        let path = Path::new(
+            vec![
+                Node::new(0, 64, 0),
+                Node::new(1, 64, 0),
+                Node::new(2, 64, 0),
+            ],
+            BlockPos::new(2, 64, 0),
+            true,
+        );
+        let mut navigation = PathNavigation::new();
+        navigation.set_avoid_sun(true);
+
+        assert!(navigation.move_to(&level, path, 1.0, DVec3::new(0.5, 64.0, 0.5)));
+
+        assert_eq!(navigation.path().map(Path::node_count), Some(2));
     }
 
     #[test]
@@ -865,7 +988,12 @@ mod tests {
         );
         let mut navigation = PathNavigation::new();
 
-        assert!(navigation.move_to(path, 1.25, DVec3::new(0.5, 64.0, 0.5)));
+        assert!(move_to(
+            &mut navigation,
+            path,
+            1.25,
+            DVec3::new(0.5, 64.0, 0.5)
+        ));
 
         let target = navigation.next_move_target(tick_context(DVec3::new(0.5, 64.0, 0.5)));
 
@@ -882,7 +1010,12 @@ mod tests {
         let path = Path::new(vec![Node::new(0, 64, 0)], BlockPos::new(0, 64, 0), true);
         let mut navigation = PathNavigation::new();
 
-        assert!(navigation.move_to(path, 1.0, DVec3::new(0.5, 64.0, 0.5)));
+        assert!(move_to(
+            &mut navigation,
+            path,
+            1.0,
+            DVec3::new(0.5, 64.0, 0.5)
+        ));
 
         assert!(
             navigation
@@ -907,7 +1040,12 @@ mod tests {
         );
         let mut navigation = PathNavigation::new();
 
-        assert!(navigation.move_to(path, 1.0, DVec3::new(0.0, 64.0, 0.5)));
+        assert!(move_to(
+            &mut navigation,
+            path,
+            1.0,
+            DVec3::new(0.0, 64.0, 0.5)
+        ));
 
         let target = navigation.next_move_target(tick_context(DVec3::new(1.1, 64.0, 0.5)));
 
@@ -930,7 +1068,12 @@ mod tests {
         );
         let mut navigation = PathNavigation::new();
 
-        assert!(navigation.move_to(path, 1.0, DVec3::new(0.0, 64.0, 0.5)));
+        assert!(move_to(
+            &mut navigation,
+            path,
+            1.0,
+            DVec3::new(0.0, 64.0, 0.5)
+        ));
 
         let target = navigation.next_move_target(tick_context(DVec3::new(1.1, 64.0, 0.5)));
 
@@ -950,7 +1093,12 @@ mod tests {
         );
         let mut navigation = PathNavigation::new();
 
-        assert!(navigation.move_to(path, 1.0, DVec3::new(0.5, 64.0, 0.5)));
+        assert!(move_to(
+            &mut navigation,
+            path,
+            1.0,
+            DVec3::new(0.5, 64.0, 0.5)
+        ));
 
         let target = navigation
             .next_move_target_without_path_update(tick_context(DVec3::new(0.5, 64.0, 0.5)), false);
@@ -971,7 +1119,12 @@ mod tests {
         );
         let mut navigation = PathNavigation::new();
 
-        assert!(navigation.move_to(path, 1.0, DVec3::new(0.5, 65.0, 0.5)));
+        assert!(move_to(
+            &mut navigation,
+            path,
+            1.0,
+            DVec3::new(0.5, 65.0, 0.5)
+        ));
 
         let target = navigation
             .next_move_target_without_path_update(tick_context(DVec3::new(0.5, 65.0, 0.5)), false);
@@ -989,7 +1142,7 @@ mod tests {
         let mut navigation = PathNavigation::new();
         let mob_position = DVec3::new(0.0, 64.0, 0.5);
 
-        assert!(navigation.move_to(path, 1.0, mob_position));
+        assert!(move_to(&mut navigation, path, 1.0, mob_position));
         for game_time in 1..=101 {
             navigation.tick();
             let _ =
@@ -1006,7 +1159,7 @@ mod tests {
         let mut navigation = PathNavigation::new();
         let mob_position = DVec3::new(1.0, 64.0, 0.5);
 
-        assert!(navigation.move_to(path, 1.0, mob_position));
+        assert!(move_to(&mut navigation, path, 1.0, mob_position));
         for game_time in 1..=92 {
             navigation.tick();
             let _ =
@@ -1022,7 +1175,12 @@ mod tests {
         let path = Path::new(vec![Node::new(2, 64, 0)], BlockPos::new(2, 64, 0), true);
         let mut navigation = PathNavigation::new();
 
-        assert!(navigation.move_to(path, 1.0, DVec3::new(0.5, 64.0, 0.5)));
+        assert!(move_to(
+            &mut navigation,
+            path,
+            1.0,
+            DVec3::new(0.5, 64.0, 0.5)
+        ));
 
         assert_eq!(navigation.request_recompute_path(20, true), None);
         assert!(navigation.has_delayed_recomputation());
@@ -1053,7 +1211,12 @@ mod tests {
         let path = Path::new(vec![Node::new(2, 64, 0)], BlockPos::new(2, 64, 0), true);
         let mut navigation = PathNavigation::new();
 
-        assert!(navigation.move_to(path, 1.0, DVec3::new(0.5, 64.0, 0.5)));
+        assert!(move_to(
+            &mut navigation,
+            path,
+            1.0,
+            DVec3::new(0.5, 64.0, 0.5)
+        ));
 
         assert_eq!(navigation.request_recompute_path(30, false), None);
         assert!(navigation.has_delayed_recomputation());
@@ -1076,7 +1239,7 @@ mod tests {
         let mut navigation = PathNavigation::new();
         let mob_position = DVec3::new(0.5, 64.0, 0.5);
 
-        assert!(navigation.move_to(path, 1.0, mob_position));
+        assert!(move_to(&mut navigation, path, 1.0, mob_position));
         assert!(navigation.should_recompute_path(BlockPos::new(2, 64, 0), mob_position));
         assert!(!navigation.should_recompute_path(BlockPos::new(20, 64, 0), mob_position));
 
@@ -1106,7 +1269,12 @@ mod tests {
         );
         let mut navigation = PathNavigation::new();
 
-        assert!(navigation.move_to(path, 1.0, DVec3::new(0.5, 64.0, 0.5)));
+        assert!(move_to(
+            &mut navigation,
+            path,
+            1.0,
+            DVec3::new(0.5, 64.0, 0.5)
+        ));
         assert!(
             navigation
                 .next_move_target(tick_context(DVec3::new(0.5, 64.0, 0.5)))
@@ -1114,7 +1282,12 @@ mod tests {
         );
         assert_eq!(navigation.path().map(Path::next_node_index), Some(1));
 
-        assert!(navigation.move_to(same_path, 1.5, DVec3::new(0.5, 64.0, 0.5)));
+        assert!(move_to(
+            &mut navigation,
+            same_path,
+            1.5,
+            DVec3::new(0.5, 64.0, 0.5)
+        ));
 
         assert_eq!(navigation.path().map(Path::next_node_index), Some(1));
         assert_eq!(navigation.speed_modifier().to_bits(), 1.5_f64.to_bits());
@@ -1129,8 +1302,15 @@ mod tests {
         );
         let mut navigation = PathNavigation::new();
 
-        assert!(navigation.move_to(path, 1.0, DVec3::new(0.5, 64.0, 0.5)));
+        assert!(move_to(
+            &mut navigation,
+            path,
+            1.0,
+            DVec3::new(0.5, 64.0, 0.5)
+        ));
+        let level = empty_level();
         assert!(navigation.reuse_current_path_to_targets(
+            &level,
             &[BlockPos::new(4, 64, 0)],
             1.25,
             DVec3::new(1.5, 64.0, 0.5),
@@ -1158,7 +1338,12 @@ mod tests {
         );
         path.set_next_node_index(1);
         let mut navigation = PathNavigation::new();
-        assert!(navigation.move_to(path, 1.0, DVec3::new(0.5, 64.0, 0.5)));
+        assert!(move_to(
+            &mut navigation,
+            path,
+            1.0,
+            DVec3::new(0.5, 64.0, 0.5)
+        ));
 
         let level = GridLevel::new(BlockStateId(0));
         let malus = PathfindingMalus::new();
@@ -1196,9 +1381,16 @@ mod tests {
         let path = Path::new(vec![Node::new(4, 64, 0)], BlockPos::new(4, 64, 0), true);
         let mut navigation = PathNavigation::new();
 
-        assert!(navigation.move_to(path, 1.0, DVec3::new(0.5, 64.0, 0.5)));
+        assert!(move_to(
+            &mut navigation,
+            path,
+            1.0,
+            DVec3::new(0.5, 64.0, 0.5)
+        ));
 
+        let level = empty_level();
         assert!(!navigation.reuse_current_path_to_targets(
+            &level,
             &[BlockPos::new(5, 64, 0)],
             1.25,
             DVec3::new(0.5, 64.0, 0.5),

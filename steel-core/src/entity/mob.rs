@@ -16,7 +16,7 @@ use steel_registry::sound_event::SoundEventRef;
 use steel_registry::vanilla_block_tags::BlockTag;
 use steel_registry::vanilla_game_rules::ENTITY_DROPS;
 use steel_registry::{
-    REGISTRY, RegistryExt, sound_events, vanilla_attributes, vanilla_damage_types,
+    REGISTRY, RegistryExt, sound_events, vanilla_attributes, vanilla_blocks, vanilla_damage_types,
     vanilla_game_events, vanilla_items,
 };
 use steel_utils::UuidExt;
@@ -376,10 +376,6 @@ fn torque_from_force(lever_arm: DVec3, force: DVec3) -> f64 {
 impl MobBase {
     #[must_use]
     pub fn new() -> Self {
-        let mut pathfinding_malus = PathfindingMalus::new();
-        pathfinding_malus.set(PathType::FireInNeighbor, 16.0);
-        pathfinding_malus.set(PathType::Fire, -1.0);
-
         Self {
             goal_selector: SyncMutex::new(GoalSelector::new()),
             target_selector: SyncMutex::new(GoalSelector::new()),
@@ -387,7 +383,7 @@ impl MobBase {
             sensing: SyncMutex::new(Sensing::new()),
             controls: SyncMutex::new(MobControls::new()),
             navigation: SyncMutex::new(PathNavigation::new()),
-            pathfinding_malus: SyncMutex::new(pathfinding_malus),
+            pathfinding_malus: SyncMutex::new(PathfindingMalus::new()),
             persistence_required: SyncMutex::new(false),
             can_pick_up_loot: SyncMutex::new(false),
             drop_chances: SyncMutex::new(DropChances::DEFAULT),
@@ -1268,6 +1264,15 @@ pub trait Mob: LivingEntity {
         world.nearest_player_distance_sqr(self.position())
     }
 
+    fn controlling_passenger_mob(&self) -> Option<SharedEntity> {
+        let first_passenger = self.first_passenger()?;
+        if self.is_no_ai() || !first_passenger.is_mob() || !first_passenger.can_control_vehicle() {
+            return None;
+        }
+
+        Some(first_passenger)
+    }
+
     fn get_pathfinding_malus(&self, path_type: PathType) -> f32 {
         self.mob_base().pathfinding_malus().lock().get(path_type)
     }
@@ -1471,7 +1476,26 @@ pub trait Mob: LivingEntity {
         self.set_mob_flags(next);
     }
 
+    fn controlled_mob_vehicle(&self) -> Option<SharedEntity> {
+        let vehicle = self.vehicle()?;
+        if vehicle
+            .controlling_passenger()
+            .is_none_or(|passenger| passenger.id() != self.id())
+        {
+            return None;
+        }
+        vehicle.as_mob()?;
+        Some(vehicle)
+    }
+
     fn set_wanted_position(&self, position: DVec3, speed_modifier: f64) {
+        if let Some(vehicle) = self.controlled_mob_vehicle()
+            && let Some(mob) = vehicle.as_mob()
+        {
+            mob.set_wanted_position(position, speed_modifier);
+            return;
+        }
+
         self.mob_base()
             .controls()
             .lock()
@@ -1758,8 +1782,10 @@ fn tick_path_navigation_target<M: Mob + ?Sized>(
 ) {
     let (target, speed_modifier) = {
         let mut navigation = mob.mob_base().navigation().lock();
+        let mob_position =
+            ground_navigation_temp_mob_pos(mob, world.as_ref(), navigation.can_float());
         let context = NavigationTickContext {
-            mob_position: mob.position(),
+            mob_position,
             mob_bounding_box_width: mob.bounding_box().width(),
             mob_speed: mob.get_speed(),
             game_time,
@@ -1784,7 +1810,56 @@ fn tick_path_navigation_target<M: Mob + ?Sized>(
     mob.set_wanted_position(DVec3::new(target.x, ground_y, target.z), speed_modifier);
 }
 
+fn ground_navigation_temp_mob_pos<M: Mob + ?Sized>(
+    mob: &M,
+    world: &World,
+    can_float: bool,
+) -> DVec3 {
+    let position = mob.position();
+    DVec3::new(
+        position.x,
+        f64::from(ground_navigation_surface_y(mob, world, can_float)),
+        position.z,
+    )
+}
+
+fn ground_navigation_surface_y<M: Mob + ?Sized>(mob: &M, world: &World, can_float: bool) -> i32 {
+    if !mob.is_in_water() || !can_float {
+        return floor(mob.position().y + 0.5);
+    }
+
+    let position = mob.position();
+    let block_y = mob.block_position().y();
+    let mut surface = block_y;
+    let mut state = world.get_block_state(BlockPos::containing(
+        position.x,
+        f64::from(surface),
+        position.z,
+    ));
+    let mut steps = 0;
+    while state.get_block() == &vanilla_blocks::WATER {
+        surface += 1;
+        state = world.get_block_state(BlockPos::containing(
+            position.x,
+            f64::from(surface),
+            position.z,
+        ));
+        steps += 1;
+        if steps > 16 {
+            return block_y;
+        }
+    }
+
+    surface
+}
+
 pub trait PathfinderMob: Mob {
+    fn controlled_pathfinder_vehicle(&self) -> Option<SharedEntity> {
+        let vehicle = self.controlled_mob_vehicle()?;
+        vehicle.as_pathfinder_mob()?;
+        Some(vehicle)
+    }
+
     fn get_walk_target_value(&self, pos: BlockPos) -> f32 {
         self.as_animal()
             .map_or(0.0, |animal| animal.animal_walk_target_value(pos))
@@ -1802,6 +1877,12 @@ pub trait PathfinderMob: Mob {
     }
 
     fn can_path_to_targets_below_surface(&self) -> bool {
+        if let Some(vehicle) = self.controlled_pathfinder_vehicle()
+            && let Some(pathfinder) = vehicle.as_pathfinder_mob()
+        {
+            return pathfinder.can_path_to_targets_below_surface();
+        }
+
         self.mob_base()
             .navigation()
             .lock()
@@ -1857,6 +1938,12 @@ pub trait PathfinderMob: Mob {
     }
 
     fn create_path_to(&self, target: BlockPos, reach_range: i32) -> Option<Path> {
+        if let Some(vehicle) = self.controlled_pathfinder_vehicle()
+            && let Some(pathfinder) = vehicle.as_pathfinder_mob()
+        {
+            return pathfinder.create_path_to(target, reach_range);
+        }
+
         let world = self.level()?;
         if !world.has_full_chunk(ChunkPos::from_block_pos(target)) {
             return None;
@@ -1868,6 +1955,13 @@ pub trait PathfinderMob: Mob {
     }
 
     fn recompute_path(&self, request: NavigationRecomputeRequest) {
+        if let Some(vehicle) = self.controlled_pathfinder_vehicle()
+            && let Some(pathfinder) = vehicle.as_pathfinder_mob()
+        {
+            pathfinder.recompute_path(request);
+            return;
+        }
+
         let path = self.create_path_to(request.target_pos, request.reach_range);
         self.mob_base()
             .navigation()
@@ -1880,6 +1974,12 @@ pub trait PathfinderMob: Mob {
     }
 
     fn move_to_pos_with_reach(&self, target: DVec3, reach_range: i32, speed_modifier: f64) -> bool {
+        if let Some(vehicle) = self.controlled_pathfinder_vehicle()
+            && let Some(pathfinder) = vehicle.as_pathfinder_mob()
+        {
+            return pathfinder.move_to_pos_with_reach(target, reach_range, speed_modifier);
+        }
+
         let target_pos = BlockPos::containing(target.x, target.y, target.z);
         let Some(world) = self.level() else {
             self.mob_base().navigation().lock().stop();
@@ -1896,7 +1996,12 @@ pub trait PathfinderMob: Mob {
             .mob_base()
             .navigation()
             .lock()
-            .reuse_current_path_to_targets(&targets, speed_modifier, self.position())
+            .reuse_current_path_to_targets(
+                world.as_ref(),
+                &targets,
+                speed_modifier,
+                self.position(),
+            )
         {
             return true;
         }
@@ -1906,16 +2011,32 @@ pub trait PathfinderMob: Mob {
     }
 
     fn move_to_path(&self, path: Option<Path>, speed_modifier: f64) -> bool {
+        if let Some(vehicle) = self.controlled_pathfinder_vehicle()
+            && let Some(pathfinder) = vehicle.as_pathfinder_mob()
+        {
+            return pathfinder.move_to_path(path, speed_modifier);
+        }
+
+        let Some(world) = self.level() else {
+            self.mob_base().navigation().lock().stop();
+            return false;
+        };
         let mut navigation = self.mob_base().navigation().lock();
         let Some(path) = path else {
             navigation.stop();
             return false;
         };
 
-        navigation.move_to(path, speed_modifier, self.position())
+        navigation.move_to(world.as_ref(), path, speed_modifier, self.position())
     }
 
     fn is_path_finding(&self) -> bool {
+        if let Some(vehicle) = self.controlled_pathfinder_vehicle()
+            && let Some(pathfinder) = vehicle.as_pathfinder_mob()
+        {
+            return pathfinder.is_path_finding();
+        }
+
         !self.mob_base().navigation().lock().is_done()
     }
 
@@ -1932,6 +2053,12 @@ pub trait PathfinderMob: Mob {
         targets: &[BlockPos],
         reach_range: i32,
     ) -> Option<Path> {
+        if let Some(vehicle) = self.controlled_pathfinder_vehicle()
+            && let Some(pathfinder) = vehicle.as_pathfinder_mob()
+        {
+            return pathfinder.create_path_to_targets(world, targets, reach_range);
+        }
+
         if targets.is_empty()
             || self.position().y < f64::from(world.min_y())
             || !self.can_update_path()
@@ -2403,15 +2530,15 @@ mod tests {
     }
 
     #[test]
-    fn mob_base_uses_vanilla_fire_path_malus_overrides() {
+    fn mob_base_uses_vanilla_fire_path_malus_defaults() {
         let base = MobBase::new();
         let malus = base.pathfinding_malus().lock();
 
         assert_eq!(
             malus.get(PathType::FireInNeighbor).to_bits(),
-            16.0_f32.to_bits()
+            8.0_f32.to_bits()
         );
-        assert_eq!(malus.get(PathType::Fire).to_bits(), (-1.0_f32).to_bits());
+        assert_eq!(malus.get(PathType::Fire).to_bits(), 16.0_f32.to_bits());
         assert_eq!(malus.get(PathType::Water).to_bits(), 8.0_f32.to_bits());
     }
 

@@ -6,6 +6,7 @@ use proc_macro2::{Ident, Literal, Span, TokenStream};
 use quote::quote;
 use serde::{Deserialize, de};
 use steel_utils::Identifier;
+use steel_utils::types::GameType;
 
 #[derive(Deserialize, Debug)]
 struct EnchantmentJson {
@@ -33,7 +34,7 @@ struct EnchantmentEffectsJson {
     #[serde(rename = "minecraft:damage_protection", default)]
     damage_protection: Vec<ConditionalValueEffectJson>,
     #[serde(rename = "minecraft:damage_immunity", default)]
-    damage_immunity: Vec<serde_json::Value>,
+    damage_immunity: Vec<ConditionalDamageImmunityEffectJson>,
     #[serde(rename = "minecraft:damage", default)]
     damage: Vec<ConditionalValueEffectJson>,
     #[serde(rename = "minecraft:smash_damage_per_fallen_block", default)]
@@ -45,7 +46,7 @@ struct EnchantmentEffectsJson {
     #[serde(rename = "minecraft:post_attack", default)]
     post_attack: Vec<TargetedConditionalEntityEffectJson>,
     #[serde(rename = "minecraft:post_piercing_attack", default)]
-    post_piercing_attack: Vec<serde_json::Value>,
+    post_piercing_attack: Vec<ConditionalEntityEffectJson>,
     #[serde(rename = "minecraft:hit_block", default)]
     hit_block: Vec<serde_json::Value>,
     #[serde(rename = "minecraft:item_damage", default)]
@@ -102,6 +103,64 @@ struct ConditionalValueEffectJson {
 }
 
 #[derive(Deserialize, Debug)]
+struct ConditionalEntityEffectJson {
+    effect: EntityEffectJson,
+    #[serde(default)]
+    requirements: Option<RequirementsJson>,
+}
+
+#[derive(Debug)]
+struct ConditionalDamageImmunityEffectJson {
+    requirements: Option<RequirementsJson>,
+}
+
+impl<'de> Deserialize<'de> for ConditionalDamageImmunityEffectJson {
+    fn deserialize<D>(deserializer: D) -> Result<Self, D::Error>
+    where
+        D: serde::Deserializer<'de>,
+    {
+        let value = serde_json::Value::deserialize(deserializer)?;
+        let Some(object) = value.as_object() else {
+            return Err(de::Error::custom(
+                "damage_immunity effect entry must be an object",
+            ));
+        };
+
+        for key in object.keys() {
+            if key != "effect" && key != "requirements" {
+                return Err(de::Error::custom(format!(
+                    "unsupported damage_immunity field `{key}`"
+                )));
+            }
+        }
+
+        let Some(effect) = object.get("effect") else {
+            return Err(de::Error::custom(
+                "damage_immunity effect entry missing `effect`",
+            ));
+        };
+        let Some(effect_object) = effect.as_object() else {
+            return Err(de::Error::custom(
+                "damage_immunity `effect` must be an object",
+            ));
+        };
+        if !effect_object.is_empty() {
+            return Err(de::Error::custom(
+                "damage_immunity `effect` must be an empty object",
+            ));
+        }
+
+        let requirements = object
+            .get("requirements")
+            .map(parse_requirements_json)
+            .transpose()
+            .map_err(de::Error::custom)?;
+
+        Ok(Self { requirements })
+    }
+}
+
+#[derive(Deserialize, Debug)]
 struct TargetedConditionalEntityEffectJson {
     effect: EntityEffectJson,
     enchanted: EnchantmentTargetJson,
@@ -138,6 +197,22 @@ impl<'de> Deserialize<'de> for EnchantmentTargetJson {
 #[derive(Debug)]
 enum EntityEffectJson {
     AllOf(Vec<EntityEffectJson>),
+    ChangeItemDamage {
+        amount: LevelBasedValueJson,
+    },
+    ApplyExhaustion {
+        amount: LevelBasedValueJson,
+    },
+    ApplyImpulse {
+        direction: [f64; 3],
+        coordinate_scale: [f64; 3],
+        magnitude: LevelBasedValueJson,
+    },
+    PlaySound {
+        sounds: Vec<Identifier>,
+        volume: f32,
+        pitch: f32,
+    },
     Ignite {
         duration: LevelBasedValueJson,
     },
@@ -204,6 +279,10 @@ enum EntityTargetJson {
 #[derive(Debug)]
 struct EntityPredicateJson {
     entity_type: EntityTypePredicateJson,
+    vehicle: EntityVehiclePredicateJson,
+    flags: EntityFlagsPredicateJson,
+    type_specific: EntityTypeSpecificPredicateJson,
+    unsupported: bool,
 }
 
 #[derive(Debug)]
@@ -211,7 +290,44 @@ enum EntityTypePredicateJson {
     Any,
     Type(Identifier),
     Tag(Identifier),
+}
+
+#[derive(Debug)]
+enum EntityVehiclePredicateJson {
+    Any,
+    Present,
     Unsupported,
+}
+
+#[derive(Debug)]
+struct EntityFlagsPredicateJson {
+    is_fall_flying: Option<bool>,
+    is_in_water: Option<bool>,
+    unsupported: bool,
+}
+
+impl EntityFlagsPredicateJson {
+    const fn any() -> Self {
+        Self {
+            is_fall_flying: None,
+            is_in_water: None,
+            unsupported: false,
+        }
+    }
+}
+
+#[derive(Debug)]
+enum EntityTypeSpecificPredicateJson {
+    Any,
+    Player(PlayerPredicateJson),
+    Unsupported,
+}
+
+#[derive(Debug)]
+struct PlayerPredicateJson {
+    game_modes: Vec<GameType>,
+    food_level_min: Option<i32>,
+    unsupported: bool,
 }
 
 #[derive(Debug)]
@@ -396,6 +512,55 @@ fn parse_entity_effect_json(value: &serde_json::Value) -> Result<EntityEffectJso
                 .collect::<Result<Vec<_>, _>>()?;
             Ok(EntityEffectJson::AllOf(effects))
         }
+        "minecraft:change_item_damage" => {
+            for key in object.keys() {
+                if key != "type" && key != "amount" {
+                    return Err(format!(
+                        "unsupported change_item_damage effect field `{key}`"
+                    ));
+                }
+            }
+            Ok(EntityEffectJson::ChangeItemDamage {
+                amount: parse_level_based_value_json(object_field(object, "amount")?)?,
+            })
+        }
+        "minecraft:apply_exhaustion" => {
+            for key in object.keys() {
+                if key != "type" && key != "amount" {
+                    return Err(format!("unsupported apply_exhaustion effect field `{key}`"));
+                }
+            }
+            Ok(EntityEffectJson::ApplyExhaustion {
+                amount: parse_level_based_value_json(object_field(object, "amount")?)?,
+            })
+        }
+        "minecraft:apply_impulse" => {
+            for key in object.keys() {
+                if !matches!(
+                    key.as_str(),
+                    "type" | "direction" | "coordinate_scale" | "magnitude"
+                ) {
+                    return Err(format!("unsupported apply_impulse effect field `{key}`"));
+                }
+            }
+            Ok(EntityEffectJson::ApplyImpulse {
+                direction: parse_vec3_json(object_field(object, "direction")?)?,
+                coordinate_scale: parse_vec3_json(object_field(object, "coordinate_scale")?)?,
+                magnitude: parse_level_based_value_json(object_field(object, "magnitude")?)?,
+            })
+        }
+        "minecraft:play_sound" => {
+            for key in object.keys() {
+                if !matches!(key.as_str(), "type" | "sound" | "volume" | "pitch") {
+                    return Err(format!("unsupported play_sound effect field `{key}`"));
+                }
+            }
+            Ok(EntityEffectJson::PlaySound {
+                sounds: parse_sound_list_json(object_field(object, "sound")?)?,
+                volume: parse_f32_field(object, "volume")?,
+                pitch: parse_f32_field(object, "pitch")?,
+            })
+        }
         "minecraft:ignite" => {
             for key in object.keys() {
                 if key != "type" && key != "duration" {
@@ -440,6 +605,51 @@ fn parse_entity_effect_json(value: &serde_json::Value) -> Result<EntityEffectJso
     }
 }
 
+fn parse_vec3_json(value: &serde_json::Value) -> Result<[f64; 3], String> {
+    let Some(values) = value.as_array() else {
+        return Err("vec3 must be an array".to_owned());
+    };
+    let [x, y, z] = values.as_slice() else {
+        return Err("vec3 must have exactly three values".to_owned());
+    };
+
+    Ok([
+        x.as_f64()
+            .ok_or_else(|| "vec3 x must be a number".to_owned())?,
+        y.as_f64()
+            .ok_or_else(|| "vec3 y must be a number".to_owned())?,
+        z.as_f64()
+            .ok_or_else(|| "vec3 z must be a number".to_owned())?,
+    ])
+}
+
+fn parse_sound_list_json(value: &serde_json::Value) -> Result<Vec<Identifier>, String> {
+    match value {
+        serde_json::Value::String(raw) => Ok(vec![parse_identifier(raw)?]),
+        serde_json::Value::Array(values) => values
+            .iter()
+            .map(|value| {
+                value
+                    .as_str()
+                    .ok_or_else(|| "sound list entries must be strings".to_owned())
+                    .and_then(parse_identifier)
+            })
+            .collect(),
+        _ => Err("play_sound `sound` must be a string or string array".to_owned()),
+    }
+}
+
+fn parse_f32_field(
+    object: &serde_json::Map<String, serde_json::Value>,
+    field: &str,
+) -> Result<f32, String> {
+    let value = object_field(object, field)?;
+    let number = value
+        .as_f64()
+        .ok_or_else(|| format!("`{field}` must be a number"))?;
+    Ok(number as f32)
+}
+
 fn parse_entity_type_predicate(raw: &str) -> Result<EntityTypePredicateJson, String> {
     let Some(tag) = raw.strip_prefix('#') else {
         return Ok(EntityTypePredicateJson::Type(parse_identifier(raw)?));
@@ -452,21 +662,144 @@ fn parse_entity_predicate_json(value: &serde_json::Value) -> Result<EntityPredic
     let Some(object) = value.as_object() else {
         return Err("entity_properties predicate must be an object".to_owned());
     };
-    let has_unsupported_fields = object.keys().any(|key| key != "type");
+    let unsupported = object
+        .keys()
+        .any(|key| !matches!(key.as_str(), "type" | "vehicle" | "flags" | "type_specific"));
     let entity_type = match object.get("type") {
-        Some(serde_json::Value::String(raw)) => {
-            if has_unsupported_fields {
-                EntityTypePredicateJson::Unsupported
-            } else {
-                parse_entity_type_predicate(raw)?
-            }
-        }
+        Some(serde_json::Value::String(raw)) => parse_entity_type_predicate(raw)?,
         Some(_) => return Err("entity_properties predicate `type` must be a string".to_owned()),
-        None if has_unsupported_fields => EntityTypePredicateJson::Unsupported,
         None => EntityTypePredicateJson::Any,
     };
+    let vehicle = match object.get("vehicle") {
+        Some(serde_json::Value::Object(vehicle)) if vehicle.is_empty() => {
+            EntityVehiclePredicateJson::Present
+        }
+        Some(serde_json::Value::Object(_)) => EntityVehiclePredicateJson::Unsupported,
+        Some(_) => return Err("entity_properties predicate `vehicle` must be an object".to_owned()),
+        None => EntityVehiclePredicateJson::Any,
+    };
+    let flags = object
+        .get("flags")
+        .map(parse_entity_flags_predicate_json)
+        .transpose()?
+        .unwrap_or_else(EntityFlagsPredicateJson::any);
+    let type_specific = object
+        .get("type_specific")
+        .map(parse_type_specific_predicate_json)
+        .transpose()?
+        .unwrap_or(EntityTypeSpecificPredicateJson::Any);
 
-    Ok(EntityPredicateJson { entity_type })
+    Ok(EntityPredicateJson {
+        entity_type,
+        vehicle,
+        flags,
+        type_specific,
+        unsupported,
+    })
+}
+
+fn parse_entity_flags_predicate_json(
+    value: &serde_json::Value,
+) -> Result<EntityFlagsPredicateJson, String> {
+    let Some(object) = value.as_object() else {
+        return Err("entity flags predicate must be an object".to_owned());
+    };
+    let unsupported = object
+        .keys()
+        .any(|key| key != "is_fall_flying" && key != "is_in_water");
+    let is_fall_flying = optional_bool_field(object, "is_fall_flying")?;
+    let is_in_water = optional_bool_field(object, "is_in_water")?;
+
+    Ok(EntityFlagsPredicateJson {
+        is_fall_flying,
+        is_in_water,
+        unsupported,
+    })
+}
+
+fn parse_type_specific_predicate_json(
+    value: &serde_json::Value,
+) -> Result<EntityTypeSpecificPredicateJson, String> {
+    let Some(object) = value.as_object() else {
+        return Err("entity type_specific predicate must be an object".to_owned());
+    };
+    let predicate_type = string_field(object, "type")?;
+    if predicate_type != "minecraft:player" {
+        return Ok(EntityTypeSpecificPredicateJson::Unsupported);
+    }
+
+    let unsupported = object
+        .keys()
+        .any(|key| !matches!(key.as_str(), "type" | "gamemode" | "food"));
+    let game_modes = match object.get("gamemode") {
+        Some(serde_json::Value::Array(modes)) => modes
+            .iter()
+            .map(|mode| {
+                mode.as_str()
+                    .ok_or_else(|| "player gamemode entries must be strings".to_owned())
+                    .and_then(parse_game_type)
+            })
+            .collect::<Result<Vec<_>, _>>()?,
+        Some(_) => return Err("player predicate `gamemode` must be an array".to_owned()),
+        None => Vec::new(),
+    };
+    let food_level_min = object
+        .get("food")
+        .map(parse_player_food_min_json)
+        .transpose()?;
+
+    Ok(EntityTypeSpecificPredicateJson::Player(
+        PlayerPredicateJson {
+            game_modes,
+            food_level_min,
+            unsupported,
+        },
+    ))
+}
+
+fn parse_player_food_min_json(value: &serde_json::Value) -> Result<i32, String> {
+    let Some(object) = value.as_object() else {
+        return Err("player food predicate must be an object".to_owned());
+    };
+    let level = object_field(object, "level")?;
+    let Some(level_object) = level.as_object() else {
+        return Err("player food `level` must be an object".to_owned());
+    };
+    for key in object.keys() {
+        if key != "level" {
+            return Err(format!("unsupported player food predicate field `{key}`"));
+        }
+    }
+    for key in level_object.keys() {
+        if key != "min" {
+            return Err(format!("unsupported player food level field `{key}`"));
+        }
+    }
+    let min = object_field(level_object, "min")?
+        .as_i64()
+        .ok_or_else(|| "player food level `min` must be an integer".to_owned())?;
+    i32::try_from(min).map_err(|_| "player food level `min` out of range".to_owned())
+}
+
+fn optional_bool_field(
+    object: &serde_json::Map<String, serde_json::Value>,
+    field: &str,
+) -> Result<Option<bool>, String> {
+    match object.get(field) {
+        Some(serde_json::Value::Bool(value)) => Ok(Some(*value)),
+        Some(_) => Err(format!("`{field}` must be a bool")),
+        None => Ok(None),
+    }
+}
+
+fn parse_game_type(value: &str) -> Result<GameType, String> {
+    match value {
+        "survival" => Ok(GameType::Survival),
+        "creative" => Ok(GameType::Creative),
+        "adventure" => Ok(GameType::Adventure),
+        "spectator" => Ok(GameType::Spectator),
+        other => Err(format!("unknown game type `{other}`")),
+    }
 }
 
 fn parse_damage_source_predicate_json(
@@ -717,13 +1050,87 @@ fn entity_type_predicate_token(predicate: &EntityTypePredicateJson) -> TokenStre
             let tag = identifier_token(tag);
             quote! { EntityTypePredicate::Tag(#tag) }
         }
-        EntityTypePredicateJson::Unsupported => quote! { EntityTypePredicate::Unsupported },
+    }
+}
+
+fn game_type_token(game_type: GameType) -> TokenStream {
+    match game_type {
+        GameType::Survival => quote! { GameType::Survival },
+        GameType::Creative => quote! { GameType::Creative },
+        GameType::Adventure => quote! { GameType::Adventure },
+        GameType::Spectator => quote! { GameType::Spectator },
+    }
+}
+
+fn entity_vehicle_predicate_token(predicate: &EntityVehiclePredicateJson) -> TokenStream {
+    match predicate {
+        EntityVehiclePredicateJson::Any => quote! { EntityVehiclePredicate::Any },
+        EntityVehiclePredicateJson::Present => quote! { EntityVehiclePredicate::Present },
+        EntityVehiclePredicateJson::Unsupported => quote! { EntityVehiclePredicate::Unsupported },
+    }
+}
+
+fn entity_flags_predicate_token(predicate: &EntityFlagsPredicateJson) -> TokenStream {
+    let is_fall_flying = match predicate.is_fall_flying {
+        Some(value) => quote! { Some(#value) },
+        None => quote! { None },
+    };
+    let is_in_water = match predicate.is_in_water {
+        Some(value) => quote! { Some(#value) },
+        None => quote! { None },
+    };
+    let unsupported = predicate.unsupported;
+
+    quote! {
+        EntityFlagsPredicate {
+            is_fall_flying: #is_fall_flying,
+            is_in_water: #is_in_water,
+            unsupported: #unsupported,
+        }
+    }
+}
+
+fn entity_type_specific_predicate_token(
+    predicate: &EntityTypeSpecificPredicateJson,
+) -> TokenStream {
+    match predicate {
+        EntityTypeSpecificPredicateJson::Any => quote! { EntityTypeSpecificPredicate::Any },
+        EntityTypeSpecificPredicateJson::Player(player) => {
+            let game_modes = player.game_modes.iter().copied().map(game_type_token);
+            let food_level_min = match player.food_level_min {
+                Some(min) => quote! { Some(#min) },
+                None => quote! { None },
+            };
+            let unsupported = player.unsupported;
+            quote! {
+                EntityTypeSpecificPredicate::Player(PlayerPredicate {
+                    game_modes: &[#(#game_modes),*],
+                    food_level_min: #food_level_min,
+                    unsupported: #unsupported,
+                })
+            }
+        }
+        EntityTypeSpecificPredicateJson::Unsupported => {
+            quote! { EntityTypeSpecificPredicate::Unsupported }
+        }
     }
 }
 
 fn entity_predicate_token(predicate: &EntityPredicateJson) -> TokenStream {
     let entity_type = entity_type_predicate_token(&predicate.entity_type);
-    quote! { EntityPredicate { entity_type: #entity_type } }
+    let vehicle = entity_vehicle_predicate_token(&predicate.vehicle);
+    let flags = entity_flags_predicate_token(&predicate.flags);
+    let type_specific = entity_type_specific_predicate_token(&predicate.type_specific);
+    let unsupported = predicate.unsupported;
+    quote! {
+        EntityPredicate {
+            entity_type: #entity_type,
+            vehicle: #vehicle,
+            flags: #flags,
+            type_specific: #type_specific,
+            unsupported: #unsupported,
+        }
+    }
 }
 
 fn damage_source_predicate_token(predicate: &DamageSourcePredicateJson) -> TokenStream {
@@ -798,6 +1205,44 @@ fn generate_entity_effect(
                 .iter()
                 .map(|effect| generate_entity_effect_ref(prefix, effect, statics, counter));
             quote! { EnchantmentEntityEffect::AllOf(&[#(#effects),*]) }
+        }
+        EntityEffectJson::ChangeItemDamage { amount } => {
+            let amount = generate_level_based_value_ref(prefix, amount, statics, counter);
+            quote! { EnchantmentEntityEffect::ChangeItemDamage { amount: #amount } }
+        }
+        EntityEffectJson::ApplyExhaustion { amount } => {
+            let amount = generate_level_based_value_ref(prefix, amount, statics, counter);
+            quote! { EnchantmentEntityEffect::ApplyExhaustion { amount: #amount } }
+        }
+        EntityEffectJson::ApplyImpulse {
+            direction,
+            coordinate_scale,
+            magnitude,
+        } => {
+            let [direction_x, direction_y, direction_z] = *direction;
+            let [scale_x, scale_y, scale_z] = *coordinate_scale;
+            let magnitude = generate_level_based_value_ref(prefix, magnitude, statics, counter);
+            quote! {
+                EnchantmentEntityEffect::ApplyImpulse {
+                    direction: DVec3::new(#direction_x, #direction_y, #direction_z),
+                    coordinate_scale: DVec3::new(#scale_x, #scale_y, #scale_z),
+                    magnitude: #magnitude,
+                }
+            }
+        }
+        EntityEffectJson::PlaySound {
+            sounds,
+            volume,
+            pitch,
+        } => {
+            let sounds = sounds.iter().map(generate_sound_event_ref);
+            quote! {
+                EnchantmentEntityEffect::PlaySound {
+                    sounds: &[#(#sounds),*],
+                    volume: #volume,
+                    pitch: #pitch,
+                }
+            }
         }
         EntityEffectJson::Ignite { duration } => {
             let duration = generate_level_based_value_ref(prefix, duration, statics, counter);
@@ -937,6 +1382,48 @@ fn generate_conditional_value_effects(
     quote! { &[#(#entries),*] }
 }
 
+fn generate_conditional_entity_effects(
+    prefix: &str,
+    effects: &[ConditionalEntityEffectJson],
+    statics: &mut TokenStream,
+    counter: &mut usize,
+) -> TokenStream {
+    let entries = effects.iter().enumerate().map(|(index, effect)| {
+        let entry_prefix = format!("{prefix}_{index}");
+        let effect_token = generate_entity_effect(&entry_prefix, &effect.effect, statics, counter);
+        let requirements =
+            generate_optional_requirements(&entry_prefix, &effect.requirements, statics, counter);
+        quote! {
+            ConditionalEnchantmentEffect {
+                effect: #effect_token,
+                requirements: #requirements,
+            }
+        }
+    });
+
+    quote! { &[#(#entries),*] }
+}
+
+fn generate_damage_immunity_effects(
+    prefix: &str,
+    effects: &[ConditionalDamageImmunityEffectJson],
+    statics: &mut TokenStream,
+    counter: &mut usize,
+) -> TokenStream {
+    let entries = effects.iter().enumerate().map(|(index, effect)| {
+        let entry_prefix = format!("{prefix}_{index}");
+        let requirements =
+            generate_optional_requirements(&entry_prefix, &effect.requirements, statics, counter);
+        quote! {
+            ConditionalDamageImmunityEffect {
+                requirements: #requirements,
+            }
+        }
+    });
+
+    quote! { &[#(#entries),*] }
+}
+
 fn generate_targeted_entity_effects(
     prefix: &str,
     effects: &[TargetedConditionalEntityEffectJson],
@@ -1064,6 +1551,12 @@ fn generate_enchantment_effects(
         statics,
         counter,
     );
+    let damage_immunity = generate_damage_immunity_effects(
+        &format!("{prefix}_DAMAGE_IMMUNITY"),
+        &effects.damage_immunity,
+        statics,
+        counter,
+    );
     let damage = generate_conditional_value_effects(
         &format!("{prefix}_DAMAGE"),
         &effects.damage,
@@ -1091,6 +1584,12 @@ fn generate_enchantment_effects(
     let post_attack = generate_targeted_entity_effects(
         &format!("{prefix}_POST_ATTACK"),
         &effects.post_attack,
+        statics,
+        counter,
+    );
+    let post_piercing_attack = generate_conditional_entity_effects(
+        &format!("{prefix}_POST_PIERCING_ATTACK"),
+        &effects.post_piercing_attack,
         statics,
         counter,
     );
@@ -1188,8 +1687,6 @@ fn generate_enchantment_effects(
         counter,
     );
 
-    let damage_immunity = !effects.damage_immunity.is_empty();
-    let post_piercing_attack = !effects.post_piercing_attack.is_empty();
     let hit_block = !effects.hit_block.is_empty();
     let location_changed = !effects.location_changed.is_empty();
     let tick = !effects.tick.is_empty();
@@ -1267,19 +1764,24 @@ pub(crate) fn build() -> TokenStream {
     let mut stream = TokenStream::new();
 
     stream.extend(quote! {
+        use glam::DVec3;
         use crate::attribute::AttributeModifierOperation;
         use crate::enchantment_effect::{
-            ConditionalEnchantmentEffect, CrossbowChargingSounds, DamageSourcePredicate,
-            DamageSourceTagPredicate, EnchantmentAttributeEffect, EnchantmentEffectRequirements,
-            EnchantmentEffects, EnchantmentEntityEffect, EnchantmentEntityTarget,
-            EnchantmentTarget, EnchantmentValueEffect, EntityPredicate, EntityTypePredicate,
-            LevelBasedValue, MobEffectSelection, TargetedConditionalEnchantmentEffect,
+            ConditionalDamageImmunityEffect, ConditionalEnchantmentEffect,
+            CrossbowChargingSounds, DamageSourcePredicate, DamageSourceTagPredicate,
+            EnchantmentAttributeEffect, EnchantmentEffectRequirements, EnchantmentEffects,
+            EnchantmentEntityEffect, EnchantmentEntityTarget, EnchantmentTarget,
+            EnchantmentValueEffect, EntityFlagsPredicate, EntityPredicate,
+            EntityTypePredicate, EntityTypeSpecificPredicate, EntityVehiclePredicate,
+            LevelBasedValue, MobEffectSelection, PlayerPredicate,
+            TargetedConditionalEnchantmentEffect,
         };
         use crate::enchantment::{Enchantment, EnchantmentCost, EnchantmentRegistry};
         use crate::equipment::EquipmentSlotGroup;
         use crate::vanilla_attributes;
         use crate::vanilla_mob_effects;
         use steel_utils::Identifier;
+        use steel_utils::types::GameType;
     });
 
     let mut register_stream = TokenStream::new();

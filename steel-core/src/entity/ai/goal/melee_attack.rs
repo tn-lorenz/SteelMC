@@ -177,10 +177,7 @@ impl Goal for MeleeAttackGoal {
 
     fn start(&mut self, mob: &dyn PathfinderMob) {
         if let Some(path) = self.path.take() {
-            mob.mob_base()
-                .navigation()
-                .lock()
-                .move_to(path, self.speed_modifier, mob.position());
+            mob.move_to_path(Some(path), self.speed_modifier);
         } else {
             mob.mob_base().navigation().lock().stop();
         }

@@ -1,7 +1,9 @@
 use crate::attribute::{AttributeModifierOperation, AttributeRef};
 use crate::mob_effect::MobEffectRef;
 use crate::sound_event::SoundEventRef;
+use glam::DVec3;
 use steel_utils::Identifier;
+use steel_utils::types::GameType;
 
 /// Vanilla enchantment effect component keys.
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Hash)]
@@ -188,6 +190,54 @@ pub enum EntityTypePredicate {
 #[derive(Debug, PartialEq, Eq)]
 pub struct EntityPredicate {
     pub entity_type: EntityTypePredicate,
+    pub vehicle: EntityVehiclePredicate,
+    pub flags: EntityFlagsPredicate,
+    pub type_specific: EntityTypeSpecificPredicate,
+    pub unsupported: bool,
+}
+
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+pub enum EntityVehiclePredicate {
+    Any,
+    Present,
+    Unsupported,
+}
+
+#[derive(Debug, PartialEq, Eq)]
+pub struct EntityFlagsPredicate {
+    pub is_fall_flying: Option<bool>,
+    pub is_in_water: Option<bool>,
+    pub unsupported: bool,
+}
+
+impl EntityFlagsPredicate {
+    #[must_use]
+    pub const fn any() -> Self {
+        Self {
+            is_fall_flying: None,
+            is_in_water: None,
+            unsupported: false,
+        }
+    }
+
+    #[must_use]
+    pub const fn has_constraints(&self) -> bool {
+        self.is_fall_flying.is_some() || self.is_in_water.is_some() || self.unsupported
+    }
+}
+
+#[derive(Debug, PartialEq, Eq)]
+pub enum EntityTypeSpecificPredicate {
+    Any,
+    Player(PlayerPredicate),
+    Unsupported,
+}
+
+#[derive(Debug, PartialEq, Eq)]
+pub struct PlayerPredicate {
+    pub game_modes: &'static [GameType],
+    pub food_level_min: Option<i32>,
+    pub unsupported: bool,
 }
 
 #[derive(Debug, PartialEq, Eq)]
@@ -231,6 +281,18 @@ impl<T> ConditionalEnchantmentEffect<T> {
     }
 }
 
+#[derive(Debug, PartialEq, Eq)]
+pub struct ConditionalDamageImmunityEffect {
+    pub requirements: Option<&'static EnchantmentEffectRequirements>,
+}
+
+impl ConditionalDamageImmunityEffect {
+    #[must_use]
+    pub const fn is_unconditional(&self) -> bool {
+        self.requirements.is_none()
+    }
+}
+
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
 pub enum EnchantmentTarget {
     Attacker,
@@ -247,6 +309,22 @@ pub enum MobEffectSelection {
 #[derive(Debug)]
 pub enum EnchantmentEntityEffect {
     AllOf(&'static [&'static EnchantmentEntityEffect]),
+    ChangeItemDamage {
+        amount: &'static LevelBasedValue,
+    },
+    ApplyExhaustion {
+        amount: &'static LevelBasedValue,
+    },
+    ApplyImpulse {
+        direction: DVec3,
+        coordinate_scale: DVec3,
+        magnitude: &'static LevelBasedValue,
+    },
+    PlaySound {
+        sounds: &'static [SoundEventRef],
+        volume: f32,
+        pitch: f32,
+    },
     Ignite {
         duration: &'static LevelBasedValue,
     },
@@ -288,14 +366,14 @@ pub struct CrossbowChargingSounds {
 #[derive(Debug)]
 pub struct EnchantmentEffects {
     pub damage_protection: &'static [ConditionalEnchantmentEffect<EnchantmentValueEffect>],
-    pub damage_immunity: bool,
+    pub damage_immunity: &'static [ConditionalDamageImmunityEffect],
     pub damage: &'static [ConditionalEnchantmentEffect<EnchantmentValueEffect>],
     pub smash_damage_per_fallen_block:
         &'static [ConditionalEnchantmentEffect<EnchantmentValueEffect>],
     pub knockback: &'static [ConditionalEnchantmentEffect<EnchantmentValueEffect>],
     pub armor_effectiveness: &'static [ConditionalEnchantmentEffect<EnchantmentValueEffect>],
     pub post_attack: &'static [TargetedConditionalEnchantmentEffect<EnchantmentEntityEffect>],
-    pub post_piercing_attack: bool,
+    pub post_piercing_attack: &'static [ConditionalEnchantmentEffect<EnchantmentEntityEffect>],
     pub hit_block: bool,
     pub item_damage: &'static [ConditionalEnchantmentEffect<EnchantmentValueEffect>],
     pub equipment_drops: &'static [TargetedConditionalEnchantmentEffect<EnchantmentValueEffect>],
@@ -325,13 +403,13 @@ pub struct EnchantmentEffects {
 impl EnchantmentEffects {
     pub const EMPTY: Self = Self {
         damage_protection: &[],
-        damage_immunity: false,
+        damage_immunity: &[],
         damage: &[],
         smash_damage_per_fallen_block: &[],
         knockback: &[],
         armor_effectiveness: &[],
         post_attack: &[],
-        post_piercing_attack: false,
+        post_piercing_attack: &[],
         hit_block: false,
         item_damage: &[],
         equipment_drops: &[],
@@ -361,7 +439,7 @@ impl EnchantmentEffects {
     pub fn has(&self, component: EnchantmentEffectComponent) -> bool {
         match component {
             EnchantmentEffectComponent::DamageProtection => !self.damage_protection.is_empty(),
-            EnchantmentEffectComponent::DamageImmunity => self.damage_immunity,
+            EnchantmentEffectComponent::DamageImmunity => !self.damage_immunity.is_empty(),
             EnchantmentEffectComponent::Damage => !self.damage.is_empty(),
             EnchantmentEffectComponent::SmashDamagePerFallenBlock => {
                 !self.smash_damage_per_fallen_block.is_empty()
@@ -369,7 +447,7 @@ impl EnchantmentEffects {
             EnchantmentEffectComponent::Knockback => !self.knockback.is_empty(),
             EnchantmentEffectComponent::ArmorEffectiveness => !self.armor_effectiveness.is_empty(),
             EnchantmentEffectComponent::PostAttack => !self.post_attack.is_empty(),
-            EnchantmentEffectComponent::PostPiercingAttack => self.post_piercing_attack,
+            EnchantmentEffectComponent::PostPiercingAttack => !self.post_piercing_attack.is_empty(),
             EnchantmentEffectComponent::HitBlock => self.hit_block,
             EnchantmentEffectComponent::ItemDamage => !self.item_damage.is_empty(),
             EnchantmentEffectComponent::EquipmentDrops => !self.equipment_drops.is_empty(),

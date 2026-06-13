@@ -17,9 +17,11 @@ use steel_utils::{BlockPos, Identifier, UuidExt};
 use uuid::Uuid;
 
 use crate::behavior::InteractionResult;
+use crate::entity::ai::path::PathType;
 use crate::entity::entities::ExperienceOrbEntity;
 use crate::entity::{
-    AgeableMob, AgeableMobBase, ENTITIES, EntitySpawnReason, Mob, SharedEntity, next_entity_id,
+    AgeableMob, AgeableMobBase, ENTITIES, EntitySpawnReason, Mob, MobBase, SharedEntity,
+    next_entity_id,
 };
 use crate::player::Player;
 use crate::world::{LevelReader, World};
@@ -55,6 +57,12 @@ impl AnimalBase {
         Self {
             state: SyncMutex::new(AnimalState::new()),
         }
+    }
+
+    pub fn initialize_pathfinding_malus(mob_base: &MobBase) {
+        let mut malus = mob_base.pathfinding_malus().lock();
+        malus.set(PathType::FireInNeighbor, 16.0);
+        malus.set(PathType::Fire, -1.0);
     }
 
     /// Returns vanilla `Animal.inLove`.

@@ -82,6 +82,7 @@ impl PigEntity {
         let mob_base = MobBase::new();
         let ageable_base = AgeableMobBase::new();
         let animal_base = AnimalBase::new();
+        AnimalBase::initialize_pathfinding_malus(&mob_base);
         let steering = SyncMutex::new(ItemBasedSteering::new());
         let mut entity_data = PigEntityData::new();
         living_base.initialize_synced_data(&mut entity_data);
@@ -519,18 +520,18 @@ impl Entity for PigEntity {
     }
 
     fn controlling_passenger(&self) -> Option<SharedEntity> {
-        if !self.is_saddled() {
-            return None;
+        if self.is_saddled()
+            && let Some(passenger) = self.first_passenger()
+            && passenger.as_player().is_some_and(|player| {
+                let mut is_holding_carrot_on_a_stick =
+                    |item_stack: &ItemStack| item_stack.is(&vanilla_items::ITEMS.carrot_on_a_stick);
+                player.is_holding(&mut is_holding_carrot_on_a_stick)
+            })
+        {
+            return Some(passenger);
         }
 
-        let passenger = self.first_passenger()?;
-        let is_controller = passenger.as_player().is_some_and(|player| {
-            let mut is_holding_carrot_on_a_stick =
-                |item_stack: &ItemStack| item_stack.is(&vanilla_items::ITEMS.carrot_on_a_stick);
-            player.is_holding(&mut is_holding_carrot_on_a_stick)
-        });
-
-        is_controller.then_some(passenger)
+        self.controlling_passenger_mob()
     }
 
     fn is_effective_ai(&self) -> bool {
@@ -898,7 +899,7 @@ mod tests {
     use simdnbt::borrow::read_compound as read_borrowed_compound;
     use simdnbt::owned::NbtTag;
     use steel_registry::test_support::init_test_registry;
-    use steel_registry::{vanilla_entities, vanilla_items::ITEMS};
+    use steel_registry::{vanilla_blocks, vanilla_entities, vanilla_items::ITEMS};
     use steel_utils::UuidExt;
     use uuid::Uuid;
 
@@ -910,8 +911,39 @@ mod tests {
     use crate::entity::mob::LeashAttachment;
     use crate::entity::{Animal, DEATH_DURATION, ItemSteerable, RemovalReason, SharedEntity};
     use crate::inventory::equipment::EquipmentSlot;
+    use crate::world::LevelReader;
 
     use super::*;
+
+    struct EmptyNavigationLevel {
+        air_state: BlockStateId,
+    }
+
+    impl EmptyNavigationLevel {
+        fn new() -> Self {
+            Self {
+                air_state: REGISTRY.blocks.get_default_state_id(&vanilla_blocks::AIR),
+            }
+        }
+    }
+
+    impl LevelReader for EmptyNavigationLevel {
+        fn get_block_state(&self, _pos: BlockPos) -> BlockStateId {
+            self.air_state
+        }
+
+        fn raw_brightness(&self, _pos: BlockPos, _sky_darkening: u8) -> u8 {
+            0
+        }
+
+        fn min_y(&self) -> i32 {
+            -64
+        }
+
+        fn height(&self) -> i32 {
+            384
+        }
+    }
 
     #[test]
     fn pig_initializes_vanilla_living_attributes_and_health() {
@@ -1421,7 +1453,13 @@ mod tests {
         let pig = PigEntity::new(&vanilla_entities::PIG, 1, DVec3::ZERO, Weak::new());
         let path = Path::new(vec![Node::new(1, 0, 0)], BlockPos::new(1, 0, 0), true);
 
-        assert!(pig.move_to_path(Some(path), 1.0));
+        let level = EmptyNavigationLevel::new();
+        assert!(
+            pig.mob_base()
+                .navigation()
+                .lock()
+                .move_to(&level, path, 1.0, pig.position())
+        );
         let target = {
             let mut navigation = pig.mob_base().navigation().lock();
             navigation.next_move_target(NavigationTickContext {
@@ -1773,7 +1811,7 @@ mod tests {
     }
 
     #[test]
-    fn pig_uses_vanilla_fire_path_malus_from_mob_base() {
+    fn pig_uses_vanilla_animal_fire_path_malus() {
         init_test_registry();
 
         let pig = PigEntity::new(&vanilla_entities::PIG, 1, DVec3::ZERO, Weak::new());
@@ -1786,6 +1824,48 @@ mod tests {
         assert_eq!(
             pig.get_pathfinding_malus(PathType::Fire).to_bits(),
             (-1.0_f32).to_bits()
+        );
+    }
+
+    #[test]
+    fn pig_uses_mob_passenger_as_controller_when_not_player_controlled() {
+        init_test_registry();
+
+        let vehicle_pig = Arc::new(PigEntity::new(
+            &vanilla_entities::PIG,
+            1,
+            DVec3::ZERO,
+            Weak::new(),
+        ));
+        let vehicle: SharedEntity = vehicle_pig.clone();
+        let passenger_pig = Arc::new(PigEntity::new(
+            &vanilla_entities::PIG,
+            2,
+            DVec3::ZERO,
+            Weak::new(),
+        ));
+        let passenger: SharedEntity = passenger_pig.clone();
+        EntityBase::restore_passenger_relationship(&vehicle, &passenger);
+
+        assert_eq!(
+            vehicle
+                .controlling_passenger()
+                .map(|controller| controller.id()),
+            Some(passenger.id())
+        );
+
+        passenger_pig.set_wanted_position(DVec3::new(1.0, 0.0, 0.0), 1.0);
+        Mob::tick_move_control(vehicle_pig.as_ref());
+
+        assert_eq!(vehicle_pig.get_speed().to_bits(), 0.25_f32.to_bits());
+        assert_eq!(
+            vehicle_pig.travel_input().forward().to_bits(),
+            0.25_f32.to_bits()
+        );
+        Mob::tick_move_control(passenger_pig.as_ref());
+        assert_eq!(
+            passenger_pig.travel_input().forward().to_bits(),
+            0.0_f32.to_bits()
         );
     }
 

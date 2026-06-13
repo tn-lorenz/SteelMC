@@ -19,8 +19,8 @@ use crate::{
         vanilla_components::{
             ATTACK_RANGE, ATTRIBUTE_MODIFIERS, AttackRange, DAMAGE, DAMAGE_TYPE, ENCHANTMENTS,
             EQUIPPABLE, Equippable, ItemAttributeModifiers, ItemEnchantments, MAX_DAMAGE,
-            MAX_STACK_SIZE, MINIMUM_ATTACK_CHARGE, PIERCING_WEAPON, TOOL, Tool, UNBREAKABLE,
-            WEAPON, Weapon,
+            MAX_STACK_SIZE, MINIMUM_ATTACK_CHARGE, PIERCING_WEAPON, PiercingWeapon, TOOL, Tool,
+            UNBREAKABLE, WEAPON, Weapon,
         },
     },
     enchantment_effect::EnchantmentEffectComponent,
@@ -394,6 +394,12 @@ impl ItemStack {
     #[must_use]
     pub fn is_piercing_weapon(&self) -> bool {
         self.has(PIERCING_WEAPON)
+    }
+
+    /// Gets the PiercingWeapon component if present.
+    #[must_use]
+    pub fn get_piercing_weapon(&self) -> Option<&PiercingWeapon> {
+        self.get(PIERCING_WEAPON)
     }
 
     /// Returns the mining speed for the given block state ID.
