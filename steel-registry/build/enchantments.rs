@@ -51,7 +51,7 @@ struct EnchantmentEffectsJson {
     #[serde(rename = "minecraft:item_damage", default)]
     item_damage: Vec<ConditionalValueEffectJson>,
     #[serde(rename = "minecraft:equipment_drops", default)]
-    equipment_drops: Vec<ConditionalValueEffectJson>,
+    equipment_drops: Vec<TargetedConditionalValueEffectJson>,
     #[serde(rename = "minecraft:location_changed", default)]
     location_changed: Vec<serde_json::Value>,
     #[serde(rename = "minecraft:tick", default)]
@@ -106,6 +106,14 @@ struct TargetedConditionalEntityEffectJson {
     effect: EntityEffectJson,
     enchanted: EnchantmentTargetJson,
     affected: EnchantmentTargetJson,
+    #[serde(default)]
+    requirements: Option<RequirementsJson>,
+}
+
+#[derive(Deserialize, Debug)]
+struct TargetedConditionalValueEffectJson {
+    effect: ValueEffectJson,
+    enchanted: EnchantmentTargetJson,
     #[serde(default)]
     requirements: Option<RequirementsJson>,
 }
@@ -955,6 +963,31 @@ fn generate_targeted_entity_effects(
     quote! { &[#(#entries),*] }
 }
 
+fn generate_targeted_value_effects(
+    prefix: &str,
+    effects: &[TargetedConditionalValueEffectJson],
+    statics: &mut TokenStream,
+    counter: &mut usize,
+) -> TokenStream {
+    let entries = effects.iter().enumerate().map(|(index, effect)| {
+        let entry_prefix = format!("{prefix}_{index}");
+        let effect_token = generate_value_effect(&entry_prefix, &effect.effect, statics, counter);
+        let enchanted = enchantment_target_token(&effect.enchanted);
+        let requirements =
+            generate_optional_requirements(&entry_prefix, &effect.requirements, statics, counter);
+        quote! {
+            TargetedConditionalEnchantmentEffect {
+                effect: #effect_token,
+                enchanted: #enchanted,
+                affected: EnchantmentTarget::Victim,
+                requirements: #requirements,
+            }
+        }
+    });
+
+    quote! { &[#(#entries),*] }
+}
+
 fn generate_attribute_effects(
     prefix: &str,
     attributes: &[AttributeEffectJson],
@@ -1067,7 +1100,7 @@ fn generate_enchantment_effects(
         statics,
         counter,
     );
-    let equipment_drops = generate_conditional_value_effects(
+    let equipment_drops = generate_targeted_value_effects(
         &format!("{prefix}_EQUIPMENT_DROPS"),
         &effects.equipment_drops,
         statics,

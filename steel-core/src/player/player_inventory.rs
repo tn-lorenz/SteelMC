@@ -146,6 +146,25 @@ impl PlayerInventory {
         }
     }
 
+    /// Sets the selected hotbar slot from the signed protocol field.
+    ///
+    /// Returns an error when the packet value is outside the vanilla hotbar
+    /// range instead of wrapping or panicking.
+    pub fn try_set_selected_slot_from_packet(
+        &mut self,
+        slot: i16,
+    ) -> Result<(), InvalidHotbarSlot> {
+        let Ok(slot) = u8::try_from(slot) else {
+            return Err(InvalidHotbarSlot);
+        };
+        if !Self::is_hotbar_slot(slot as usize) {
+            return Err(InvalidHotbarSlot);
+        }
+
+        self.set_selected_slot(slot);
+        Ok(())
+    }
+
     /// Executes a function with a reference to the currently selected item.
     pub fn with_selected_item<R>(&self, f: impl FnOnce(&ItemStack) -> R) -> R {
         f(&self.items[self.selected as usize])
@@ -874,7 +893,17 @@ impl Player {
 
     /// Sets selected slot
     pub fn handle_set_carried_item(&self, packet: SSetCarriedItem) {
-        self.inventory.lock().set_selected_slot(packet.slot as u8);
+        if self
+            .inventory
+            .lock()
+            .try_set_selected_slot_from_packet(packet.slot)
+            .is_err()
+        {
+            log::warn!(
+                "{} tried to set an invalid carried item",
+                self.gameprofile.name
+            );
+        }
     }
 
     /// Sends all inventory slots to the client (full sync).
@@ -1103,6 +1132,10 @@ impl Player {
 
 /// Static empty item stack for returning references to invalid slots.
 static EMPTY_ITEM: LazyLock<ItemStack> = LazyLock::new(ItemStack::empty);
+
+/// Error returned when a carried-item packet selects a non-hotbar slot.
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+pub struct InvalidHotbarSlot;
 
 impl Container for PlayerInventory {
     fn get_container_size(&self) -> usize {
@@ -1373,6 +1406,32 @@ mod tests {
 
         assert_eq!(dirty_items, vec![(EquipmentSlot::MainHand, selected)]);
         assert!(inventory.drain_dirty_equipment_items().is_empty());
+    }
+
+    #[test]
+    fn packet_selected_slot_rejects_invalid_values_without_wrapping() {
+        let mut inventory = PlayerInventory::new(Weak::new());
+
+        assert!(inventory.try_set_selected_slot_from_packet(8).is_ok());
+        assert_eq!(inventory.get_selected_slot(), 8);
+
+        assert_eq!(
+            inventory.try_set_selected_slot_from_packet(9),
+            Err(InvalidHotbarSlot)
+        );
+        assert_eq!(inventory.get_selected_slot(), 8);
+
+        assert_eq!(
+            inventory.try_set_selected_slot_from_packet(-1),
+            Err(InvalidHotbarSlot)
+        );
+        assert_eq!(inventory.get_selected_slot(), 8);
+
+        assert_eq!(
+            inventory.try_set_selected_slot_from_packet(256),
+            Err(InvalidHotbarSlot)
+        );
+        assert_eq!(inventory.get_selected_slot(), 8);
     }
 
     #[test]

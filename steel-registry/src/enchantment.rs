@@ -202,7 +202,7 @@ crate::impl_tagged_registry!(EnchantmentRegistry, enchantments_by_key, "enchantm
 
 #[cfg(test)]
 mod tests {
-    use crate::enchantment_effect::EnchantmentEffectComponent;
+    use crate::enchantment_effect::{EnchantmentEffectComponent, EnchantmentTarget};
     use crate::equipment::EquipmentSlot;
     use crate::vanilla_enchantments;
 
@@ -252,5 +252,14 @@ mod tests {
     fn conditional_value_effects_are_not_applied_without_context() {
         assert_eq!(vanilla_enchantments::PUNCH.effects.knockback.len(), 1);
         assert!(!vanilla_enchantments::PUNCH.effects.knockback[0].is_unconditional());
+    }
+
+    #[test]
+    fn looting_equipment_drops_preserves_attacker_target() {
+        let effects = vanilla_enchantments::LOOTING.effects.equipment_drops;
+
+        assert_eq!(effects.len(), 1);
+        assert_eq!(effects[0].enchanted, EnchantmentTarget::Attacker);
+        assert_eq!(effects[0].affected, EnchantmentTarget::Victim);
     }
 }

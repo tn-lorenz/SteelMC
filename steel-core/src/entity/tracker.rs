@@ -398,8 +398,14 @@ impl EntityTracker {
             }
             result.for_each_packet(|packet| packets_to_broadcast.push((entity_id, packet)));
             if entity.hurt_marked() {
+                let velocity = entity.velocity();
+                packets_to_broadcast.push((
+                    entity_id,
+                    EntityMovementSyncPacket::from(CSetEntityMotion::new(
+                        entity_id, velocity.x, velocity.y, velocity.z,
+                    )),
+                ));
                 if entity.entity_type() == &vanilla_entities::PLAYER {
-                    let velocity = entity.velocity();
                     self_movement_packets.push((
                         entity_id,
                         EntityMovementSyncPacket::from(CSetEntityMotion::new(
@@ -1085,6 +1091,27 @@ mod tests {
         });
     }
 
+    fn assert_has_velocity_packet(
+        updates: &[(i32, EntityMovementSyncPacket)],
+        entity_id: i32,
+        velocity: DVec3,
+    ) {
+        let has_packet = updates.iter().any(|(sent_entity_id, packet)| {
+            let EntityMovementSyncPacket::Velocity(packet) = packet else {
+                return false;
+            };
+            *sent_entity_id == entity_id
+                && packet.entity_id == entity_id
+                && packet.velocity_x.to_bits() == velocity.x.to_bits()
+                && packet.velocity_y.to_bits() == velocity.y.to_bits()
+                && packet.velocity_z.to_bits() == velocity.z.to_bits()
+        });
+        assert!(
+            has_packet,
+            "expected velocity packet for entity {entity_id} with velocity {velocity:?}, got {updates:?}"
+        );
+    }
+
     #[test]
     fn client_tracking_range_is_converted_to_blocks() {
         let range = EntityTrackingRange::from_client_chunk_range(4);
@@ -1351,13 +1378,14 @@ mod tests {
         entity_typed.set_velocity(DVec3::new(0.25, 0.4, -0.125));
         entity_typed.mark_hurt();
 
-        let mut updates = Vec::new();
+        let mut tracker_updates = Vec::new();
+        let mut self_updates = Vec::new();
         tracker.send_changes(
             |_| Vec::new(),
             |_| None,
             EntityChangeSenders {
-                movement: |_, _| {},
-                self_movement: |player_id, packet| updates.push((player_id, packet)),
+                movement: |entity_id, packet| tracker_updates.push((entity_id, packet)),
+                self_movement: |player_id, packet| self_updates.push((player_id, packet)),
                 entity_data: |_, _| {},
                 attributes: |_, _| {},
                 mob_effects: |_, _| {},
@@ -1367,18 +1395,54 @@ mod tests {
             },
         );
 
-        assert_eq!(updates.len(), 1);
-        assert_eq!(updates[0].0, 1);
-        let EntityMovementSyncPacket::Velocity(packet) = &updates[0].1 else {
+        assert_has_velocity_packet(&tracker_updates, 1, DVec3::new(0.25, 0.4, -0.125));
+
+        assert_eq!(self_updates.len(), 1);
+        assert_eq!(self_updates[0].0, 1);
+        let EntityMovementSyncPacket::Velocity(packet) = &self_updates[0].1 else {
             panic!(
                 "expected velocity self-motion packet, got {:?}",
-                updates[0].1
+                self_updates[0].1
             );
         };
         assert_eq!(packet.entity_id, 1);
         assert_eq!(packet.velocity_x.to_bits(), 0.25_f64.to_bits());
         assert_eq!(packet.velocity_y.to_bits(), 0.4_f64.to_bits());
         assert_eq!(packet.velocity_z.to_bits(), (-0.125_f64).to_bits());
+        assert!(!entity_typed.hurt_marked());
+    }
+
+    #[test]
+    fn send_changes_broadcasts_hurt_marked_non_player_motion() {
+        test_support::init_test_registry();
+
+        let tracker = EntityTracker::new();
+        let entity_typed = PairingTestEntity::new(1, Vec::new());
+        let entity: SharedEntity = entity_typed.clone();
+        track_entity_for_player(&tracker, &entity, 99);
+
+        entity_typed.set_velocity(DVec3::new(-0.25, 0.2, 0.125));
+        entity_typed.mark_hurt();
+
+        let mut tracker_updates = Vec::new();
+        let mut self_updates = Vec::new();
+        tracker.send_changes(
+            |_| Vec::new(),
+            |_| None,
+            EntityChangeSenders {
+                movement: |entity_id, packet| tracker_updates.push((entity_id, packet)),
+                self_movement: |player_id, packet| self_updates.push((player_id, packet)),
+                entity_data: |_, _| {},
+                attributes: |_, _| {},
+                mob_effects: |_, _| {},
+                equipment: |_, _| {},
+                passengers: |_, _| {},
+                entity_link: |_, _| {},
+            },
+        );
+
+        assert_has_velocity_packet(&tracker_updates, 1, DVec3::new(-0.25, 0.2, 0.125));
+        assert!(self_updates.is_empty());
         assert!(!entity_typed.hurt_marked());
     }
 

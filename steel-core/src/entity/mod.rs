@@ -4718,7 +4718,10 @@ pub trait LivingEntity: Entity {
     /// immunity on `LivingEntity`. Steel keeps this helper separate so concrete
     /// `Entity::can_freeze` implementations can delegate without downcasting.
     fn default_living_can_freeze(&self) -> bool {
-        for slot in EquipmentSlot::ARMOR_SLOTS {
+        for slot in EquipmentSlot::ALL {
+            if !slot.is_armor() {
+                continue;
+            }
             let mut is_freeze_immune = false;
             self.with_equipment_slot(slot, &mut |item_stack| {
                 is_freeze_immune = REGISTRY
@@ -6576,6 +6579,19 @@ mod tests {
         entity.equip(
             EquipmentSlot::Feet,
             ItemStack::new(&vanilla_items::ITEMS.leather_boots),
+        );
+
+        assert!(!entity.default_living_can_freeze());
+    }
+
+    #[test]
+    fn living_freeze_immunity_uses_body_armor_equipment() {
+        init_test_registry();
+        let entity = LivingFluidTestEntity::new(0.0, 0.0, true);
+
+        entity.equip(
+            EquipmentSlot::Body,
+            ItemStack::new(&vanilla_items::ITEMS.leather_horse_armor),
         );
 
         assert!(!entity.default_living_can_freeze());

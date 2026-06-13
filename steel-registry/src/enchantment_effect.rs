@@ -298,7 +298,7 @@ pub struct EnchantmentEffects {
     pub post_piercing_attack: bool,
     pub hit_block: bool,
     pub item_damage: &'static [ConditionalEnchantmentEffect<EnchantmentValueEffect>],
-    pub equipment_drops: &'static [ConditionalEnchantmentEffect<EnchantmentValueEffect>],
+    pub equipment_drops: &'static [TargetedConditionalEnchantmentEffect<EnchantmentValueEffect>],
     pub location_changed: bool,
     pub tick: bool,
     pub ammo_use: &'static [ConditionalEnchantmentEffect<EnchantmentValueEffect>],
@@ -418,7 +418,6 @@ impl EnchantmentEffects {
             EnchantmentEffectComponent::Knockback => self.knockback,
             EnchantmentEffectComponent::ArmorEffectiveness => self.armor_effectiveness,
             EnchantmentEffectComponent::ItemDamage => self.item_damage,
-            EnchantmentEffectComponent::EquipmentDrops => self.equipment_drops,
             EnchantmentEffectComponent::AmmoUse => self.ammo_use,
             EnchantmentEffectComponent::ProjectilePiercing => self.projectile_piercing,
             EnchantmentEffectComponent::ProjectileSpread => self.projectile_spread,
@@ -431,6 +430,17 @@ impl EnchantmentEffects {
             EnchantmentEffectComponent::BlockExperience => self.block_experience,
             EnchantmentEffectComponent::MobExperience => self.mob_experience,
             EnchantmentEffectComponent::RepairWithXp => self.repair_with_xp,
+            _ => &[],
+        }
+    }
+
+    #[must_use]
+    pub fn targeted_value_effects(
+        &self,
+        component: EnchantmentEffectComponent,
+    ) -> &'static [TargetedConditionalEnchantmentEffect<EnchantmentValueEffect>] {
+        match component {
+            EnchantmentEffectComponent::EquipmentDrops => self.equipment_drops,
             _ => &[],
         }
     }

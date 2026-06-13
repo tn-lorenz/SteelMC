@@ -13,6 +13,7 @@ use steel_protocol::packets::game::{
 };
 use steel_registry::blocks::block_state_ext::BlockStateExt;
 use steel_registry::blocks::properties::Direction;
+use steel_registry::entity_type::EntityTypeRef;
 use steel_registry::item_stack::ItemStack;
 use steel_registry::{REGISTRY, vanilla_attributes, vanilla_damage_types, vanilla_entities};
 use steel_utils::Identifier;
@@ -490,7 +491,7 @@ impl Player {
             return;
         }
 
-        if target.id() == self.id() || target.entity_type() == &vanilla_entities::ITEM {
+        if Self::is_invalid_attack_target(self.id(), target.id(), target.entity_type()) {
             self.disconnect(Self::invalid_entity_attacked_message());
             log::warn!(
                 "Player {} tried to attack an invalid entity",
@@ -500,6 +501,16 @@ impl Player {
         }
 
         let _ = self.attack(&target);
+    }
+
+    fn is_invalid_attack_target(
+        player_id: i32,
+        target_id: i32,
+        target_type: EntityTypeRef,
+    ) -> bool {
+        target_id == player_id
+            || target_type == &vanilla_entities::ITEM
+            || target_type == &vanilla_entities::EXPERIENCE_ORB
     }
 
     /// Handles a client request to interact with an entity.
@@ -1042,4 +1053,35 @@ fn strip_formatting_codes(text: &str) -> String {
     }
 
     result
+}
+
+#[cfg(test)]
+mod tests {
+    use steel_registry::vanilla_entities;
+
+    use super::Player;
+
+    #[test]
+    fn invalid_attack_targets_include_xp_orbs() {
+        assert!(Player::is_invalid_attack_target(
+            1,
+            1,
+            &vanilla_entities::PLAYER
+        ));
+        assert!(Player::is_invalid_attack_target(
+            1,
+            2,
+            &vanilla_entities::ITEM
+        ));
+        assert!(Player::is_invalid_attack_target(
+            1,
+            2,
+            &vanilla_entities::EXPERIENCE_ORB
+        ));
+        assert!(!Player::is_invalid_attack_target(
+            1,
+            2,
+            &vanilla_entities::PIG
+        ));
+    }
 }

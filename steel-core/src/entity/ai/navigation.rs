@@ -390,6 +390,38 @@ impl PathNavigation {
         Some((target, self.speed_modifier))
     }
 
+    pub fn next_move_target_without_path_update(
+        &mut self,
+        context: NavigationTickContext,
+        on_ground: bool,
+    ) -> Option<(DVec3, f64)> {
+        if self.done {
+            return None;
+        }
+
+        let path = self.path.as_mut()?;
+        let Some(target) = path_move_target(path, context.mob_bounding_box_width) else {
+            self.stop();
+            return None;
+        };
+
+        if context.mob_position.y > target.y
+            && !on_ground
+            && floor(context.mob_position.x) == floor(target.x)
+            && floor(context.mob_position.z) == floor(target.z)
+        {
+            path.advance();
+        }
+
+        if path.is_done() {
+            self.stop();
+            return None;
+        }
+
+        path_move_target(path, context.mob_bounding_box_width)
+            .map(|target| (target, self.speed_modifier))
+    }
+
     pub fn request_recompute_path(
         &mut self,
         game_time: i64,
@@ -503,14 +535,7 @@ impl PathNavigation {
             return None;
         };
 
-        let target = path.next_node().map(|node| {
-            let offset = f64::from(floor(context.mob_bounding_box_width + 1.0)) * 0.5;
-            DVec3::new(
-                f64::from(node.x) + offset,
-                f64::from(node.y),
-                f64::from(node.z) + offset,
-            )
-        })?;
+        let target = path_move_target(path, context.mob_bounding_box_width)?;
         Some((target, self.speed_modifier))
     }
 
@@ -614,6 +639,17 @@ fn block_bottom_center(pos: BlockPos) -> DVec3 {
 fn block_center(pos: BlockPos) -> DVec3 {
     let (x, y, z) = pos.get_center();
     DVec3::new(x, y, z)
+}
+
+fn path_move_target(path: &Path, mob_bounding_box_width: f64) -> Option<DVec3> {
+    path.next_node().map(|node| {
+        let offset = f64::from(floor(mob_bounding_box_width + 1.0)) * 0.5;
+        DVec3::new(
+            f64::from(node.x) + offset,
+            f64::from(node.y),
+            f64::from(node.z) + offset,
+        )
+    })
 }
 
 const fn can_cut_corner(path_type: PathType) -> bool {
@@ -899,6 +935,48 @@ mod tests {
         };
         assert_eq!(target, DVec3::new(0.5, 64.0, 0.5));
         assert_eq!(navigation.path().map(Path::next_node_index), Some(0));
+    }
+
+    #[test]
+    fn path_navigation_without_update_does_not_advance_normally() {
+        let path = Path::new(
+            vec![Node::new(0, 64, 0), Node::new(1, 64, 0)],
+            BlockPos::new(1, 64, 0),
+            true,
+        );
+        let mut navigation = PathNavigation::new();
+
+        assert!(navigation.move_to(path, 1.0, DVec3::new(0.5, 64.0, 0.5)));
+
+        let target = navigation
+            .next_move_target_without_path_update(tick_context(DVec3::new(0.5, 64.0, 0.5)), false);
+
+        assert_eq!(
+            target.map(|(target, _)| target),
+            Some(DVec3::new(0.5, 64.0, 0.5))
+        );
+        assert_eq!(navigation.path().map(Path::next_node_index), Some(0));
+    }
+
+    #[test]
+    fn path_navigation_without_update_advances_when_airborne_over_node() {
+        let path = Path::new(
+            vec![Node::new(0, 64, 0), Node::new(1, 64, 0)],
+            BlockPos::new(1, 64, 0),
+            true,
+        );
+        let mut navigation = PathNavigation::new();
+
+        assert!(navigation.move_to(path, 1.0, DVec3::new(0.5, 65.0, 0.5)));
+
+        let target = navigation
+            .next_move_target_without_path_update(tick_context(DVec3::new(0.5, 65.0, 0.5)), false);
+
+        assert_eq!(
+            target.map(|(target, _)| target),
+            Some(DVec3::new(1.5, 64.0, 0.5))
+        );
+        assert_eq!(navigation.path().map(Path::next_node_index), Some(1));
     }
 
     #[test]

@@ -416,7 +416,7 @@ impl MobBase {
     }
 
     #[must_use]
-    pub fn target(&self) -> Option<SharedEntity> {
+    pub fn target(&self, is_valid: impl Fn(&dyn LivingEntity) -> bool) -> Option<SharedEntity> {
         let mut target = self.target.lock();
         let Some(upgraded) = target.as_ref().and_then(WeakEntity::upgrade) else {
             *target = None;
@@ -426,15 +426,33 @@ impl MobBase {
             *target = None;
             return None;
         }
+        let Some(living_target) = upgraded.as_living_entity() else {
+            *target = None;
+            return None;
+        };
+        if !is_valid(living_target) {
+            *target = None;
+            return None;
+        }
         Some(upgraded)
     }
 
-    pub fn set_target(&self, target: Option<&SharedEntity>) -> bool {
+    pub fn set_target(
+        &self,
+        target: Option<&SharedEntity>,
+        is_valid: impl Fn(&dyn LivingEntity) -> bool,
+    ) -> bool {
         let Some(target) = target else {
             *self.target.lock() = None;
             return true;
         };
         if !target.is_living_entity() {
+            return false;
+        }
+        let Some(living_target) = target.as_living_entity() else {
+            return false;
+        };
+        if !is_valid(living_target) {
             return false;
         }
 
@@ -539,14 +557,27 @@ pub trait Mob: LivingEntity {
 
     /// Returns vanilla `Mob.getTarget`.
     fn target(&self) -> Option<SharedEntity> {
-        self.mob_base().target()
+        self.mob_base()
+            .target(|target| self.is_valid_target(target))
     }
 
     /// Sets vanilla `Mob.target`.
     ///
     /// Returns `false` when the supplied entity is not a living entity.
     fn set_target(&self, target: Option<&SharedEntity>) -> bool {
-        self.mob_base().set_target(target)
+        self.mob_base()
+            .set_target(target, |target| self.is_valid_target(target))
+    }
+
+    fn is_valid_target(&self, target: &dyn LivingEntity) -> bool {
+        if target
+            .as_player()
+            .is_some_and(|player| player.has_infinite_materials() || player.is_spectator())
+        {
+            return false;
+        }
+
+        self.can_attack(target)
     }
 
     fn base_experience_reward_mob(&self) -> i32 {
@@ -1483,7 +1514,7 @@ pub trait Mob: LivingEntity {
         };
         let game_time = world.game_time();
         self.mob_base().navigation().lock().tick();
-        tick_path_navigation_target(self, &world, game_time);
+        tick_path_navigation_target(self, &world, game_time, true);
     }
 
     fn tick_move_control(&self) {
@@ -1719,15 +1750,26 @@ fn default_attack_reach() -> f64 {
     f64::from(DEFAULT_ATTACK_REACH_BASE).sqrt() - f64::from(DEFAULT_ATTACK_REACH_OFFSET)
 }
 
-fn tick_path_navigation_target<M: Mob + ?Sized>(mob: &M, world: &Arc<World>, game_time: i64) {
+fn tick_path_navigation_target<M: Mob + ?Sized>(
+    mob: &M,
+    world: &Arc<World>,
+    game_time: i64,
+    can_update_path: bool,
+) {
     let (target, speed_modifier) = {
         let mut navigation = mob.mob_base().navigation().lock();
-        let Some(target) = navigation.next_move_target(NavigationTickContext {
+        let context = NavigationTickContext {
             mob_position: mob.position(),
             mob_bounding_box_width: mob.bounding_box().width(),
             mob_speed: mob.get_speed(),
             game_time,
-        }) else {
+        };
+        let next_target = if can_update_path {
+            navigation.next_move_target(context)
+        } else {
+            navigation.next_move_target_without_path_update(context, mob.on_ground())
+        };
+        let Some(target) = next_target else {
             return;
         };
         target
@@ -1786,7 +1828,7 @@ pub trait PathfinderMob: Mob {
             self.recompute_path(request);
         }
 
-        tick_path_navigation_target(self, &world, game_time);
+        tick_path_navigation_target(self, &world, game_time, self.can_update_path());
     }
 
     fn tick_pathfinder_goal_selectors(&self)
@@ -2255,6 +2297,63 @@ mod tests {
         }
     }
 
+    struct HiddenTarget {
+        base: EntityBase,
+        living_base: LivingEntityBase,
+        health: SyncMutex<f32>,
+    }
+
+    impl HiddenTarget {
+        fn shared(id: i32) -> SharedEntity {
+            Arc::new(Self {
+                base: EntityBase::new(
+                    id,
+                    DVec3::ZERO,
+                    vanilla_entities::PIG.dimensions,
+                    Weak::new(),
+                ),
+                living_base: LivingEntityBase::new(&vanilla_entities::PIG),
+                health: SyncMutex::new(10.0),
+            })
+        }
+    }
+
+    impl Entity for HiddenTarget {
+        fn base(&self) -> &EntityBase {
+            &self.base
+        }
+
+        fn entity_type(&self) -> EntityTypeRef {
+            &vanilla_entities::PIG
+        }
+
+        fn is_living_entity(&self) -> bool {
+            true
+        }
+
+        fn as_living_entity(&self) -> Option<&dyn LivingEntity> {
+            Some(self)
+        }
+    }
+
+    impl LivingEntity for HiddenTarget {
+        fn living_base(&self) -> &LivingEntityBase {
+            &self.living_base
+        }
+
+        fn get_health(&self) -> f32 {
+            *self.health.lock()
+        }
+
+        fn set_health(&self, health: f32) {
+            *self.health.lock() = health;
+        }
+
+        fn can_be_seen_as_enemy(&self) -> bool {
+            false
+        }
+    }
+
     impl Mob for DespawnTestMob {
         fn mob_base(&self) -> &MobBase {
             &self.mob_base
@@ -2430,6 +2529,16 @@ mod tests {
         let mob = DespawnTestMob::new(None, false);
         let target: SharedEntity =
             Arc::new(MobControlVehicleEntity::new(2, &vanilla_entities::OAK_BOAT));
+
+        assert!(!mob.set_target(Some(&target)));
+
+        assert!(mob.target().is_none());
+    }
+
+    #[test]
+    fn mob_target_rejects_targets_it_cannot_attack() {
+        let mob = DespawnTestMob::new(None, false);
+        let target = HiddenTarget::shared(2);
 
         assert!(!mob.set_target(Some(&target)));
 
