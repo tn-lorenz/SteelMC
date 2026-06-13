@@ -226,7 +226,7 @@ pub trait Animal: AgeableMob {
         };
 
         if !self.is_food(&item_stack) {
-            return InteractionResult::Pass;
+            return self.mob_interact_ageable(player, hand);
         }
 
         let age = self.get_age();
@@ -247,7 +247,7 @@ pub trait Animal: AgeableMob {
             return InteractionResult::Success;
         }
 
-        InteractionResult::Pass
+        self.mob_interact_ageable(player, hand)
     }
 
     /// Creates a same-type offspring using the registered entity factory.

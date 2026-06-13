@@ -265,6 +265,8 @@ pub struct EntityType {
     pub fire_immune: bool,
     /// Whether this entity can be summoned via commands.
     pub summonable: bool,
+    /// Whether this entity type is allowed to exist in Peaceful difficulty.
+    pub allowed_in_peaceful: bool,
     /// Whether this entity can spawn far from players.
     pub can_spawn_far_from_player: bool,
     /// Whether this entity type can be serialized to disk.

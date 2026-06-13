@@ -1029,7 +1029,7 @@ pub enum LootFunction {
     /// Set custom NBT data on the item (merges with existing custom_data).
     SetCustomData { tag: &'static str },
     /// Smelt the item (convert raw to cooked, ore to ingot, etc.).
-    FurnaceSmelt,
+    FurnaceSmelt { use_input_count: bool },
     /// Create an exploration map pointing to a structure.
     ExplorationMap {
         destination: Identifier,
@@ -1812,9 +1812,8 @@ impl LootFunction {
             LootFunction::SetCustomData { tag } => {
                 item.set_custom_data(tag);
             }
-            LootFunction::FurnaceSmelt => {
-                // TODO: Implement smelting recipe lookup
-                item.apply_furnace_smelt();
+            LootFunction::FurnaceSmelt { use_input_count } => {
+                item.apply_furnace_smelt(*use_input_count);
             }
             LootFunction::ExplorationMap {
                 destination,

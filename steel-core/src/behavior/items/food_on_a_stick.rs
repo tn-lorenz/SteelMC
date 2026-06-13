@@ -52,7 +52,7 @@ impl ItemBehavior for FoodOnAStickItem {
             );
         });
 
-        InteractionResult::Success
+        InteractionResult::SuccessServer
     }
 }
 

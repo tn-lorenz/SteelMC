@@ -4,19 +4,27 @@ use std::sync::Arc;
 
 use simdnbt::borrow::NbtCompound as BorrowedNbtCompoundView;
 use simdnbt::owned::NbtCompound;
+use steel_protocol::packets::game::SoundSource;
+use steel_registry::vanilla_entity_type_tags::EntityTypeTag;
+use steel_registry::{REGISTRY, TaggedRegistryExt, sound_events, vanilla_items};
 use steel_utils::locks::SyncMutex;
 use steel_utils::random::Random as _;
+use steel_utils::types::InteractionHand;
 
+use crate::behavior::InteractionResult;
 use crate::entity::{AgeableMobGroupData, Entity, EntitySpawnReason, Mob, SpawnGroupData};
+use crate::player::Player;
 use crate::world::World;
 
 const BABY_START_AGE: i32 = -24_000;
+const AGE_LOCK_COOLDOWN_TICKS: i32 = 40;
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
 struct AgeableMobState {
     age: i32,
     forced_age: i32,
     forced_age_timer: i32,
+    age_lock_particle_timer: i32,
 }
 
 impl AgeableMobState {
@@ -25,6 +33,7 @@ impl AgeableMobState {
             age: 0,
             forced_age: 0,
             forced_age_timer: 0,
+            age_lock_particle_timer: 0,
         }
     }
 }
@@ -78,6 +87,17 @@ impl AgeableMobBase {
     /// Sets vanilla `AgeableMob.forcedAgeTimer`.
     pub fn set_forced_age_timer(&self, forced_age_timer: i32) {
         self.state.lock().forced_age_timer = forced_age_timer;
+    }
+
+    /// Returns vanilla `AgeableMob.ageLockParticleTimer`.
+    #[must_use]
+    pub fn age_lock_particle_timer(&self) -> i32 {
+        self.state.lock().age_lock_particle_timer
+    }
+
+    /// Sets vanilla `AgeableMob.ageLockParticleTimer`.
+    pub fn set_age_lock_particle_timer(&self, timer: i32) {
+        self.state.lock().age_lock_particle_timer = timer;
     }
 
     /// Adds to vanilla `AgeableMob.forcedAge`.
@@ -164,6 +184,16 @@ pub trait AgeableMob: Mob {
         self.ageable_base().set_forced_age_timer(forced_age_timer);
     }
 
+    /// Returns vanilla `AgeableMob.ageLockParticleTimer`.
+    fn age_lock_particle_timer(&self) -> i32 {
+        self.ageable_base().age_lock_particle_timer()
+    }
+
+    /// Sets vanilla `AgeableMob.ageLockParticleTimer`.
+    fn set_age_lock_particle_timer(&self, timer: i32) {
+        self.ageable_base().set_age_lock_particle_timer(timer);
+    }
+
     /// Returns whether this mob can naturally age toward adulthood this tick.
     fn can_age_up(&self) -> bool {
         AgeableMob::is_baby(self) && !self.is_age_locked()
@@ -221,6 +251,52 @@ pub trait AgeableMob: Mob {
         )
     }
 
+    /// Handles vanilla `AgeableMob.mobInteract`.
+    fn mob_interact_ageable(&self, player: &Player, hand: InteractionHand) -> InteractionResult {
+        let item_stack = {
+            let inventory = player.inventory.lock();
+            let item_stack = inventory.get_item_in_hand(hand);
+            item_stack.copy_with_count(item_stack.count())
+        };
+
+        if !item_stack.is(&vanilla_items::ITEMS.golden_dandelion)
+            || !AgeableMob::is_baby(self)
+            || self.age_lock_particle_timer() != 0
+            || REGISTRY
+                .entity_types
+                .is_in_tag(self.entity_type(), &EntityTypeTag::CANNOT_BE_AGE_LOCKED)
+        {
+            return InteractionResult::Pass;
+        }
+
+        self.set_age_locked(!self.is_age_locked());
+        self.set_age(self.get_baby_start_age());
+        self.set_age_lock_particle_timer(AGE_LOCK_COOLDOWN_TICKS);
+        Mob::use_player_item(self, player, hand);
+
+        let is_age_locked = self.is_age_locked();
+        if is_age_locked {
+            self.set_persistence_required();
+        }
+        if let Some(world) = self.level() {
+            let sound = if is_age_locked {
+                &sound_events::ITEM_GOLDEN_DANDELION_USE
+            } else {
+                &sound_events::ITEM_GOLDEN_DANDELION_UNUSE
+            };
+            world.play_sound(
+                sound,
+                SoundSource::Players,
+                self.block_position(),
+                1.0,
+                1.0,
+                None,
+            );
+        }
+
+        InteractionResult::Success
+    }
+
     /// Ticks vanilla age progression.
     fn tick_ageable_mob(&self) {
         if !Entity::is_alive(self) {
@@ -232,6 +308,11 @@ pub trait AgeableMob: Mob {
             self.set_age(age + 1);
         } else if age > 0 {
             self.set_age(age - 1);
+        }
+
+        let age_lock_particle_timer = self.age_lock_particle_timer();
+        if age_lock_particle_timer > 0 {
+            self.set_age_lock_particle_timer(age_lock_particle_timer - 1);
         }
     }
 

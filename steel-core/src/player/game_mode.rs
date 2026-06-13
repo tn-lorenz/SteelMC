@@ -722,7 +722,7 @@ impl Player {
             return false;
         }
 
-        // TODO: Apply item damage bonuses, crits, sweep attacks, exhaustion, and sounds.
+        // TODO: Apply crits, sweep attacks, damage stats, and sounds.
         let old_movement = entity.velocity();
         let was_hurt = entity.hurt(&damage_source, total_damage);
         if was_hurt {
@@ -735,8 +735,10 @@ impl Player {
                 old_movement,
             );
             self.item_attack_interaction(entity, &damage_source, true);
+            self.cause_food_exhaustion(0.1);
         }
 
+        enchantment_helper::do_post_piercing_attack_effects(self);
         was_hurt
     }
 

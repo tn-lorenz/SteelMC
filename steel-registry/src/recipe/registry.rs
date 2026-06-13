@@ -5,7 +5,7 @@ use steel_utils::Identifier;
 
 use super::cooking::SmeltingRecipe;
 use super::crafting::{CraftingInput, CraftingRecipe, ShapedRecipe, ShapelessRecipe};
-use crate::{item_stack::ItemStack, items::ItemRef};
+use crate::item_stack::ItemStack;
 
 /// Registry for all recipes.
 pub struct RecipeRegistry {
@@ -132,13 +132,17 @@ impl RecipeRegistry {
         self.shapeless_recipes.iter().find(|r| &r.id == id).copied()
     }
 
-    /// Finds the first furnace smelting result item for `input`.
+    /// Finds the first furnace smelting result stack for `input`.
     #[must_use]
-    pub fn find_smelting_result(&self, input: &ItemStack) -> Option<ItemRef> {
+    pub fn find_smelting_result(
+        &self,
+        input: &ItemStack,
+        use_input_count: bool,
+    ) -> Option<ItemStack> {
         self.smelting_recipes
             .iter()
             .find(|recipe| recipe.matches(input))
-            .map(|recipe| recipe.result_item())
+            .map(|recipe| recipe.assemble_result(input.count(), use_input_count))
     }
 
     /// Returns the number of shaped recipes.

@@ -1198,6 +1198,9 @@ impl Container for PlayerInventory {
                         let to_add = stack.count().min(space);
                         existing.grow(to_add);
                         stack.shrink(to_add);
+                        if slot == self.selected as usize {
+                            self.mark_main_hand_dirty();
+                        }
                         changed = true;
                     }
                 }
@@ -1215,6 +1218,10 @@ impl Container for PlayerInventory {
             if self.items[slot].is_empty() {
                 let to_place = stack.count().min(max_size);
                 self.items[slot] = stack.split(to_place);
+                if slot == self.selected as usize {
+                    self.mark_main_hand_dirty();
+                    self.refresh_player_equipment_attribute_modifiers(EquipmentSlot::MainHand);
+                }
                 changed = true;
             }
         }
@@ -1382,6 +1389,45 @@ mod tests {
         assert!(stack.is_empty());
         assert_eq!(inventory.items[0].count(), 64);
         assert_ne!(inventory.get_times_changed(), before);
+    }
+
+    #[test]
+    fn add_to_selected_existing_slot_marks_main_hand_dirty() {
+        init_test_registry();
+
+        let mut inventory = PlayerInventory::new(Weak::new());
+        inventory.items[0] = ItemStack::with_count(&ITEMS.oak_log, 63);
+        inventory.drain_dirty_equipment_items();
+
+        let mut stack = ItemStack::new(&ITEMS.oak_log);
+        assert!(inventory.add(&mut stack));
+
+        assert_eq!(
+            inventory.drain_dirty_equipment_items(),
+            vec![(
+                EquipmentSlot::MainHand,
+                ItemStack::with_count(&ITEMS.oak_log, 64)
+            )]
+        );
+    }
+
+    #[test]
+    fn add_to_empty_selected_slot_marks_main_hand_dirty() {
+        init_test_registry();
+
+        let mut inventory = PlayerInventory::new(Weak::new());
+        inventory.drain_dirty_equipment_items();
+
+        let mut stack = ItemStack::with_count(&ITEMS.oak_log, 3);
+        assert!(inventory.add(&mut stack));
+
+        assert_eq!(
+            inventory.drain_dirty_equipment_items(),
+            vec![(
+                EquipmentSlot::MainHand,
+                ItemStack::with_count(&ITEMS.oak_log, 3)
+            )]
+        );
     }
 
     #[test]

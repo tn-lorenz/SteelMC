@@ -587,9 +587,9 @@ impl ItemStack {
     }
 
     /// Applies furnace smelting to convert this item (e.g., raw iron -> iron ingot).
-    pub fn apply_furnace_smelt(&mut self) {
-        if let Some(result_item) = REGISTRY.recipes.find_smelting_result(self) {
-            self.item = result_item;
+    pub fn apply_furnace_smelt(&mut self, use_input_count: bool) {
+        if let Some(result) = REGISTRY.recipes.find_smelting_result(self, use_input_count) {
+            *self = result;
         }
     }
 

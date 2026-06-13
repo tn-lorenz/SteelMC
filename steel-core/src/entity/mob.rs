@@ -22,7 +22,7 @@ use steel_registry::{
 use steel_utils::UuidExt;
 use steel_utils::locks::SyncMutex;
 use steel_utils::random::Random as _;
-use steel_utils::types::InteractionHand;
+use steel_utils::types::{Difficulty, InteractionHand};
 use steel_utils::{BlockPos, ChunkPos, Identifier, WorldAabb, axis::Axis};
 use uuid::Uuid;
 
@@ -418,16 +418,10 @@ impl MobBase {
             *target = None;
             return None;
         };
-        if !upgraded.is_living_entity() {
-            *target = None;
-            return None;
-        }
         let Some(living_target) = upgraded.as_living_entity() else {
-            *target = None;
             return None;
         };
         if !is_valid(living_target) {
-            *target = None;
             return None;
         }
         Some(upgraded)
@@ -449,6 +443,7 @@ impl MobBase {
             return false;
         };
         if !is_valid(living_target) {
+            *self.target.lock() = None;
             return false;
         }
 
@@ -1221,7 +1216,15 @@ pub trait Mob: LivingEntity {
     }
 
     fn check_mob_despawn(&self) {
-        // TODO: Apply peaceful hostile removal once EntityType.allowedInPeaceful is in registry data.
+        if self
+            .level()
+            .is_some_and(|world| world.difficulty() == Difficulty::Peaceful)
+            && !self.entity_type().allowed_in_peaceful
+        {
+            self.set_removed(RemovalReason::Discarded);
+            return;
+        }
+
         if self.is_persistence_required() || self.requires_custom_persistence() {
             self.set_no_action_time(0);
             return;
@@ -1368,7 +1371,9 @@ pub trait Mob: LivingEntity {
             self.play_attack_sound();
         }
 
-        // TODO: Run post-piercing attack effects once that enchantment hook exists.
+        if let Some(user) = self.as_entity_event_source().as_living_entity() {
+            enchantment_helper::do_post_piercing_attack_effects(user);
+        }
         was_hurt
     }
 
@@ -1604,7 +1609,7 @@ pub trait Mob: LivingEntity {
             .required_value(vanilla_attributes::MOVEMENT_SPEED);
         self.set_mob_speed((speed_modifier * movement_speed) as f32);
 
-        if should_jump_to_wanted_position(self, wanted_position, xd, yd, zd) {
+        if should_jump_to_wanted_position(self, xd, yd, zd) {
             self.jump_control_jump();
             self.mob_base().controls().lock().move_control.set_jumping();
         }
@@ -2153,13 +2158,7 @@ fn find_ground_path_target_surface(level: &dyn LevelReader, mut pos: BlockPos) -
     column_pos
 }
 
-fn should_jump_to_wanted_position<M: Mob + ?Sized>(
-    mob: &M,
-    wanted_position: DVec3,
-    xd: f64,
-    yd: f64,
-    zd: f64,
-) -> bool {
+fn should_jump_to_wanted_position<M: Mob + ?Sized>(mob: &M, xd: f64, yd: f64, zd: f64) -> bool {
     let max_up_step = f64::from(mob.max_up_step());
     if yd > max_up_step && xd * xd + zd * zd < mob.bounding_box().width().max(1.0) {
         return true;
@@ -2180,7 +2179,6 @@ fn should_jump_to_wanted_position<M: Mob + ?Sized>(
     let shape_top = position_shape_top(pos, shape.max(Axis::Y));
     let block = block_state.get_block();
     !shape.is_empty()
-        && wanted_position.y > shape_top
         && mob.position().y < shape_top
         && !block.has_tag(&BlockTag::DOORS)
         && !block.has_tag(&BlockTag::FENCES)
@@ -2668,6 +2666,36 @@ mod tests {
         let target = HiddenTarget::shared(2);
 
         assert!(!mob.set_target(Some(&target)));
+
+        assert!(mob.target().is_none());
+    }
+
+    #[test]
+    fn mob_target_filters_invalid_target_without_clearing_stored_target() {
+        let mob = DespawnTestMob::new(None, false);
+        let target: SharedEntity =
+            Arc::new(DespawnTestMob::with_position(2, DVec3::ZERO, None, false));
+
+        assert!(mob.mob_base().set_target(Some(&target), |_| true));
+
+        assert!(mob.mob_base().target(|_| false).is_none());
+
+        let stored = mob
+            .mob_base()
+            .target(|_| true)
+            .expect("temporary invalidity must not clear the stored target");
+        assert!(Arc::ptr_eq(&stored, &target));
+    }
+
+    #[test]
+    fn mob_target_clears_previous_target_when_new_target_is_invalid() {
+        let mob = DespawnTestMob::new(None, false);
+        let previous: SharedEntity =
+            Arc::new(DespawnTestMob::with_position(2, DVec3::ZERO, None, false));
+        let invalid = HiddenTarget::shared(3);
+
+        assert!(mob.set_target(Some(&previous)));
+        assert!(!mob.set_target(Some(&invalid)));
 
         assert!(mob.target().is_none());
     }

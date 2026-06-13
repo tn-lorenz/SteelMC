@@ -394,6 +394,9 @@ struct LootFunctionJson {
     // set_components (keep as raw value since it's complex NBT)
     #[serde(default)]
     components: Option<serde_json::Value>,
+    // furnace_smelt
+    #[serde(default)]
+    use_input_count: Option<bool>,
     // exploration_map
     #[serde(default)]
     destination: Option<String>,
@@ -1270,7 +1273,8 @@ fn generate_function(function: &LootFunctionJson) -> TokenStream {
             quote! { LootFunction::SetComponents { components: #components_str } }
         }
         "minecraft:furnace_smelt" => {
-            quote! { LootFunction::FurnaceSmelt }
+            let use_input_count = function.use_input_count.unwrap_or(true);
+            quote! { LootFunction::FurnaceSmelt { use_input_count: #use_input_count } }
         }
         "minecraft:exploration_map" => {
             let destination = function

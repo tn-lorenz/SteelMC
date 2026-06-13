@@ -916,7 +916,7 @@ impl WorldEntityManager {
         _tick_count: i32,
         tickable_chunks: &[ChunkPos],
     ) -> FxHashSet<ChunkPos> {
-        let mut dirty_chunks = FxHashSet::default();
+        let mut dirty_chunks = self.check_despawn_for_live_entities();
         let mut ticked_entities = FxHashSet::default();
         let tickable_chunk_set = tickable_chunks.iter().copied().collect::<FxHashSet<_>>();
         for chunk in tickable_chunks {
@@ -926,11 +926,6 @@ impl WorldEntityManager {
                     continue;
                 }
 
-                if entity.is_removed() {
-                    continue;
-                }
-
-                entity.check_despawn();
                 if entity.is_removed() {
                     continue;
                 }
@@ -986,6 +981,30 @@ impl WorldEntityManager {
                     .collect()
             })
             .unwrap_or_default()
+    }
+
+    fn live_manager_owned_entities(&self) -> Vec<(SharedEntity, ChunkPos)> {
+        self.state
+            .read()
+            .live_by_id
+            .values()
+            .filter(|entry| entry.ownership == EntityOwnership::ManagerOwned)
+            .map(|entry| (entry.entity.clone(), entry.chunk))
+            .collect()
+    }
+
+    fn check_despawn_for_live_entities(&self) -> FxHashSet<ChunkPos> {
+        let mut dirty_chunks = FxHashSet::default();
+        for (entity, chunk) in self.live_manager_owned_entities() {
+            if entity.is_removed() {
+                continue;
+            }
+            entity.check_despawn();
+            if entity.is_removed() {
+                dirty_chunks.insert(chunk);
+            }
+        }
+        dirty_chunks
     }
 
     fn is_live_manager_owned_in_chunk(&self, entity_id: i32, chunk: ChunkPos) -> bool {
@@ -1284,6 +1303,38 @@ mod tests {
                 panic!("moving tick test entity failed to move during tick: {error}");
             }
             self.set_rotation(self.tick_rotation);
+        }
+    }
+
+    struct DespawnOnCheckTestEntity {
+        base: EntityBase,
+    }
+
+    impl DespawnOnCheckTestEntity {
+        fn shared(id: i32, uuid: Uuid, position: DVec3) -> SharedEntity {
+            Arc::new(Self {
+                base: EntityBase::with_uuid(
+                    id,
+                    uuid,
+                    position,
+                    vanilla_entities::ITEM.dimensions,
+                    Weak::new(),
+                ),
+            })
+        }
+    }
+
+    impl Entity for DespawnOnCheckTestEntity {
+        fn base(&self) -> &EntityBase {
+            &self.base
+        }
+
+        fn entity_type(&self) -> EntityTypeRef {
+            &vanilla_entities::ITEM
+        }
+
+        fn check_despawn(&self) {
+            self.set_removed(RemovalReason::Discarded);
         }
     }
 
@@ -2281,5 +2332,28 @@ mod tests {
         assert!(dirty_chunks.contains(&chunk));
         assert_eq!(manager_owned.tick_count(), 1);
         assert_eq!(external.tick_count(), 0);
+    }
+
+    #[test]
+    fn tick_entities_checks_despawn_outside_tickable_chunks() {
+        let manager = WorldEntityManager::new();
+        let tickable_chunk = ChunkPos::new(0, 0);
+        let non_tickable_chunk = ChunkPos::new(1, 0);
+        load_chunk(&manager, tickable_chunk);
+        load_chunk(&manager, non_tickable_chunk);
+
+        let entity =
+            DespawnOnCheckTestEntity::shared(1, Uuid::from_u128(1), DVec3::new(17.0, 64.0, 1.0));
+        assert!(
+            manager
+                .add_live_entity(entity.clone(), EntityOwnership::ManagerOwned)
+                .is_ok()
+        );
+
+        let dirty_chunks = manager.tick_entities(0, &[tickable_chunk]);
+
+        assert!(entity.is_removed());
+        assert!(dirty_chunks.contains(&non_tickable_chunk));
+        assert_eq!(entity.tick_count(), 0);
     }
 }

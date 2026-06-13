@@ -7,12 +7,10 @@ use steel_registry::entity_type::EntityTypeRef;
 use steel_registry::item_stack::ItemStack;
 use steel_registry::{REGISTRY, RegistryExt, TaggedRegistryExt, vanilla_entities};
 use steel_utils::random::Random;
-use steel_utils::types::InteractionHand;
 
 use crate::entity::damage::DamageSource;
 use crate::entity::{Entity, LivingEntity, MobEffectInstance};
 use crate::inventory::equipment::EquipmentSlot;
-use crate::player::Player;
 
 #[derive(Debug, Clone, Copy)]
 pub(crate) struct EnchantmentDamageContext<'a> {
@@ -298,14 +296,12 @@ fn apply_post_attack_effects(
     }
 }
 
-pub(crate) fn do_post_piercing_attack_effects(user: &Player) {
-    let enchantments = {
-        let inventory = user.inventory.lock();
-        inventory
-            .get_item_in_hand(InteractionHand::MainHand)
-            .get_enchantments()
-            .cloned()
-    };
+pub(crate) fn do_post_piercing_attack_effects(user: &dyn LivingEntity) {
+    let mut item_stack = ItemStack::empty();
+    user.with_equipment_slot(EquipmentSlot::MainHand, &mut |stack| {
+        item_stack = stack.copy_with_count(stack.count());
+    });
+    let enchantments = item_stack.get_enchantments().cloned();
     let Some(enchantments) = enchantments else {
         return;
     };
@@ -413,7 +409,7 @@ fn apply_supported_entity_effect(
 fn apply_post_piercing_entity_effect(
     effect: &EnchantmentEntityEffect,
     level: i32,
-    user: &Player,
+    user: &dyn LivingEntity,
 ) -> bool {
     if !post_piercing_entity_effect_is_supported(effect) {
         return false;
@@ -445,7 +441,7 @@ fn post_piercing_entity_effect_is_supported(effect: &EnchantmentEntityEffect) ->
 fn apply_supported_post_piercing_entity_effect(
     effect: &EnchantmentEntityEffect,
     level: i32,
-    user: &Player,
+    user: &dyn LivingEntity,
 ) {
     match effect {
         EnchantmentEntityEffect::AllOf(effects) => {
@@ -456,13 +452,14 @@ fn apply_supported_post_piercing_entity_effect(
         EnchantmentEntityEffect::ChangeItemDamage { amount } => {
             let amount = amount.calculate(level) as i32;
             let has_infinite_materials = user.has_infinite_materials();
-            let mut inventory = user.inventory.lock();
-            inventory.mutate_item_in_hand(InteractionHand::MainHand, |stack| {
+            user.with_equipment_slot_mut(EquipmentSlot::MainHand, &mut |stack| {
                 stack.hurt_and_break(amount, has_infinite_materials);
             });
         }
         EnchantmentEntityEffect::ApplyExhaustion { amount } => {
-            user.cause_food_exhaustion(amount.calculate(level));
+            if let Some(player) = user.as_player() {
+                player.cause_food_exhaustion(amount.calculate(level));
+            }
         }
         EnchantmentEntityEffect::ApplyImpulse {
             direction,
