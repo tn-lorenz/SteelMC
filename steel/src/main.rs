@@ -149,7 +149,7 @@ async fn main_async(chunk_runtime: Arc<Runtime>) {
     };
     let logger = init_tracing(cancel_token.clone(), steel_config.log.clone()).await;
 
-    if let Err(error) = run_server(chunk_runtime, cancel_token, &logger, steel_config).await {
+    if let Err(error) = run_server(chunk_runtime, cancel_token, steel_config).await {
         log::error!("Server startup failed: {error}");
     }
 
@@ -159,7 +159,6 @@ async fn main_async(chunk_runtime: Arc<Runtime>) {
 async fn run_server(
     chunk_runtime: Arc<Runtime>,
     cancel_token: CancellationToken,
-    logger: &Arc<CommandLogger>,
     steel_config: config::SteelConfig,
 ) -> Result<(), String> {
     #[cfg(feature = "deadlock_detection")]
@@ -194,7 +193,7 @@ async fn run_server(
         .await
         .map_err(|e| e.to_string())?;
 
-    generate_spawn_chunks(&steel.server, logger).await;
+    generate_spawn_chunks(&steel.server).await;
 
     SERVER.set(steel.server.clone()).ok();
     let server = steel.server.clone();

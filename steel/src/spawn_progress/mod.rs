@@ -1,16 +1,13 @@
-//! Spawn chunk generation with optional terminal progress display.
+//! Spawn chunk generation.
 //!
 //! During server startup, generates chunks around the spawn position until
-//! the 7×7 Full area is complete. When the `spawn_chunk_display` feature is
-//! enabled, a colored ANSI grid shows real-time progress including the
-//! surrounding dependency rings.
+//! the 7×7 Full area is complete.
 //!
 //! Set `PREGEN_RADIUS` environment variable to generate a larger area (e.g., 128).
 
 use std::sync::Arc;
 use std::time::{Duration, Instant};
 
-use steel_core::chunk::chunk_pyramid::GENERATION_PYRAMID;
 use tokio::time::sleep;
 
 use steel_core::chunk::chunk_access::ChunkStatus;
@@ -25,8 +22,6 @@ use std::sync::atomic::Ordering;
 #[cfg(feature = "slow_chunk_gen")]
 use steel_core::chunk::chunk_holder::SLOW_CHUNK_GEN;
 
-use crate::logger::CommandLogger;
-
 /// Vanilla spawn chunk radius — chunks within this radius reach Full status.
 const SPAWN_RADIUS: i32 = 3;
 
@@ -39,32 +34,14 @@ fn get_pregen_radius() -> i32 {
         .unwrap_or(SPAWN_RADIUS)
 }
 
-/// Dependency margin: extra rings required for Full chunk generation.
-const DEPENDENCY_MARGIN: i32 = GENERATION_PYRAMID
-    .get_step_to(ChunkStatus::Full)
-    .accumulated_dependencies
-    .get_radius_of(ChunkStatus::Empty) as i32;
-
-/// Display radius: Full radius + dependency margin.
-pub const DISPLAY_RADIUS: i32 = SPAWN_RADIUS + DEPENDENCY_MARGIN;
-
-/// Display diameter covering Full area + dependencies.
-#[cfg(feature = "spawn_chunk_display")]
-pub const DISPLAY_DIAMETER: usize = (DISPLAY_RADIUS * 2 + 1) as usize;
-
-/// Number of chunks that must reach Full status (7×7).
-#[cfg(feature = "spawn_chunk_display")]
-const TOTAL_SPAWN_CHUNKS: usize = ((SPAWN_RADIUS * 2 + 1) * (SPAWN_RADIUS * 2 + 1)) as usize;
-
-/// Generates spawn chunks, optionally displaying progress in the terminal.
+/// Generates spawn chunks.
 ///
 /// Adds a ticket at the world spawn position so that a 7×7 area of chunks
 /// reaches `Full` status. The generation system is pumped in a loop until
-/// completion. With the `spawn_chunk_display` feature, progress is shown as
-/// a colored terminal grid that includes the surrounding dependency chunks.
+/// completion.
 ///
 /// Set `PREGEN_RADIUS` environment variable to generate a larger area.
-pub async fn generate_spawn_chunks(server: &Arc<Server>, logger: &Arc<CommandLogger>) {
+pub async fn generate_spawn_chunks(server: &Arc<Server>) {
     let overworld = server.overworld();
     let pregen_radius = get_pregen_radius();
 
@@ -79,23 +56,10 @@ pub async fn generate_spawn_chunks(server: &Arc<Server>, logger: &Arc<CommandLog
         )
     };
 
-    // Overworld: supports the interactive display path when the spawn radius is small.
-    pregen_overworld(overworld, center_chunk, pregen_radius, logger).await;
+    pregen_overworld(overworld, center_chunk, pregen_radius).await;
 }
 
-async fn pregen_overworld(
-    world: &Arc<World>,
-    center_chunk: ChunkPos,
-    pregen_radius: i32,
-    #[cfg_attr(
-        not(feature = "spawn_chunk_display"),
-        expect(
-            unused_variables,
-            reason = "logger only used with `spawn_chunk_display` feature enabled"
-        )
-    )]
-    logger: &Arc<CommandLogger>,
-) {
+async fn pregen_overworld(world: &Arc<World>, center_chunk: ChunkPos, pregen_radius: i32) {
     let total_chunks = ((pregen_radius * 2 + 1) * (pregen_radius * 2 + 1)) as usize;
 
     log::info!(
@@ -119,16 +83,6 @@ async fn pregen_overworld(
     #[cfg(feature = "slow_chunk_gen")]
     SLOW_CHUNK_GEN.store(true, Ordering::Relaxed);
 
-    #[cfg(feature = "spawn_chunk_display")]
-    let elapsed = if pregen_radius > SPAWN_RADIUS {
-        let start = Instant::now();
-        generate_pregen(world, center_chunk, pregen_radius).await;
-        start.elapsed()
-    } else {
-        generate_with_display(world, center_chunk, logger).await
-    };
-
-    #[cfg(not(feature = "spawn_chunk_display"))]
     let elapsed = {
         let start = Instant::now();
         generate_pregen(world, center_chunk, pregen_radius).await;
@@ -166,76 +120,6 @@ fn build_ticket_positions(center_chunk: ChunkPos, pregen_radius: i32) -> Vec<Chu
     } else {
         vec![center_chunk]
     }
-}
-
-/// Returns the elapsed generation time (excluding the final display delay).
-#[cfg(feature = "spawn_chunk_display")]
-async fn generate_with_display(
-    world: &Arc<World>,
-    center_chunk: ChunkPos,
-    logger: &Arc<CommandLogger>,
-) -> Duration {
-    use crate::spawn_progress::{DISPLAY_DIAMETER, DISPLAY_RADIUS};
-
-    let _ = logger.activate_spawn_display().await;
-    let start = Instant::now();
-    let mut grid = [[None; DISPLAY_DIAMETER]; DISPLAY_DIAMETER];
-    let mut last_render = Instant::now();
-
-    loop {
-        world
-            .chunk_map
-            .tick_scheduling(GenerationTaskCap::RespectMaxCap);
-
-        let mut completed = 0;
-        let mut pending_dependencies = false;
-
-        for dz in -DISPLAY_RADIUS..=DISPLAY_RADIUS {
-            for dx in -DISPLAY_RADIUS..=DISPLAY_RADIUS {
-                let pos = ChunkPos::new(center_chunk.0.x + dx, center_chunk.0.y + dz);
-                let status = world
-                    .chunk_map
-                    .chunks
-                    .read_sync(&pos, |_, holder| holder.persisted_status())
-                    .flatten();
-
-                let gx = (dx + DISPLAY_RADIUS) as usize;
-                let gz = (dz + DISPLAY_RADIUS) as usize;
-                grid[gz][gx] = status;
-
-                let in_spawn_area = dx.abs() <= SPAWN_RADIUS && dz.abs() <= SPAWN_RADIUS;
-                if in_spawn_area && status == Some(ChunkStatus::Full) {
-                    completed += 1;
-                } else if !in_spawn_area && status.is_none() {
-                    pending_dependencies = true;
-                }
-            }
-        }
-
-        // Always update grid state; throttle rendering to ~10fps
-        let should_render = last_render.elapsed() >= Duration::from_millis(100);
-        let _ = logger.update_spawn_grid(&grid, should_render).await;
-        if should_render {
-            last_render = Instant::now();
-        }
-
-        if completed == TOTAL_SPAWN_CHUNKS && !pending_dependencies {
-            break;
-        }
-
-        sleep(Duration::from_millis(10)).await;
-    }
-
-    let elapsed = start.elapsed();
-
-    // Render final state
-    let _ = logger.update_spawn_grid(&grid, true).await;
-    // Show completed grid briefly before clearing
-    #[cfg(feature = "slow_chunk_gen")]
-    sleep(Duration::from_secs(1)).await;
-    logger.deactivate_spawn_display().await;
-
-    elapsed
 }
 
 /// Generates chunks with progress reporting for pregeneration.
