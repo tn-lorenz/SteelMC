@@ -12,7 +12,6 @@ use crate::behavior::init_behaviors;
 use crate::block_entity::init_block_entities;
 use crate::chunk::{
     chunk_access::ChunkStatus,
-    chunk_map::GenerationTaskCap,
     chunk_request::{ChunkRequestHandle, ChunkRequestState, ChunkTicketKind},
 };
 use crate::command::CommandDispatcher;
@@ -1017,9 +1016,7 @@ impl Server {
     /// Executes one chunk scheduling tick across all worlds.
     fn tick_chunk_scheduling(&self) {
         for (i, world) in self.worlds.values().enumerate() {
-            let timings = world
-                .chunk_map
-                .tick_scheduling(GenerationTaskCap::RespectMaxCap);
+            let timings = world.chunk_map.tick_scheduling();
 
             let total = timings.ticket_updates
                 + timings.holder_creation
