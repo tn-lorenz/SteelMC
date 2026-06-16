@@ -22,8 +22,8 @@ use crate::chunk::chunk_holder::SLOW_CHUNK_GEN;
 #[cfg(feature = "slow_chunk_gen")]
 use std::sync::atomic::Ordering;
 
-/// Vanilla spawn chunk radius - chunks within this radius reach Full status.
-const SPAWN_RADIUS: i32 = 3;
+const PREGEN_SIZE_ENV: &str = "PREGEN_SIZE";
+const VANILLA_PLAYER_SPAWN_SIZE_CHUNKS: i32 = 7;
 const PREGEN_WINDOW_SIZE: i32 = 32;
 const PREGEN_ACTIVE_WINDOWS: usize = 2;
 const FULL_DEPENDENCY_RADIUS: i32 = GENERATION_PYRAMID
@@ -136,15 +136,54 @@ impl ActivePregenWindow {
     }
 }
 
+#[derive(Clone, Copy, Debug, PartialEq, Eq)]
+struct PregenSize {
+    side_length: i32,
+    radius: i32,
+}
+
+impl PregenSize {
+    fn from_side_length(side_length: i32) -> Result<Option<Self>, String> {
+        if side_length == 0 {
+            return Ok(None);
+        }
+        if side_length < 0 {
+            return Err(format!(
+                "{PREGEN_SIZE_ENV} must be 0 or a positive odd integer"
+            ));
+        }
+        if side_length % 2 == 0 {
+            return Err(format!(
+                "{PREGEN_SIZE_ENV} must be odd so the area has a single center chunk"
+            ));
+        }
+
+        Ok(Some(Self {
+            side_length,
+            radius: side_length / 2,
+        }))
+    }
+}
+
 impl Server {
     /// Generates the startup spawn area for the server default world.
     ///
-    /// Set `PREGEN_RADIUS` to generate a larger square area around chunk 0,0.
+    /// Set `PREGEN_SIZE` to an odd chunk side length, or `0` to skip custom pregen.
     pub async fn prepare_spawn_area(&self) -> bool {
         let overworld = self.overworld();
-        let pregen_radius = get_pregen_radius();
+        let pregen_size = match get_pregen_size() {
+            Ok(Some(size)) => size,
+            Ok(None) => {
+                log::info!("Skipping custom startup spawn-area pregeneration");
+                return true;
+            }
+            Err(error) => {
+                log::error!("{error}");
+                return false;
+            }
+        };
 
-        let center_chunk = if pregen_radius > SPAWN_RADIUS {
+        let center_chunk = if pregen_size.side_length > VANILLA_PLAYER_SPAWN_SIZE_CHUNKS {
             ChunkPos::new(0, 0)
         } else {
             let spawn_pos = overworld.level_data.read().data().spawn_pos();
@@ -154,29 +193,37 @@ impl Server {
             )
         };
 
-        pregen_overworld(overworld, center_chunk, pregen_radius, &self.cancel_token).await
+        pregen_overworld(overworld, center_chunk, pregen_size, &self.cancel_token).await
     }
 }
 
-fn get_pregen_radius() -> i32 {
-    env::var("PREGEN_RADIUS")
-        .ok()
-        .and_then(|s| s.parse().ok())
-        .unwrap_or(SPAWN_RADIUS)
+fn get_pregen_size() -> Result<Option<PregenSize>, String> {
+    let side_length = match env::var(PREGEN_SIZE_ENV) {
+        Ok(value) => value
+            .parse::<i32>()
+            .map_err(|e| format!("{PREGEN_SIZE_ENV} must be 0 or a positive odd integer: {e}"))?,
+        Err(env::VarError::NotPresent) => return Ok(None),
+        Err(env::VarError::NotUnicode(_)) => {
+            return Err(format!("{PREGEN_SIZE_ENV} must be valid unicode"));
+        }
+    };
+
+    PregenSize::from_side_length(side_length)
 }
 
 async fn pregen_overworld(
     world: &Arc<World>,
     center_chunk: ChunkPos,
-    pregen_radius: i32,
+    pregen_size: PregenSize,
     cancel_token: &CancellationToken,
 ) -> bool {
-    let total_chunks = ((pregen_radius * 2 + 1) * (pregen_radius * 2 + 1)) as usize;
+    let total_chunks = total_chunks(pregen_size.side_length);
 
     log::info!(
-        "Preparing spawn area: {} chunks (radius {}) around chunk ({}, {})",
+        "Preparing spawn area: {} chunks ({}x{}) around chunk ({}, {})",
         total_chunks,
-        pregen_radius,
+        pregen_size.side_length,
+        pregen_size.side_length,
         center_chunk.0.x,
         center_chunk.0.y,
     );
@@ -186,7 +233,7 @@ async fn pregen_overworld(
 
     let elapsed = {
         let start = Instant::now();
-        let completed = generate_pregen(world, center_chunk, pregen_radius, cancel_token).await;
+        let completed = generate_pregen(world, center_chunk, pregen_size, cancel_token).await;
         (start.elapsed(), completed)
     };
 
@@ -239,11 +286,11 @@ fn build_pregen_windows(center_chunk: ChunkPos, radius: i32) -> VecDeque<PregenW
 async fn generate_pregen(
     world: &Arc<World>,
     center_chunk: ChunkPos,
-    radius: i32,
+    pregen_size: PregenSize,
     cancel_token: &CancellationToken,
 ) -> bool {
-    let total_chunks = ((radius * 2 + 1) * (radius * 2 + 1)) as usize;
-    let mut pending_windows = build_pregen_windows(center_chunk, radius);
+    let total_chunks = total_chunks(pregen_size.side_length);
+    let mut pending_windows = build_pregen_windows(center_chunk, pregen_size.radius);
     let mut active_windows = Vec::with_capacity(PREGEN_ACTIVE_WINDOWS + 1);
     let mut last_report = Instant::now();
     let mut last_completed = 0usize;
@@ -290,7 +337,9 @@ async fn generate_pregen(
             break;
         }
 
-        if radius > SPAWN_RADIUS && last_report.elapsed() >= Duration::from_secs(5) {
+        if pregen_size.side_length > VANILLA_PLAYER_SPAWN_SIZE_CHUNKS
+            && last_report.elapsed() >= Duration::from_secs(5)
+        {
             let ready_in_active = active_windows
                 .iter()
                 .filter(|active| !active.counted)
@@ -329,6 +378,11 @@ async fn generate_pregen(
 
     release_all_windows(world, &mut active_windows);
     true
+}
+
+fn total_chunks(side_length: i32) -> usize {
+    let side_length = i64::from(side_length);
+    (side_length * side_length) as usize
 }
 
 fn fill_active_windows(
@@ -389,4 +443,35 @@ fn release_unneeded_completed_windows(
 fn release_all_windows(world: &Arc<World>, active_windows: &mut Vec<ActivePregenWindow>) {
     active_windows.clear();
     world.chunk_map.tick_scheduling();
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    #[test]
+    fn pregen_size_accepts_zero_as_disabled() {
+        assert_eq!(PregenSize::from_side_length(0), Ok(None));
+    }
+
+    #[test]
+    fn pregen_size_accepts_odd_side_lengths() {
+        assert_eq!(
+            PregenSize::from_side_length(7),
+            Ok(Some(PregenSize {
+                side_length: 7,
+                radius: 3,
+            }))
+        );
+    }
+
+    #[test]
+    fn pregen_size_rejects_even_side_lengths() {
+        assert!(PregenSize::from_side_length(2).is_err());
+    }
+
+    #[test]
+    fn pregen_size_rejects_negative_side_lengths() {
+        assert!(PregenSize::from_side_length(-1).is_err());
+    }
 }
