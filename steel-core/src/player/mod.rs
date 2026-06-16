@@ -94,6 +94,7 @@ use crate::entity::{
 };
 use crate::fluid::get_fluid_state;
 use crate::inventory::{SyncPlayerInv, equipment::EquipmentSlot};
+use crate::level_data::RespawnData;
 use crate::physics::MoveResult;
 use crate::player::experience::Experience;
 use crate::player::player_data::PersistentRootVehicle;
@@ -308,21 +309,18 @@ impl PlayerRespawnJob {
         player: Arc<Player>,
         source_world: Arc<World>,
         target_world: Arc<World>,
+        respawn_data: RespawnData,
     ) -> Result<Self, String> {
-        let (spawn, spawn_pos) = {
-            let level_data = target_world.level_data.read();
-            (
-                level_data.data().spawn.clone(),
-                level_data.data().spawn_pos(),
-            )
-        };
-        let search =
-            PlayerSpawnSearch::new(&target_world, spawn_pos, target_world.default_gamemode)?;
+        let search = PlayerSpawnSearch::new(
+            &target_world,
+            respawn_data.pos(),
+            target_world.default_gamemode,
+        )?;
         Ok(Self {
             player,
             source_world,
             target_world,
-            rotation: (spawn.angle, 0.0),
+            rotation: (respawn_data.yaw, respawn_data.pitch),
             phase: PlayerRespawnJobPhase::Searching(search),
         })
     }
@@ -947,7 +945,7 @@ impl Player {
         }
     }
 
-    /// TODO: bed/respawn anchor and noRespawnBlockAvailable
+    /// TODO: personal respawn blocks/anchors and noRespawnBlockAvailable.
     pub fn respawn(&self) {
         let health = self.get_health();
         if !Self::should_process_respawn(health) {
@@ -970,17 +968,20 @@ impl Player {
             );
             return;
         };
-        let Some(target_world) = server.worlds.default_world(source_world.domain()).cloned() else {
-            self.finish_respawn_request();
-            log::error!(
-                "Failed to schedule respawn for player {}: domain {} has no default world",
-                self.gameprofile.name,
-                source_world.domain()
-            );
-            return;
-        };
+        let (target_world, respawn_data) =
+            match server.respawn_world_and_data_for_domain(source_world.domain()) {
+                Ok(resolved) => resolved,
+                Err(error) => {
+                    self.finish_respawn_request();
+                    log::error!(
+                        "Failed to schedule respawn for player {}: {error}",
+                        self.gameprofile.name
+                    );
+                    return;
+                }
+            };
 
-        match PlayerRespawnJob::new(player_arc, source_world, target_world) {
+        match PlayerRespawnJob::new(player_arc, source_world, target_world, respawn_data) {
             Ok(job) => server.jobs.spawn(job),
             Err(error) => {
                 self.finish_respawn_request();
@@ -1010,7 +1011,7 @@ impl Player {
         self.reset_state_for_death_respawn();
         let was_removed = self.base.clear_removed();
 
-        // TODO: personal respawn position lookup and NO_RESPAWN_BLOCK_AVAILABLE.
+        // TODO: personal respawn blocks/anchors and NO_RESPAWN_BLOCK_AVAILABLE.
 
         if !was_removed && Arc::ptr_eq(source_world, target_world) {
             source_world.unregister_player_entity(self);
@@ -1415,14 +1416,22 @@ impl Player {
         }
 
         self.send_packet(world.initialize_border_packet());
-        {
-            let spawn = world.level_data.read().data().spawn.clone();
-            self.send_packet(CSetDefaultSpawnPosition {
-                dimension: world.key.clone(),
-                pos: BlockPos::new(spawn.x, spawn.y, spawn.z),
-                yaw: spawn.angle,
-                pitch: 0.0,
-            });
+        if let Some(server) = self.server.upgrade() {
+            match server.respawn_data_for_domain(world.domain()) {
+                Ok(respawn_data) => {
+                    self.send_packet(CSetDefaultSpawnPosition {
+                        global_pos: respawn_data.global_pos,
+                        yaw: respawn_data.yaw,
+                        pitch: respawn_data.pitch,
+                    });
+                }
+                Err(error) => {
+                    log::error!(
+                        "Failed to send default spawn position to player {}: {error}",
+                        self.gameprofile.name
+                    );
+                }
+            }
         }
 
         // Weather sync

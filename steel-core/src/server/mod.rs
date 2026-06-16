@@ -20,7 +20,7 @@ use crate::config::{ResolvedWorldConfig, RuntimeConfig, WorldsConfig};
 use crate::entity::{Entity, EntityBase, RemovalReason, SharedEntity, init_entities};
 
 use crate::chunk_saver::{ChunkStorage, registry::WorldStorageRegistry};
-use crate::level_data::{LevelDataManager, WorldGenerationSettings};
+use crate::level_data::{LevelDataManager, RespawnData, WorldGenerationSettings};
 use crate::player::chunk_sender::ChunkSender;
 use crate::player::connection::NetworkConnection;
 use crate::player::player_data::{PersistentPlayerData, PersistentRootVehicle};
@@ -44,8 +44,8 @@ use std::{
 use steel_crypto::key_store::KeyStore;
 use steel_protocol::packet_traits::EncodedPacket;
 use steel_protocol::packets::game::{
-    CEntityEvent, CGameEvent, CLogin, CSystemChat, CTabList, CTickingState, CTickingStep,
-    CommonPlayerSpawnInfo, GameEventType,
+    CEntityEvent, CGameEvent, CLogin, CSetDefaultSpawnPosition, CSystemChat, CTabList,
+    CTickingState, CTickingStep, CommonPlayerSpawnInfo, GameEventType,
 };
 use steel_registry::game_rules::GameRuleValue;
 use steel_registry::vanilla_game_rules::{IMMEDIATE_RESPAWN, LIMITED_CRAFTING, REDUCED_DEBUG_INFO};
@@ -84,17 +84,28 @@ fn apply_default_spawn(player: &Arc<Player>, world: &Arc<World>, spawn: Prepared
 }
 
 fn world_spawn_transition(world: Arc<World>) -> TeleportTransition {
-    let spawn = world.level_data.read().data().spawn.clone();
+    let spawn = local_respawn_data_for_world(&world);
     TeleportTransition {
         target_world: world,
-        position: DVec3::new(
-            f64::from(spawn.x) + 0.5,
-            f64::from(spawn.y),
-            f64::from(spawn.z) + 0.5,
-        ),
-        rotation: (spawn.angle, 0.0),
+        position: respawn_position(&spawn),
+        rotation: (spawn.yaw, spawn.pitch),
         portal_cooldown: 0,
     }
+}
+
+fn local_respawn_data_for_world(world: &World) -> RespawnData {
+    let level_data = world.level_data.read();
+    let data = level_data.data();
+    RespawnData::of(world.key.clone(), data.spawn_pos(), data.spawn.angle, 0.0)
+}
+
+fn respawn_position(respawn_data: &RespawnData) -> DVec3 {
+    let pos = respawn_data.pos();
+    DVec3::new(
+        f64::from(pos.x()) + 0.5,
+        f64::from(pos.y()),
+        f64::from(pos.z()) + 0.5,
+    )
 }
 
 fn generation_settings_for_world(
@@ -577,6 +588,7 @@ impl Server {
         fallback_world: Option<Arc<World>>,
         restore_saved_location: bool,
     ) -> Result<DomainPlayerState, String> {
+        let explicit_target_world = fallback_world.is_some();
         let mut world = self
             .worlds
             .default_world(target_domain)
@@ -609,7 +621,10 @@ impl Server {
                         spawn_position,
                     )
                 } else {
-                    let default_spawn = Self::prepare_default_spawn(&world).await?;
+                    let (default_world, default_spawn) = self
+                        .prepare_domain_default_spawn(target_domain, explicit_target_world, &world)
+                        .await?;
+                    world = default_world;
                     (
                         DomainPlayerData::SavedWithoutLocation {
                             data: Box::new(saved_data),
@@ -632,7 +647,10 @@ impl Server {
                     player.gameprofile.name,
                     target_domain
                 );
-                let default_spawn = Self::prepare_default_spawn(&world).await?;
+                let (default_world, default_spawn) = self
+                    .prepare_domain_default_spawn(target_domain, explicit_target_world, &world)
+                    .await?;
+                world = default_world;
                 let spawn_chunk_request = world
                     .prepare_player_spawn_chunks(default_spawn.position)
                     .await?;
@@ -649,6 +667,21 @@ impl Server {
         }
     }
 
+    async fn prepare_domain_default_spawn(
+        &self,
+        target_domain: &str,
+        explicit_target_world: bool,
+        world: &Arc<World>,
+    ) -> Result<(Arc<World>, PreparedSpawn), String> {
+        if explicit_target_world {
+            return Ok((world.clone(), Self::prepare_default_spawn(world).await?));
+        }
+
+        let (world, respawn_data) = self.respawn_world_and_data_for_domain(target_domain)?;
+        let spawn = Self::prepare_respawn_spawn(&world, &respawn_data).await?;
+        Ok((world, spawn))
+    }
+
     async fn prepare_default_spawn(world: &Arc<World>) -> Result<PreparedSpawn, String> {
         let (spawn, spawn_pos) = {
             let level_data = world.level_data.read();
@@ -663,6 +696,19 @@ impl Server {
         Ok(PreparedSpawn {
             position,
             rotation: (spawn.angle, 0.0),
+        })
+    }
+
+    async fn prepare_respawn_spawn(
+        world: &Arc<World>,
+        respawn_data: &RespawnData,
+    ) -> Result<PreparedSpawn, String> {
+        let position = world
+            .find_adjusted_shared_spawn_pos(respawn_data.pos(), world.default_gamemode)
+            .await?;
+        Ok(PreparedSpawn {
+            position,
+            rotation: (respawn_data.yaw, respawn_data.pitch),
         })
     }
 
@@ -840,6 +886,98 @@ impl Server {
                 .next()
                 .expect("At least one world must exist")
         })
+    }
+
+    /// Resolves the default respawn world and data for a domain.
+    pub fn respawn_world_and_data_for_domain(
+        &self,
+        domain: &str,
+    ) -> Result<(Arc<World>, RespawnData), String> {
+        let default_world = self
+            .worlds
+            .default_world(domain)
+            .cloned()
+            .ok_or_else(|| format!("domain {domain} has no default world"))?;
+        let respawn_data = {
+            let level_data = default_world.level_data.read();
+            level_data.data().respawn_data_or_local(&default_world.key)
+        };
+
+        let Some(target_world) = self
+            .worlds
+            .get(respawn_data.dimension())
+            .filter(|world| world.domain() == domain)
+            .cloned()
+        else {
+            return Ok((
+                default_world.clone(),
+                local_respawn_data_for_world(&default_world),
+            ));
+        };
+
+        // TODO: apply vanilla world-border-adjusted respawn data.
+        Ok((target_world, respawn_data))
+    }
+
+    /// Returns the default respawn data sent to clients in the given domain.
+    pub fn respawn_data_for_domain(&self, domain: &str) -> Result<RespawnData, String> {
+        self.respawn_world_and_data_for_domain(domain)
+            .map(|(_, respawn_data)| respawn_data)
+    }
+
+    /// Sets the default respawn data for the respawn data's domain and broadcasts it.
+    pub fn set_respawn_data(&self, respawn_data: RespawnData) -> Result<(), String> {
+        let domain = respawn_data.dimension().namespace.as_ref();
+        let default_world = self
+            .worlds
+            .default_world(domain)
+            .cloned()
+            .ok_or_else(|| format!("domain {domain} has no default world"))?;
+        let target_world = self
+            .worlds
+            .get(respawn_data.dimension())
+            .filter(|world| world.domain() == domain)
+            .cloned()
+            .ok_or_else(|| {
+                format!(
+                    "respawn dimension {} is not loaded in domain {domain}",
+                    respawn_data.dimension()
+                )
+            })?;
+
+        if Arc::ptr_eq(&default_world, &target_world) {
+            let mut level_data = default_world.level_data.write();
+            let data = level_data.data_mut();
+            data.set_spawn_pos(respawn_data.pos());
+            data.spawn.angle = respawn_data.yaw;
+            data.set_respawn_data(respawn_data.clone());
+        } else {
+            default_world
+                .level_data
+                .write()
+                .data_mut()
+                .set_respawn_data(respawn_data.clone());
+
+            let mut level_data = target_world.level_data.write();
+            let data = level_data.data_mut();
+            data.set_spawn_pos(respawn_data.pos());
+            data.spawn.angle = respawn_data.yaw;
+        }
+
+        let packet = CSetDefaultSpawnPosition {
+            global_pos: respawn_data.global_pos.clone(),
+            yaw: respawn_data.yaw,
+            pitch: respawn_data.pitch,
+        };
+        for world in self
+            .worlds
+            .values()
+            .filter(|world| world.domain() == domain)
+        {
+            world.broadcast_to_all(packet.clone());
+        }
+
+        Ok(())
     }
 
     /// Returns the default domain's conventional nether world, if present.

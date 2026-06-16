@@ -1,5 +1,6 @@
 //! This module contains types and utilities for parsing command arguments.
 pub mod anchor;
+pub mod block_pos;
 pub mod bool;
 pub mod domain;
 pub mod enchantment;

@@ -508,6 +508,39 @@ impl ReadFrom for BlockPos {
     }
 }
 
+/// A position tied to a dimension key.
+#[derive(Debug, Clone, PartialEq, Eq, Hash)]
+pub struct GlobalPos {
+    /// Dimension containing the block position.
+    pub dimension: Identifier,
+    /// Block position within the dimension.
+    pub pos: BlockPos,
+}
+
+impl GlobalPos {
+    /// Creates a new global position.
+    #[must_use]
+    pub const fn new(dimension: Identifier, pos: BlockPos) -> Self {
+        Self { dimension, pos }
+    }
+}
+
+impl ReadFrom for GlobalPos {
+    fn read(data: &mut Cursor<&[u8]>) -> io::Result<Self> {
+        Ok(Self {
+            dimension: <Identifier as ReadFrom>::read(data)?,
+            pos: BlockPos::read(data)?,
+        })
+    }
+}
+
+impl WriteTo for GlobalPos {
+    fn write(&self, writer: &mut impl Write) -> io::Result<()> {
+        self.dimension.write(writer)?;
+        self.pos.write(writer)
+    }
+}
+
 /// A chunk section position (16x16x16 region).
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Hash)]
 pub struct SectionPos(pub IVec3);
