@@ -1024,7 +1024,7 @@ impl Server {
                 + timings.run_generation
                 + timings.process_unloads;
 
-            if total.as_millis() >= 10 {
+            if total.as_millis() >= 50 {
                 tracing::warn!(
                     world = i,
                     elapsed = ?total,
@@ -1234,7 +1234,7 @@ impl Server {
             }
         }
         for (i, timings) in all_timings.iter().enumerate() {
-            if timings.elapsed.as_millis() < 10 {
+            if timings.elapsed.as_millis() < 50 {
                 continue;
             }
             let cm = &timings.chunk_map;
