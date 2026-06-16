@@ -86,6 +86,20 @@ impl World {
         self.chunk_map.update_player_status(player);
     }
 
+    pub(crate) fn add_respawned_player(self: &Arc<Self>, player: Arc<Player>) -> bool {
+        if !self.players.insert(player.clone()) {
+            player.connection.close();
+            return false;
+        }
+
+        self.register_respawned_player_entity(&player);
+        player.send_packet(CGameEvent {
+            event: GameEventType::LevelChunksLoadStart,
+            data: 0.0,
+        });
+        true
+    }
+
     /// Removes a player from the world.
     pub async fn remove_player(self: &Arc<Self>, player: Arc<Player>) {
         let Some(player) = self.players.remove_player(&player).await else {

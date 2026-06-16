@@ -289,7 +289,8 @@ struct DeathRespawnSpawn {
 
 struct PlayerRespawnJob {
     player: Arc<Player>,
-    world: Arc<World>,
+    source_world: Arc<World>,
+    target_world: Arc<World>,
     rotation: (f32, f32),
     phase: PlayerRespawnJobPhase,
 }
@@ -303,18 +304,24 @@ enum PlayerRespawnJobPhase {
 }
 
 impl PlayerRespawnJob {
-    fn new(player: Arc<Player>, world: Arc<World>) -> Result<Self, String> {
+    fn new(
+        player: Arc<Player>,
+        source_world: Arc<World>,
+        target_world: Arc<World>,
+    ) -> Result<Self, String> {
         let (spawn, spawn_pos) = {
-            let level_data = world.level_data.read();
+            let level_data = target_world.level_data.read();
             (
                 level_data.data().spawn.clone(),
                 level_data.data().spawn_pos(),
             )
         };
-        let search = PlayerSpawnSearch::new(&world, spawn_pos, world.default_gamemode)?;
+        let search =
+            PlayerSpawnSearch::new(&target_world, spawn_pos, target_world.default_gamemode)?;
         Ok(Self {
             player,
-            world,
+            source_world,
+            target_world,
             rotation: (spawn.angle, 0.0),
             phase: PlayerRespawnJobPhase::Searching(search),
         })
@@ -322,7 +329,7 @@ impl PlayerRespawnJob {
 
     fn still_valid(&self) -> bool {
         !self.player.connection.closed()
-            && Arc::ptr_eq(&self.player.get_world(), &self.world)
+            && Arc::ptr_eq(&self.player.get_world(), &self.source_world)
             && Player::should_process_respawn(self.player.get_health())
     }
 }
@@ -338,7 +345,7 @@ impl ServerJob for PlayerRespawnJob {
             match &mut self.phase {
                 PlayerRespawnJobPhase::Searching(search) => {
                     match search.poll_with_ready_candidate_budget(
-                        &self.world,
+                        &self.target_world,
                         RESPAWN_SEARCH_READY_CANDIDATE_BUDGET,
                     ) {
                         PlayerSpawnSearchPoll::Pending => return JobPoll::Pending,
@@ -351,7 +358,7 @@ impl ServerJob for PlayerRespawnJob {
                                 position,
                                 rotation: self.rotation,
                             };
-                            let request = self.world.request_player_spawn_chunks(position);
+                            let request = self.target_world.request_player_spawn_chunks(position);
                             self.phase =
                                 PlayerRespawnJobPhase::LoadingSpawnChunks { spawn, request };
                         }
@@ -369,7 +376,11 @@ impl ServerJob for PlayerRespawnJob {
                                 return JobPoll::Pending;
                             }
 
-                            self.player.finish_death_respawn(&self.world, *spawn);
+                            self.player.finish_death_respawn(
+                                &self.source_world,
+                                &self.target_world,
+                                *spawn,
+                            );
                             return JobPoll::Finished;
                         }
                     }
@@ -936,23 +947,41 @@ impl Player {
         }
     }
 
-    /// TODO: bed/respawn anchor, cross-world, noRespawnBlockAvailable
+    /// TODO: bed/respawn anchor and noRespawnBlockAvailable
     pub fn respawn(&self) {
         let health = self.get_health();
         if !Self::should_process_respawn(health) {
             return;
         }
 
-        let world = self.get_world();
-        let Some(player_arc) = world.players.get_by_entity_id(self.id()) else {
+        let source_world = self.get_world();
+        let Some(player_arc) = source_world.players.get_by_entity_id(self.id()) else {
             return;
         };
         if !self.begin_respawn_request() {
             return;
         }
 
-        match PlayerRespawnJob::new(player_arc, world) {
-            Ok(job) => self.server().jobs.spawn(job),
+        let Some(server) = self.server.upgrade() else {
+            self.finish_respawn_request();
+            log::error!(
+                "Failed to schedule respawn for player {}: server is gone",
+                self.gameprofile.name
+            );
+            return;
+        };
+        let Some(target_world) = server.worlds.default_world(source_world.domain()).cloned() else {
+            self.finish_respawn_request();
+            log::error!(
+                "Failed to schedule respawn for player {}: domain {} has no default world",
+                self.gameprofile.name,
+                source_world.domain()
+            );
+            return;
+        };
+
+        match PlayerRespawnJob::new(player_arc, source_world, target_world) {
+            Ok(job) => server.jobs.spawn(job),
             Err(error) => {
                 self.finish_respawn_request();
                 log::error!(
@@ -963,11 +992,16 @@ impl Player {
         }
     }
 
-    fn finish_death_respawn(self: &Arc<Self>, world: &Arc<World>, spawn: DeathRespawnSpawn) {
+    fn finish_death_respawn(
+        self: &Arc<Self>,
+        source_world: &Arc<World>,
+        target_world: &Arc<World>,
+        spawn: DeathRespawnSpawn,
+    ) {
         self.finish_respawn_request();
 
         if self.connection.closed()
-            || !Arc::ptr_eq(&self.get_world(), world)
+            || !Arc::ptr_eq(&self.get_world(), source_world)
             || !Self::should_process_respawn(self.get_health())
         {
             return;
@@ -976,21 +1010,21 @@ impl Player {
         self.reset_state_for_death_respawn();
         let was_removed = self.base.clear_removed();
 
-        // TODO: bed/respawn anchor lookup, send NO_RESPAWN_BLOCK_AVAILABLE if missing
+        // TODO: personal respawn position lookup and NO_RESPAWN_BLOCK_AVAILABLE.
 
-        if !was_removed {
-            world.unregister_player_entity(self);
+        if !was_removed && Arc::ptr_eq(source_world, target_world) {
+            source_world.unregister_player_entity(self);
         }
 
         // Shared reset (clears transient state, sends CRespawn)
-        self.reset(world.clone(), ResetReason::Respawn);
+        self.reset(target_world.clone(), ResetReason::Respawn);
 
         self.send_difficulty();
 
         // Handle XP loss on death
         {
             let mut experience = self.experience.lock();
-            if world.get_game_rule(&KEEP_INVENTORY) != GameRuleValue::Bool(true)
+            if target_world.get_game_rule(&KEEP_INVENTORY) != GameRuleValue::Bool(true)
                 && self.game_mode() != GameType::Spectator
             {
                 // TODO: drop XP orbs (min(level * 7, 100))
@@ -1431,6 +1465,10 @@ impl Player {
                 world.add_player(self.clone(), reason)
             }
             ResetReason::Respawn => {
+                if world.players.get_by_entity_id(self.id()).is_none() {
+                    return world.add_respawned_player(self.clone());
+                }
+
                 // Same world — re-enter chunk tracking
                 world.player_area_map.remove_by_entity_id(self.id());
                 world.chunk_map.remove_player(self);
