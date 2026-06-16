@@ -171,6 +171,7 @@ pub mod game_event_listener;
 mod level_reader;
 mod player_area_map;
 mod player_map;
+mod player_spawn_finder;
 pub mod tick_scheduler;
 mod weather;
 mod world_entities;
@@ -779,7 +780,7 @@ impl World {
     fn spawn_pos_in_chunk(&self, chunk_pos: ChunkPos) -> Option<BlockPos> {
         for x in chunk_min_block_x(chunk_pos)..=chunk_max_block_x(chunk_pos) {
             for z in chunk_min_block_z(chunk_pos)..=chunk_max_block_z(chunk_pos) {
-                if let Some(pos) = self.overworld_respawn_pos(x, z) {
+                if let Some(pos) = self.level_respawn_pos(x, z) {
                     return Some(pos);
                 }
             }
@@ -788,7 +789,7 @@ impl World {
         None
     }
 
-    fn overworld_respawn_pos(&self, x: i32, z: i32) -> Option<BlockPos> {
+    fn level_respawn_pos(&self, x: i32, z: i32) -> Option<BlockPos> {
         let top_y = if self.dimension_type.has_ceiling {
             self.chunk_map
                 .world_gen_context

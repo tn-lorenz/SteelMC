@@ -67,7 +67,7 @@ Tooling: `ast-grep` is available for structural code search/rewrites.
 
 ## Architecture
 
-Steel = Minecraft 26.1 server in Rust.
+Steel = Minecraft server in Rust.
 
 **Crates:** `steel` (thin wrapper) -> `steel-login` (initial connection) → `steel-core` (game logic) → `steel-worldgen` (worldgen) → `steel-protocol` (packets) → `steel-macros` (derives) → `steel-registry` (generated data) → `steel-utils`/`steel-math` (common) → `steel-crypto` (encryption)
 

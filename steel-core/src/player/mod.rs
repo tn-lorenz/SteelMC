@@ -56,8 +56,9 @@ use game_mode_state::PlayerGameModeState;
 pub use game_profile::{GameProfile, GameProfileAction};
 use std::sync::{Arc, Weak};
 use steel_protocol::packets::game::{
-    AttributeSnapshot, CEntityEvent, CPlayerCombatKill, CRespawn, CSetHealth, CSetHeldSlot,
-    CSetPassengers, CSetTime, ClientCommandAction, EquipmentSlotItem, SoundSource,
+    AttributeSnapshot, CEntityEvent, CPlayerCombatKill, CRespawn, CSetDefaultSpawnPosition,
+    CSetHealth, CSetHeldSlot, CSetPassengers, CSetTime, ClientCommandAction, EquipmentSlotItem,
+    SoundSource,
 };
 use steel_registry::RegistryEntry;
 use steel_registry::blocks::block_state_ext::BlockStateExt as _;
@@ -1250,6 +1251,15 @@ impl Player {
         }
 
         self.send_packet(world.initialize_border_packet());
+        {
+            let spawn = world.level_data.read().data().spawn.clone();
+            self.send_packet(CSetDefaultSpawnPosition {
+                dimension: world.key.clone(),
+                pos: BlockPos::new(spawn.x, spawn.y, spawn.z),
+                yaw: spawn.angle,
+                pitch: 0.0,
+            });
+        }
 
         // Weather sync
         if world.can_have_weather() && world.is_raining() {

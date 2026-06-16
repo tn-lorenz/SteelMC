@@ -67,14 +67,15 @@ const CHUNK_SENDING_TPS: u64 = 20;
 /// Tick rate for the chunk scheduling loop.
 const CHUNK_SCHEDULING_TPS: u64 = 20;
 
-fn apply_first_visit_defaults(player: &Arc<Player>, world: &Arc<World>) {
-    let spawn = world.level_data.read().data().spawn.clone();
-    player.base().set_position_local(DVec3::new(
-        f64::from(spawn.x),
-        f64::from(spawn.y),
-        f64::from(spawn.z),
-    ));
-    player.set_rotation((spawn.angle, 0.0));
+#[derive(Clone, Copy)]
+struct PreparedSpawn {
+    position: DVec3,
+    rotation: (f32, f32),
+}
+
+fn apply_default_spawn(player: &Arc<Player>, world: &Arc<World>, spawn: PreparedSpawn) {
+    player.base().set_position_local(spawn.position);
+    player.set_rotation(spawn.rotation);
     player.restore_game_modes(world.default_gamemode, world.default_gamemode);
     player
         .abilities
@@ -120,14 +121,20 @@ fn world_config_registries() -> Result<(WorldGeneratorRegistry, WorldStorageRegi
 struct DomainPlayerState {
     world: Arc<World>,
     data: DomainPlayerData,
+    _spawn_chunk_request: ChunkRequestHandle,
 }
 
 enum DomainPlayerData {
-    Saved {
+    SavedRestored {
         data: Box<PersistentPlayerData>,
-        restore_location: bool,
     },
-    FirstVisit,
+    SavedWithoutLocation {
+        data: Box<PersistentPlayerData>,
+        default_spawn: PreparedSpawn,
+    },
+    FirstVisit {
+        default_spawn: PreparedSpawn,
+    },
 }
 
 struct DomainSwitchRequest {
@@ -592,13 +599,31 @@ impl Server {
                         &mut world,
                         &player.gameprofile.name,
                     );
+                let (data, spawn_position) = if restore_location {
+                    let spawn_position =
+                        DVec3::new(saved_data.pos[0], saved_data.pos[1], saved_data.pos[2]);
+                    (
+                        DomainPlayerData::SavedRestored {
+                            data: Box::new(saved_data),
+                        },
+                        spawn_position,
+                    )
+                } else {
+                    let default_spawn = Self::prepare_default_spawn(&world).await?;
+                    (
+                        DomainPlayerData::SavedWithoutLocation {
+                            data: Box::new(saved_data),
+                            default_spawn,
+                        },
+                        default_spawn.position,
+                    )
+                };
+                let spawn_chunk_request = world.prepare_player_spawn_chunks(spawn_position).await?;
                 log::info!("Loaded saved data for player {}", player.gameprofile.name);
                 Ok(DomainPlayerState {
                     world,
-                    data: DomainPlayerData::Saved {
-                        data: Box::new(saved_data),
-                        restore_location,
-                    },
+                    data,
+                    _spawn_chunk_request: spawn_chunk_request,
                 })
             }
             Ok(None) => {
@@ -607,9 +632,14 @@ impl Server {
                     player.gameprofile.name,
                     target_domain
                 );
+                let default_spawn = Self::prepare_default_spawn(&world).await?;
+                let spawn_chunk_request = world
+                    .prepare_player_spawn_chunks(default_spawn.position)
+                    .await?;
                 Ok(DomainPlayerState {
                     world,
-                    data: DomainPlayerData::FirstVisit,
+                    data: DomainPlayerData::FirstVisit { default_spawn },
+                    _spawn_chunk_request: spawn_chunk_request,
                 })
             }
             Err(e) => Err(format!(
@@ -617,6 +647,23 @@ impl Server {
                 player.gameprofile.name, target_domain
             )),
         }
+    }
+
+    async fn prepare_default_spawn(world: &Arc<World>) -> Result<PreparedSpawn, String> {
+        let (spawn, spawn_pos) = {
+            let level_data = world.level_data.read();
+            (
+                level_data.data().spawn.clone(),
+                level_data.data().spawn_pos(),
+            )
+        };
+        let position = world
+            .find_adjusted_shared_spawn_pos(spawn_pos, world.default_gamemode)
+            .await?;
+        Ok(PreparedSpawn {
+            position,
+            rotation: (spawn.angle, 0.0),
+        })
     }
 
     fn resolve_saved_world(
@@ -650,18 +697,19 @@ impl Server {
 
     fn apply_domain_player_state(player: &Arc<Player>, state: &DomainPlayerState) {
         match &state.data {
-            DomainPlayerData::Saved {
-                data,
-                restore_location,
-            } => {
-                if *restore_location {
-                    data.apply_to_player(player);
-                } else {
-                    apply_first_visit_defaults(player, &state.world);
-                    data.apply_to_player_without_location(player);
-                }
+            DomainPlayerData::SavedRestored { data } => {
+                data.apply_to_player(player);
             }
-            DomainPlayerData::FirstVisit => apply_first_visit_defaults(player, &state.world),
+            DomainPlayerData::SavedWithoutLocation {
+                data,
+                default_spawn,
+            } => {
+                apply_default_spawn(player, &state.world, *default_spawn);
+                data.apply_to_player_without_location(player);
+            }
+            DomainPlayerData::FirstVisit { default_spawn } => {
+                apply_default_spawn(player, &state.world, *default_spawn);
+            }
         }
     }
 
@@ -682,11 +730,10 @@ impl Server {
 
     fn root_vehicle_to_restore(state: &DomainPlayerState) -> Option<PersistentRootVehicle> {
         match &state.data {
-            DomainPlayerData::Saved {
-                data,
-                restore_location: true,
-            } => data.root_vehicle.clone(),
-            DomainPlayerData::Saved { .. } | DomainPlayerData::FirstVisit => None,
+            DomainPlayerData::SavedRestored { data } => data.root_vehicle.clone(),
+            DomainPlayerData::SavedWithoutLocation { .. } | DomainPlayerData::FirstVisit { .. } => {
+                None
+            }
         }
     }
 
