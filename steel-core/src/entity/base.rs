@@ -146,6 +146,11 @@ impl EntityMovementTrace {
         self.movement_this_tick.pop_back();
     }
 
+    fn reset(&mut self) {
+        self.movement_this_tick.clear();
+        self.final_movements_this_tick.clear();
+    }
+
     fn take_for_block_effects(
         &mut self,
         old_position: DVec3,
@@ -1489,6 +1494,8 @@ impl EntityBase {
             state.hurt_marked = false;
         }
 
+        self.movement_trace.lock().reset();
+
         let mut save_data = self.save_data.lock();
         let tags = mem::take(&mut save_data.tags);
         *save_data = EntityBaseSaveData::new();
@@ -2774,10 +2781,22 @@ mod tests {
         base.make_stuck_in_block(DVec3::splat(0.2));
         base.mark_velocity_sync();
         base.mark_hurt();
+        base.record_movement_this_tick(EntityMovement::new(
+            DVec3::new(1.0, 64.0, 1.0),
+            DVec3::new(2.0, 64.0, 1.0),
+        ));
+        base.set_position_local(DVec3::new(2.0, 64.0, 1.0));
+        assert!(!base.take_movements_for_block_effects().is_empty());
+        base.record_movement_this_tick(EntityMovement::new(
+            DVec3::new(2.0, 64.0, 1.0),
+            DVec3::new(3.0, 64.0, 1.0),
+        ));
+        base.set_position_local(DVec3::new(3.0, 64.0, 1.0));
 
         let reset_dimensions = EntityDimensions::new(0.6, 1.8, 1.62);
         base.reset_for_player_respawn(reset_dimensions);
 
+        let reset_position = DVec3::new(3.0, 64.0, 1.0);
         assert_vec3_close(base.velocity(), DVec3::ZERO);
         assert!(!base.no_physics());
         assert_eq!(base.air_supply(), DEFAULT_MAX_AIR_SUPPLY);
@@ -2797,6 +2816,11 @@ mod tests {
         assert!(!base.needs_velocity_sync());
         assert!(!base.hurt_marked());
         assert_eq!(base.dimensions(), reset_dimensions);
+        assert!(base.last_movements_for_block_effects().is_empty());
+        assert_eq!(
+            base.take_movements_for_block_effects(),
+            vec![EntityMovement::new(reset_position, reset_position)]
+        );
     }
 
     #[test]
