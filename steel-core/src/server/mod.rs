@@ -909,13 +909,12 @@ impl Server {
             .filter(|world| world.domain() == domain)
             .cloned()
         else {
-            return Ok((
-                default_world.clone(),
-                local_respawn_data_for_world(&default_world),
-            ));
+            let respawn_data = default_world
+                .world_border_adjusted_respawn_data(local_respawn_data_for_world(&default_world));
+            return Ok((default_world.clone(), respawn_data));
         };
 
-        // TODO: apply vanilla world-border-adjusted respawn data.
+        let respawn_data = target_world.world_border_adjusted_respawn_data(respawn_data);
         Ok((target_world, respawn_data))
     }
 

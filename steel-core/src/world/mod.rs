@@ -92,7 +92,7 @@ use crate::{
         SharedEntity, WorldEntityManager, entities::ItemEntity,
     },
     fluid::{FluidStateExt as _, fluid_state_to_block},
-    level_data::{LevelDataManager, WorldBorderData, WorldGenerationSettings},
+    level_data::{LevelDataManager, RespawnData, WorldBorderData, WorldGenerationSettings},
     player::{LastSeen, Player, connection::NetworkConnection},
     poi::PointOfInterestStorage,
 };
@@ -483,6 +483,27 @@ impl World {
         initialize_border_packet(self.world_border_snapshot())
     }
 
+    #[must_use]
+    pub(crate) fn world_border_adjusted_respawn_data(
+        &self,
+        respawn_data: RespawnData,
+    ) -> RespawnData {
+        let pos = respawn_data.pos();
+        let border = self.world_border_snapshot();
+        if border.is_within_bounds_with_margin(f64::from(pos.x()), f64::from(pos.z()), 0.0) {
+            return respawn_data;
+        }
+
+        let center_pos = BlockPos::containing(border.center_x, 0.0, border.center_z);
+        let new_pos = self.heightmap_pos(HeightmapType::MotionBlocking, center_pos);
+        RespawnData::of(
+            respawn_data.dimension().clone(),
+            new_pos,
+            respawn_data.yaw,
+            respawn_data.pitch,
+        )
+    }
+
     /// Sets the world border center and broadcasts the vanilla center update packet.
     pub fn set_world_border_center(&self, x: f64, z: f64) -> Result<(), WorldBorderError> {
         let (snapshot, data) = {
@@ -796,15 +817,15 @@ impl World {
                 .generator
                 .spawn_height(self.get_min_y(), self.get_height())
         } else {
-            self.height_at(HeightmapType::MotionBlocking, x, z)?
+            self.vanilla_chunk_height_at(HeightmapType::MotionBlocking, x, z)?
         };
 
         if top_y < self.get_min_y() {
             return None;
         }
 
-        let surface = self.height_at(HeightmapType::WorldSurface, x, z)?;
-        let ocean_floor = self.height_at(HeightmapType::OceanFloor, x, z)?;
+        let surface = self.vanilla_chunk_height_at(HeightmapType::WorldSurface, x, z)?;
+        let ocean_floor = self.vanilla_chunk_height_at(HeightmapType::OceanFloor, x, z)?;
         if surface <= top_y && surface > ocean_floor {
             return None;
         }
@@ -834,6 +855,33 @@ impl World {
                 .as_full()
                 .map(|chunk| chunk.get_height(heightmap_type, (x & 15) as usize, (z & 15) as usize))
         })?
+    }
+
+    fn vanilla_chunk_height_at(
+        &self,
+        heightmap_type: HeightmapType,
+        x: i32,
+        z: i32,
+    ) -> Option<i32> {
+        self.height_at(heightmap_type, x, z)
+            .map(|first_available| first_available - 1)
+    }
+
+    fn heightmap_pos(&self, heightmap_type: HeightmapType, pos: BlockPos) -> BlockPos {
+        BlockPos::new(
+            pos.x(),
+            self.level_height_at(heightmap_type, pos.x(), pos.z()),
+            pos.z(),
+        )
+    }
+
+    fn level_height_at(&self, heightmap_type: HeightmapType, x: i32, z: i32) -> i32 {
+        if !Self::is_in_world_bounds_horizontal(BlockPos::new(x, 0, z)) {
+            return self.sea_level + 1;
+        }
+
+        self.height_at(heightmap_type, x, z)
+            .unwrap_or_else(|| self.get_min_y())
     }
 
     /// Checks if a player may interact with the world at the given position.

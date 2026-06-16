@@ -27,7 +27,7 @@ use crate::behavior::BlockStateBehaviorExt;
 use crate::behavior::{BLOCK_BEHAVIORS, FLUID_BEHAVIORS};
 use crate::chunk::chunk_holder::ChunkHolder;
 use crate::chunk::chunk_ticket_manager::{
-    ChunkTicket, ChunkTicketLevel, ChunkTicketManager, LevelChange, is_full, is_ticked,
+    ChunkTicket, ChunkTicketLevel, ChunkTicketManager, LevelChange, generation_status, is_ticked,
 };
 use crate::chunk::player_chunk_view::PlayerChunkView;
 use crate::chunk::{
@@ -723,9 +723,11 @@ impl ChunkMap {
             let start = Instant::now();
             let scheduled_count = holders_to_schedule
                 .iter()
-                .filter(|(holder, level)| {
-                    level.is_some_and(is_full)
-                        && holder.schedule_chunk_generation_task_b(ChunkStatus::Full, self)
+                .filter_map(|(holder, level)| {
+                    let status = generation_status(*level)?;
+                    holder
+                        .schedule_chunk_generation_task_b(status, self)
+                        .then_some(())
                 })
                 .count();
             timings.schedule_generation = start.elapsed();
