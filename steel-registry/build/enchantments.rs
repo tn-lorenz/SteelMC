@@ -662,15 +662,25 @@ fn parse_entity_predicate_json(value: &serde_json::Value) -> Result<EntityPredic
     let Some(object) = value.as_object() else {
         return Err("entity_properties predicate must be an object".to_owned());
     };
-    let unsupported = object
-        .keys()
-        .any(|key| !matches!(key.as_str(), "type" | "vehicle" | "flags" | "type_specific"));
-    let entity_type = match object.get("type") {
+    let unsupported = object.keys().any(|key| {
+        !matches!(
+            key.as_str(),
+            "type"
+                | "minecraft:entity_type"
+                | "vehicle"
+                | "minecraft:vehicle"
+                | "flags"
+                | "minecraft:flags"
+                | "type_specific"
+                | "minecraft:type_specific/player"
+        )
+    });
+    let entity_type = match aliased_object_field(object, &["type", "minecraft:entity_type"])? {
         Some(serde_json::Value::String(raw)) => parse_entity_type_predicate(raw)?,
         Some(_) => return Err("entity_properties predicate `type` must be a string".to_owned()),
         None => EntityTypePredicateJson::Any,
     };
-    let vehicle = match object.get("vehicle") {
+    let vehicle = match aliased_object_field(object, &["vehicle", "minecraft:vehicle"])? {
         Some(serde_json::Value::Object(vehicle)) if vehicle.is_empty() => {
             EntityVehiclePredicateJson::Present
         }
@@ -678,16 +688,18 @@ fn parse_entity_predicate_json(value: &serde_json::Value) -> Result<EntityPredic
         Some(_) => return Err("entity_properties predicate `vehicle` must be an object".to_owned()),
         None => EntityVehiclePredicateJson::Any,
     };
-    let flags = object
-        .get("flags")
+    let flags = aliased_object_field(object, &["flags", "minecraft:flags"])?
         .map(parse_entity_flags_predicate_json)
         .transpose()?
         .unwrap_or_else(EntityFlagsPredicateJson::any);
-    let type_specific = object
-        .get("type_specific")
-        .map(parse_type_specific_predicate_json)
-        .transpose()?
-        .unwrap_or(EntityTypeSpecificPredicateJson::Any);
+    let type_specific =
+        match aliased_object_field(object, &["type_specific", "minecraft:type_specific/player"])? {
+            Some(value) if object.contains_key("minecraft:type_specific/player") => {
+                EntityTypeSpecificPredicateJson::Player(parse_player_predicate_json(value, false)?)
+            }
+            Some(value) => parse_type_specific_predicate_json(value)?,
+            None => EntityTypeSpecificPredicateJson::Any,
+        };
 
     Ok(EntityPredicateJson {
         entity_type,
@@ -696,6 +708,26 @@ fn parse_entity_predicate_json(value: &serde_json::Value) -> Result<EntityPredic
         type_specific,
         unsupported,
     })
+}
+
+fn aliased_object_field<'a>(
+    object: &'a serde_json::Map<String, serde_json::Value>,
+    fields: &[&str],
+) -> Result<Option<&'a serde_json::Value>, String> {
+    let mut found: Option<(&str, &serde_json::Value)> = None;
+    for field in fields {
+        if let Some(value) = object.get(*field) {
+            if let Some(previous) = found {
+                let previous_field = previous.0;
+                return Err(format!(
+                    "entity_properties predicate must not contain both `{previous_field}` and `{field}`"
+                ));
+            }
+            found = Some((*field, value));
+        }
+    }
+
+    Ok(found.map(|(_, value)| value))
 }
 
 fn parse_entity_flags_predicate_json(
@@ -728,9 +760,21 @@ fn parse_type_specific_predicate_json(
         return Ok(EntityTypeSpecificPredicateJson::Unsupported);
     }
 
-    let unsupported = object
-        .keys()
-        .any(|key| !matches!(key.as_str(), "type" | "gamemode" | "food"));
+    Ok(EntityTypeSpecificPredicateJson::Player(
+        parse_player_predicate_json(value, true)?,
+    ))
+}
+
+fn parse_player_predicate_json(
+    value: &serde_json::Value,
+    allow_type_field: bool,
+) -> Result<PlayerPredicateJson, String> {
+    let Some(object) = value.as_object() else {
+        return Err("player predicate must be an object".to_owned());
+    };
+    let unsupported = object.keys().any(|key| {
+        !matches!(key.as_str(), "gamemode" | "food") && !(allow_type_field && key == "type")
+    });
     let game_modes = match object.get("gamemode") {
         Some(serde_json::Value::Array(modes)) => modes
             .iter()
@@ -748,13 +792,11 @@ fn parse_type_specific_predicate_json(
         .map(parse_player_food_min_json)
         .transpose()?;
 
-    Ok(EntityTypeSpecificPredicateJson::Player(
-        PlayerPredicateJson {
-            game_modes,
-            food_level_min,
-            unsupported,
-        },
-    ))
+    Ok(PlayerPredicateJson {
+        game_modes,
+        food_level_min,
+        unsupported,
+    })
 }
 
 fn parse_player_food_min_json(value: &serde_json::Value) -> Result<i32, String> {
