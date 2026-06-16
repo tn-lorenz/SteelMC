@@ -102,7 +102,6 @@ pub struct ItemEntity {
     /// Vanilla entity type registered for this implementation.
     entity_type: EntityTypeRef,
 
-    // === Synced Entity Data ===
     /// Entity data containing the `ItemStack`.
     entity_data: SyncMutex<ItemEntityData>,
 
@@ -199,8 +198,6 @@ impl ItemEntity {
         }
     }
 
-    // === Item Access ===
-
     /// Gets a clone of the item stack.
     #[must_use]
     pub fn get_item(&self) -> ItemStack {
@@ -211,8 +208,6 @@ impl ItemEntity {
     pub fn set_item(&self, item: ItemStack) {
         self.entity_data.lock().item.set(item);
     }
-
-    // === Timers ===
 
     /// Gets the current age in ticks.
     #[must_use]
@@ -262,8 +257,6 @@ impl ItemEntity {
         self.item_state.lock().pickup_delay > 0
     }
 
-    // === Health ===
-
     /// Gets the health (damage resistance).
     #[must_use]
     pub fn get_health(&self) -> i32 {
@@ -275,8 +268,6 @@ impl ItemEntity {
         self.item_state.lock().health = health;
     }
 
-    // === Thrower ===
-
     /// Sets the entity that threw/dropped this item.
     pub fn set_thrower(&self, uuid: Uuid) {
         self.item_state.lock().thrower = Some(uuid);
@@ -287,8 +278,6 @@ impl ItemEntity {
     pub fn get_thrower(&self) -> Option<Uuid> {
         self.item_state.lock().thrower
     }
-
-    // === Owner ===
 
     /// Sets the owner (the only entity that can pick up this item).
     ///
@@ -305,8 +294,6 @@ impl ItemEntity {
     pub fn get_owner(&self) -> Option<Uuid> {
         self.item_state.lock().owner
     }
-
-    // === Pickup ===
 
     /// Attempts to have a player pick up this item.
     ///
@@ -362,8 +349,6 @@ impl ItemEntity {
             false
         }
     }
-
-    // === Merging ===
 
     /// Returns true if this item entity can be merged with others.
     ///

@@ -1064,8 +1064,6 @@ impl EntityBase {
         base
     }
 
-    // === Accessors for Entity trait delegation ===
-
     /// Gets the entity's unique network ID.
     #[inline]
     pub const fn id(&self) -> i32 {

@@ -1732,9 +1732,8 @@ fn generate_enchantment_effects(
 }
 
 pub(crate) fn build() -> TokenStream {
-    println!("cargo:rerun-if-changed=build_assets/builtin_datapacks/minecraft/enchantment/");
-
-    let enchantment_dir = "build_assets/builtin_datapacks/minecraft/enchantment";
+    let enchantment_dir = "../steel-utils/build_assets/builtin_datapacks/minecraft/enchantment";
+    println!("cargo:rerun-if-changed={enchantment_dir}");
     let mut enchantments = Vec::new();
 
     for entry in fs::read_dir(enchantment_dir).expect("Failed to read enchantment directory") {

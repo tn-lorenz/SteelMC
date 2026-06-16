@@ -6,9 +6,6 @@ use crate::{
 use rand::RngExt;
 use rustc_hash::FxHashMap;
 use steel_utils::{BlockStateId, Identifier};
-// =============================================================================
-// Strongly-typed enums for string values
-// =============================================================================
 
 /// Entity target for loot context lookups.
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
@@ -45,10 +42,6 @@ pub enum DyeColor {
     Red,
     Black,
 }
-
-// =============================================================================
-// Loot table types
-// =============================================================================
 
 /// The type of loot table, determining when/how it's used.
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
@@ -258,7 +251,6 @@ pub struct LootContext<'a, R: rand::Rng> {
     /// Whether the entity was killed by a player.
     pub killed_by_player: bool,
 
-    // === Extended context parameters for vanilla compatibility ===
     /// World position where the loot is generated (block position or entity death location).
     pub origin: Option<(f64, f64, f64)>,
     /// Current game time in ticks (for TimeCheck condition).
@@ -1055,7 +1047,6 @@ pub enum LootFunction {
         enchantments: &'static [(Identifier, NumberProvider)],
         add: bool,
     },
-    // === New functions for vanilla compatibility ===
     /// Change the item type entirely.
     SetItem { item: Identifier },
     /// Copy name from source entity/block to item.
@@ -1848,7 +1839,6 @@ impl LootFunction {
                     .collect();
                 item.set_enchantments(&resolved, *add);
             }
-            // === New function implementations ===
             LootFunction::SetItem { item: new_item } => {
                 item.set_item(new_item);
             }

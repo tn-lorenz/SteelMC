@@ -60,11 +60,9 @@ pub enum ComponentDataDiscriminant {
 #[derive(Debug, Clone, PartialEq)]
 #[non_exhaustive]
 pub enum ComponentData {
-    // ==================== Unit types (marker components) ====================
     /// Component with no data (e.g., Unbreakable, Glider, CreativeSlotLock)
     Empty,
 
-    // ==================== Primitives ====================
     /// Boolean component (e.g., EnchantmentGlintOverride)
     Bool(bool),
     /// i32 component (e.g., MaxStackSize, MaxDamage, Damage, RepairCost)
@@ -75,7 +73,6 @@ pub enum ComponentData {
     /// minecraft:damage_type
     DamageType(DamageTypeComponent),
 
-    // ==================== Complex structured components ====================
     /// minecraft:tool
     Tool(Tool),
     /// minecraft:weapon
@@ -93,11 +90,9 @@ pub enum ComponentData {
     /// TextComponent component (e.g., CustomName, ItemName)
     TextComponent(Box<TextComponent>),
 
-    // ==================== Not yet implemented ====================
     /// Placeholder for components that aren't implemented yet.
     Todo,
 
-    // ==================== Plugin fallback ====================
     /// Opaque bytes for plugin-defined components.
     /// The plugin is responsible for serialization/deserialization.
     Other(Vec<u8>),
@@ -214,8 +209,6 @@ pub trait Component: Sized + Clone {
     /// cannot be referenced directly (e.g., needs conversion).
     fn from_data_ref(data: &ComponentData) -> Option<&Self>;
 }
-
-// ==================== Component implementations ====================
 
 // Unit type for marker components
 impl Component for () {

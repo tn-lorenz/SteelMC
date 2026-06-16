@@ -18,8 +18,6 @@ pub use super::components::{
     ItemEnchantments, PiercingWeapon, Tool, ToolRule, Weapon,
 };
 
-// ==================== Fully Implemented Components ====================
-
 pub const MAX_STACK_SIZE: DataComponentType<i32> =
     DataComponentType::new(Identifier::vanilla_static("max_stack_size"));
 
@@ -68,7 +66,6 @@ pub const ENCHANTMENT_GLINT_OVERRIDE: DataComponentType<bool> =
 pub const POTION_DURATION_SCALE: DataComponentType<f32> =
     DataComponentType::new(Identifier::vanilla_static("potion_duration_scale"));
 
-// ==================== Stub Component Keys ====================
 // These components are registered but use placeholder serialization.
 // They use the Todo ComponentData variant.
 
@@ -349,8 +346,6 @@ pub const SHEEP_COLOR: DataComponentType<()> =
 pub const SHULKER_COLOR: DataComponentType<()> =
     DataComponentType::new(Identifier::vanilla_static("shulker/color"));
 
-// ==================== Registration ====================
-
 /// Helper to create stub reader/writer functions for unimplemented components.
 /// These components use the Todo variant as a placeholder.
 macro_rules! register_stub {
@@ -385,8 +380,6 @@ macro_rules! register_stub {
         );
     }};
 }
-
-// ==================== Custom Network Readers/Writers ====================
 
 /// Network reader for VarInt-encoded i32 components.
 fn varint_reader(cursor: &mut std::io::Cursor<&[u8]>) -> std::io::Result<ComponentData> {
