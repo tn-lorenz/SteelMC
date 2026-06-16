@@ -19,21 +19,54 @@ const ABSOLUTE_MAX_ATTEMPTS: i32 = 1024;
 const PLAYER_SPAWN_CHUNK_RADIUS: u8 = 3;
 const CHUNK_REQUEST_POLL_DELAY: Duration = Duration::from_millis(10);
 
-impl World {
-    /// Finds the adjusted shared spawn position used for players entering this world's default spawn.
-    pub async fn find_adjusted_shared_spawn_pos(
-        self: &Arc<Self>,
+pub(crate) enum PlayerSpawnSearchPoll {
+    Pending,
+    Ready(DVec3),
+    Cancelled,
+}
+
+pub(crate) struct PlayerSpawnSearch {
+    spawn_suggestion: BlockPos,
+    radius: i32,
+    candidate_count: i32,
+    coprime: i32,
+    offset: i32,
+    next_candidate_index: i32,
+    pending: Option<PendingSpawnCandidate>,
+}
+
+struct PendingSpawnCandidate {
+    x: i32,
+    z: i32,
+    kind: SpawnCandidateKind,
+    request: ChunkRequestHandle,
+}
+
+#[derive(Clone, Copy)]
+enum SpawnCandidateKind {
+    Candidate,
+    Fixup,
+}
+
+impl PlayerSpawnSearch {
+    pub(crate) fn new(
+        world: &Arc<World>,
         spawn_suggestion: BlockPos,
         game_type: GameType,
-    ) -> Result<DVec3, String> {
+    ) -> Result<Self, String> {
         if game_type == GameType::Adventure {
-            let _chunk_request = self
-                .load_spawn_candidate_chunk(spawn_suggestion.x(), spawn_suggestion.z())
-                .await?;
-            return Ok(self.fixup_spawn_height(spawn_suggestion));
+            return Ok(Self {
+                spawn_suggestion,
+                radius: 0,
+                candidate_count: 0,
+                coprime: 0,
+                offset: 0,
+                next_candidate_index: 0,
+                pending: None,
+            });
         }
 
-        let mut radius = match self.get_game_rule(&RESPAWN_RADIUS) {
+        let mut radius = match world.get_game_rule(&RESPAWN_RADIUS) {
             GameRuleValue::Int(radius) => radius.max(0),
             value @ GameRuleValue::Bool(_) => {
                 return Err(format!(
@@ -42,7 +75,7 @@ impl World {
                 ));
             }
         };
-        let border_distance = self
+        let border_distance = world
             .world_border_snapshot()
             .distance_to_border(
                 f64::from(spawn_suggestion.x()),
@@ -63,26 +96,123 @@ impl World {
         let coprime = get_coprime(candidate_count);
         let offset = rand::random_range(0..candidate_count);
 
-        for candidate_index in 0..candidate_count {
-            let value = (offset + coprime * candidate_index).rem_euclid(candidate_count);
-            let delta_x = value % (radius * 2 + 1);
-            let delta_z = value / (radius * 2 + 1);
-            let target_x = spawn_suggestion.x() + delta_x - radius;
-            let target_z = spawn_suggestion.z() + delta_z - radius;
+        Ok(Self {
+            spawn_suggestion,
+            radius,
+            candidate_count,
+            coprime,
+            offset,
+            next_candidate_index: 0,
+            pending: None,
+        })
+    }
 
-            let _chunk_request = self.load_spawn_candidate_chunk(target_x, target_z).await?;
-            let Some(spawn_pos) = self.level_respawn_pos(target_x, target_z) else {
-                continue;
-            };
-            if self.no_collision_no_liquid(spawn_pos) {
-                return Ok(block_bottom_center(spawn_pos));
+    #[must_use]
+    pub(crate) fn poll(&mut self, world: &Arc<World>) -> PlayerSpawnSearchPoll {
+        self.poll_with_ready_candidate_budget(world, usize::MAX)
+    }
+
+    #[must_use]
+    pub(crate) fn poll_with_ready_candidate_budget(
+        &mut self,
+        world: &Arc<World>,
+        ready_candidate_budget: usize,
+    ) -> PlayerSpawnSearchPoll {
+        let ready_candidate_budget = ready_candidate_budget.max(1);
+        let mut ready_candidates_checked = 0;
+
+        loop {
+            if let Some(pending) = &self.pending {
+                match pending.request.poll() {
+                    ChunkRequestState::Pending { .. } => return PlayerSpawnSearchPoll::Pending,
+                    ChunkRequestState::Cancelled => return PlayerSpawnSearchPoll::Cancelled,
+                    ChunkRequestState::Ready => {
+                        if pending.request.ready_chunks().is_none() {
+                            return PlayerSpawnSearchPoll::Pending;
+                        }
+                    }
+                }
             }
+
+            if let Some(pending) = self.pending.take() {
+                ready_candidates_checked += 1;
+                match pending.kind {
+                    SpawnCandidateKind::Candidate => {
+                        let Some(spawn_pos) = world.level_respawn_pos(pending.x, pending.z) else {
+                            if ready_candidates_checked >= ready_candidate_budget {
+                                self.pending = Some(self.next_candidate(world));
+                                return PlayerSpawnSearchPoll::Pending;
+                            }
+                            continue;
+                        };
+                        if world.no_collision_no_liquid(spawn_pos) {
+                            return PlayerSpawnSearchPoll::Ready(block_bottom_center(spawn_pos));
+                        }
+                        if ready_candidates_checked >= ready_candidate_budget {
+                            self.pending = Some(self.next_candidate(world));
+                            return PlayerSpawnSearchPoll::Pending;
+                        }
+                    }
+                    SpawnCandidateKind::Fixup => {
+                        return PlayerSpawnSearchPoll::Ready(
+                            world.fixup_spawn_height(self.spawn_suggestion),
+                        );
+                    }
+                }
+            }
+
+            self.pending = Some(self.next_candidate(world));
+        }
+    }
+
+    fn next_candidate(&mut self, world: &Arc<World>) -> PendingSpawnCandidate {
+        if self.next_candidate_index < self.candidate_count {
+            let candidate_index = self.next_candidate_index;
+            self.next_candidate_index += 1;
+
+            let value = (self.offset + self.coprime * candidate_index) % self.candidate_count;
+            let delta_x = value % (self.radius * 2 + 1);
+            let delta_z = value / (self.radius * 2 + 1);
+            let target_x = self.spawn_suggestion.x() + delta_x - self.radius;
+            let target_z = self.spawn_suggestion.z() + delta_z - self.radius;
+
+            return PendingSpawnCandidate {
+                x: target_x,
+                z: target_z,
+                kind: SpawnCandidateKind::Candidate,
+                request: world.request_spawn_candidate_chunk(target_x, target_z),
+            };
         }
 
-        let _chunk_request = self
-            .load_spawn_candidate_chunk(spawn_suggestion.x(), spawn_suggestion.z())
-            .await?;
-        Ok(self.fixup_spawn_height(spawn_suggestion))
+        PendingSpawnCandidate {
+            x: self.spawn_suggestion.x(),
+            z: self.spawn_suggestion.z(),
+            kind: SpawnCandidateKind::Fixup,
+            request: world.request_spawn_candidate_chunk(
+                self.spawn_suggestion.x(),
+                self.spawn_suggestion.z(),
+            ),
+        }
+    }
+}
+
+impl World {
+    /// Finds the adjusted shared spawn position used for players entering this world's default spawn.
+    pub async fn find_adjusted_shared_spawn_pos(
+        self: &Arc<Self>,
+        spawn_suggestion: BlockPos,
+        game_type: GameType,
+    ) -> Result<DVec3, String> {
+        let mut search = PlayerSpawnSearch::new(self, spawn_suggestion, game_type)?;
+        loop {
+            match search.poll(self) {
+                PlayerSpawnSearchPoll::Pending => sleep(CHUNK_REQUEST_POLL_DELAY).await,
+                PlayerSpawnSearchPoll::Ready(position) => return Ok(position),
+                PlayerSpawnSearchPoll::Cancelled => {
+                    return Err("spawn search chunk request was cancelled".to_owned());
+                }
+            }
+        }
     }
 
     /// Loads the vanilla radius-3 full chunk square around a prepared player spawn.
@@ -90,35 +220,35 @@ impl World {
         self: &Arc<Self>,
         spawn_position: DVec3,
     ) -> Result<ChunkRequestHandle, String> {
+        let request = self.request_player_spawn_chunks(spawn_position);
+        Self::wait_for_chunk_request(&request).await?;
+        Ok(request)
+    }
+
+    pub(crate) fn request_player_spawn_chunks(
+        self: &Arc<Self>,
+        spawn_position: DVec3,
+    ) -> ChunkRequestHandle {
         let spawn_pos = BlockPos::containing(spawn_position.x, spawn_position.y, spawn_position.z);
         let center = ChunkPos::new(
             SectionPos::block_to_section_coord(spawn_pos.x()),
             SectionPos::block_to_section_coord(spawn_pos.z()),
         );
-        let request = self.chunk_map.request_square(
+        self.chunk_map.request_square(
             center,
             PLAYER_SPAWN_CHUNK_RADIUS,
             ChunkStatus::Full,
             ChunkTicketKind::PlayerSpawn,
-        );
-        Self::wait_for_chunk_request(&request).await?;
-        Ok(request)
+        )
     }
 
-    async fn load_spawn_candidate_chunk(
-        self: &Arc<Self>,
-        x: i32,
-        z: i32,
-    ) -> Result<ChunkRequestHandle, String> {
+    fn request_spawn_candidate_chunk(self: &Arc<Self>, x: i32, z: i32) -> ChunkRequestHandle {
         let chunk = ChunkPos::new(
             SectionPos::block_to_section_coord(x),
             SectionPos::block_to_section_coord(z),
         );
-        let request =
-            self.chunk_map
-                .request_chunk(chunk, ChunkStatus::Full, ChunkTicketKind::SpawnSearch);
-        Self::wait_for_chunk_request(&request).await?;
-        Ok(request)
+        self.chunk_map
+            .request_chunk(chunk, ChunkStatus::Full, ChunkTicketKind::SpawnSearch)
     }
 
     async fn wait_for_chunk_request(request: &ChunkRequestHandle) -> Result<(), String> {

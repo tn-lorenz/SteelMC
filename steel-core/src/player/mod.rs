@@ -83,6 +83,7 @@ use text_components::resolving::TextResolutor;
 use text_components::translation::TranslatedMessage;
 use text_components::{content::Resolvable, custom::CustomData};
 
+use crate::chunk::chunk_request::{ChunkRequestHandle, ChunkRequestState};
 use crate::config::RuntimeConfig;
 use crate::enchantment_helper;
 use crate::entity::damage::DamageSource;
@@ -97,7 +98,11 @@ use crate::physics::MoveResult;
 use crate::player::experience::Experience;
 use crate::player::player_data::PersistentRootVehicle;
 use crate::player::player_inventory::PlayerInventory;
-use crate::server::Server;
+use crate::server::{
+    Server,
+    jobs::{JobPoll, ServerJob, ServerJobContext},
+};
+use crate::world::player_spawn_finder::{PlayerSpawnSearch, PlayerSpawnSearchPoll};
 use steel_registry::vanilla_damage_types;
 
 use steel_protocol::packets::{
@@ -114,6 +119,8 @@ use crate::inventory::{MenuInstance, container::Container, inventory_menu::Inven
 pub type PreviousMessageEntry = PreviousMessage;
 
 pub use steel_protocol::packets::common::{ChatVisibility, HumanoidArm, ParticleStatus};
+
+const RESPAWN_SEARCH_READY_CANDIDATE_BUDGET: usize = 8;
 
 /// Client-side settings sent via `SClientInformation` packet.
 /// This is stored separately from the packet struct to allow default initialization.
@@ -272,6 +279,108 @@ pub struct Player {
 struct PendingRootVehicleRestore {
     world: Identifier,
     root_vehicle: PersistentRootVehicle,
+}
+
+#[derive(Clone, Copy)]
+struct DeathRespawnSpawn {
+    position: DVec3,
+    rotation: (f32, f32),
+}
+
+struct PlayerRespawnJob {
+    player: Arc<Player>,
+    world: Arc<World>,
+    rotation: (f32, f32),
+    phase: PlayerRespawnJobPhase,
+}
+
+enum PlayerRespawnJobPhase {
+    Searching(PlayerSpawnSearch),
+    LoadingSpawnChunks {
+        spawn: DeathRespawnSpawn,
+        request: ChunkRequestHandle,
+    },
+}
+
+impl PlayerRespawnJob {
+    fn new(player: Arc<Player>, world: Arc<World>) -> Result<Self, String> {
+        let (spawn, spawn_pos) = {
+            let level_data = world.level_data.read();
+            (
+                level_data.data().spawn.clone(),
+                level_data.data().spawn_pos(),
+            )
+        };
+        let search = PlayerSpawnSearch::new(&world, spawn_pos, world.default_gamemode)?;
+        Ok(Self {
+            player,
+            world,
+            rotation: (spawn.angle, 0.0),
+            phase: PlayerRespawnJobPhase::Searching(search),
+        })
+    }
+
+    fn still_valid(&self) -> bool {
+        !self.player.connection.closed()
+            && Arc::ptr_eq(&self.player.get_world(), &self.world)
+            && Player::should_process_respawn(self.player.get_health())
+    }
+}
+
+impl ServerJob for PlayerRespawnJob {
+    fn poll(&mut self, _context: &mut ServerJobContext) -> JobPoll {
+        if !self.still_valid() {
+            self.player.finish_respawn_request();
+            return JobPoll::Finished;
+        }
+
+        loop {
+            match &mut self.phase {
+                PlayerRespawnJobPhase::Searching(search) => {
+                    match search.poll_with_ready_candidate_budget(
+                        &self.world,
+                        RESPAWN_SEARCH_READY_CANDIDATE_BUDGET,
+                    ) {
+                        PlayerSpawnSearchPoll::Pending => return JobPoll::Pending,
+                        PlayerSpawnSearchPoll::Cancelled => {
+                            self.player.finish_respawn_request();
+                            return JobPoll::Finished;
+                        }
+                        PlayerSpawnSearchPoll::Ready(position) => {
+                            let spawn = DeathRespawnSpawn {
+                                position,
+                                rotation: self.rotation,
+                            };
+                            let request = self.world.request_player_spawn_chunks(position);
+                            self.phase =
+                                PlayerRespawnJobPhase::LoadingSpawnChunks { spawn, request };
+                        }
+                    }
+                }
+                PlayerRespawnJobPhase::LoadingSpawnChunks { spawn, request } => {
+                    match request.poll() {
+                        ChunkRequestState::Pending { .. } => return JobPoll::Pending,
+                        ChunkRequestState::Cancelled => {
+                            self.player.finish_respawn_request();
+                            return JobPoll::Finished;
+                        }
+                        ChunkRequestState::Ready => {
+                            if request.ready_chunks().is_none() {
+                                return JobPoll::Pending;
+                            }
+
+                            self.player.finish_death_respawn(&self.world, *spawn);
+                            return JobPoll::Finished;
+                        }
+                    }
+                }
+            }
+        }
+    }
+
+    fn cancel(&mut self) {
+        self.player.finish_respawn_request();
+    }
 }
 
 impl Player {
@@ -828,9 +937,6 @@ impl Player {
     }
 
     /// TODO: bed/respawn anchor, cross-world, noRespawnBlockAvailable
-    ///
-    /// # Panics
-    /// If the player dies in a world that doesn't exist.
     pub fn respawn(&self) {
         let health = self.get_health();
         if !Self::should_process_respawn(health) {
@@ -838,30 +944,46 @@ impl Player {
         }
 
         let world = self.get_world();
+        let Some(player_arc) = world.players.get_by_entity_id(self.id()) else {
+            return;
+        };
+        if !self.begin_respawn_request() {
+            return;
+        }
+
+        match PlayerRespawnJob::new(player_arc, world) {
+            Ok(job) => self.server().jobs.spawn(job),
+            Err(error) => {
+                self.finish_respawn_request();
+                log::error!(
+                    "Failed to schedule respawn for player {}: {error}",
+                    self.gameprofile.name
+                );
+            }
+        }
+    }
+
+    fn finish_death_respawn(self: &Arc<Self>, world: &Arc<World>, spawn: DeathRespawnSpawn) {
+        self.finish_respawn_request();
+
+        if self.connection.closed()
+            || !Arc::ptr_eq(&self.get_world(), world)
+            || !Self::should_process_respawn(self.get_health())
+        {
+            return;
+        }
+
         self.reset_state_for_death_respawn();
         let was_removed = self.base.clear_removed();
 
         // TODO: bed/respawn anchor lookup, send NO_RESPAWN_BLOCK_AVAILABLE if missing
 
-        let Some(player_arc) = world.players.get_by_entity_id(self.id()) else {
-            return;
-        };
         if !was_removed {
             world.unregister_player_entity(self);
         }
 
         // Shared reset (clears transient state, sends CRespawn)
-        player_arc.reset(world.clone(), ResetReason::Respawn);
-
-        // Compute spawn position
-        let spawn_pos = world.level_data.read().data().spawn_pos();
-        let spawn = DVec3::new(
-            f64::from(spawn_pos.x()) + 0.5,
-            f64::from(spawn_pos.y()),
-            f64::from(spawn_pos.z()) + 0.5,
-        );
-
-        // TODO: send CSetDefaultSpawnPosition (dimension, pos, yaw, pitch)
+        self.reset(world.clone(), ResetReason::Respawn);
 
         self.send_difficulty();
 
@@ -881,7 +1003,7 @@ impl Player {
         // TODO: send mob effect packets once effects are implemented
 
         // Shared spawn (teleport, abilities, weather, time, chunk tracking reset)
-        let _ = player_arc.spawn(spawn, (0.0, 0.0), ResetReason::Respawn);
+        let _ = self.spawn(spawn.position, spawn.rotation, ResetReason::Respawn);
     }
 
     fn reset_state_for_death_respawn(&self) {
@@ -907,6 +1029,14 @@ impl Player {
         self.health_sync.lock().reset_for_respawn();
         self.clear_pending_root_vehicle();
         self.movement.lock().reset_last_known_client_movement();
+    }
+
+    fn begin_respawn_request(&self) -> bool {
+        self.lifecycle.lock().begin_respawn()
+    }
+
+    fn finish_respawn_request(&self) {
+        self.lifecycle.lock().finish_respawn();
     }
 
     fn detach_relationships_for_respawn(&self) {
