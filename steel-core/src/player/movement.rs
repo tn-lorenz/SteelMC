@@ -766,6 +766,7 @@ impl Player {
         let pos = DVec3::new(x, y, z);
 
         self.try_set_position(pos)?;
+        self.get_world().chunk_map.update_player_status(self);
         self.set_velocity(DVec3::ZERO);
 
         let new_id = {

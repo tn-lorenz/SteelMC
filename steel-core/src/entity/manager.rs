@@ -764,6 +764,83 @@ impl WorldEntityManager {
             .collect()
     }
 
+    /// Returns whether any live entity intersects `aabb` and matches `predicate`.
+    #[must_use]
+    pub fn has_entity_in_aabb_matching(
+        &self,
+        aabb: &WorldAabb,
+        mut predicate: impl FnMut(&dyn Entity) -> bool,
+    ) -> bool {
+        let (min_section, max_section) = Self::entity_query_section_bounds(aabb);
+
+        let state = self.state.read();
+        for sy in min_section.y()..=max_section.y() {
+            for sz in min_section.z()..=max_section.z() {
+                for sx in min_section.x()..=max_section.x() {
+                    let section_pos = SectionPos::new(sx, sy, sz);
+                    let Some(entity_ids) = state.by_section.get(&section_pos) else {
+                        continue;
+                    };
+
+                    for entity_id in entity_ids {
+                        let Some(entry) = state.live_by_id.get(entity_id) else {
+                            continue;
+                        };
+                        if !Self::is_accessible(&state, entry) {
+                            continue;
+                        }
+
+                        let bounding_box = entry.entity.bounding_box();
+                        if bounding_box.intersects(*aabb) && predicate(entry.entity.as_ref()) {
+                            return true;
+                        }
+                    }
+                }
+            }
+        }
+
+        false
+    }
+
+    /// Gets matching live entity bounding boxes that intersect `aabb`.
+    #[must_use]
+    pub fn get_entity_bounding_boxes_in_aabb_matching(
+        &self,
+        aabb: &WorldAabb,
+        mut predicate: impl FnMut(&dyn Entity) -> bool,
+    ) -> Vec<WorldAabb> {
+        let (min_section, max_section) = Self::entity_query_section_bounds(aabb);
+
+        let state = self.state.read();
+        let mut result = Vec::new();
+        for sy in min_section.y()..=max_section.y() {
+            for sz in min_section.z()..=max_section.z() {
+                for sx in min_section.x()..=max_section.x() {
+                    let section_pos = SectionPos::new(sx, sy, sz);
+                    let Some(entity_ids) = state.by_section.get(&section_pos) else {
+                        continue;
+                    };
+
+                    for entity_id in entity_ids {
+                        let Some(entry) = state.live_by_id.get(entity_id) else {
+                            continue;
+                        };
+                        if !Self::is_accessible(&state, entry) {
+                            continue;
+                        }
+
+                        let bounding_box = entry.entity.bounding_box();
+                        if bounding_box.intersects(*aabb) && predicate(entry.entity.as_ref()) {
+                            result.push(bounding_box);
+                        }
+                    }
+                }
+            }
+        }
+
+        result
+    }
+
     #[must_use]
     /// Gets the nearest live entity whose bounding box intersects `aabb` and matches `predicate`.
     pub fn nearest_entity_in_aabb_matching(
@@ -786,16 +863,7 @@ impl WorldEntityManager {
     #[must_use]
     /// Gets live entities whose bounding boxes intersect `aabb`.
     pub fn get_entities_in_aabb(&self, aabb: &WorldAabb) -> Vec<SharedEntity> {
-        let min_section = SectionPos::from_entity_pos(DVec3::new(
-            aabb.min_x() - 2.0,
-            aabb.min_y() - 2.0,
-            aabb.min_z() - 2.0,
-        ));
-        let max_section = SectionPos::from_entity_pos(DVec3::new(
-            aabb.max_x() + 2.0,
-            aabb.max_y() + 2.0,
-            aabb.max_z() + 2.0,
-        ));
+        let (min_section, max_section) = Self::entity_query_section_bounds(aabb);
 
         let state = self.state.read();
         let mut result = Vec::new();
@@ -822,6 +890,20 @@ impl WorldEntityManager {
         }
 
         result
+    }
+
+    fn entity_query_section_bounds(aabb: &WorldAabb) -> (SectionPos, SectionPos) {
+        let min_section = SectionPos::from_entity_pos(DVec3::new(
+            aabb.min_x() - 2.0,
+            aabb.min_y() - 2.0,
+            aabb.min_z() - 2.0,
+        ));
+        let max_section = SectionPos::from_entity_pos(DVec3::new(
+            aabb.max_x() + 2.0,
+            aabb.max_y() + 2.0,
+            aabb.max_z() + 2.0,
+        ));
+        (min_section, max_section)
     }
 
     /// Reports saveable entities whose chunks were not part of a chunk save pass.
@@ -1386,6 +1468,62 @@ mod tests {
 
         assert_eq!(result.len(), 1);
         assert!(Arc::ptr_eq(&result[0], &second));
+    }
+
+    #[test]
+    fn has_aabb_matching_query_respects_bounds_accessibility_and_predicate() {
+        let manager = WorldEntityManager::new();
+        let loaded_chunk = ChunkPos::new(0, 0);
+        let hidden_chunk = ChunkPos::new(1, 0);
+        load_chunk(&manager, loaded_chunk);
+        load_chunk(&manager, hidden_chunk);
+
+        let filtered_out = entity(1, 1, DVec3::new(1.0, 64.0, 1.0));
+        let matching = entity(2, 2, DVec3::new(3.0, 64.0, 1.0));
+        let hidden = entity(3, 3, DVec3::new(17.0, 64.0, 1.0));
+        for entity in [filtered_out, matching, hidden] {
+            assert!(
+                manager
+                    .add_live_entity(entity, EntityOwnership::ManagerOwned)
+                    .is_ok()
+            );
+        }
+
+        let loaded_aabb = WorldAabb::new(0.0, 63.0, 0.0, 5.0, 66.0, 3.0);
+        assert!(manager.has_entity_in_aabb_matching(&loaded_aabb, |entity| entity.id() == 2));
+        assert!(!manager.has_entity_in_aabb_matching(&loaded_aabb, |entity| entity.id() == 3));
+
+        manager.begin_chunk_unload(hidden_chunk);
+        let hidden_aabb = WorldAabb::new(16.0, 63.0, 0.0, 18.0, 66.0, 3.0);
+        assert!(!manager.has_entity_in_aabb_matching(&hidden_aabb, |entity| entity.id() == 3));
+    }
+
+    #[test]
+    fn aabb_matching_bounding_box_query_returns_only_matching_intersections() {
+        let manager = WorldEntityManager::new();
+        load_chunk(&manager, ChunkPos::new(0, 0));
+
+        let filtered_out = entity(1, 1, DVec3::new(1.0, 64.0, 1.0));
+        let matching = entity(2, 2, DVec3::new(3.0, 64.0, 1.0));
+        let outside = entity(3, 3, DVec3::new(8.0, 64.0, 1.0));
+        let expected_box = matching.bounding_box();
+        for entity in [filtered_out, matching, outside] {
+            assert!(
+                manager
+                    .add_live_entity(entity, EntityOwnership::ManagerOwned)
+                    .is_ok()
+            );
+        }
+
+        let aabb = WorldAabb::new(2.0, 63.0, 0.0, 4.0, 66.0, 3.0);
+        let mut saw_outside_entity = false;
+        let result = manager.get_entity_bounding_boxes_in_aabb_matching(&aabb, |entity| {
+            saw_outside_entity |= entity.id() == 3;
+            entity.id() > 1
+        });
+
+        assert_eq!(result, vec![expected_box]);
+        assert!(!saw_outside_entity);
     }
 
     #[test]

@@ -553,15 +553,13 @@ impl Player {
             //return;
         }
 
-        let world = self.get_world();
-        world.chunk_map.update_player_status(self);
-
         self.living_base.decrement_invulnerable_time();
         self.tick_mob_effects();
 
         if self.get_health() <= 0.0 {
             self.tick_death();
         } else {
+            let world = self.get_world();
             self.touch_nearby_items();
             self.block_breaking.lock().tick(self, &world);
             self.apply_effects_from_blocks();

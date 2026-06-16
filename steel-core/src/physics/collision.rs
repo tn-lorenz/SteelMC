@@ -577,19 +577,19 @@ impl CollisionWorld for WorldCollisionProvider<'_> {
 
         let query = aabb.inflate(ENTITY_COLLISION_EPSILON);
         self.world
-            .get_entities_in_aabb(&query)
-            .into_iter()
-            .filter(|entity| !entity.is_removed())
-            .filter(|entity| match self.source {
+            .get_entity_bounding_boxes_in_aabb_matching(&query, |entity| match self.source {
                 Some(source) => {
                     entity.id() != source.id()
+                        && !entity.is_removed()
                         && !entity.is_spectator()
-                        && source.can_collide_with(entity.as_ref())
+                        && source.can_collide_with(entity)
                 }
-                None => !entity.is_spectator() && entity.can_be_collided_with(None),
+                None => {
+                    !entity.is_removed()
+                        && !entity.is_spectator()
+                        && entity.can_be_collided_with(None)
+                }
             })
-            .map(|entity| entity.bounding_box())
-            .collect()
     }
 
     fn has_entity_collision(&self, aabb: &WorldAabb) -> bool {
@@ -602,18 +602,18 @@ impl CollisionWorld for WorldCollisionProvider<'_> {
 
         let query = aabb.inflate(ENTITY_COLLISION_EPSILON);
         self.world
-            .get_entities_in_aabb(&query)
-            .into_iter()
-            .any(|entity| {
-                !entity.is_removed()
-                    && match self.source {
-                        Some(source) => {
-                            entity.id() != source.id()
-                                && !entity.is_spectator()
-                                && source.can_collide_with(entity.as_ref())
-                        }
-                        None => !entity.is_spectator() && entity.can_be_collided_with(None),
-                    }
+            .has_entity_in_aabb_matching(&query, |entity| match self.source {
+                Some(source) => {
+                    entity.id() != source.id()
+                        && !entity.is_removed()
+                        && !entity.is_spectator()
+                        && source.can_collide_with(entity)
+                }
+                None => {
+                    !entity.is_removed()
+                        && !entity.is_spectator()
+                        && entity.can_be_collided_with(None)
+                }
             })
     }
 

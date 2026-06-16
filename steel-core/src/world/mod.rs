@@ -3748,6 +3748,32 @@ impl World {
             .get_entities_in_aabb_matching(aabb, predicate)
     }
 
+    /// Returns whether any entity intersects the given bounding box and matches `predicate`.
+    ///
+    /// Only checks entities in loaded chunks.
+    #[must_use]
+    pub fn has_entity_in_aabb_matching(
+        &self,
+        aabb: &WorldAabb,
+        predicate: impl FnMut(&dyn Entity) -> bool,
+    ) -> bool {
+        self.entity_manager
+            .has_entity_in_aabb_matching(aabb, predicate)
+    }
+
+    /// Gets matching entity bounding boxes intersecting the given bounding box.
+    ///
+    /// Only checks entities in loaded chunks.
+    #[must_use]
+    pub fn get_entity_bounding_boxes_in_aabb_matching(
+        &self,
+        aabb: &WorldAabb,
+        predicate: impl FnMut(&dyn Entity) -> bool,
+    ) -> Vec<WorldAabb> {
+        self.entity_manager
+            .get_entity_bounding_boxes_in_aabb_matching(aabb, predicate)
+    }
+
     /// Gets the nearest entity intersecting the given bounding box and matching `predicate`.
     ///
     /// Only returns entities in loaded chunks.
