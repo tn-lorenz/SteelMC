@@ -119,10 +119,12 @@ pub trait CollisionWorld {
         old_bottom_center: DVec3,
         descending: bool,
     ) -> Vec<WorldAabb> {
-        self.get_collisions_with_context(
+        let mut collisions = self.get_entity_collisions(aabb);
+        collisions.extend(self.get_block_collisions_with_context(
             aabb,
             BlockCollisionContext::pre_move(old_bottom_center.y, descending),
-        )
+        ));
+        collisions
     }
 }
 
@@ -508,10 +510,12 @@ impl CollisionWorld for WorldCollisionProvider<'_> {
         old_bottom_center: DVec3,
         descending: bool,
     ) -> Vec<WorldAabb> {
-        self.get_collisions_with_context(
+        let mut collisions = self.get_entity_collisions(aabb);
+        collisions.extend(self.get_block_collisions_with_context(
             aabb,
             self.entity_collision_context(old_bottom_center.y, descending, true),
-        )
+        ));
+        collisions
     }
 
     fn get_entity_collisions(&self, aabb: &WorldAabb) -> Vec<WorldAabb> {
@@ -605,6 +609,11 @@ mod tests {
         pre_move_collisions: Vec<WorldAabb>,
     }
 
+    struct BorderPreMoveWorld {
+        entity_collisions: Vec<WorldAabb>,
+        border_collisions: Vec<WorldAabb>,
+    }
+
     impl CollisionWorld for TestCollisionWorld {
         fn get_block_state(&self, _pos: BlockPos) -> BlockStateId {
             vanilla_blocks::AIR.default_state()
@@ -633,6 +642,32 @@ mod tests {
             _descending: bool,
         ) -> Vec<WorldAabb> {
             self.pre_move_collisions.clone()
+        }
+    }
+
+    impl CollisionWorld for BorderPreMoveWorld {
+        fn get_block_state(&self, _pos: BlockPos) -> BlockStateId {
+            vanilla_blocks::AIR.default_state()
+        }
+
+        fn get_block_collisions(&self, _aabb: &WorldAabb) -> Vec<WorldAabb> {
+            Vec::new()
+        }
+
+        fn get_entity_collisions(&self, aabb: &WorldAabb) -> Vec<WorldAabb> {
+            self.entity_collisions
+                .iter()
+                .copied()
+                .filter(|collision| collision.intersects(*aabb))
+                .collect()
+        }
+
+        fn get_world_border_collisions(&self, aabb: &WorldAabb) -> Vec<WorldAabb> {
+            self.border_collisions
+                .iter()
+                .copied()
+                .filter(|collision| collision.intersects(*aabb))
+                .collect()
         }
     }
 
@@ -714,6 +749,23 @@ mod tests {
             new_aabb,
             false
         ));
+    }
+
+    #[test]
+    fn pre_move_collisions_exclude_world_border_collisions() {
+        let entity_collision = WorldAabb::new(0.25, 0.0, 0.25, 0.75, 1.0, 0.75);
+        let border_collision = WorldAabb::new(0.0, 0.0, 0.0, 1.0, 1.0, 1.0);
+        let world = BorderPreMoveWorld {
+            entity_collisions: vec![entity_collision],
+            border_collisions: vec![border_collision],
+        };
+        let aabb = WorldAabb::new(0.0, 0.0, 0.0, 1.0, 1.0, 1.0);
+
+        assert_eq!(
+            world.get_pre_move_collisions(&aabb, DVec3::ZERO, false),
+            vec![entity_collision]
+        );
+        assert!(world.has_world_border_collision(&aabb));
     }
 
     #[test]

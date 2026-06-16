@@ -17,7 +17,7 @@ const FLAG_BLEND: u8 = 0x08;
 pub struct CUpdateMobEffect {
     #[write(as = VarInt)]
     pub entity_id: i32,
-    /// Holder-encoded mob effect id (`registry_id + 1`).
+    /// Holder-registry mob effect id.
     #[write(as = VarInt)]
     pub effect_id: i32,
     #[write(as = VarInt)]
@@ -69,4 +69,37 @@ fn mob_effect_flags(packet_flags: MobEffectPacketFlags) -> u8 {
         flags |= FLAG_BLEND;
     }
     flags
+}
+
+#[cfg(test)]
+mod tests {
+    use std::sync::Once;
+
+    use steel_registry::{REGISTRY, Registry, vanilla_mob_effects};
+
+    use super::*;
+
+    fn init_test_registry() {
+        static INIT_REGISTRY: Once = Once::new();
+        INIT_REGISTRY.call_once(|| {
+            let mut registry = Registry::new_vanilla();
+            registry.freeze();
+            let _ = REGISTRY.init(registry);
+        });
+    }
+
+    #[test]
+    fn update_mob_effect_uses_raw_holder_registry_id() {
+        init_test_registry();
+
+        let packet = CUpdateMobEffect::new(
+            42,
+            vanilla_mob_effects::SPEED,
+            0,
+            100,
+            MobEffectPacketFlags::default(),
+        );
+
+        assert_eq!(packet.effect_id, 0);
+    }
 }

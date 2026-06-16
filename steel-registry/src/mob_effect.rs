@@ -28,13 +28,12 @@ pub struct MobEffect {
 }
 
 impl MobEffect {
-    /// Returns the VarInt payload used by vanilla holder-based mob-effect packets.
+    /// Returns the VarInt payload used by vanilla mob-effect holder-registry packets.
     #[must_use]
     pub fn packet_holder_id(&self) -> i32 {
         let id = crate::RegistryEntry::id(self);
-        let holder_id = id + 1;
-        debug_assert!(holder_id <= i32::MAX as usize);
-        holder_id as i32
+        debug_assert!(id <= i32::MAX as usize);
+        id as i32
     }
 }
 

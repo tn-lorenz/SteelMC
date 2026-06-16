@@ -3730,6 +3730,9 @@ impl World {
     pub fn nearest_player_distance_sqr(&self, position: DVec3) -> Option<f64> {
         let mut nearest = None;
         self.players.iter_players(|_, player| {
+            if player.is_spectator() {
+                return true;
+            }
             let distance_sqr = player.position().distance_squared(position);
             if nearest.is_none_or(|current| distance_sqr < current) {
                 nearest = Some(distance_sqr);

@@ -230,6 +230,7 @@ impl PathNavigation {
         self.direct_target = None;
         self.target_pos = None;
         self.speed_modifier = 0.0;
+        self.has_delayed_recomputation = false;
         self.done = true;
     }
 
@@ -1227,6 +1228,28 @@ mod tests {
             panic!("recompute should run once path updates are allowed");
         };
         assert_eq!(request.target_pos, BlockPos::new(2, 64, 0));
+    }
+
+    #[test]
+    fn stop_clears_delayed_recompute_request() {
+        let path = Path::new(vec![Node::new(2, 64, 0)], BlockPos::new(2, 64, 0), true);
+        let mut navigation = PathNavigation::new();
+
+        assert!(move_to(
+            &mut navigation,
+            path,
+            1.0,
+            DVec3::new(0.5, 64.0, 0.5)
+        ));
+
+        assert_eq!(navigation.request_recompute_path(20, true), None);
+        assert!(navigation.has_delayed_recomputation());
+
+        navigation.stop();
+
+        assert!(!navigation.has_delayed_recomputation());
+        assert_eq!(navigation.target_pos(), None);
+        assert_eq!(navigation.take_delayed_recompute_request(21, true), None);
     }
 
     #[test]
