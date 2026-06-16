@@ -7,7 +7,6 @@ use std::thread;
 
 use steel::config::{self, LogConfig};
 use steel::logger::CommandLogger;
-use steel::spawn_progress::generate_spawn_chunks;
 use steel::{SERVER, SteelServer, logger::LoggerLayer};
 use steel_core::server::Server;
 use steel_utils::text::DisplayResolutor;
@@ -196,7 +195,7 @@ async fn run_server(
 
     let server = steel.server.clone();
 
-    if !generate_spawn_chunks(&server).await {
+    if !server.prepare_spawn_area().await {
         shutdown_worlds(&server).await;
         return Ok(());
     }

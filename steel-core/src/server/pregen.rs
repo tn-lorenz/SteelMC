@@ -1,32 +1,28 @@
-//! Spawn chunk generation.
-//!
-//! During server startup, generates chunks around the spawn position until
-//! the 7×7 Full area is complete.
-//!
-//! Set `PREGEN_RADIUS` environment variable to generate a larger area (e.g., 128).
+//! Startup pregeneration for the server default world.
 
 use std::collections::VecDeque;
+use std::env;
 use std::sync::Arc;
 use std::time::{Duration, Instant};
 
-use tokio::time::sleep;
-
-use steel_core::chunk::chunk_access::ChunkStatus;
-use steel_core::chunk::chunk_pyramid::GENERATION_PYRAMID;
-use steel_core::chunk::chunk_request::{
-    ChunkRequest, ChunkRequestHandle, ChunkRequestState, ChunkTicketKind,
-};
-use steel_core::server::Server;
-use steel_core::world::World;
 use steel_utils::{ChunkPos, SectionPos};
+use tokio::time::sleep;
 use tokio_util::sync::CancellationToken;
 
+use crate::chunk::chunk_access::ChunkStatus;
+use crate::chunk::chunk_pyramid::GENERATION_PYRAMID;
+use crate::chunk::chunk_request::{
+    ChunkRequest, ChunkRequestHandle, ChunkRequestState, ChunkTicketKind,
+};
+use crate::server::Server;
+use crate::world::World;
+
+#[cfg(feature = "slow_chunk_gen")]
+use crate::chunk::chunk_holder::SLOW_CHUNK_GEN;
 #[cfg(feature = "slow_chunk_gen")]
 use std::sync::atomic::Ordering;
-#[cfg(feature = "slow_chunk_gen")]
-use steel_core::chunk::chunk_holder::SLOW_CHUNK_GEN;
 
-/// Vanilla spawn chunk radius — chunks within this radius reach Full status.
+/// Vanilla spawn chunk radius - chunks within this radius reach Full status.
 const SPAWN_RADIUS: i32 = 3;
 const PREGEN_WINDOW_SIZE: i32 = 32;
 const PREGEN_ACTIVE_WINDOWS: usize = 2;
@@ -140,38 +136,33 @@ impl ActivePregenWindow {
     }
 }
 
-/// Gets the pregeneration radius from environment variable, or returns default spawn radius.
+impl Server {
+    /// Generates the startup spawn area for the server default world.
+    ///
+    /// Set `PREGEN_RADIUS` to generate a larger square area around chunk 0,0.
+    pub async fn prepare_spawn_area(&self) -> bool {
+        let overworld = self.overworld();
+        let pregen_radius = get_pregen_radius();
+
+        let center_chunk = if pregen_radius > SPAWN_RADIUS {
+            ChunkPos::new(0, 0)
+        } else {
+            let spawn_pos = overworld.level_data.read().data().spawn_pos();
+            ChunkPos::new(
+                SectionPos::block_to_section_coord(spawn_pos.0.x),
+                SectionPos::block_to_section_coord(spawn_pos.0.z),
+            )
+        };
+
+        pregen_overworld(overworld, center_chunk, pregen_radius, &self.cancel_token).await
+    }
+}
+
 fn get_pregen_radius() -> i32 {
-    use std::env;
     env::var("PREGEN_RADIUS")
         .ok()
         .and_then(|s| s.parse().ok())
         .unwrap_or(SPAWN_RADIUS)
-}
-
-/// Generates spawn chunks.
-///
-/// Adds a ticket at the world spawn position so that a 7×7 area of chunks
-/// reaches `Full` status. The generation system is pumped in a loop until
-/// completion.
-///
-/// Set `PREGEN_RADIUS` environment variable to generate a larger area.
-pub async fn generate_spawn_chunks(server: &Arc<Server>) -> bool {
-    let overworld = server.overworld();
-    let pregen_radius = get_pregen_radius();
-
-    // For large pregeneration, use center at 0,0; otherwise use spawn position
-    let center_chunk = if pregen_radius > SPAWN_RADIUS {
-        ChunkPos::new(0, 0)
-    } else {
-        let spawn_pos = overworld.level_data.read().data().spawn_pos();
-        ChunkPos::new(
-            SectionPos::block_to_section_coord(spawn_pos.0.x),
-            SectionPos::block_to_section_coord(spawn_pos.0.z),
-        )
-    };
-
-    pregen_overworld(overworld, center_chunk, pregen_radius, &server.cancel_token).await
 }
 
 async fn pregen_overworld(
@@ -245,7 +236,6 @@ fn build_pregen_windows(center_chunk: ChunkPos, radius: i32) -> VecDeque<PregenW
     windows
 }
 
-/// Generates chunks with progress reporting for pregeneration.
 async fn generate_pregen(
     world: &Arc<World>,
     center_chunk: ChunkPos,
@@ -300,7 +290,6 @@ async fn generate_pregen(
             break;
         }
 
-        // Report progress every 5 seconds for large pregen
         if radius > SPAWN_RADIUS && last_report.elapsed() >= Duration::from_secs(5) {
             let ready_in_active = active_windows
                 .iter()
