@@ -331,7 +331,7 @@ async fn generate_pregen(
         }
         fill_active_windows(world, &mut pending_windows, &mut active_windows);
         world.chunk_map.tick_scheduling();
-        release_unneeded_completed_windows(world, &pending_windows, &mut active_windows);
+        release_unneeded_completed_windows(world, &mut active_windows);
 
         if completed == total_chunks {
             break;
@@ -412,7 +412,6 @@ fn activate_next_window(
 
 fn release_unneeded_completed_windows(
     world: &Arc<World>,
-    pending_windows: &VecDeque<PregenWindow>,
     active_windows: &mut Vec<ActivePregenWindow>,
 ) {
     let incomplete_windows = active_windows
@@ -430,11 +429,8 @@ fn release_unneeded_completed_windows(
         let overlaps_incomplete = incomplete_windows
             .iter()
             .any(|window| protected.overlaps(window.protected_rect()));
-        let overlaps_pending = pending_windows
-            .iter()
-            .any(|window| protected.overlaps(window.protected_rect()));
 
-        overlaps_incomplete || overlaps_pending
+        overlaps_incomplete
     });
 
     world.chunk_map.tick_scheduling();
