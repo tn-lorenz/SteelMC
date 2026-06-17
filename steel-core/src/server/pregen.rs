@@ -461,7 +461,6 @@ fn release_unneeded_completed_windows(
         }
 
         let protected = active.window.protected_rect();
-        
 
         incomplete_windows
             .iter()
