@@ -9,6 +9,7 @@ use std::{collections::BTreeMap, fs, path::Path};
 use tracing::level_filters::LevelFilter;
 use tracing_subscriber::filter::Directive;
 
+use reqwest::Url;
 use steel_core::config::{CompressionInfo, RuntimeConfig, ServerLinks, WorldsConfig};
 
 #[cfg(feature = "stand-alone")]
@@ -75,6 +76,8 @@ pub struct ServerConfig {
     pub simulation_distance: u8,
     /// Whether the server is in online mode.
     pub online_mode: bool,
+    /// Optional authentication endpoint for online-mode `hasJoined` checks.
+    pub auth_server: Option<String>,
     /// Whether the server should use encryption.
     pub encryption: bool,
     /// Whether vanilla floating/flying movement checks permit unauthorized flight.
@@ -109,6 +112,7 @@ impl ServerConfig {
             view_distance: self.view_distance,
             simulation_distance: self.simulation_distance,
             online_mode: self.online_mode,
+            auth_server: self.auth_server,
             encryption: self.encryption,
             allow_flight: self.allow_flight,
             motd: self.motd,
@@ -283,6 +287,14 @@ fn validate(config: &ServerConfig) -> Result<(), &'static str> {
     if !(1..=32).contains(&config.view_distance) {
         return Err("View distance must in range 1..32");
     }
+    if let Some(auth_server) = &config.auth_server {
+        let Ok(url) = Url::parse(auth_server) else {
+            return Err("auth_server must be an absolute URL");
+        };
+        if !matches!(url.scheme(), "http" | "https") {
+            return Err("auth_server must use http or https");
+        }
+    }
     if config.simulation_distance > config.view_distance {
         return Err("Simulation distance must be less than or equal to view distance");
     }
@@ -341,6 +353,61 @@ mod tests {
         let config: SteelConfig = toml::from_str(input).expect("config should parse");
 
         assert!(!config.server.allow_flight);
+    }
+
+    #[test]
+    fn configured_auth_server_flows_to_runtime_config() {
+        let auth_server = "https://auth.example.com/session/minecraft/hasJoined";
+        let config_toml = DEFAULT_CONFIG.replace(
+            "online_mode = true",
+            &format!("online_mode = true\nauth_server = \"{auth_server}\""),
+        );
+        let config: SteelConfig = toml::from_str(&config_toml).expect("config parses");
+
+        assert_eq!(config.server.auth_server.as_deref(), Some(auth_server));
+        assert_eq!(
+            config.server.into_runtime_config().auth_server.as_deref(),
+            Some(auth_server)
+        );
+    }
+
+    #[test]
+    fn validate_rejects_invalid_auth_server_url() {
+        let config_toml = DEFAULT_CONFIG.replace(
+            "online_mode = true",
+            "online_mode = true\nauth_server = \"not a url\"",
+        );
+        let config: SteelConfig = toml::from_str(&config_toml).expect("config parses");
+
+        assert_eq!(
+            validate(&config.server),
+            Err("auth_server must be an absolute URL")
+        );
+    }
+
+    #[test]
+    fn validate_allows_http_auth_server_url() {
+        let config_toml = DEFAULT_CONFIG.replace(
+            "online_mode = true",
+            "online_mode = true\nauth_server = \"http://localhost:8080/session/minecraft/hasJoined\"",
+        );
+        let config: SteelConfig = toml::from_str(&config_toml).expect("config parses");
+
+        validate(&config.server).expect("http auth server URL validates");
+    }
+
+    #[test]
+    fn validate_rejects_unsupported_auth_server_scheme() {
+        let config_toml = DEFAULT_CONFIG.replace(
+            "online_mode = true",
+            "online_mode = true\nauth_server = \"ftp://auth.example.com/session/minecraft/hasJoined\"",
+        );
+        let config: SteelConfig = toml::from_str(&config_toml).expect("config parses");
+
+        assert_eq!(
+            validate(&config.server),
+            Err("auth_server must use http or https")
+        );
     }
 
     #[test]
