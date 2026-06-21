@@ -2383,16 +2383,8 @@ mod tests {
             self.entity_type
         }
 
-        fn is_living_entity(&self) -> bool {
-            true
-        }
-
         fn as_living_entity(&self) -> Option<&dyn LivingEntity> {
             Some(self)
-        }
-
-        fn is_mob(&self) -> bool {
-            true
         }
 
         fn as_mob(&self) -> Option<&dyn Mob> {
@@ -2450,10 +2442,6 @@ mod tests {
 
         fn entity_type(&self) -> EntityTypeRef {
             &vanilla_entities::PIG
-        }
-
-        fn is_living_entity(&self) -> bool {
-            true
         }
 
         fn as_living_entity(&self) -> Option<&dyn LivingEntity> {

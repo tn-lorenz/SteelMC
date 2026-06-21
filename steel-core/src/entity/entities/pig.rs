@@ -467,40 +467,20 @@ impl Entity for PigEntity {
         Mob::check_mob_despawn(self);
     }
 
-    fn is_living_entity(&self) -> bool {
-        true
-    }
-
     fn as_living_entity(&self) -> Option<&dyn LivingEntity> {
         Some(self)
-    }
-
-    fn is_pathfinder_mob(&self) -> bool {
-        true
     }
 
     fn as_pathfinder_mob(&self) -> Option<&dyn PathfinderMob> {
         Some(self)
     }
 
-    fn is_mob(&self) -> bool {
-        true
-    }
-
     fn as_mob(&self) -> Option<&dyn Mob> {
         Some(self)
     }
 
-    fn is_animal(&self) -> bool {
-        true
-    }
-
     fn as_animal(&self) -> Option<&dyn Animal> {
         Some(self)
-    }
-
-    fn is_item_steerable(&self) -> bool {
-        true
     }
 
     fn as_item_steerable(&self) -> Option<&dyn ItemSteerable> {

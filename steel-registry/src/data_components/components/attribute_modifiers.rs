@@ -175,8 +175,10 @@ impl ReadFrom for ItemAttributeModifierEntry {
         let id = Identifier::read(data)?;
         let amount = f64::read(data)?;
         let operation = AttributeModifierOperation::read(data)?;
-        let slot =
-            EquipmentSlotGroup::by_id(VarInt::read(data)?.0).unwrap_or(EquipmentSlotGroup::Any);
+        let slot_id = VarInt::read(data)?.0;
+        let slot = EquipmentSlotGroup::by_id(slot_id).ok_or_else(|| {
+            std::io::Error::other(format!("Unknown equipment slot group id: {slot_id}"))
+        })?;
         let display = ItemAttributeModifierDisplay::read(data)?;
 
         Ok(Self {
@@ -202,11 +204,14 @@ impl WriteTo for ItemAttributeModifierDisplay {
 
 impl ReadFrom for ItemAttributeModifierDisplay {
     fn read(data: &mut Cursor<&[u8]>) -> Result<Self> {
-        match VarInt::read(data)?.0 {
+        let display_id = VarInt::read(data)?.0;
+        match display_id {
             0 => Ok(Self::Default),
             1 => Ok(Self::Hidden),
             2 => Ok(Self::OverrideText(Box::new(TextComponent::read(data)?))),
-            _ => Ok(Self::Default),
+            _ => Err(std::io::Error::other(format!(
+                "Unknown attribute modifier display id: {display_id}"
+            ))),
         }
     }
 }
@@ -346,14 +351,20 @@ fn push_hash_entry<T: HashComponent + ?Sized>(entries: &mut Vec<HashEntry>, key:
 
 #[cfg(test)]
 mod tests {
+    use std::io::Cursor;
+
     use steel_utils::Identifier;
+    use steel_utils::codec::VarInt;
+    use steel_utils::serial::{ReadFrom, WriteTo};
 
     use crate::attribute::AttributeModifierOperation;
     use crate::equipment::EquipmentSlot;
     use crate::item_stack::ItemStack;
-    use crate::{test_support::init_test_registry, vanilla_attributes, vanilla_items::ITEMS};
+    use crate::{
+        RegistryEntry, test_support::init_test_registry, vanilla_attributes, vanilla_items::ITEMS,
+    };
 
-    use super::ItemAttributeModifierDisplay;
+    use super::{ItemAttributeModifierDisplay, ItemAttributeModifierEntry};
 
     #[test]
     fn generated_diamond_sword_has_main_hand_attack_modifiers() {
@@ -408,5 +419,48 @@ mod tests {
             AttributeModifierOperation::AddMultipliedTotal
         );
         assert_eq!(modifier.display, ItemAttributeModifierDisplay::Hidden);
+    }
+
+    #[test]
+    fn rejects_unknown_attribute_modifier_slot_group_id() {
+        init_test_registry();
+
+        let mut bytes = Vec::new();
+        let Some(attribute_id) = vanilla_attributes::ARMOR.try_id() else {
+            panic!("armor attribute should be registered");
+        };
+        VarInt(attribute_id as i32).write(&mut bytes).unwrap();
+        Identifier::vanilla_static("test")
+            .write(&mut bytes)
+            .unwrap();
+        1.0_f64.write(&mut bytes).unwrap();
+        AttributeModifierOperation::AddValue
+            .write(&mut bytes)
+            .unwrap();
+        VarInt(999).write(&mut bytes).unwrap();
+        ItemAttributeModifierDisplay::Default
+            .write(&mut bytes)
+            .unwrap();
+
+        let error = ItemAttributeModifierEntry::read(&mut Cursor::new(bytes.as_slice()))
+            .expect_err("unknown slot group id should be rejected");
+
+        assert!(
+            error
+                .to_string()
+                .contains("Unknown equipment slot group id")
+        );
+    }
+
+    #[test]
+    fn rejects_unknown_attribute_modifier_display_id() {
+        let error = ItemAttributeModifierDisplay::read(&mut Cursor::new(&[99][..]))
+            .expect_err("unknown display id should be rejected");
+
+        assert!(
+            error
+                .to_string()
+                .contains("Unknown attribute modifier display id")
+        );
     }
 }

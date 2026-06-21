@@ -1618,10 +1618,6 @@ impl Entity for Player {
         )
     }
 
-    fn is_living_entity(&self) -> bool {
-        true
-    }
-
     fn as_living_entity(&self) -> Option<&dyn LivingEntity> {
         Some(self)
     }

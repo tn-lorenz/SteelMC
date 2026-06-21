@@ -269,6 +269,21 @@ pub fn init_entities() {
 }
 
 #[cfg(test)]
+pub(crate) fn init_test_entities() {
+    use steel_registry::test_support::init_test_registry;
+
+    init_test_registry();
+
+    if ENTITIES.get().is_some() {
+        return;
+    }
+
+    let mut registry = EntityRegistry::new();
+    register_entity_factories(&mut registry);
+    let _ = ENTITIES.set(registry);
+}
+
+#[cfg(test)]
 mod tests {
     use std::io::Cursor;
 

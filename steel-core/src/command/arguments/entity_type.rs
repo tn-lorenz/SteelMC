@@ -79,13 +79,14 @@ impl CommandArgument for EntitySummonArgument {
 
 #[cfg(test)]
 mod tests {
-    use steel_registry::{test_support::init_test_registry, vanilla_entities};
+    use steel_registry::vanilla_entities;
 
     use super::*;
+    use crate::entity::init_test_entities;
 
     #[test]
     fn resolves_summonable_entity_with_default_namespace() {
-        init_test_registry();
+        init_test_entities();
 
         assert_eq!(
             EntitySummonArgument::resolve("pig"),
@@ -95,7 +96,7 @@ mod tests {
 
     #[test]
     fn resolves_summonable_entity_with_explicit_namespace() {
-        init_test_registry();
+        init_test_entities();
 
         assert_eq!(
             EntitySummonArgument::resolve("minecraft:pig"),
@@ -105,14 +106,14 @@ mod tests {
 
     #[test]
     fn rejects_non_summonable_entity_type() {
-        init_test_registry();
+        init_test_entities();
 
         assert_eq!(EntitySummonArgument::resolve("player"), None);
     }
 
     #[test]
     fn rejects_unknown_entity_type() {
-        init_test_registry();
+        init_test_entities();
 
         assert_eq!(EntitySummonArgument::resolve("minecraft:not_real"), None);
     }

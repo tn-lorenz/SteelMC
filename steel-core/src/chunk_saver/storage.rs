@@ -2728,7 +2728,7 @@ mod tests {
     use crate::entity::{
         DEFAULT_MAX_AIR_SUPPLY, Entity, SharedEntity,
         entities::{EndCrystalEntity, RawEntity},
-        init_entities, next_entity_id,
+        init_test_entities, next_entity_id,
     };
     use glam::DVec3;
     use rustc_hash::FxHashMap;
@@ -2744,11 +2744,10 @@ mod tests {
     static RUNTIME_REGISTRIES: Once = Once::new();
 
     fn init_runtime_registries() {
-        init_test_registry();
         RUNTIME_REGISTRIES.call_once(|| {
+            init_test_entities();
             init_behaviors();
             init_block_entities();
-            init_entities();
         });
     }
 

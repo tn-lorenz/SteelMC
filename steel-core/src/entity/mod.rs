@@ -660,6 +660,8 @@ pub use movement_sync::{
     EntityRotationSyncState, EntityVelocitySyncState, POSITION_SYNC_THRESHOLD,
     PackedEntityRotation, ServerEntityMovementSyncState, ServerEntityMovementSyncUpdate,
 };
+#[cfg(test)]
+pub(crate) use registry::init_test_entities;
 pub use registry::{ENTITIES, EntityLoadRequest, EntityRegistry, init_entities};
 pub(crate) use shared_flags::EntitySharedFlags;
 pub(crate) use spawn::{AgeableMobGroupData, EntitySpawnReason, SpawnGroupData};
@@ -1748,7 +1750,7 @@ pub trait Entity: EntityEventSource + Send + Sync {
 
     /// Returns true for entities that implement vanilla living-entity behavior.
     fn is_living_entity(&self) -> bool {
-        false
+        self.as_living_entity().is_some()
     }
 
     /// Returns this entity as a living entity when it has living behavior.
@@ -1769,7 +1771,7 @@ pub trait Entity: EntityEventSource + Send + Sync {
 
     /// Returns true for mobs with pathfinding navigation.
     fn is_pathfinder_mob(&self) -> bool {
-        false
+        self.as_pathfinder_mob().is_some()
     }
 
     /// Returns this entity as a pathfinder mob when it has pathfinding behavior.
@@ -1782,7 +1784,7 @@ pub trait Entity: EntityEventSource + Send + Sync {
 
     /// Returns true for entities that implement vanilla mob behavior.
     fn is_mob(&self) -> bool {
-        false
+        self.as_mob().is_some()
     }
 
     /// Returns this entity as a mob when it has mob behavior.
@@ -1795,7 +1797,7 @@ pub trait Entity: EntityEventSource + Send + Sync {
 
     /// Returns true for entities that implement vanilla animal behavior.
     fn is_animal(&self) -> bool {
-        false
+        self.as_animal().is_some()
     }
 
     /// Returns this entity as an animal when it has animal behavior.
@@ -1808,7 +1810,7 @@ pub trait Entity: EntityEventSource + Send + Sync {
 
     /// Returns true for entities that implement vanilla item-steered boosts.
     fn is_item_steerable(&self) -> bool {
-        false
+        self.as_item_steerable().is_some()
     }
 
     /// Returns this entity as item steerable when it has item-steering behavior.
@@ -6042,10 +6044,6 @@ mod tests {
 
         fn entity_type(&self) -> EntityTypeRef {
             self.entity_type
-        }
-
-        fn is_living_entity(&self) -> bool {
-            true
         }
 
         fn as_living_entity(&self) -> Option<&dyn LivingEntity> {
