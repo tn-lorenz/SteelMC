@@ -5,6 +5,7 @@ use std::sync::Arc;
 
 use glam::DVec3;
 use steel_registry::entity_type::EntityTypeRef;
+use steel_utils::types::Difficulty;
 use steel_utils::{BlockPos, translations};
 use text_components::TextComponent;
 use text_components::translation::TranslatedMessage;
@@ -86,7 +87,12 @@ fn create_entity(
         ));
     }
 
-    // TODO: Reject peaceful-disallowed entity types once `EntityType.allowedInPeaceful` is generated.
+    if context.world.difficulty() == Difficulty::Peaceful && !entity_type.allowed_in_peaceful {
+        return Err(command_failed(
+            translations::COMMANDS_SUMMON_FAILED_PEACEFUL.msg(),
+        ));
+    }
+
     let world = Arc::clone(&context.world);
     let Some(entity) = ENTITIES.create(entity_type, next_entity_id(), pos, Arc::downgrade(&world))
     else {

@@ -231,7 +231,6 @@ pub(crate) fn generate_arg(
         }
         JsonArgKind::Registry(module) => {
             let name = get_json_str(extra, entry_name, json_key);
-            let name = description_id_registry_name(module, name);
             // vanilla_items uses a LazyLock<Items> struct with field access (ITEMS.stone),
             // while other registries use module-level constants (vanilla_blocks::STONE).
             if module == "vanilla_items" {
@@ -271,14 +270,6 @@ pub(crate) fn generate_arg(
     } else {
         result
     }
-}
-
-fn description_id_registry_name<'a>(module: &str, value: &'a str) -> &'a str {
-    if module == "vanilla_entities" {
-        return value.strip_prefix("entity.minecraft.").unwrap_or(value);
-    }
-
-    value
 }
 
 pub(crate) fn extract_class_name(attr: &syn::Attribute, attribute_name: &str) -> Option<String> {
