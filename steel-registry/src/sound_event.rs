@@ -11,7 +11,7 @@ use steel_utils::serial::{ReadFrom, WriteTo};
 use crate::{REGISTRY, RegistryEntry, RegistryExt};
 
 /// Built-in sound event registry entry used by sound packets and data-driven audio refs.
-#[derive(Debug, PartialEq)]
+#[derive(Debug)]
 pub struct SoundEvent {
     pub key: Identifier,
     pub sound_id: Identifier,

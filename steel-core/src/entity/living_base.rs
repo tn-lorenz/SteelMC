@@ -1529,10 +1529,7 @@ mod tests {
         let last_source = base
             .last_damage_source(50)
             .expect("last damage source should remain valid for 40 ticks");
-        assert!(std::ptr::eq(
-            last_source.damage_type,
-            &vanilla_damage_types::GENERIC
-        ));
+        assert_eq!(last_source.damage_type, &vanilla_damage_types::GENERIC);
         assert!(base.last_damage_source(51).is_none());
     }
 

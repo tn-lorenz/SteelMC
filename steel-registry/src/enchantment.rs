@@ -30,6 +30,8 @@ pub struct Enchantment {
     pub effects: EnchantmentEffects,
 }
 
+crate::impl_registry_entry_eq!(Enchantment);
+
 impl RegistryEntry for Enchantment {
     fn key(&self) -> &Identifier {
         &self.key
@@ -154,15 +156,6 @@ impl Enchantment {
 }
 
 pub type EnchantmentRef = &'static Enchantment;
-
-impl PartialEq for EnchantmentRef {
-    #[expect(clippy::disallowed_methods)] // This IS the PartialEq impl; ptr::eq is correct here
-    fn eq(&self, other: &Self) -> bool {
-        std::ptr::eq(*self, *other)
-    }
-}
-
-impl Eq for EnchantmentRef {}
 
 pub struct EnchantmentRegistry {
     enchantments_by_id: Vec<EnchantmentRef>,

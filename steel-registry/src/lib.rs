@@ -489,7 +489,7 @@ pub mod test_support {
 }
 
 /// Trait for types stored in a registry, allowing self-lookup of their numeric ID.
-pub trait RegistryEntry: 'static {
+pub trait RegistryEntry: PartialEq + 'static {
     fn key(&self) -> &Identifier;
     fn try_id(&self) -> Option<usize>;
 

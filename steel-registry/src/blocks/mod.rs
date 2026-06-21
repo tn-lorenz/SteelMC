@@ -200,15 +200,6 @@ impl Block {
 
 pub type BlockRef = &'static Block;
 
-impl PartialEq for BlockRef {
-    #[expect(clippy::disallowed_methods)] // This IS the PartialEq impl; ptr::eq is correct here
-    fn eq(&self, other: &Self) -> bool {
-        std::ptr::eq(*self, *other)
-    }
-}
-
-impl Eq for BlockRef {}
-
 // The central registry for all blocks.
 pub struct BlockRegistry {
     blocks_by_id: Vec<BlockRef>,
@@ -551,6 +542,8 @@ impl BlockRegistry {
 }
 
 crate::impl_registry_ext!(BlockRegistry, Block, blocks_by_id, blocks_by_key);
+
+crate::impl_registry_entry_eq!(Block);
 
 impl crate::RegistryEntry for Block {
     fn key(&self) -> &Identifier {

@@ -3971,7 +3971,7 @@ pub trait LivingEntity: Entity {
         if source.is(&vanilla_damage_type_tags::DamageTypeTag::NO_ANGER) {
             return;
         }
-        if std::ptr::eq(source.damage_type, &vanilla_damage_types::WIND_CHARGE)
+        if source.damage_type == &vanilla_damage_types::WIND_CHARGE
             && REGISTRY.entity_types.is_in_tag(
                 self.entity_type(),
                 &EntityTypeTag::NO_ANGER_FROM_WIND_CHARGE,
