@@ -250,7 +250,7 @@ fn piercing_ray_hit_t(
 }
 
 fn ray_aabb_hit_t(aabb: WorldAabb, from: DVec3, to: DVec3) -> Option<f64> {
-    if aabb.contains(from.x, from.y, from.z) {
+    if aabb.contains(from) {
         return Some(0.0);
     }
 
@@ -451,12 +451,7 @@ impl Player {
             && let Some(player) = self.get_world().players.get_by_entity_id(entity.id())
         {
             let velocity = entity.velocity();
-            player.send_packet(CSetEntityMotion::new(
-                entity.id(),
-                velocity.x,
-                velocity.y,
-                velocity.z,
-            ));
+            player.send_packet(CSetEntityMotion::new(entity.id(), velocity));
             entity.clear_hurt_mark();
             entity.set_velocity(old_movement);
         }

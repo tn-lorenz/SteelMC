@@ -1584,7 +1584,7 @@ impl Entity for Player {
         entity_to_ride.position_rider(self.as_entity_event_source());
         let position = self.position();
         let (yaw, pitch) = self.rotation();
-        if let Err(error) = self.teleport(position.x, position.y, position.z, yaw, pitch) {
+        if let Err(error) = self.teleport(position, yaw, pitch) {
             panic!(
                 "failed to synchronize player {} mounted position: {error}",
                 self.id()
