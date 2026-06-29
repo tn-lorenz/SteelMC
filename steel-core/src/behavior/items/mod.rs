@@ -19,6 +19,7 @@ mod shovel;
 mod sign_item;
 mod standing_and_wall_block_item;
 
+mod fishing_rod;
 mod flint_and_steel;
 
 pub use axe::AxeItem;
@@ -27,6 +28,7 @@ pub use bonemeal::BoneMealItem;
 pub use bucket::BucketItem;
 pub use default::DefaultItemBehavior;
 pub use ender_eye::EnderEyeItem;
+pub use fishing_rod::FishingRodItem;
 pub use ender_pearl::EnderPearlItem;
 pub use flint_and_steel::{FireChargeItem, FlintAndSteelItem};
 pub use food_on_a_stick::FoodOnAStickItem;
