@@ -353,19 +353,24 @@ pub const SHULKER_COLOR: DataComponentType<()> =
 /// These components use the Todo variant as a placeholder.
 macro_rules! register_stub {
     ($registry:expr, $key:expr) => {{
-        fn network_reader(cursor: &mut std::io::Cursor<&[u8]>) -> std::io::Result<ComponentData> {
+        const fn network_reader(
+            cursor: &mut std::io::Cursor<&[u8]>,
+        ) -> std::io::Result<ComponentData> {
             // Stub: read nothing, return Todo
             let _ = cursor;
             Ok(ComponentData::Todo)
         }
 
-        fn network_writer(data: &ComponentData, _writer: &mut Vec<u8>) -> std::io::Result<()> {
+        const fn network_writer(
+            data: &ComponentData,
+            _writer: &mut Vec<u8>,
+        ) -> std::io::Result<()> {
             // Stub: write nothing
             let _ = data;
             Ok(())
         }
 
-        fn nbt_reader(_tag: simdnbt::borrow::NbtTag) -> Option<ComponentData> {
+        const fn nbt_reader(_tag: simdnbt::borrow::NbtTag) -> Option<ComponentData> {
             Some(ComponentData::Todo)
         }
 
