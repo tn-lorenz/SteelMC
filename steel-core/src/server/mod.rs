@@ -18,14 +18,17 @@ use crate::chunk::{
 use crate::command::CommandDispatcher;
 use crate::config::{ResolvedWorldConfig, RuntimeConfig, WorldsConfig};
 use crate::entity::{
-    Entity, EntityBase, RemovalReason, SharedEntity, change_entity_world, init_entities,
+    Entity, EntityBase, PendingWorldChangeToken, RemovalReason, SharedEntity, change_entity_world,
+    init_entities,
 };
 
-use crate::chunk_saver::{ChunkStorage, registry::WorldStorageRegistry};
+use crate::chunk_saver::{ChunkStorage, PersistentEntity, registry::WorldStorageRegistry};
 use crate::level_data::{LevelDataManager, RespawnData, WorldGenerationSettings};
 use crate::player::chunk_sender::{ChunkSender, EncodedChunk};
 use crate::player::connection::NetworkConnection;
-use crate::player::player_data::{PersistentPlayerData, PersistentRootVehicle};
+use crate::player::player_data::{
+    PersistentEnderPearl, PersistentPlayerData, PersistentRootVehicle,
+};
 use crate::player::player_data_storage::{GlobalPlayerData, PlayerDataStorage};
 use crate::player::{Player, ResetReason};
 use crate::portal::{
@@ -466,7 +469,7 @@ impl RootVehicleRestoreJob {
         world: Arc<World>,
         root_vehicle: &PersistentRootVehicle,
     ) -> Option<Self> {
-        let root_chunk = root_vehicle_chunk(root_vehicle)?;
+        let root_chunk = persistent_entity_chunk(&root_vehicle.entity)?;
         let request = world.chunk_map.request_chunk(
             root_chunk,
             ChunkStatus::StructureStarts,
@@ -515,6 +518,72 @@ impl ServerJob for RootVehicleRestoreJob {
     }
 }
 
+fn clear_pending_world_change(entity: &SharedEntity, pending_token: PendingWorldChangeToken) {
+    entity.finish_pending_world_change(pending_token);
+}
+
+fn finish_pending_world_change_after_transition(
+    entity: &SharedEntity,
+    pending_token: PendingWorldChangeToken,
+    changed_entity: Option<SharedEntity>,
+) {
+    match changed_entity {
+        Some(changed_entity) if Arc::ptr_eq(entity, &changed_entity) => {
+            changed_entity.finish_pending_world_change(pending_token);
+        }
+        Some(_) => {}
+        None => {
+            entity.finish_pending_world_change(pending_token);
+        }
+    }
+}
+
+fn finish_portal_world_change(
+    entity: &SharedEntity,
+    pending_token: PendingWorldChangeToken,
+    changed_entity: Option<SharedEntity>,
+) -> JobPoll {
+    finish_pending_world_change_after_transition(entity, pending_token, changed_entity);
+    JobPoll::Finished
+}
+
+fn portal_entity_still_valid(
+    entity: &SharedEntity,
+    source_world: &Arc<World>,
+    pending_token: PendingWorldChangeToken,
+) -> bool {
+    !entity.is_removed()
+        && entity.is_world_change_token_pending(pending_token)
+        && entity
+            .level()
+            .is_some_and(|world| Arc::ptr_eq(&world, source_world))
+        && source_world.contains_live_or_unloading_entity(entity)
+        && !entity
+            .as_player()
+            .is_some_and(|player| player.connection.closed())
+}
+
+fn poll_portal_chunks_until_ready(
+    request: &mut ChunkRequestHandle,
+    entity: &SharedEntity,
+    pending_token: PendingWorldChangeToken,
+) -> Option<JobPoll> {
+    match request.poll() {
+        ChunkRequestState::Pending { .. } => Some(JobPoll::Pending),
+        ChunkRequestState::Cancelled => {
+            clear_pending_world_change(entity, pending_token);
+            Some(JobPoll::Finished)
+        }
+        ChunkRequestState::Ready => {
+            if request.ready_chunks().is_some() {
+                None
+            } else {
+                Some(JobPoll::Pending)
+            }
+        }
+    }
+}
+
 struct NetherPortalTeleportJob {
     entity: SharedEntity,
     source_world: Arc<World>,
@@ -522,6 +591,7 @@ struct NetherPortalTeleportJob {
     portal_pos: BlockPos,
     approximate_exit_pos: BlockPos,
     to_nether: bool,
+    pending_token: PendingWorldChangeToken,
     request: ChunkRequestHandle,
 }
 
@@ -533,6 +603,7 @@ impl NetherPortalTeleportJob {
         portal_pos: BlockPos,
         approximate_exit_pos: BlockPos,
         to_nether: bool,
+        pending_token: PendingWorldChangeToken,
     ) -> Self {
         let request = target_world.chunk_map.request_square(
             nether_portal::prewarm_center(approximate_exit_pos),
@@ -547,61 +618,73 @@ impl NetherPortalTeleportJob {
             portal_pos,
             approximate_exit_pos,
             to_nether,
+            pending_token,
             request,
         }
     }
 
     fn still_valid(&self) -> bool {
-        !self.entity.is_removed()
-            && self
-                .entity
-                .level()
-                .is_some_and(|world| Arc::ptr_eq(&world, &self.source_world))
+        portal_entity_still_valid(&self.entity, &self.source_world, self.pending_token)
+    }
+
+    fn clear_pending(&self) {
+        clear_pending_world_change(&self.entity, self.pending_token);
+    }
+
+    fn finish_transition(&self, changed_entity: Option<SharedEntity>) {
+        finish_pending_world_change_after_transition(
+            &self.entity,
+            self.pending_token,
+            changed_entity,
+        );
     }
 }
 
 impl ServerJob for NetherPortalTeleportJob {
     fn poll(&mut self, context: &mut ServerJobContext) -> JobPoll {
         if !self.still_valid() {
+            self.clear_pending();
             return JobPoll::Finished;
         }
 
-        match self.request.poll() {
-            ChunkRequestState::Pending { .. } => JobPoll::Pending,
-            ChunkRequestState::Cancelled => JobPoll::Finished,
-            ChunkRequestState::Ready => {
-                let Some(_ready) = self.request.ready_chunks() else {
-                    return JobPoll::Pending;
-                };
-                let Some(server) = context.server() else {
-                    return JobPoll::Finished;
-                };
-                if !is_allowed_to_enter_portal(&self.source_world, &self.target_world)
-                    || !server.can_teleport_between_worlds(
-                        self.entity.as_ref(),
-                        &self.source_world,
-                        &self.target_world,
-                    )
-                {
-                    return JobPoll::Finished;
-                }
-                let Some(transition) = nether_portal::calculate_transition(
-                    &self.source_world,
-                    &self.target_world,
-                    self.entity.as_ref(),
-                    self.portal_pos,
-                    self.approximate_exit_pos,
-                    self.to_nether,
-                ) else {
-                    return JobPoll::Finished;
-                };
-                change_entity_world(Arc::clone(&self.entity), &transition);
-                JobPoll::Finished
-            }
+        if let Some(job_poll) =
+            poll_portal_chunks_until_ready(&mut self.request, &self.entity, self.pending_token)
+        {
+            return job_poll;
         }
+
+        let Some(server) = context.server() else {
+            self.clear_pending();
+            return JobPoll::Finished;
+        };
+        if !is_allowed_to_enter_portal(&self.source_world, &self.target_world)
+            || !server.can_teleport_between_worlds(
+                self.entity.as_ref(),
+                &self.source_world,
+                &self.target_world,
+            )
+        {
+            self.clear_pending();
+            return JobPoll::Finished;
+        }
+        let Some(transition) = nether_portal::calculate_transition(
+            &self.source_world,
+            &self.target_world,
+            self.entity.as_ref(),
+            self.portal_pos,
+            self.approximate_exit_pos,
+            self.to_nether,
+        ) else {
+            self.clear_pending();
+            return JobPoll::Finished;
+        };
+        let changed_entity = change_entity_world(Arc::clone(&self.entity), &transition);
+        self.finish_transition(changed_entity);
+        JobPoll::Finished
     }
 
     fn cancel(&mut self) {
+        self.clear_pending();
         self.request.cancel();
     }
 }
@@ -616,6 +699,7 @@ struct EndPortalRespawnSpawn {
 struct EndPortalTeleportJob {
     entity: SharedEntity,
     source_world: Arc<World>,
+    pending_token: PendingWorldChangeToken,
     phase: EndPortalTeleportPhase,
 }
 
@@ -646,6 +730,7 @@ impl EndPortalTeleportJob {
         entity: SharedEntity,
         source_world: Arc<World>,
         target_world: Arc<World>,
+        pending_token: PendingWorldChangeToken,
     ) -> Self {
         let request = target_world.chunk_map.request_square(
             end_portal::end_platform_prewarm_center(),
@@ -656,6 +741,7 @@ impl EndPortalTeleportJob {
         Self {
             entity,
             source_world,
+            pending_token,
             phase: EndPortalTeleportPhase::EntryToEnd {
                 target_world,
                 request,
@@ -668,6 +754,7 @@ impl EndPortalTeleportJob {
         source_world: Arc<World>,
         target_world: Arc<World>,
         respawn_data: RespawnData,
+        pending_token: PendingWorldChangeToken,
     ) -> Self {
         let request = target_world.chunk_map.request_chunk(
             end_portal::prewarm_center(respawn_data.pos()),
@@ -677,6 +764,7 @@ impl EndPortalTeleportJob {
         Self {
             entity,
             source_world,
+            pending_token,
             phase: EndPortalTeleportPhase::ReturningEntity {
                 target_world,
                 respawn_data,
@@ -690,6 +778,7 @@ impl EndPortalTeleportJob {
         source_world: Arc<World>,
         target_world: Arc<World>,
         respawn_data: RespawnData,
+        pending_token: PendingWorldChangeToken,
     ) -> Result<Self, String> {
         let search = PlayerSpawnSearch::new(
             &target_world,
@@ -699,6 +788,7 @@ impl EndPortalTeleportJob {
         Ok(Self {
             entity,
             source_world,
+            pending_token,
             phase: EndPortalTeleportPhase::SearchingPlayerRespawn {
                 target_world,
                 respawn_data,
@@ -708,62 +798,61 @@ impl EndPortalTeleportJob {
     }
 
     fn still_valid(&self) -> bool {
-        !self.entity.is_removed()
-            && self
-                .entity
-                .level()
-                .is_some_and(|world| Arc::ptr_eq(&world, &self.source_world))
+        portal_entity_still_valid(&self.entity, &self.source_world, self.pending_token)
+    }
+
+    fn clear_pending(&self) {
+        clear_pending_world_change(&self.entity, self.pending_token);
     }
 }
 
 impl ServerJob for EndPortalTeleportJob {
     fn poll(&mut self, _context: &mut ServerJobContext) -> JobPoll {
         if !self.still_valid() {
+            self.clear_pending();
             return JobPoll::Finished;
         }
 
+        let entity = Arc::clone(&self.entity);
+        let pending_token = self.pending_token;
         loop {
             match &mut self.phase {
                 EndPortalTeleportPhase::EntryToEnd {
                     target_world,
                     request,
-                } => match request.poll() {
-                    ChunkRequestState::Pending { .. } => return JobPoll::Pending,
-                    ChunkRequestState::Cancelled => return JobPoll::Finished,
-                    ChunkRequestState::Ready => {
-                        let Some(_ready) = request.ready_chunks() else {
-                            return JobPoll::Pending;
-                        };
-                        let Some(transition) = end_portal::calculate_entry_transition(
-                            target_world,
-                            self.entity.as_ref(),
-                        ) else {
-                            return JobPoll::Finished;
-                        };
-                        change_entity_world(Arc::clone(&self.entity), &transition);
-                        return JobPoll::Finished;
+                } => {
+                    if let Some(job_poll) =
+                        poll_portal_chunks_until_ready(request, &entity, pending_token)
+                    {
+                        return job_poll;
                     }
-                },
+                    let Some(transition) =
+                        end_portal::calculate_entry_transition(target_world, entity.as_ref())
+                    else {
+                        clear_pending_world_change(&entity, pending_token);
+                        return JobPoll::Finished;
+                    };
+                    let changed_entity = change_entity_world(Arc::clone(&entity), &transition);
+                    return finish_portal_world_change(&entity, pending_token, changed_entity);
+                }
                 EndPortalTeleportPhase::ReturningEntity {
                     target_world,
                     respawn_data,
                     request,
-                } => match request.poll() {
-                    ChunkRequestState::Pending { .. } => return JobPoll::Pending,
-                    ChunkRequestState::Cancelled => return JobPoll::Finished,
-                    ChunkRequestState::Ready => {
-                        let Some(_ready) = request.ready_chunks() else {
-                            return JobPoll::Pending;
-                        };
-                        let transition = end_portal::calculate_entity_return_transition(
-                            target_world,
-                            self.entity.as_ref(),
-                            respawn_data,
-                        );
-                        change_entity_world(Arc::clone(&self.entity), &transition);
-                        return JobPoll::Finished;
+                } => {
+                    if let Some(job_poll) =
+                        poll_portal_chunks_until_ready(request, &entity, pending_token)
+                    {
+                        return job_poll;
                     }
-                },
+                    let transition = end_portal::calculate_entity_return_transition(
+                        target_world,
+                        entity.as_ref(),
+                        respawn_data,
+                    );
+                    let changed_entity = change_entity_world(Arc::clone(&entity), &transition);
+                    return finish_portal_world_change(&entity, pending_token, changed_entity);
+                }
                 EndPortalTeleportPhase::SearchingPlayerRespawn {
                     target_world,
                     respawn_data,
@@ -773,7 +862,10 @@ impl ServerJob for EndPortalTeleportJob {
                     END_PORTAL_RESPAWN_SEARCH_READY_CANDIDATE_BUDGET,
                 ) {
                     PlayerSpawnSearchPoll::Pending => return JobPoll::Pending,
-                    PlayerSpawnSearchPoll::Cancelled => return JobPoll::Finished,
+                    PlayerSpawnSearchPoll::Cancelled => {
+                        clear_pending_world_change(&entity, pending_token);
+                        return JobPoll::Finished;
+                    }
                     PlayerSpawnSearchPoll::Ready(position) => {
                         let spawn = EndPortalRespawnSpawn {
                             position,
@@ -791,28 +883,27 @@ impl ServerJob for EndPortalTeleportJob {
                     target_world,
                     spawn,
                     request,
-                } => match request.poll() {
-                    ChunkRequestState::Pending { .. } => return JobPoll::Pending,
-                    ChunkRequestState::Cancelled => return JobPoll::Finished,
-                    ChunkRequestState::Ready => {
-                        if request.ready_chunks().is_none() {
-                            return JobPoll::Pending;
-                        }
-                        let transition = end_portal::calculate_player_return_transition(
-                            target_world,
-                            self.entity.as_ref(),
-                            spawn.position,
-                            spawn.rotation,
-                        );
-                        change_entity_world(Arc::clone(&self.entity), &transition);
-                        return JobPoll::Finished;
+                } => {
+                    if let Some(job_poll) =
+                        poll_portal_chunks_until_ready(request, &entity, pending_token)
+                    {
+                        return job_poll;
                     }
-                },
+                    let transition = end_portal::calculate_player_return_transition(
+                        target_world,
+                        entity.as_ref(),
+                        spawn.position,
+                        spawn.rotation,
+                    );
+                    let changed_entity = change_entity_world(Arc::clone(&entity), &transition);
+                    return finish_portal_world_change(&entity, pending_token, changed_entity);
+                }
             }
         }
     }
 
     fn cancel(&mut self) {
+        self.clear_pending();
         match &mut self.phase {
             EndPortalTeleportPhase::EntryToEnd { request, .. }
             | EndPortalTeleportPhase::ReturningEntity { request, .. }
@@ -827,6 +918,7 @@ struct EndGatewayTeleportJob {
     source_world: Arc<World>,
     portal_pos: BlockPos,
     source_is_end: bool,
+    pending_token: PendingWorldChangeToken,
     phase: EndGatewayTeleportPhase,
 }
 
@@ -841,6 +933,7 @@ impl EndGatewayTeleportJob {
         source_world: Arc<World>,
         portal_pos: BlockPos,
         source_is_end: bool,
+        pending_token: PendingWorldChangeToken,
     ) -> Option<Self> {
         let preparation = end_gateway::initial_chunks(&source_world, portal_pos, source_is_end)?;
         let phase = match preparation {
@@ -860,62 +953,82 @@ impl EndGatewayTeleportJob {
             source_world,
             portal_pos,
             source_is_end,
+            pending_token,
             phase,
         })
     }
 
     fn still_valid(&self) -> bool {
-        !self.entity.is_removed()
-            && self
-                .entity
-                .level()
-                .is_some_and(|world| Arc::ptr_eq(&world, &self.source_world))
+        portal_entity_still_valid(&self.entity, &self.source_world, self.pending_token)
+    }
+
+    fn clear_pending(&self) {
+        clear_pending_world_change(&self.entity, self.pending_token);
     }
 }
 
 impl ServerJob for EndGatewayTeleportJob {
     fn poll(&mut self, _context: &mut ServerJobContext) -> JobPoll {
         if !self.still_valid() {
+            self.clear_pending();
             return JobPoll::Finished;
         }
 
+        let entity = Arc::clone(&self.entity);
+        let pending_token = self.pending_token;
+        let source_world = Arc::clone(&self.source_world);
+        let portal_pos = self.portal_pos;
+        let source_is_end = self.source_is_end;
         loop {
             match &mut self.phase {
                 EndGatewayTeleportPhase::LoadingReady { request } => match request.poll() {
                     ChunkRequestState::Pending { .. } => return JobPoll::Pending,
-                    ChunkRequestState::Cancelled => return JobPoll::Finished,
+                    ChunkRequestState::Cancelled => {
+                        clear_pending_world_change(&entity, pending_token);
+                        return JobPoll::Finished;
+                    }
                     ChunkRequestState::Ready => {
                         let Some(_ready) = request.ready_chunks() else {
                             return JobPoll::Pending;
                         };
                         let Some(transition) = end_gateway::calculate_transition(
-                            &self.source_world,
-                            self.entity.as_ref(),
-                            self.portal_pos,
-                            self.source_is_end,
+                            &source_world,
+                            entity.as_ref(),
+                            portal_pos,
+                            source_is_end,
                         ) else {
+                            clear_pending_world_change(&entity, pending_token);
                             return JobPoll::Finished;
                         };
-                        change_entity_world(Arc::clone(&self.entity), &transition);
+                        let changed_entity = change_entity_world(Arc::clone(&entity), &transition);
+                        finish_pending_world_change_after_transition(
+                            &entity,
+                            pending_token,
+                            changed_entity,
+                        );
                         return JobPoll::Finished;
                     }
                 },
                 EndGatewayTeleportPhase::LoadingSearchPath { request } => match request.poll() {
                     ChunkRequestState::Pending { .. } => return JobPoll::Pending,
-                    ChunkRequestState::Cancelled => return JobPoll::Finished,
+                    ChunkRequestState::Cancelled => {
+                        clear_pending_world_change(&entity, pending_token);
+                        return JobPoll::Finished;
+                    }
                     ChunkRequestState::Ready => {
                         let Some(_ready) = request.ready_chunks() else {
                             return JobPoll::Pending;
                         };
                         let Some(chunks) = end_gateway::final_chunks_after_search(
-                            &self.source_world,
-                            self.portal_pos,
-                            self.source_is_end,
+                            &source_world,
+                            portal_pos,
+                            source_is_end,
                         ) else {
+                            clear_pending_world_change(&entity, pending_token);
                             return JobPoll::Finished;
                         };
                         self.phase = EndGatewayTeleportPhase::LoadingReady {
-                            request: request_end_gateway_chunks(&self.source_world, chunks),
+                            request: request_end_gateway_chunks(&source_world, chunks),
                         };
                     }
                 },
@@ -924,6 +1037,7 @@ impl ServerJob for EndGatewayTeleportJob {
     }
 
     fn cancel(&mut self) {
+        self.clear_pending();
         match &mut self.phase {
             EndGatewayTeleportPhase::LoadingReady { request }
             | EndGatewayTeleportPhase::LoadingSearchPath { request } => request.cancel(),
@@ -939,16 +1053,12 @@ fn request_end_gateway_chunks(world: &Arc<World>, chunks: Vec<ChunkPos>) -> Chun
     })
 }
 
-fn root_vehicle_chunk(root_vehicle: &PersistentRootVehicle) -> Option<ChunkPos> {
-    let pos = DVec3::new(
-        root_vehicle.entity.pos[0],
-        root_vehicle.entity.pos[1],
-        root_vehicle.entity.pos[2],
-    );
+fn persistent_entity_chunk(entity: &PersistentEntity) -> Option<ChunkPos> {
+    let pos = DVec3::new(entity.pos[0], entity.pos[1], entity.pos[2]);
     if !pos.x.is_finite() || !pos.y.is_finite() || !pos.z.is_finite() {
         tracing::warn!(
-            uuid = ?Uuid::from_bytes(root_vehicle.entity.uuid),
-            "Skipping persisted RootVehicle with non-finite root position {pos:?}",
+            uuid = ?Uuid::from_bytes(entity.uuid),
+            "Skipping persisted entity with non-finite position {pos:?}",
         );
         return None;
     }
@@ -960,7 +1070,7 @@ fn restore_root_vehicle_for_player(
     world: &Arc<World>,
     root_vehicle: PersistentRootVehicle,
 ) {
-    let Some(root_chunk) = root_vehicle_chunk(&root_vehicle) else {
+    let Some(root_chunk) = persistent_entity_chunk(&root_vehicle.entity) else {
         return;
     };
     let level = Arc::downgrade(world);
@@ -1015,6 +1125,109 @@ fn discard_restored_entities(entities: &[SharedEntity]) {
     for entity in entities {
         entity.set_removed(RemovalReason::Discarded);
     }
+}
+
+/// Re-spawns a single persisted ender pearl in its own world once the target
+/// chunk is loaded (vanilla `ServerPlayer.loadAndSpawnEnderPearl`).
+struct EnderPearlRestoreJob {
+    player: Arc<Player>,
+    world: Arc<World>,
+    request: ChunkRequestHandle,
+    uuid: Uuid,
+    entity: PersistentEntity,
+}
+
+impl EnderPearlRestoreJob {
+    fn new(player: Arc<Player>, world: Arc<World>, entity: PersistentEntity) -> Option<Self> {
+        let chunk = persistent_entity_chunk(&entity)?;
+        let uuid = Uuid::from_bytes(entity.uuid);
+        let request = world.chunk_map.request_chunk(
+            chunk,
+            ChunkStatus::StructureStarts,
+            ChunkTicketKind::PlayerSpawn,
+        );
+        Some(Self {
+            player,
+            world,
+            request,
+            uuid,
+            entity,
+        })
+    }
+}
+
+impl ServerJob for EnderPearlRestoreJob {
+    fn poll(&mut self, _context: &mut ServerJobContext) -> JobPoll {
+        // The pearl lives in its own world, which may differ from the player's, so
+        // only the connection (not the player's current world) gates the restore.
+        if self.player.connection.closed() {
+            return JobPoll::Finished;
+        }
+
+        match self.request.poll() {
+            ChunkRequestState::Pending { .. } => JobPoll::Pending,
+            ChunkRequestState::Cancelled => JobPoll::Finished,
+            ChunkRequestState::Ready => {
+                if self.request.ready_chunks().is_none() {
+                    return JobPoll::Pending;
+                }
+                if !restore_ender_pearl_for_player(&self.player, &self.world, &self.entity) {
+                    self.player.remove_pending_ender_pearl(self.uuid);
+                }
+                JobPoll::Finished
+            }
+        }
+    }
+
+    fn cancel(&mut self) {
+        self.request.cancel();
+    }
+}
+
+fn restore_ender_pearl_for_player(
+    player: &Arc<Player>,
+    world: &Arc<World>,
+    entity: &PersistentEntity,
+) -> bool {
+    let Some(chunk) = persistent_entity_chunk(entity) else {
+        return false;
+    };
+    let level = Arc::downgrade(world);
+    let entities = ChunkStorage::persistent_to_entity_tree_at_level(entity, chunk, &level);
+    let Some(pearl) = entities.first().cloned() else {
+        tracing::warn!(
+            player = %player.gameprofile.name,
+            "Persisted ender pearl did not recreate a runtime entity",
+        );
+        return false;
+    };
+    if pearl.entity_type() != &vanilla_entities::ENDER_PEARL {
+        tracing::warn!(
+            player = %player.gameprofile.name,
+            entity_type = ?pearl.entity_type().key,
+            "Persisted ender pearl recreated a non-pearl root entity",
+        );
+        return false;
+    }
+
+    let owner: SharedEntity = player.clone();
+    for entity in &entities {
+        entity.restore_owner_reference(&owner);
+    }
+
+    if let Err(error) = world.register_loaded_entity_tree(&entities) {
+        tracing::warn!(
+            player = %player.gameprofile.name,
+            "Discarding persisted ender pearl because it could not be registered: {error}",
+        );
+        discard_restored_entities(&entities);
+        return false;
+    }
+
+    player.register_ender_pearl(&pearl);
+    world.chunk_map.place_ender_pearl_ticket(chunk);
+    world.mark_chunk_dirty(chunk);
+    true
 }
 
 /// The main server struct.
@@ -1270,6 +1483,7 @@ impl Server {
             player.send_inventory_to_remote();
         }
         self.schedule_root_vehicle_restore(&player, &state);
+        self.schedule_ender_pearl_restores(&player, &state);
         if player.connection.closed() {
             tokio::spawn(async move {
                 state.world.remove_player(player).await;
@@ -1676,6 +1890,55 @@ impl Server {
         }
     }
 
+    /// Spawns a restore job per persisted ender pearl, each in its own world
+    /// (vanilla `ServerPlayer.loadAndSpawnEnderPearls`).
+    fn schedule_ender_pearl_restores(&self, player: &Arc<Player>, state: &DomainPlayerState) {
+        let pearls = Self::ender_pearls_to_restore(state);
+        if pearls.is_empty() {
+            player.clear_pending_ender_pearls();
+            return;
+        }
+        player.set_pending_ender_pearls(pearls.clone());
+        for pearl in pearls {
+            let pearl_uuid = Uuid::from_bytes(pearl.entity.uuid);
+            let Some(world) = self.resolve_pearl_world(&pearl.world, player) else {
+                player.remove_pending_ender_pearl(pearl_uuid);
+                continue;
+            };
+            if let Some(job) = EnderPearlRestoreJob::new(Arc::clone(player), world, pearl.entity) {
+                self.jobs.spawn(job);
+            } else {
+                player.remove_pending_ender_pearl(pearl_uuid);
+            }
+        }
+    }
+
+    fn ender_pearls_to_restore(state: &DomainPlayerState) -> Vec<PersistentEnderPearl> {
+        match &state.data {
+            DomainPlayerData::SavedRestored { data }
+            | DomainPlayerData::SavedWithoutLocation { data, .. } => data.ender_pearls.clone(),
+            DomainPlayerData::FirstVisit { .. } => Vec::new(),
+        }
+    }
+
+    fn resolve_pearl_world(&self, world_key: &str, player: &Player) -> Option<Arc<World>> {
+        let Ok(key) = world_key.parse::<Identifier>() else {
+            log::warn!(
+                "Saved ender pearl world {world_key} for player {} is invalid, skipping",
+                player.gameprofile.name
+            );
+            return None;
+        };
+        let Some(world) = self.worlds.get(&key) else {
+            log::warn!(
+                "Saved ender pearl world {key} for player {} is missing, skipping",
+                player.gameprofile.name
+            );
+            return None;
+        };
+        Some(world.clone())
+    }
+
     fn send_login_packet(&self, player: &Player, world: &World) {
         let reduced_debug_info =
             world.get_game_rule(&REDUCED_DEBUG_INFO) == GameRuleValue::Bool(true);
@@ -1967,7 +2230,9 @@ impl Server {
 
             {
                 let server = self.clone();
-                let _ = spawn_blocking(move || server.process_world_changes()).await;
+                let _ =
+                    spawn_blocking(move || server.process_world_changes(tick_count, runs_normally))
+                        .await;
             }
 
             self.process_domain_switches().await;
@@ -2138,7 +2403,7 @@ impl Server {
         }
     }
 
-    fn process_world_changes(&self) {
+    fn process_world_changes(self: &Arc<Self>, tick_count: u64, runs_normally: bool) {
         let mut changes = mem::take(&mut *self.pending_world_changes.lock());
         for world in self.worlds.values() {
             changes.extend(world.drain_world_changes());
@@ -2160,43 +2425,75 @@ impl Server {
                     portal: PortalKind::Nether,
                     source_world,
                     portal_pos,
+                    pending_token,
                 } => {
-                    self.queue_nether_portal_change(entity, source_world, portal_pos);
+                    self.queue_nether_portal_change(
+                        entity,
+                        source_world,
+                        portal_pos,
+                        pending_token,
+                        tick_count,
+                        runs_normally,
+                    );
                 }
                 WorldChangeRequest::Portal {
                     portal: PortalKind::End,
                     source_world,
                     portal_pos: _,
+                    pending_token,
                 } => {
-                    self.queue_end_portal_change(entity, source_world);
+                    self.queue_end_portal_change(
+                        entity,
+                        source_world,
+                        pending_token,
+                        tick_count,
+                        runs_normally,
+                    );
                 }
                 WorldChangeRequest::Portal {
                     portal: PortalKind::EndGateway,
                     source_world,
                     portal_pos,
+                    pending_token,
                 } => {
-                    self.queue_end_gateway_change(entity, source_world, portal_pos);
+                    self.queue_end_gateway_change(
+                        entity,
+                        source_world,
+                        portal_pos,
+                        pending_token,
+                        tick_count,
+                        runs_normally,
+                    );
                 }
             }
         }
     }
 
     fn queue_nether_portal_change(
-        &self,
+        self: &Arc<Self>,
         entity: SharedEntity,
         source_world: Arc<World>,
         portal_pos: BlockPos,
+        pending_token: PendingWorldChangeToken,
+        tick_count: u64,
+        runs_normally: bool,
     ) {
+        if !portal_entity_still_valid(&entity, &source_world, pending_token) {
+            clear_pending_world_change(&entity, pending_token);
+            return;
+        }
         let Some(target_world) = self.worlds.resolve_nether_portal_target(&source_world) else {
             log::warn!(
                 "No Nether portal target world loaded for source world {}",
                 source_world.key
             );
+            clear_pending_world_change(&entity, pending_token);
             return;
         };
         if !is_allowed_to_enter_portal(&source_world, &target_world)
             || !self.can_teleport_between_worlds(entity.as_ref(), &source_world, &target_world)
         {
+            clear_pending_world_change(&entity, pending_token);
             return;
         }
         let to_nether = is_nether_dimension_type(&target_world);
@@ -2205,70 +2502,103 @@ impl Server {
             &target_world,
             entity.position(),
         );
-        self.jobs.spawn(NetherPortalTeleportJob::new(
-            entity,
-            source_world,
-            target_world,
-            portal_pos,
-            approximate_exit_pos,
-            to_nether,
-        ));
-    }
-
-    fn queue_end_portal_change(&self, entity: SharedEntity, source_world: Arc<World>) {
-        if !is_end_dimension_type(&source_world) {
-            let Some(target_world) = self.worlds.resolve_end_entry_portal_target(&source_world)
-            else {
-                log::warn!(
-                    "No End portal target world loaded for source world {}",
-                    source_world.key
-                );
-                return;
-            };
-            if !is_allowed_to_enter_portal(&source_world, &target_world)
-                || !self.can_teleport_between_worlds(entity.as_ref(), &source_world, &target_world)
-            {
-                return;
-            }
-            self.jobs.spawn(EndPortalTeleportJob::entry_to_end(
+        self.jobs.poll_now_or_spawn(
+            Arc::downgrade(self),
+            tick_count,
+            runs_normally,
+            NetherPortalTeleportJob::new(
                 entity,
                 source_world,
                 target_world,
-            ));
+                portal_pos,
+                approximate_exit_pos,
+                to_nether,
+                pending_token,
+            ),
+        );
+    }
+
+    fn queue_end_portal_change(
+        self: &Arc<Self>,
+        entity: SharedEntity,
+        source_world: Arc<World>,
+        pending_token: PendingWorldChangeToken,
+        tick_count: u64,
+        runs_normally: bool,
+    ) {
+        if !portal_entity_still_valid(&entity, &source_world, pending_token) {
+            clear_pending_world_change(&entity, pending_token);
+            return;
+        }
+        if !is_end_dimension_type(&source_world) {
+            self.queue_end_entry_portal_change(
+                entity,
+                source_world,
+                pending_token,
+                tick_count,
+                runs_normally,
+            );
             return;
         }
 
         if entity.as_player().is_some() {
-            let (target_world, respawn_data) =
-                match self.strict_respawn_world_and_data_for_domain(source_world.domain()) {
-                    Ok(resolved) => resolved,
-                    Err(error) => {
-                        log::warn!(
-                            "No End portal return target world loaded for source world {}: {error}",
-                            source_world.key
-                        );
-                        return;
-                    }
-                };
-            if !is_allowed_to_enter_portal(&source_world, &target_world)
-                || !self.can_teleport_between_worlds(entity.as_ref(), &source_world, &target_world)
-            {
-                return;
-            }
-            match EndPortalTeleportJob::returning_player(
+            self.queue_end_portal_player_return_change(
                 entity,
                 source_world,
-                target_world,
-                respawn_data,
-            ) {
-                Ok(job) => self.jobs.spawn(job),
-                Err(error) => {
-                    log::error!("Failed to schedule End portal player return: {error}");
-                }
-            }
+                pending_token,
+                tick_count,
+                runs_normally,
+            );
             return;
         }
 
+        self.queue_end_portal_entity_return_change(
+            entity,
+            source_world,
+            pending_token,
+            tick_count,
+            runs_normally,
+        );
+    }
+
+    fn queue_end_entry_portal_change(
+        self: &Arc<Self>,
+        entity: SharedEntity,
+        source_world: Arc<World>,
+        pending_token: PendingWorldChangeToken,
+        tick_count: u64,
+        runs_normally: bool,
+    ) {
+        let Some(target_world) = self.worlds.resolve_end_entry_portal_target(&source_world) else {
+            log::warn!(
+                "No End portal target world loaded for source world {}",
+                source_world.key
+            );
+            clear_pending_world_change(&entity, pending_token);
+            return;
+        };
+        if !is_allowed_to_enter_portal(&source_world, &target_world)
+            || !self.can_teleport_between_worlds(entity.as_ref(), &source_world, &target_world)
+        {
+            clear_pending_world_change(&entity, pending_token);
+            return;
+        }
+        self.jobs.poll_now_or_spawn(
+            Arc::downgrade(self),
+            tick_count,
+            runs_normally,
+            EndPortalTeleportJob::entry_to_end(entity, source_world, target_world, pending_token),
+        );
+    }
+
+    fn queue_end_portal_player_return_change(
+        self: &Arc<Self>,
+        entity: SharedEntity,
+        source_world: Arc<World>,
+        pending_token: PendingWorldChangeToken,
+        tick_count: u64,
+        runs_normally: bool,
+    ) {
         let (target_world, respawn_data) =
             match self.strict_respawn_world_and_data_for_domain(source_world.domain()) {
                 Ok(resolved) => resolved,
@@ -2277,35 +2607,101 @@ impl Server {
                         "No End portal return target world loaded for source world {}: {error}",
                         source_world.key
                     );
+                    clear_pending_world_change(&entity, pending_token);
                     return;
                 }
             };
         if !is_allowed_to_enter_portal(&source_world, &target_world)
             || !self.can_teleport_between_worlds(entity.as_ref(), &source_world, &target_world)
         {
+            clear_pending_world_change(&entity, pending_token);
             return;
         }
-        self.jobs.spawn(EndPortalTeleportJob::returning_entity(
-            entity,
+        match EndPortalTeleportJob::returning_player(
+            Arc::clone(&entity),
             source_world,
             target_world,
             respawn_data,
-        ));
+            pending_token,
+        ) {
+            Ok(job) => {
+                self.jobs
+                    .poll_now_or_spawn(Arc::downgrade(self), tick_count, runs_normally, job);
+            }
+            Err(error) => {
+                clear_pending_world_change(&entity, pending_token);
+                log::error!("Failed to schedule End portal player return: {error}");
+            }
+        }
+    }
+
+    fn queue_end_portal_entity_return_change(
+        self: &Arc<Self>,
+        entity: SharedEntity,
+        source_world: Arc<World>,
+        pending_token: PendingWorldChangeToken,
+        tick_count: u64,
+        runs_normally: bool,
+    ) {
+        let (target_world, respawn_data) =
+            match self.strict_respawn_world_and_data_for_domain(source_world.domain()) {
+                Ok(resolved) => resolved,
+                Err(error) => {
+                    log::warn!(
+                        "No End portal return target world loaded for source world {}: {error}",
+                        source_world.key
+                    );
+                    clear_pending_world_change(&entity, pending_token);
+                    return;
+                }
+            };
+        if !is_allowed_to_enter_portal(&source_world, &target_world)
+            || !self.can_teleport_between_worlds(entity.as_ref(), &source_world, &target_world)
+        {
+            clear_pending_world_change(&entity, pending_token);
+            return;
+        }
+        self.jobs.poll_now_or_spawn(
+            Arc::downgrade(self),
+            tick_count,
+            runs_normally,
+            EndPortalTeleportJob::returning_entity(
+                entity,
+                source_world,
+                target_world,
+                respawn_data,
+                pending_token,
+            ),
+        );
     }
 
     fn queue_end_gateway_change(
-        &self,
+        self: &Arc<Self>,
         entity: SharedEntity,
         source_world: Arc<World>,
         portal_pos: BlockPos,
+        pending_token: PendingWorldChangeToken,
+        tick_count: u64,
+        runs_normally: bool,
     ) {
+        if !portal_entity_still_valid(&entity, &source_world, pending_token) {
+            clear_pending_world_change(&entity, pending_token);
+            return;
+        }
         let source_is_end = is_end_dimension_type(&source_world);
-        let Some(job) = EndGatewayTeleportJob::new(entity, source_world, portal_pos, source_is_end)
-        else {
+        let Some(job) = EndGatewayTeleportJob::new(
+            Arc::clone(&entity),
+            source_world,
+            portal_pos,
+            source_is_end,
+            pending_token,
+        ) else {
             tracing::debug!("End gateway world change ignored because no destination is available");
+            clear_pending_world_change(&entity, pending_token);
             return;
         };
-        self.jobs.spawn(job);
+        self.jobs
+            .poll_now_or_spawn(Arc::downgrade(self), tick_count, runs_normally, job);
     }
 
     fn can_teleport_between_worlds(
@@ -2499,6 +2895,7 @@ impl Server {
             return Err("failed to add player to target world".to_owned());
         }
         self.schedule_root_vehicle_restore(&player, &target_state);
+        self.schedule_ender_pearl_restores(&player, &target_state);
 
         if let Err(e) = self
             .player_data_storage

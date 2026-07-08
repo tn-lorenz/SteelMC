@@ -13,8 +13,8 @@ use uuid::Uuid;
 use wincode::{SchemaRead, SchemaWrite};
 
 use super::player_data::{
-    PLAYER_DATA_VERSION, PersistentAbilities, PersistentPlayerData, PersistentRootVehicle,
-    PersistentSlot,
+    PLAYER_DATA_VERSION, PersistentAbilities, PersistentEnderPearl, PersistentPlayerData,
+    PersistentRootVehicle, PersistentSlot,
 };
 use crate::chunk_saver::PersistentEntity;
 use crate::config::StorageSelection;
@@ -80,11 +80,18 @@ struct PlayerDataFile {
     score: i32,
     seen_credits: bool,
     root_vehicle: Option<RootVehicleFile>,
+    ender_pearls: Vec<EnderPearlFile>,
 }
 
 #[derive(SchemaWrite, SchemaRead)]
 struct RootVehicleFile {
     attach: [u8; 16],
+    entity: PersistentEntity,
+}
+
+#[derive(SchemaWrite, SchemaRead)]
+struct EnderPearlFile {
+    world: String,
     entity: PersistentEntity,
 }
 
@@ -369,6 +376,14 @@ impl PlayerDataFile {
                     attach: root_vehicle.attach,
                     entity: root_vehicle.entity,
                 }),
+            ender_pearls: data
+                .ender_pearls
+                .iter()
+                .map(|pearl| EnderPearlFile {
+                    world: pearl.world.clone(),
+                    entity: pearl.entity.clone(),
+                })
+                .collect(),
         })
     }
 
@@ -431,6 +446,14 @@ impl PlayerDataFile {
                 attach: root_vehicle.attach,
                 entity: root_vehicle.entity,
             }),
+            ender_pearls: self
+                .ender_pearls
+                .into_iter()
+                .map(|pearl| PersistentEnderPearl {
+                    world: pearl.world,
+                    entity: pearl.entity,
+                })
+                .collect(),
         })
     }
 }
@@ -572,6 +595,7 @@ mod tests {
             score: 9,
             seen_credits: true,
             root_vehicle: None,
+            ender_pearls: Vec::new(),
         }
     }
 
@@ -678,6 +702,36 @@ mod tests {
         );
         assert_eq!(
             root_vehicle.entity.pos.map(f64::to_bits),
+            [4.0_f64.to_bits(), 65.0_f64.to_bits(), 6.0_f64.to_bits()]
+        );
+    }
+
+    #[test]
+    fn player_file_roundtrip_preserves_ender_pearls() {
+        let mut file = sample_player_file(PLAYER_DATA_VERSION);
+        file.ender_pearls = vec![
+            EnderPearlFile {
+                world: "minecraft:overworld".to_owned(),
+                entity: sample_persistent_entity(),
+            },
+            EnderPearlFile {
+                world: "minecraft:the_nether".to_owned(),
+                entity: sample_persistent_entity(),
+            },
+        ];
+
+        let encoded = encode_player_file(&file).expect("player file should encode");
+        let decoded = decode_player_file(&encoded).expect("player file should decode");
+        let persistent = decoded
+            .into_persistent()
+            .expect("player file should convert");
+
+        assert_eq!(persistent.ender_pearls.len(), 2);
+        assert_eq!(persistent.ender_pearls[0].world, "minecraft:overworld");
+        assert_eq!(persistent.ender_pearls[1].world, "minecraft:the_nether");
+        assert_eq!(persistent.ender_pearls[0].entity.uuid, [7; 16]);
+        assert_eq!(
+            persistent.ender_pearls[0].entity.pos.map(f64::to_bits),
             [4.0_f64.to_bits(), 65.0_f64.to_bits(), 6.0_f64.to_bits()]
         );
     }

@@ -43,9 +43,6 @@ impl RelativeMovement {
     pub const DELTA: RelativeMovement =
         RelativeMovement(Self::DELTA_X | Self::DELTA_Y | Self::DELTA_Z | Self::ROTATE_DELTA);
 
-    /// All rotation flags.
-    pub const ALL_ROTATION: RelativeMovement = Self::ROTATION;
-
     /// Creates a new RelativeMovement with the given flags.
     #[must_use]
     pub const fn new(flags: i32) -> Self {
@@ -200,6 +197,17 @@ mod tests {
     use glam::DVec3;
 
     use super::{CPlayerPosition, RelativeMovement};
+
+    #[test]
+    fn delta_matches_vanilla_relative_delta_set() {
+        assert_eq!(
+            RelativeMovement::DELTA.0,
+            RelativeMovement::DELTA_X
+                | RelativeMovement::DELTA_Y
+                | RelativeMovement::DELTA_Z
+                | RelativeMovement::ROTATE_DELTA
+        );
+    }
 
     #[test]
     fn absolute_with_velocity_preserves_delta_movement() {

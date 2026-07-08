@@ -707,6 +707,7 @@ mod living_base;
 mod manager;
 mod mob;
 mod movement_sync;
+pub mod projectile;
 mod registry;
 mod shared_flags;
 mod spawn;
@@ -726,6 +727,7 @@ pub use base::{
     EntityBaseLoad, EntityBaseSaveData, EntityBaseState, EntityFireFreezeState,
     EntityGroundContact, EntityMovement, EntityMovementEmission, EntityMovementFlags,
     EntityMovementProgress, EntityVerticalMovementStateUpdate, MAX_ENTITY_TAGS,
+    PendingWorldChangeToken,
 };
 pub use callback::{
     EntityChunkCallback, EntityLevelCallback, InactiveEntityCallback, NullEntityCallback,
@@ -752,6 +754,10 @@ pub use movement_sync::{
     EntityPositionSyncPacket, EntityPositionSyncSnapshot, EntityPositionSyncState,
     EntityRotationSyncState, EntityVelocitySyncState, POSITION_SYNC_THRESHOLD,
     PackedEntityRotation, ServerEntityMovementSyncState, ServerEntityMovementSyncUpdate,
+};
+pub use projectile::{
+    EntityHitResult, Projectile, ProjectileBase, ProjectileHit, ThrowableItemProjectile,
+    ThrowableProjectile, compute_margin,
 };
 #[cfg(test)]
 pub(crate) use registry::init_test_entities;
@@ -979,6 +985,7 @@ fn teleport_entity_cross_world(
         }
     }
 
+    let projectile_owner = entity.projectile_owner();
     let Some(persistent) = ChunkStorage::entity_to_dimension_transition_persistent(&entity) else {
         tracing::warn!(
             entity_id = entity.id(),
@@ -1002,6 +1009,9 @@ fn teleport_entity_cross_world(
         );
         return None;
     };
+    if let Some(owner) = &projectile_owner {
+        new_entity.restore_owner_reference(owner);
+    }
 
     if let Err(error) = teleport_set_position(
         new_entity.as_ref(),
@@ -1030,6 +1040,12 @@ fn teleport_entity_cross_world(
         );
         new_entity.set_removed(RemovalReason::Discarded);
         return None;
+    }
+    if new_entity.entity_type() == &vanilla_entities::ENDER_PEARL
+        && let Some(owner) = &projectile_owner
+        && let Some(player) = owner.as_player()
+    {
+        player.register_ender_pearl(&new_entity);
     }
 
     remove_after_changing_dimensions(entity.as_ref());
@@ -1613,6 +1629,11 @@ pub trait Entity: EntityEventSource + Send + Sync {
         None
     }
 
+    /// Returns the live vanilla `Projectile` owner when this entity exposes one.
+    fn projectile_owner(&self) -> Option<SharedEntity> {
+        None
+    }
+
     /// Returns true for vanilla players whose abilities have `flying` set.
     fn is_flying_player(&self) -> bool {
         false
@@ -2041,13 +2062,21 @@ pub trait Entity: EntityEventSource + Send + Sync {
             .process_portal_teleportation(self.can_use_portal(false), transition_time)
         {
             Some(PortalProcessResult::Ready) => {
+                let Some(pending_token) = self.begin_pending_world_change() else {
+                    return;
+                };
+                let Some(entity) = world.get_entity_by_id(self.id()) else {
+                    self.finish_pending_world_change(pending_token);
+                    return;
+                };
                 self.reset_portal_cooldown();
                 world.queue_world_change(
-                    self.id(),
+                    entity,
                     WorldChangeRequest::Portal {
                         portal: process.portal(),
                         source_world: world.clone(),
                         portal_pos: process.entry_position(),
+                        pending_token,
                     },
                 );
             }
@@ -2205,6 +2234,26 @@ pub trait Entity: EntityEventSource + Send + Sync {
         !self.is_removed()
     }
 
+    /// Marks this entity as waiting for a prepared world change.
+    fn begin_pending_world_change(&self) -> Option<PendingWorldChangeToken> {
+        self.base().begin_pending_world_change()
+    }
+
+    /// Clears a pending world change if it still matches the provided token.
+    fn finish_pending_world_change(&self, token: PendingWorldChangeToken) -> bool {
+        self.base().finish_pending_world_change(token)
+    }
+
+    /// Returns true while this entity is waiting for a prepared world change.
+    fn is_world_change_pending(&self) -> bool {
+        self.base().is_world_change_pending()
+    }
+
+    /// Returns true if the given world-change token is still pending.
+    fn is_world_change_token_pending(&self, token: PendingWorldChangeToken) -> bool {
+        self.base().is_world_change_token_pending(token)
+    }
+
     /// Returns whether this entity may enter a portal.
     ///
     /// Mirrors vanilla `Entity.canUsePortal`, including `LivingEntity` sleeping
@@ -2254,6 +2303,10 @@ pub trait Entity: EntityEventSource + Send + Sync {
     fn set_removed(&self, reason: RemovalReason) {
         self.base().set_removed(reason);
     }
+
+    /// Caches a live owner reference after restoring persisted owner-linked
+    /// entities. Most entities do not store owner references.
+    fn restore_owner_reference(&self, _owner: &SharedEntity) {}
 
     /// Sets the level callback for lifecycle events (movement, removal).
     fn set_level_callback(&self, callback: Arc<dyn EntityLevelCallback>) {

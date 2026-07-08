@@ -2,6 +2,7 @@
 //!
 //! This module defines the data format for saving and loading player state.
 
+use rustc_hash::FxHashSet;
 use steel_registry::item_stack::ItemStack;
 use steel_utils::types::GameType;
 
@@ -108,6 +109,9 @@ pub struct PersistentPlayerData {
 
     /// Vanilla one-player root vehicle tree stored with the player instead of chunk data.
     pub root_vehicle: Option<PersistentRootVehicle>,
+
+    /// Vanilla in-flight ender pearls stored with the player (`ServerPlayer.enderPearls`).
+    pub ender_pearls: Vec<PersistentEnderPearl>,
 }
 
 /// A vanilla `RootVehicle` tree persisted with player data.
@@ -116,6 +120,18 @@ pub struct PersistentRootVehicle {
     /// UUID of the direct vehicle the player should reattach to.
     pub attach: [u8; 16],
     /// Root vehicle entity tree.
+    pub entity: PersistentEntity,
+}
+
+/// A thrown ender pearl persisted with its owning player.
+///
+/// Mirrors a vanilla `ender_pearls` list entry: the pearl entity plus the world
+/// it lives in (`ender_pearl_dimension`), so it re-spawns in its original world.
+#[derive(Debug, Clone)]
+pub struct PersistentEnderPearl {
+    /// Key of the world the pearl lives in.
+    pub world: String,
+    /// Serialized pearl entity.
     pub entity: PersistentEntity,
 }
 
@@ -185,6 +201,7 @@ impl PersistentPlayerData {
         };
         let root_vehicle = Self::root_vehicle_from_player(player)
             .or_else(|| player.pending_root_vehicle_for_current_world());
+        let ender_pearls = Self::ender_pearls_from_player(player);
 
         Self {
             pos: [pos.x, pos.y, pos.z],
@@ -225,7 +242,30 @@ impl PersistentPlayerData {
             score,
             seen_credits: player.has_seen_credits(),
             root_vehicle,
+            ender_pearls,
         }
+    }
+
+    /// Snapshots the player's live in-flight ender pearls for persistence.
+    fn ender_pearls_from_player(player: &Player) -> Vec<PersistentEnderPearl> {
+        let mut seen = FxHashSet::default();
+        let mut pearls = player
+            .ender_pearls()
+            .iter()
+            .filter_map(|pearl| {
+                let world = pearl.level()?.key.to_string();
+                let entity = ChunkStorage::entity_tree_to_persistent(pearl)?;
+                seen.insert(entity.uuid);
+                Some(PersistentEnderPearl { world, entity })
+            })
+            .collect::<Vec<_>>();
+        pearls.extend(
+            player
+                .pending_ender_pearls()
+                .into_iter()
+                .filter(|pearl| seen.insert(pearl.entity.uuid)),
+        );
+        pearls
     }
 
     fn root_vehicle_from_player(player: &Player) -> Option<PersistentRootVehicle> {

@@ -111,6 +111,7 @@ impl World {
         let player_data = PersistentPlayerData::from_player(&player);
 
         self.unride_player_for_removal(&player, true);
+        player.store_ender_pearls_with_player();
         self.unregister_player_entity(&player);
 
         // Remove player from entity tracking (stop tracking all entities for this player)
@@ -138,6 +139,8 @@ impl World {
         let domain = self.domain().to_owned();
         let player_data = PersistentPlayerData::from_player(&player);
         let start = Instant::now();
+
+        player.store_ender_pearls_with_player();
 
         player
             .server()
@@ -177,6 +180,7 @@ impl World {
         let entity_id = player.id();
 
         self.unride_player_for_removal(&player, true);
+        player.store_ender_pearls_with_player();
         self.unregister_player_entity(&player);
         self.entity_tracker().on_player_leave(entity_id);
         self.player_area_map.on_player_leave(&player);
