@@ -185,6 +185,7 @@ pub enum PlayerConnection {
 }
 
 use crate::chunk::player_chunk_view::PlayerChunkView;
+use crate::entity::projectile::fishing_hook::FishingHook;
 use crate::player::chunk_sender::ChunkSender;
 use crate::player::networking::JavaConnection;
 use crate::portal::{
@@ -296,6 +297,8 @@ pub struct Player {
     /// In-flight ender pearls thrown by this player, kept weakly so they persist
     /// with the player and re-spawn on login (vanilla `ServerPlayer.enderPearls`).
     ender_pearls: SyncMutex<Vec<Weak<dyn Entity>>>,
+
+    pub fishing: Option<FishingHook>,
 }
 
 // SAFETY: This key is owned by Steel and uniquely identifies `Player`.

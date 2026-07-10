@@ -11,6 +11,7 @@
 
 mod throwable;
 mod throwable_item;
+pub(crate) mod fishing_hook;
 
 use std::mem;
 use std::sync::{Arc, Weak};
