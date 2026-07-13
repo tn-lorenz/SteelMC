@@ -1,5 +1,5 @@
 use crate::entity::entities::ItemEntity;
-use crate::entity::{Entity, EntityBase, Projectile, ProjectileBase, SharedEntity};
+use crate::entity::{Entity, EntityBase, Projectile, ProjectileBase, RemovalReason, SharedEntity};
 use crate::world::World;
 use glam::DVec3;
 use std::ops::Add;
@@ -8,8 +8,11 @@ use steel_macros::entity_behavior;
 use steel_registry::entity_type::EntityTypeRef;
 use steel_registry::item_stack::ItemStack;
 use steel_registry::vanilla_entity_data::FishingBobberEntityData;
+use steel_registry::vanilla_items;
 use steel_utils::locks::SyncMutex;
 use steel_utils::{Downcast, DowncastType, DowncastTypeKey};
+use steel_utils::types::InteractionHand;
+use crate::player::Player;
 
 #[entity_behavior]
 pub struct FishingHook {
@@ -74,9 +77,28 @@ impl FishingHook {
         }
     }
 
-    fn should_stop_fishing() -> bool {
+    fn should_stop_fishing(&self, owner: &Player) -> bool {
+        if !owner.can_interact_with_level() {
+            self.set_removed(RemovalReason::Discarded);
+            return true
+        }
+
+        let inventory = owner.inventory.lock();
+
+        let mainhand_item = inventory.get_item_in_hand(InteractionHand::MainHand);
+        let offhand_item = inventory.get_offhand_item();
+
+        let mainhand_fishing = mainhand_item.is(&vanilla_items::ITEMS.fishing_rod);
+        let offhand_fishing = offhand_item.is(&vanilla_items::ITEMS.fishing_rod);
+
+        if (mainhand_fishing || offhand_fishing) && self.distance_to_sqr(owner.position()) <= 1024.0 {
+            false
+        }
+
+        self.set_removed(RemovalReason::Discarded);
         true
     }
+
     fn check_collision() {}
     fn set_hooked_entity() {}
     fn catching_fish() {}
@@ -90,8 +112,8 @@ impl FishingHook {
         let mut damage = 0;
 
         if let Some(owner) = self.projectile_owner()
-            && let Some(_player) = owner.as_player()
-            && !Self::should_stop_fishing()
+            && let Some(player) = owner.as_player()
+            && !Self::should_stop_fishing(self, player)
         {
             let hooked_in = {
                 let hook_state = self.hook_state.lock();

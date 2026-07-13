@@ -30,6 +30,7 @@ impl Space for BlockLocal {
 }
 
 /// Marker type for world-space AABBs.
+/// Marker type for world-space AABBs.
 #[derive(Debug, Clone, Copy, PartialEq)]
 pub struct World;
 

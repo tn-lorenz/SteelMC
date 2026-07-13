@@ -1,5 +1,4 @@
 use crate::behavior::{InteractionResult, ItemBehavior, UseItemContext};
-use crate::entity::entities::EnderPearlEntity;
 use crate::entity::projectile::fishing_hook::{FishingHook, FishingHookState};
 use crate::entity::{Entity, Projectile};
 use crate::world::World;
@@ -39,7 +38,7 @@ impl ItemBehavior for FishingRodItem {
             );
 
             let hook = FishingHook::new(
-                &vanilla_entities::ENDER_PEARL,
+                &vanilla_entities::FISHING_BOBBER,
                 1,
                 DVec3::ZERO,
                 Weak::<World>::new(),
