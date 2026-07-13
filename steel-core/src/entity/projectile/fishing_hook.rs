@@ -1,32 +1,42 @@
+use std::ops::Add;
+use std::sync::Arc;
+use glam::DVec3;
 use steel_macros::entity_behavior;
 use steel_registry::entity_type::EntityTypeRef;
-use crate::entity::{Entity, EntityBase, Projectile, ProjectileBase};
+use steel_registry::item_stack::ItemStack;
+use steel_registry::vanilla_entity_data::{FishingHookEntityData};
+use steel_utils::locks::SyncMutex;
+use steel_utils::downcast::Downcast as _;
+use crate::entity::{Entity, EntityBase, Projectile, ProjectileBase, SharedEntity};
+use crate::entity::entities::ItemEntity;
 
 #[entity_behavior]
 pub struct FishingHook {
-    // Logger LOGGER (???)
-    // RandomSource synchronizedRandom (???)
-    biting: bool,
-    out_of_water_time: u32,
-    // MAX_OUT_OF_WATER_TIME: f32,
-    // DATA_HOOKED_ENTITY:
-    life: u16,
-    nibble: u16,
-    time_until_lured: f32,
-    time_until_hooked: f32,
+    base: EntityBase,
+    entity_type: EntityTypeRef,
+    entity_data: SyncMutex<FishingHookEntityData>,
+    projectile_base: ProjectileBase,
+    hook_state: SyncMutex<FishingHookState>,
+}
+
+struct FishingHookState {
+    out_of_water_time: i32,
+    life: i32,
+    nibble: i32,
+    time_until_lured: i32,
+    time_until_hooked: i32,
     fish_angle: f32,
     open_water: bool,
-    // private @Nullable Entity hookedIn;
     current_state: FishHookState,
-    luck: u32,
-    lure_speed: u32,
-    // private final InterpolationHandler interpolationHandler = new InterpolationHandler(this);
+    hooked_in: Option<SharedEntity>,
+    luck: i32,
+    lure_speed: i32,
 }
 
 impl FishingHook {
-    pub const MAX_OUT_OF_WATER_TIME: f32 = 10.0;
+    pub const MAX_OUT_OF_WATER_TIME: i32 = 10;
 
-    fn should_stop_fishing(){}
+    fn should_stop_fishing() -> bool{true}
     fn check_collision(){}
     fn set_hooked_entity(){}
     fn catching_fish(){}
@@ -34,8 +44,52 @@ impl FishingHook {
     fn get_open_water_type_for_area(){}
     fn get_open_water_type_for_block(){}
     // fn is_open_water_fishing(){}
-    fn retrieve(){}
-    fn pull_entity(){}
+
+    fn retrieve(&self, rod: ItemStack) -> i32 {
+        let mut damage = 0;
+
+        if let Some(owner) = self.projectile_owner()
+            && let Some(_player) = owner.as_player()
+            && !Self::should_stop_fishing()
+        {
+            let hooked_in = {
+                let hook_state = self.hook_state.lock();
+                hook_state.hooked_in.clone()
+            };
+
+            if let Some(hooked_in) = hooked_in {
+                self.pull_entity(&hooked_in);
+                // TODO: criteria triggers (advancements)
+                damage = if hooked_in.as_ref().is::<ItemEntity>() {
+                    3
+                } else {
+                    5
+                };
+            } else if let nibble = self.hook_state.lock().nibble > 0 {
+
+            }
+
+            if self.base.on_ground() {
+                damage = 2
+            }
+        } else {
+            damage = 0
+        }
+        damage
+    }
+
+    fn pull_entity(&self, entity: &Arc<dyn Entity>){
+        if let Some(owner) = self.get_owner() {
+            let base = owner.base();
+            let delta = DVec3::new(
+                base.position().x - self.base.position().x,
+                base.position().y - self.base.position().y,
+                base.position().z - self.base.position().z
+            );
+            entity.set_velocity(entity.velocity().add(delta));
+        }
+    }
+
     fn update_owner_info(){}
     // fn get_player_owner(){}
     // fn get_hooked_in(){}
@@ -43,20 +97,21 @@ impl FishingHook {
 
 impl Entity for FishingHook {
     fn base(&self) -> &EntityBase {
-        todo!()
+        &self.base
     }
 
     fn entity_type(&self) -> EntityTypeRef {
-        todo!()
+        self.entity_type
     }
 }
 
 impl Projectile for FishingHook {
     fn projectile_base(&self) -> &ProjectileBase {
-        todo!()
+        &self.projectile_base
     }
 }
 
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
 enum FishHookState {
     Flying,
     HookedInEntity,
