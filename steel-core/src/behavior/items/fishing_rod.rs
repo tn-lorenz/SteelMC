@@ -15,7 +15,7 @@ impl ItemBehavior for FishingRodItem {
         let infinite_materials = context.player.has_infinite_materials();
         if let Some(fishing) = &player.fishing {
             context.inv.with_item(|item| {
-                let damage = fishing.retrieve(*item);
+                let damage = fishing.retrieve(item);
                 item.hurt_and_break(damage, infinite_materials);
             });
 
