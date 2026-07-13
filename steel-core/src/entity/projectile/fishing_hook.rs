@@ -20,7 +20,7 @@ pub struct FishingHook {
     hook_state: SyncMutex<FishingHookState>,
 }
 
-struct FishingHookState {
+pub(crate) struct FishingHookState {
     out_of_water_time: i32,
     life: i32,
     nibble: i32,
@@ -35,7 +35,7 @@ struct FishingHookState {
 }
 
 impl FishingHookState {
-    fn new(lure_speed: i32, luck: i32) -> Self {
+    pub fn new(lure_speed: i32, luck: i32) -> Self {
         Self {
             out_of_water_time: 0,
             life: 0,
@@ -58,7 +58,7 @@ unsafe impl DowncastType for FishingHook {
 
 impl FishingHook {
     pub const MAX_OUT_OF_WATER_TIME: i32 = 10;
-    fn new(
+    pub(crate) fn new(
         entity_type: EntityTypeRef,
         id: i32,
         position: DVec3,
