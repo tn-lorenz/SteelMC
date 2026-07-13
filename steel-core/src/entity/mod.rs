@@ -4586,6 +4586,15 @@ pub trait Entity: EntityEventSource + ErasedType + Send + Sync {
         };
         change_non_player_entity_world(entity, teleport_transition);
     }
+
+    // This already exists for structures and AABB whatever that might be, but I also need it for entities, I hope this is the right spot to put it.
+    fn distance_to_sqr(&self, pos: DVec3) -> f64 {
+        let dx = self.position().x - pos.x;
+        let dy = self.position().y - pos.y;
+        let dz = self.position().z - pos.z;
+
+        dx * dx + dy * dy + dz * dz
+    }
 }
 
 /// A trait for living entities that can take damage, heal, and die.

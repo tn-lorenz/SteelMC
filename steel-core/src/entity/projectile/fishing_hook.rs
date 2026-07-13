@@ -1,5 +1,6 @@
 use crate::entity::entities::ItemEntity;
 use crate::entity::{Entity, EntityBase, Projectile, ProjectileBase, RemovalReason, SharedEntity};
+use crate::player::Player;
 use crate::world::World;
 use glam::DVec3;
 use std::ops::Add;
@@ -10,9 +11,8 @@ use steel_registry::item_stack::ItemStack;
 use steel_registry::vanilla_entity_data::FishingBobberEntityData;
 use steel_registry::vanilla_items;
 use steel_utils::locks::SyncMutex;
-use steel_utils::{Downcast, DowncastType, DowncastTypeKey};
 use steel_utils::types::InteractionHand;
-use crate::player::Player;
+use steel_utils::{Downcast, DowncastType, DowncastTypeKey};
 
 #[entity_behavior]
 pub struct FishingHook {
@@ -80,7 +80,7 @@ impl FishingHook {
     fn should_stop_fishing(&self, owner: &Player) -> bool {
         if !owner.can_interact_with_level() {
             self.set_removed(RemovalReason::Discarded);
-            return true
+            return true;
         }
 
         let inventory = owner.inventory.lock();
@@ -91,8 +91,9 @@ impl FishingHook {
         let mainhand_fishing = mainhand_item.is(&vanilla_items::ITEMS.fishing_rod);
         let offhand_fishing = offhand_item.is(&vanilla_items::ITEMS.fishing_rod);
 
-        if (mainhand_fishing || offhand_fishing) && self.distance_to_sqr(owner.position()) <= 1024.0 {
-            false
+        if (mainhand_fishing || offhand_fishing) && self.distance_to_sqr(owner.position()) <= 1024.0
+        {
+            return false;
         }
 
         self.set_removed(RemovalReason::Discarded);
