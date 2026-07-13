@@ -77,7 +77,7 @@ impl FishingHook {
     fn get_open_water_type_for_block(){}
     // fn is_open_water_fishing(){}
 
-    fn retrieve(&self, rod: ItemStack) -> i32 {
+    pub fn retrieve(&self, rod: ItemStack) -> i32 {
         let mut damage = 0;
 
         if let Some(owner) = self.projectile_owner()
