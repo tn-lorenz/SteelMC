@@ -1,20 +1,21 @@
 use std::ops::Add;
-use std::sync::Arc;
+use std::sync::{Arc, Weak};
 use glam::DVec3;
 use steel_macros::entity_behavior;
 use steel_registry::entity_type::EntityTypeRef;
 use steel_registry::item_stack::ItemStack;
-use steel_registry::vanilla_entity_data::{FishingHookEntityData};
+use steel_registry::vanilla_entity_data::FishingBobberEntityData;
 use steel_utils::locks::SyncMutex;
 use steel_utils::{Downcast, DowncastType, DowncastTypeKey};
 use crate::entity::{Entity, EntityBase, Projectile, ProjectileBase, SharedEntity};
 use crate::entity::entities::ItemEntity;
+use crate::world::World;
 
 #[entity_behavior]
 pub struct FishingHook {
     base: EntityBase,
     entity_type: EntityTypeRef,
-    entity_data: SyncMutex<FishingHookEntityData>,
+    entity_data: SyncMutex<FishingBobberEntityData>,
     projectile_base: ProjectileBase,
     hook_state: SyncMutex<FishingHookState>,
 }
@@ -33,12 +34,39 @@ struct FishingHookState {
     lure_speed: i32,
 }
 
+impl FishingHookState {
+    fn new(lure_speed: i32, luck: i32) -> Self {
+        Self {
+            out_of_water_time: 0,
+            life: 0,
+            nibble: 0,
+            time_until_lured: 0,
+            time_until_hooked: 0,
+            fish_angle: 0.0,
+            open_water: false,
+            current_state: FishHookState::Flying,
+            hooked_in: None,
+            luck: luck.max(0),
+            lure_speed: lure_speed.max(0),
+        }
+    }
+}
+
 unsafe impl DowncastType for FishingHook {
     const TYPE_KEY: DowncastTypeKey = DowncastTypeKey::new("steel:entity/fishing_hook");
 }
 
 impl FishingHook {
     pub const MAX_OUT_OF_WATER_TIME: i32 = 10;
+    fn new(entity_type: EntityTypeRef, id: i32, position: DVec3, world: Weak<World>, hook_state: SyncMutex<FishingHookState>) -> Self {
+        Self {
+            base: EntityBase::new(id, position, entity_type.dimensions, world),
+            entity_type,
+            entity_data: SyncMutex::new(FishingBobberEntityData::new()),
+            projectile_base: ProjectileBase::new(),
+            hook_state: hook_state,
+        }
+    }
 
     fn should_stop_fishing() -> bool{true}
     fn check_collision(){}
