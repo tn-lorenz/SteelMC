@@ -77,7 +77,8 @@ impl FishingHook {
     fn get_open_water_type_for_block(){}
     // fn is_open_water_fishing(){}
 
-    pub fn retrieve(&self, rod: &ItemStack) -> i32 {
+    // TODO: `rod` is needed for advancements and loot params
+    pub fn retrieve(&self, _rod: &ItemStack) -> i32 {
         let mut damage = 0;
 
         if let Some(owner) = self.projectile_owner()
@@ -97,7 +98,7 @@ impl FishingHook {
                 } else {
                     5
                 };
-            } else if let _nibble = self.hook_state.lock().nibble > 0 {
+            } else if self.hook_state.lock().nibble > 0 {
                 // TODO: Looting
                 // TODO: criteria triggers (advancements)
                 // TODO: award stat when catching fish

@@ -556,6 +556,7 @@ impl Player {
             pending_root_vehicle: SyncMutex::new(None),
             pending_ender_pearls: SyncMutex::new(Vec::new()),
             ender_pearls: SyncMutex::new(Vec::new()),
+            fishing: None,
         }
     }
 

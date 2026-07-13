@@ -1,7 +1,6 @@
 use rand::{rng, RngExt};
 use crate::behavior::{InteractionResult, ItemBehavior, UseItemContext};
 use steel_macros::item_behavior;
-use steel_registry::item_stack::ItemStack;
 use steel_registry::sound_events::{ENTITY_FISHING_BOBBER_RETRIEVE, ENTITY_FISHING_BOBBER_THROW};
 use crate::entity::Entity;
 
