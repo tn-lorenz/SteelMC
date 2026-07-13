@@ -6,7 +6,7 @@ use steel_registry::entity_type::EntityTypeRef;
 use steel_registry::item_stack::ItemStack;
 use steel_registry::vanilla_entity_data::{FishingHookEntityData};
 use steel_utils::locks::SyncMutex;
-use steel_utils::downcast::Downcast as _;
+use steel_utils::{Downcast, DowncastType, DowncastTypeKey};
 use crate::entity::{Entity, EntityBase, Projectile, ProjectileBase, SharedEntity};
 use crate::entity::entities::ItemEntity;
 
@@ -31,6 +31,10 @@ struct FishingHookState {
     hooked_in: Option<SharedEntity>,
     luck: i32,
     lure_speed: i32,
+}
+
+unsafe impl DowncastType for FishingHook {
+    const TYPE_KEY: DowncastTypeKey = DowncastTypeKey::new("steel:entity/fishing_hook");
 }
 
 impl FishingHook {
@@ -65,8 +69,10 @@ impl FishingHook {
                 } else {
                     5
                 };
-            } else if let nibble = self.hook_state.lock().nibble > 0 {
-
+            } else if let _nibble = self.hook_state.lock().nibble > 0 {
+                // TODO: Looting
+                // TODO: criteria triggers (advancements)
+                // TODO: award stat when catching fish
             }
 
             if self.base.on_ground() {
