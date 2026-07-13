@@ -1,15 +1,15 @@
+use crate::entity::entities::ItemEntity;
+use crate::entity::{Entity, EntityBase, Projectile, ProjectileBase, SharedEntity};
+use crate::world::World;
+use glam::DVec3;
 use std::ops::Add;
 use std::sync::{Arc, Weak};
-use glam::DVec3;
 use steel_macros::entity_behavior;
 use steel_registry::entity_type::EntityTypeRef;
 use steel_registry::item_stack::ItemStack;
 use steel_registry::vanilla_entity_data::FishingBobberEntityData;
 use steel_utils::locks::SyncMutex;
 use steel_utils::{Downcast, DowncastType, DowncastTypeKey};
-use crate::entity::{Entity, EntityBase, Projectile, ProjectileBase, SharedEntity};
-use crate::entity::entities::ItemEntity;
-use crate::world::World;
 
 #[entity_behavior]
 pub struct FishingHook {
@@ -58,7 +58,13 @@ unsafe impl DowncastType for FishingHook {
 
 impl FishingHook {
     pub const MAX_OUT_OF_WATER_TIME: i32 = 10;
-    fn new(entity_type: EntityTypeRef, id: i32, position: DVec3, world: Weak<World>, hook_state: SyncMutex<FishingHookState>) -> Self {
+    fn new(
+        entity_type: EntityTypeRef,
+        id: i32,
+        position: DVec3,
+        world: Weak<World>,
+        hook_state: SyncMutex<FishingHookState>,
+    ) -> Self {
         Self {
             base: EntityBase::new(id, position, entity_type.dimensions, world),
             entity_type,
@@ -68,13 +74,15 @@ impl FishingHook {
         }
     }
 
-    fn should_stop_fishing() -> bool{true}
-    fn check_collision(){}
-    fn set_hooked_entity(){}
-    fn catching_fish(){}
-    fn calculate_open_water(){}
-    fn get_open_water_type_for_area(){}
-    fn get_open_water_type_for_block(){}
+    fn should_stop_fishing() -> bool {
+        true
+    }
+    fn check_collision() {}
+    fn set_hooked_entity() {}
+    fn catching_fish() {}
+    fn calculate_open_water() {}
+    fn get_open_water_type_for_area() {}
+    fn get_open_water_type_for_block() {}
     // fn is_open_water_fishing(){}
 
     // TODO: `rod` is needed for advancements and loot params
@@ -113,19 +121,19 @@ impl FishingHook {
         damage
     }
 
-    fn pull_entity(&self, entity: &Arc<dyn Entity>){
+    fn pull_entity(&self, entity: &Arc<dyn Entity>) {
         if let Some(owner) = self.get_owner() {
             let base = owner.base();
             let delta = DVec3::new(
                 base.position().x - self.base.position().x,
                 base.position().y - self.base.position().y,
-                base.position().z - self.base.position().z
+                base.position().z - self.base.position().z,
             );
             entity.set_velocity(entity.velocity().add(delta));
         }
     }
 
-    fn update_owner_info(){}
+    fn update_owner_info() {}
     // fn get_player_owner(){}
     // fn get_hooked_in(){}
 }
