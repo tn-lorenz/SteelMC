@@ -5650,7 +5650,7 @@ pub trait LivingEntity: Entity {
 
     /// Returns vanilla `LivingEntity.shouldDropLoot`.
     fn should_drop_loot(&self, world: &World) -> bool {
-        !self.is_baby() && world.get_game_rule(&MOB_DROPS).as_bool() == Some(true)
+        !self.is_baby() && world.get_game_rule(&MOB_DROPS)
     }
 
     /// Returns vanilla `LivingEntity.shouldDropExperience`.
@@ -5715,7 +5715,7 @@ pub trait LivingEntity: Entity {
         let should_drop = self.is_always_experience_dropper()
             || self.last_hurt_by_player_memory_time() > 0
                 && self.should_drop_experience()
-                && world.get_game_rule(&MOB_DROPS).as_bool() == Some(true);
+                && world.get_game_rule(&MOB_DROPS);
         if !should_drop {
             return;
         }
@@ -6867,10 +6867,7 @@ pub trait LivingEntity: Entity {
 
     /// Applies vanilla max entity cramming damage from `LivingEntity.pushEntities()`.
     fn apply_entity_cramming_damage(&self, world: &World, pushable_entities: &[SharedEntity]) {
-        let max_cramming = world
-            .get_game_rule(&MAX_ENTITY_CRAMMING)
-            .as_int()
-            .unwrap_or(24);
+        let max_cramming = world.get_game_rule(&MAX_ENTITY_CRAMMING);
 
         if max_cramming <= 0 || pushable_entities.len() <= (max_cramming - 1) as usize {
             return;

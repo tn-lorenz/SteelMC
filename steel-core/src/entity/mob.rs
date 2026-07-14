@@ -1077,7 +1077,7 @@ pub trait Mob: LivingEntity {
         if let Some(holder) = self.leash_holder() {
             if !self.can_interact_with_level() || !holder.can_interact_with_level() {
                 if let Some(world) = self.level()
-                    && world.get_game_rule(&ENTITY_DROPS).as_bool() == Some(true)
+                    && world.get_game_rule(&ENTITY_DROPS)
                 {
                     self.drop_leash();
                 } else {

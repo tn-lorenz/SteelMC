@@ -168,10 +168,7 @@ pub(super) fn destroy_crop_on_ravager_contact(
 ) {
     if ravager_breaks_crop(
         entity.entity_type(),
-        world
-            .get_game_rule(&vanilla_game_rules::MOB_GRIEFING)
-            .as_bool()
-            == Some(true),
+        world.get_game_rule(&vanilla_game_rules::MOB_GRIEFING),
     ) {
         world.destroy_block_by_entity(pos, true, entity);
     }

@@ -138,7 +138,7 @@ impl EnderPearlEntity {
         Self::should_vanish_for_owner_state(
             LivingEntity::is_alive(player),
             player.has_won_game(),
-            world.get_game_rule(&ENDER_PEARLS_VANISH_ON_DEATH).as_bool() == Some(true),
+            world.get_game_rule(&ENDER_PEARLS_VANISH_ON_DEATH),
         )
     }
 
