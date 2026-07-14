@@ -15,11 +15,11 @@ pub trait BlockStateExt {
     fn get_block(&self) -> BlockRef;
     fn is_air(&self) -> bool;
     fn has_block_entity(&self) -> bool;
-    fn get_value<T, P: Property<T>>(&self, property: &P) -> T;
+    fn get_value<P: Property>(&self, property: &P) -> P::Value;
     /// Gets the value of a property, returning `None` if the block doesn't have this property.
-    fn try_get_value<T, P: Property<T>>(&self, property: &P) -> Option<T>;
+    fn try_get_value<P: Property>(&self, property: &P) -> Option<P::Value>;
     #[must_use]
-    fn set_value<T, P: Property<T>>(&self, property: &P, value: T) -> BlockStateId;
+    fn set_value<P: Property>(&self, property: &P, value: P::Value) -> BlockStateId;
     fn get_property_str(&self, name: &str) -> Option<String>;
     fn with_properties_of(&self, source: BlockStateId) -> BlockStateId;
     fn get_static_collision_shape(&self) -> blocks::shapes::VoxelShape;
@@ -92,15 +92,15 @@ impl BlockStateExt for BlockStateId {
         false
     }
 
-    fn get_value<T, P: Property<T>>(&self, property: &P) -> T {
+    fn get_value<P: Property>(&self, property: &P) -> P::Value {
         REGISTRY.blocks.get_property(*self, property)
     }
 
-    fn try_get_value<T, P: Property<T>>(&self, property: &P) -> Option<T> {
+    fn try_get_value<P: Property>(&self, property: &P) -> Option<P::Value> {
         REGISTRY.blocks.try_get_property(*self, property)
     }
 
-    fn set_value<T, P: Property<T>>(&self, property: &P, value: T) -> BlockStateId {
+    fn set_value<P: Property>(&self, property: &P, value: P::Value) -> BlockStateId {
         REGISTRY.blocks.set_property(*self, property, value)
     }
 
