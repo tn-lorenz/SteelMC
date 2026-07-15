@@ -2992,6 +2992,7 @@ dependencies = [
  "proc-macro2",
  "quote",
  "rand 0.10.0",
+ "rayon",
  "reqwest 0.13.2",
  "rustc-hash 2.1.2",
  "serde",
@@ -3001,6 +3002,7 @@ dependencies = [
  "steel-macros",
  "text_components",
  "tokio",
+ "toml",
  "tracing",
  "unicode_names2",
  "uuid",
@@ -3016,6 +3018,7 @@ dependencies = [
  "glam",
  "proc-macro2",
  "quote",
+ "rayon",
  "rustc-hash 2.1.2",
  "serde",
  "serde_json",
@@ -3024,6 +3027,7 @@ dependencies = [
  "steel-registry",
  "steel-utils",
  "tracing",
+ "wincode",
 ]
 
 [[package]]

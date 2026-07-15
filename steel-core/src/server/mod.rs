@@ -1982,7 +1982,12 @@ impl Server {
                 )
             })?;
             let generator_output = generator_registry
-                .create(&world_entry.generator_config, world_seed)
+                .create(
+                    storage_output.level_data_path.as_deref(),
+                    &world_entry.generator_config,
+                    world_seed,
+                    generation_pool.clone(),
+                )
                 .map_err(|e| format!("failed to create generator for {}: {e}", world_entry.key))?;
             let generation_settings = generation_settings_for_world(world_entry, &generator_output);
             let world = World::new_with_config(
