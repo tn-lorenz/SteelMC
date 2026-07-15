@@ -69,8 +69,8 @@ pub use block::{
 };
 use block_behaviors::register_block_behaviors;
 pub use context::{
-    BlockHitResult, BlockPlaceContext, InteractionResult, InventoryAccess, UseItemContext,
-    UseOnContext,
+    BlockHitResult, BlockPlaceContext, InteractionResult, InventoryAccess, PlacementOrientation,
+    PlacementSource, UseItemContext, UseOnContext,
 };
 pub use fluid::{FLUID_BEHAVIORS, FluidBehaviorRegistry};
 pub use item::{ItemBehavior, ItemBehaviorRegistry};

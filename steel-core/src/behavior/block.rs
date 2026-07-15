@@ -19,10 +19,10 @@ use steel_registry::{vanilla_damage_types, vanilla_items};
 use steel_utils::types::{GameType, InteractionHand, UpdateFlags};
 use steel_utils::{BlockPos, BlockStateId, WorldAabb, axis::Axis};
 
-use crate::behavior::InventoryAccess;
 use crate::behavior::blocks::vegetation::bonemealable::Bonemealable;
 use crate::behavior::context::{BlockHitResult, BlockPlaceContext, InteractionResult};
 use crate::behavior::{BLOCK_BEHAVIORS, BlockStateBehaviorExt};
+use crate::behavior::{InventoryAccess, PlacementSource};
 use crate::block_entity::SharedBlockEntity;
 use crate::entity::ai::path::PathComputationType;
 use crate::entity::{Entity, InsideBlockEffectCollector, damage::DamageSource};
@@ -38,8 +38,9 @@ pub(crate) fn default_can_be_replaced(
     context: &BlockPlaceContext<'_>,
 ) -> bool {
     state.is_replaceable()
-        && (context.item_in_hand_is_empty
-            || context.item_in_hand != REGISTRY.items.by_block(state.get_block()))
+        && context.with_item(|item| {
+            item.is_empty() || item.item() != REGISTRY.items.by_block(state.get_block())
+        })
 }
 
 pub struct PickupResult {
@@ -592,8 +593,9 @@ pub trait BlockBehavior: Send + Sync {
     /// Called by block items after this block has been placed by an entity.
     ///
     /// Vanilla parity: `Block.setPlacedBy(Level, BlockPos, BlockState, LivingEntity, ItemStack)`.
-    /// Steel passes lazy inventory access instead of a borrowed stack so the
-    /// caller does not hold the inventory lock while dispatching block behavior.
+    /// Steel passes the placement source instead of a borrowed stack so the
+    /// caller does not hold the inventory lock while dispatching block behavior
+    /// and synthetic placements can retain a directly supplied stack.
     /// This is intentionally separate from [`on_place`], which fires for any
     /// world block mutation.
     #[expect(
@@ -605,8 +607,7 @@ pub trait BlockBehavior: Send + Sync {
         state: BlockStateId,
         world: &Arc<World>,
         pos: BlockPos,
-        player: Option<&Player>,
-        inv: &InventoryAccess,
+        source: &PlacementSource<'_>,
     ) {
         // Default: no-op
     }

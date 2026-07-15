@@ -15,12 +15,12 @@ pub fn segmentable_get_state_for_placement(
     segment_property: &IntProperty,
     context: &BlockPlaceContext<'_>,
 ) -> BlockStateId {
-    let existing_state = context.world.get_block_state(context.place_pos);
+    let existing_state = context.world.get_block_state(context.place_pos());
     segmentable_placement_state(
         block_ref,
         segment_property,
         existing_state,
-        context.horizontal_direction,
+        context.horizontal_direction(),
     )
 }
 
@@ -29,8 +29,8 @@ pub fn segmentable_can_be_replaced(
     state: BlockStateId,
     context: &BlockPlaceContext<'_>,
 ) -> bool {
-    (!context.is_secondary_use_active
-        && context.item_in_hand == REGISTRY.items.by_block(state.get_block())
+    (!context.is_secondary_use_active()
+        && context.with_item(|item| item.item() == REGISTRY.items.by_block(state.get_block()))
         && state.get_value(segment_property) < MAX_SEGMENT_AMOUNT)
         || default_can_be_replaced(state, context)
 }
@@ -54,37 +54,42 @@ fn segmentable_placement_state(
 #[cfg(test)]
 mod tests {
     use glam::DVec3;
-    use steel_registry::{
-        items::ItemRef, test_support::init_test_registry, vanilla_blocks, vanilla_items,
-    };
-    use steel_utils::BlockPos;
+    use steel_registry::item_stack::ItemStack;
+    use steel_registry::{test_support::init_test_registry, vanilla_blocks, vanilla_items};
+    use steel_utils::{BlockPos, types::InteractionHand};
 
     use super::*;
     use crate::{
-        behavior::{BLOCK_BEHAVIORS, BlockStateBehaviorExt, init_behaviors},
+        behavior::{
+            BLOCK_BEHAVIORS, BlockHitResult, BlockStateBehaviorExt, PlacementOrientation,
+            PlacementSource, init_behaviors,
+        },
         test_support::test_world,
     };
 
     fn place_context(
-        item_in_hand: ItemRef,
-        item_in_hand_is_empty: bool,
+        item_in_hand: &mut ItemStack,
         is_secondary_use_active: bool,
-    ) -> BlockPlaceContext<'static> {
-        BlockPlaceContext {
-            hit_pos: BlockPos::ZERO,
-            clicked_face: Direction::Up,
-            click_location: DVec3::ZERO,
+    ) -> BlockPlaceContext<'_> {
+        let hit_result = BlockHitResult {
+            location: DVec3::ZERO,
+            direction: Direction::Up,
+            block_pos: BlockPos::ZERO,
+            miss: false,
             inside: false,
-            place_pos: BlockPos::ZERO,
-            replaces_clicked_block: true,
-            horizontal_direction: Direction::South,
-            rotation: 0.0,
-            pitch: 0.0,
-            is_secondary_use_active,
+            world_border_hit: false,
+        };
+        let source = PlacementSource::direct(
+            None,
+            InteractionHand::MainHand,
             item_in_hand,
-            item_in_hand_is_empty,
-            world: test_world(),
-        }
+            PlacementOrientation::Player {
+                rotation: 0.0,
+                pitch: 0.0,
+            },
+            is_secondary_use_active,
+        );
+        BlockPlaceContext::new(test_world(), source, &hit_result)
     }
 
     #[test]
@@ -125,26 +130,17 @@ mod tests {
         init_behaviors();
 
         let leaf_litter = vanilla_blocks::LEAF_LITTER.default_state();
-        assert!(leaf_litter.can_be_replaced(&place_context(
-            &vanilla_items::LEAF_LITTER,
-            false,
-            false,
-        )));
-        assert!(!leaf_litter.can_be_replaced(&place_context(
-            &vanilla_items::LEAF_LITTER,
-            false,
-            true,
-        )));
+        let mut leaf_litter_item = ItemStack::new(&vanilla_items::LEAF_LITTER);
+        assert!(leaf_litter.can_be_replaced(&place_context(&mut leaf_litter_item, false)));
+        assert!(!leaf_litter.can_be_replaced(&place_context(&mut leaf_litter_item, true)));
 
         let full_leaf_litter =
             leaf_litter.set_value(&BlockStateProperties::SEGMENT_AMOUNT, MAX_SEGMENT_AMOUNT);
-        assert!(!full_leaf_litter.can_be_replaced(&place_context(
-            &vanilla_items::LEAF_LITTER,
-            false,
-            false,
-        )));
-        assert!(leaf_litter.can_be_replaced(&place_context(&vanilla_items::STONE, false, false,)));
-        assert!(leaf_litter.can_be_replaced(&place_context(&vanilla_items::AIR, true, false,)));
+        assert!(!full_leaf_litter.can_be_replaced(&place_context(&mut leaf_litter_item, false,)));
+        let mut stone = ItemStack::new(&vanilla_items::STONE);
+        assert!(leaf_litter.can_be_replaced(&place_context(&mut stone, false)));
+        let mut empty = ItemStack::empty();
+        assert!(leaf_litter.can_be_replaced(&place_context(&mut empty, false)));
     }
 
     #[test]
