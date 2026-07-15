@@ -32,6 +32,16 @@ use crate::player::Player;
 use crate::world::{LevelAccessor, LevelReader, ScheduledTickAccess, World};
 use steel_registry::vanilla_fluids;
 
+/// Vanilla `BlockBehaviour.canBeReplaced(BlockState, BlockPlaceContext)`.
+pub(crate) fn default_can_be_replaced(
+    state: BlockStateId,
+    context: &BlockPlaceContext<'_>,
+) -> bool {
+    state.is_replaceable()
+        && (context.item_in_hand_is_empty
+            || context.item_in_hand != REGISTRY.items.by_block(state.get_block()))
+}
+
 pub struct PickupResult {
     pub filled_bucket: ItemStack,
     pub sound: Option<SoundEventRef>,
@@ -540,12 +550,17 @@ pub trait BlockBehavior: Send + Sync {
     /// blocks), and when removing water from waterlogged blocks. The default
     /// returns `true`; override for blocks that require physical support
     /// (torches, buttons, candles, cactus, etc.).
-    #[expect(
-        unused_variables,
-        reason = "default trait implementation ignores all params"
-    )]
-    fn can_survive(&self, state: BlockStateId, world: &dyn LevelReader, pos: BlockPos) -> bool {
+    fn can_survive(&self, _state: BlockStateId, _world: &dyn LevelReader, _pos: BlockPos) -> bool {
         true
+    }
+
+    /// Returns whether this block can be replaced by the held item during placement.
+    ///
+    /// Vanilla parity: `BlockState.canBeReplaced(BlockPlaceContext)`.
+    ///
+    /// Default behavior mirrors `BlockBehaviour.canBeReplaced`.
+    fn can_be_replaced(&self, state: BlockStateId, context: &BlockPlaceContext<'_>) -> bool {
+        default_can_be_replaced(state, context)
     }
 
     /// Returns the block state to use when placing this block.
