@@ -1,5 +1,7 @@
 use crate::entity::entities::ItemEntity;
-use crate::entity::{Entity, EntityBase, Projectile, ProjectileBase, RemovalReason, SharedEntity};
+use crate::entity::{
+    Entity, EntityBase, Projectile, ProjectileBase, ProjectileHit, RemovalReason, SharedEntity,
+};
 use crate::player::Player;
 use crate::world::World;
 use glam::DVec3;
@@ -79,6 +81,7 @@ impl FishingHook {
 
     fn should_stop_fishing(&self, owner: &Player) -> bool {
         if !owner.can_interact_with_level() {
+            // TODO: does this actually discard the entity?
             self.set_removed(RemovalReason::Discarded);
             return true;
         }
@@ -100,7 +103,12 @@ impl FishingHook {
         true
     }
 
-    fn check_collision() {}
+    fn check_collision(&self) {
+        if let Some(hit_result) = self.get_hit_result_on_move_vector() {
+            self.hit_target_or_deflect_self(&hit_result);
+        }
+    }
+
     fn set_hooked_entity() {}
     fn catching_fish() {}
     fn calculate_open_water() {}
