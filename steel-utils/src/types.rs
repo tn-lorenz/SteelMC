@@ -562,6 +562,17 @@ impl BlockPos {
         )
         .find(|pos| predicate(*pos))
     }
+
+    pub fn between_closed(a: BlockPos, b: BlockPos) -> impl Iterator<Item = BlockPos> {
+        (a.x().min(b.x())..=a.x().max(b.x()))
+            .flat_map(move |x| {
+                (a.y().min(b.y())..=a.y().max(b.y()))
+                    .flat_map(move |y| {
+                        (a.z().min(b.z())..=a.z().max(b.z()))
+                            .map(move |z| BlockPos::new(x, y, z))
+                    })
+            })
+    }
 }
 
 /// Iterator returned by [`BlockPos::within_manhattan`].

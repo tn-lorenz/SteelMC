@@ -14,7 +14,7 @@ use steel_registry::vanilla_entity_data::FishingBobberEntityData;
 use steel_registry::vanilla_items;
 use steel_utils::locks::SyncMutex;
 use steel_utils::types::InteractionHand;
-use steel_utils::{Downcast, DowncastType, DowncastTypeKey};
+use steel_utils::{BlockPos, Downcast, DowncastType, DowncastTypeKey};
 
 #[entity_behavior]
 pub struct FishingHook {
@@ -112,7 +112,22 @@ impl FishingHook {
     fn set_hooked_entity() {}
     fn catching_fish() {}
     fn calculate_open_water() {}
-    fn get_open_water_type_for_area() {}
+
+    fn get_open_water_type_for_area(&self, from: BlockPos, to: BlockPos) -> OpenWaterType {
+        let mut iter = BlockPos::between_closed(from, to)
+            .map(|pos| self.get_open_water_type_for_block(pos));
+
+        let Some(first) = iter.next() else {
+            return OpenWaterType::Invalid;
+        };
+
+        if iter.all(|value| value == first) {
+            first
+        } else {
+            OpenWaterType::Invalid
+        }
+    }
+
     fn get_open_water_type_for_block() {}
     // fn is_open_water_fishing(){}
 
