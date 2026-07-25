@@ -1,7 +1,6 @@
 //! This module contains all things player-related.
 mod abilities;
-pub mod block_breaking;
-mod chat_state;
+pub mod chat;
 pub mod chunk_sender;
 /// This module contains the `PlayerConnection` trait that abstracts network connections.
 pub mod connection;
@@ -12,67 +11,46 @@ pub mod experience;
 pub mod food_data;
 /// Game mode specific logic for player interactions.
 pub mod game_mode;
-mod game_mode_state;
-mod game_profile;
 mod health_sync;
-mod input_state;
 mod item_cooldowns;
-mod known_players;
-mod lifecycle_state;
-pub mod message_chain;
-mod message_validator;
+mod lifecycle;
 pub mod movement;
-mod movement_state;
-/// This module contains the networking implementation for the player.
-pub mod networking;
 mod permissions;
 pub mod player_data;
 pub mod player_data_storage;
 pub mod player_inventory;
-pub mod profile_key;
-mod profile_lookup;
-mod respawn;
-mod signature_cache;
-mod spam_throttler;
-mod spawn_sync;
-mod teleport_state;
+mod profile;
 mod tick_state;
-mod world_transition;
 
 pub use abilities::{Abilities, DEFAULT_FLYING_SPEED};
-use chat_state::ChatState;
+use chat::ChatState;
+pub use chat::{LastSeen, LastSeenMessagesValidator, MessageCache};
+use connection::NetworkConnection as _;
+pub use connection::{ClientInformation, PlayerConnection};
 use container_counter::ContainerCounter;
 use food_data::FoodData;
+use game_mode::{BlockBreakingManager, PlayerGameModeState};
 use glam::DVec3;
 use health_sync::HealthSyncState;
-pub use input_state::PlayerInput;
 use item_cooldowns::ItemCooldowns;
-use lifecycle_state::PlayerLifecycleState;
-pub use message_validator::LastSeenMessagesValidator;
-use movement_state::MovementState;
-pub use signature_cache::{LastSeen, MessageCache};
-use simdnbt::owned::{NbtCompound, NbtList, NbtTag};
-use steel_protocol::{
-    packet_traits::{CompressionInfo, EncodedPacket},
-    packets::game::{CLevelEvent, CSetEntityData, CSetExperience},
+use lifecycle::PlayerLifecycleState;
+pub(crate) use lifecycle::ResetReason;
+pub use movement::PlayerInput;
+use movement::{MovementState, TeleportState};
+use permissions::PlayerPermissionState;
+pub(crate) use profile::{GAME_PROFILE_CACHE_LIMIT, KnownPlayerNameLookup, lookup_online_profile};
+pub use profile::{
+    GameProfile, GameProfileAction, KnownPlayer, KnownPlayers, ProfileLookupError,
+    is_valid_player_name, offline_uuid,
 };
-use teleport_state::TeleportState;
-use tick_state::PlayerTickState;
-
-use block_breaking::BlockBreakingManager;
-use enum_dispatch::enum_dispatch;
-use game_mode_state::PlayerGameModeState;
-pub use game_profile::{GameProfile, GameProfileAction, is_valid_player_name, offline_uuid};
-pub(crate) use known_players::KnownPlayerNameLookup;
-pub use known_players::{KnownPlayer, KnownPlayers};
-pub use profile_lookup::ProfileLookupError;
-pub(crate) use profile_lookup::lookup_online_profile;
+use simdnbt::owned::{NbtCompound, NbtList, NbtTag};
 use std::sync::{Arc, Weak};
 use steel_protocol::packets::game::{
     AttributeSnapshot, CEntityEvent, CPlayerCombatKill, CPlayerLookAt, CRespawn,
     CSetDefaultSpawnPosition, CSetHealth, CSetHeldSlot, CSetPassengers, ClientCommandAction,
     EquipmentSlotItem, LookAtAnchor, RelativeMovement, SoundSource,
 };
+use steel_protocol::packets::game::{CLevelEvent, CSetEntityData, CSetExperience};
 use steel_registry::blocks::block_state_ext::BlockStateExt as _;
 use steel_registry::entity_data::{EntityPose, ParticleList};
 use steel_registry::entity_type::{EntityDimensions, EntityTypeRef};
@@ -89,6 +67,7 @@ use steel_registry::{
     vanilla_game_events,
 };
 use steel_utils::entity_events::EntityStatus;
+use tick_state::PlayerTickState;
 use uuid::Uuid;
 
 use arc_swap::ArcSwap;
@@ -132,7 +111,7 @@ use steel_registry::vanilla_damage_types;
 
 use steel_protocol::packets::{
     common::SCustomPayload,
-    game::{CContainerClose, CGameEvent, CSystemChat, GameEventType, PreviousMessage},
+    game::{CContainerClose, CGameEvent, CSystemChat, GameEventType},
 };
 use steel_registry::RegistryEntry;
 use steel_registry::item_stack::ItemStack;
@@ -143,70 +122,10 @@ use steel_utils::{
 
 use crate::inventory::{MenuInstance, container::Container, inventory_menu::InventoryMenu};
 
-/// Re-export `PreviousMessage` as `PreviousMessageEntry` for use in `signature_cache`
-pub type PreviousMessageEntry = PreviousMessage;
-
-pub use steel_protocol::packets::common::{ChatVisibility, HumanoidArm, ParticleStatus};
-
 const RESPAWN_SEARCH_READY_CANDIDATE_BUDGET: usize = 8;
-
-/// Client-side settings sent via `SClientInformation` packet.
-/// This is stored separately from the packet struct to allow default initialization.
-#[derive(Debug, Clone)]
-pub struct ClientInformation {
-    /// The client's language (e.g., "`en_us`").
-    pub language: String,
-    /// The client's requested view distance in chunks.
-    pub view_distance: u8,
-    /// Chat visibility setting.
-    pub chat_visibility: ChatVisibility,
-    /// Whether chat colors are enabled.
-    pub chat_colors: bool,
-    /// Bitmask for displayed skin parts.
-    pub model_customization: i32,
-    /// The player's main hand (left or right).
-    pub main_hand: HumanoidArm,
-    /// Whether text filtering is enabled.
-    pub text_filtering_enabled: bool,
-    /// Whether the player appears in the server list.
-    pub allows_listing: bool,
-    /// Particle rendering setting.
-    pub particle_status: ParticleStatus,
-}
-
-impl Default for ClientInformation {
-    fn default() -> Self {
-        Self {
-            language: "en_us".to_string(),
-            view_distance: 8, // Default client view distance
-            chat_visibility: ChatVisibility::Full,
-            chat_colors: true,
-            model_customization: 0,
-            main_hand: HumanoidArm::Right,
-            text_filtering_enabled: false,
-            allows_listing: true,
-            particle_status: ParticleStatus::All,
-        }
-    }
-}
-
-use crate::player::connection::NetworkConnection;
-
-/// Concrete player connection type using `enum_dispatch` for zero-cost dispatch.
-///
-/// The `Java` variant handles real network connections (hot path),
-/// while `Other` uses dynamic dispatch for test connections.
-#[enum_dispatch(NetworkConnection)]
-pub enum PlayerConnection {
-    /// A real Java client connection (zero-cost dispatch).
-    Java(JavaConnection),
-    /// A dynamic connection for tests or other backends.
-    Other(Box<dyn NetworkConnection>),
-}
 
 use crate::chunk::player_chunk_view::PlayerChunkView;
 use crate::player::chunk_sender::ChunkSender;
-use crate::player::networking::JavaConnection;
 use crate::portal::{
     PortalTicketTarget, TeleportPostAction, TeleportPostTransition, TeleportTransition,
 };
@@ -330,38 +249,6 @@ unsafe impl DowncastType for Player {
 struct PendingRootVehicleRestore {
     world: Identifier,
     root_vehicle: PersistentRootVehicle,
-}
-
-#[derive(Clone, Debug, Default)]
-struct PlayerPermissionState {
-    groups: Vec<String>,
-    overrides: PermissionSet,
-    metadata_overrides: PermissionMetadataSet,
-    effective: PermissionSet,
-    effective_metadata: PermissionMetadataSet,
-    version: u64,
-}
-
-impl PlayerPermissionState {
-    fn replace(
-        &mut self,
-        groups: Vec<String>,
-        overrides: PermissionSet,
-        metadata_overrides: PermissionMetadataSet,
-        effective: PermissionSet,
-        effective_metadata: PermissionMetadataSet,
-    ) -> u64 {
-        let version = self.version.wrapping_add(1);
-        *self = Self {
-            groups,
-            overrides,
-            metadata_overrides,
-            effective,
-            effective_metadata,
-            version,
-        };
-        version
-    }
 }
 
 impl Player {
@@ -1080,31 +967,6 @@ impl Player {
             above_pos
         } else {
             affecting_pos
-        }
-    }
-}
-
-/// Why the player is being reset and spawned into a world.
-///
-/// Controls which packets are sent and how world add/remove is handled.
-#[derive(Debug, Clone, Copy, PartialEq, Eq)]
-pub(crate) enum ResetReason {
-    /// First time joining the server. `CLogin` was already sent, so `CRespawn` is skipped.
-    InitialJoin,
-    /// Respawning after death in the same world.
-    Respawn,
-    /// Respawning after the End credits screen with vanilla packet flags.
-    EndCredits,
-    /// Teleporting to a different loaded world.
-    WorldChange,
-}
-
-impl ResetReason {
-    const fn respawn_data_kept(self) -> i8 {
-        match self {
-            Self::InitialJoin | Self::Respawn => 0x00,
-            Self::EndCredits => 0x01,
-            Self::WorldChange => 0x03,
         }
     }
 }

@@ -46,7 +46,7 @@ use crate::permission::{
 };
 use crate::player::chunk_sender::{ChunkSender, EncodedChunk};
 use crate::player::connection::NetworkConnection;
-use crate::player::networking::ScheduledPlayPacket;
+use crate::player::connection::ScheduledPlayPacket;
 use crate::player::player_data::{
     PersistentEnderPearl, PersistentPlayerData, PersistentRootVehicle,
 };
@@ -60,7 +60,7 @@ use crate::portal::{
     end_portal, nether_portal,
 };
 use crate::scoreboard::DomainScoreboards;
-use crate::server::jobs::{FnServerJob, JobPoll, ServerJob, ServerJobContext, ServerJobQueue};
+use crate::server::jobs::{FnServerJob, ServerJobContext, ServerJobQueue};
 use crate::server::packet_processor::PacketProcessor;
 use crate::server::registry_cache::RegistryCache;
 use crate::server::worlds::WorldMap;
@@ -396,10 +396,9 @@ mod player_lifecycle;
 
 use player_admission::{PlayerAdmissionState, PlayerDisconnectQueue, PlayerJoinQueue};
 
-mod teleport_jobs;
 mod world_changes;
 
-use teleport_jobs::{
+use jobs::teleport::{
     EndGatewayTeleportJob, EndPortalTeleportJob, EnderPearlRestoreJob, NetherPortalTeleportJob,
     RootVehicleRestoreJob, clear_pending_world_change, portal_entity_still_valid,
 };

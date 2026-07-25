@@ -3,6 +3,38 @@ use super::{
     PermissionSet, PermissionState, Player,
 };
 
+#[derive(Clone, Debug, Default)]
+pub(super) struct PlayerPermissionState {
+    pub(super) groups: Vec<String>,
+    pub(super) overrides: PermissionSet,
+    pub(super) metadata_overrides: PermissionMetadataSet,
+    pub(super) effective: PermissionSet,
+    pub(super) effective_metadata: PermissionMetadataSet,
+    pub(super) version: u64,
+}
+
+impl PlayerPermissionState {
+    pub(super) fn replace(
+        &mut self,
+        groups: Vec<String>,
+        overrides: PermissionSet,
+        metadata_overrides: PermissionMetadataSet,
+        effective: PermissionSet,
+        effective_metadata: PermissionMetadataSet,
+    ) -> u64 {
+        let version = self.version.wrapping_add(1);
+        *self = Self {
+            groups,
+            overrides,
+            metadata_overrides,
+            effective,
+            effective_metadata,
+            version,
+        };
+        version
+    }
+}
+
 impl Player {
     /// Replaces assigned groups, direct overrides, metadata, and effective state.
     pub fn set_permission_state(

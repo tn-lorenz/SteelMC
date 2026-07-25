@@ -30,9 +30,9 @@ use crate::world::World;
 
 use super::{
     ClientInformation, GameProfile, Player, PlayerConnection, PlayerPermissionState, ResetReason,
-    block_breaking::BlockBreakAction, experience::Experience,
-    experience::first_point_level_up_sound, player_data::PersistentPlayerData,
-    spawn_sync::nullable_game_mode_id,
+    experience::Experience, experience::first_point_level_up_sound,
+    game_mode::block_breaking::BlockBreakAction, lifecycle::nullable_game_mode_id,
+    player_data::PersistentPlayerData,
 };
 
 struct TestConnection;

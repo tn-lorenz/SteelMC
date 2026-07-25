@@ -1,4 +1,4 @@
-use super::*;
+use super::{block_breaking::BlockBreakAction, *};
 
 impl Player {
     /// Sends block update packets for a position and its neighbor.

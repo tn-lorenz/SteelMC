@@ -19,9 +19,9 @@ use crate::chunk::light::{
 };
 use crate::poi::OccupationStatus;
 use crate::portal::WorldChangeRequest;
-use crate::world::game_event_context::GameEventContext;
-use crate::world::game_event_listener::{
-    GameEventDispatcher, GameEventListenerCount, GameEventListenerStorage, SharedGameEventListener,
+use crate::world::game_event::{
+    GameEventContext, GameEventDispatcher, GameEventListenerCount, GameEventListenerStorage,
+    SharedGameEventListener,
 };
 use crate::{chunk::chunk_map::ChunkMapGameTickTimings, world::weather::Weather};
 use steel_utils::saved_data::{SavedDataManager, names as saved_data_names};
@@ -111,19 +111,16 @@ pub(crate) mod clock;
 mod entity_management;
 mod environment;
 mod events;
-pub mod game_event_context;
-pub mod game_event_listener;
+/// Vanilla game-event contexts, listeners, and dispatch storage.
+pub mod game_event;
 mod level_effects;
 mod level_reader;
-mod neighbor_updater;
-mod player_area_map;
-mod player_map;
+mod player_index;
 pub(crate) mod player_spawn_finder;
 mod portals;
 mod properties;
 mod raycast;
 mod redstone;
-mod scheduled_ticks;
 mod signal_getter;
 mod spawn;
 pub mod tick_scheduler;
@@ -137,15 +134,14 @@ pub use crate::config::WorldStorageConfig;
 use crate::worldgen::generators::vanilla::fuzzed_biome_at_block;
 use crate::worldgen::{ChunkGenerator, ChunkGeneratorType};
 use block_event::BlockEventQueue;
+use block_updates::CollectingNeighborUpdater;
 pub use border::WorldBorderError;
 use border::{WorldBorder, WorldBorderSnapshot};
 use entity_management::NavigatingMobTracker;
 #[cfg(test)]
 use entity_management::nearest_player_distance_in_range;
 pub use level_reader::{LevelAccessor, LevelReader, ScheduledTickAccess};
-use neighbor_updater::{CollectingNeighborUpdater, ShapeUpdate};
-pub use player_area_map::PlayerAreaMap;
-pub use player_map::PlayerMap;
+pub use player_index::{PlayerAreaMap, PlayerMap};
 pub use raycast::{ClipBlockShape, ClipFluid, ClipHitResult, RaytraceAction};
 pub use signal_getter::{SignalGetter, SignalQueryContext};
 pub(crate) use signal_getter::{

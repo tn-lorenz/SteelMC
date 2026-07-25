@@ -38,8 +38,8 @@ use crate::portal::PortalKind;
 use crate::test_support::{
     cross_world_damage_test_world, fresh_test_world, insert_ready_full_chunk, test_world,
 };
-use crate::world::game_event_context::GameEventContext;
-use crate::world::game_event_listener::{GameEventListener, SharedGameEventListener};
+use crate::world::game_event::GameEventContext;
+use crate::world::game_event::{GameEventListener, SharedGameEventListener};
 use crate::world::{LevelReader, World};
 
 use super::{
