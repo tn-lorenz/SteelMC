@@ -111,6 +111,75 @@ impl PlayerLifecycleState {
     }
 }
 
+impl Player {
+    /// Sets the world the player is in.
+    ///
+    /// This is used when the correct world isn't known at construction time
+    /// (e.g., when loading saved player data determines the actual world).
+    pub(crate) fn set_world(&self, world: Arc<World>) {
+        self.base.set_world(Arc::downgrade(&world));
+        self.world.store(world);
+    }
+
+    /// Marks the player as switching domains if they are not already in a transition.
+    pub(crate) fn begin_domain_switch(&self) -> bool {
+        self.lifecycle.lock().begin_domain_switch()
+    }
+
+    /// Clears the domain-switch transition marker.
+    pub(crate) fn finish_domain_switch(&self) {
+        self.lifecycle.lock().finish_domain_switch();
+    }
+
+    /// Returns whether this player is currently switching domains.
+    pub fn is_domain_switching(&self) -> bool {
+        self.lifecycle.lock().domain_switching()
+    }
+
+    /// Returns whether the server has inserted this player into a world.
+    #[must_use]
+    pub fn has_joined_world(&self) -> bool {
+        self.lifecycle.lock().joined_world()
+    }
+
+    /// Marks this player as inserted into a world.
+    ///
+    /// Returns `true` when a client-loaded acknowledgement arrived before world
+    /// admission and was applied by this call.
+    pub(crate) fn mark_joined_world(&self) -> bool {
+        let mut lifecycle = self.lifecycle.lock();
+        lifecycle.set_joined_world(true);
+        lifecycle.apply_pending_client_loaded()
+    }
+
+    /// Returns whether the client has sent its play-loaded signal.
+    #[must_use]
+    pub fn has_client_loaded(&self) -> bool {
+        self.lifecycle.lock().client_loaded()
+    }
+
+    /// Marks whether the client has loaded into play.
+    pub fn set_client_loaded(&self, client_loaded: bool) {
+        self.lifecycle.lock().set_client_loaded(client_loaded);
+    }
+
+    /// Applies or buffers the client's play-loaded acknowledgement.
+    ///
+    /// Returns `true` when the acknowledgement can run gameplay side effects now.
+    pub fn mark_client_loaded_from_network(&self) -> bool {
+        self.lifecycle.lock().mark_client_loaded_from_network()
+    }
+
+    pub(super) fn tick_client_load_timeout(&self) {
+        self.lifecycle.lock().tick_client_load_timeout();
+    }
+}
+use std::sync::Arc;
+
+use crate::world::World;
+
+use super::Player;
+
 #[cfg(test)]
 mod tests {
     use super::{CLIENT_LOADED_TIMEOUT_TICKS, PlayerLifecycleState};
