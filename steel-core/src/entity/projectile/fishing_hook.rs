@@ -1,7 +1,5 @@
 use crate::entity::entities::ItemEntity;
-use crate::entity::{
-    Entity, EntityBase, Projectile, ProjectileBase, ProjectileHit, RemovalReason, SharedEntity,
-};
+use crate::entity::{Entity, EntityBase, Projectile, ProjectileBase, RemovalReason, SharedEntity};
 use crate::player::Player;
 use crate::world::World;
 use glam::DVec3;
@@ -91,8 +89,8 @@ impl FishingHook {
         let mainhand_item = inventory.get_item_in_hand(InteractionHand::MainHand);
         let offhand_item = inventory.get_offhand_item();
 
-        let mainhand_fishing = mainhand_item.is(&vanilla_items::ITEMS.fishing_rod);
-        let offhand_fishing = offhand_item.is(&vanilla_items::ITEMS.fishing_rod);
+        let mainhand_fishing = mainhand_item.is(&vanilla_items::FISHING_ROD);
+        let offhand_fishing = offhand_item.is(&vanilla_items::FISHING_ROD);
 
         if (mainhand_fishing || offhand_fishing) && self.distance_to_sqr(owner.position()) <= 1024.0
         {
@@ -114,8 +112,8 @@ impl FishingHook {
     fn calculate_open_water() {}
 
     fn get_open_water_type_for_area(&self, from: BlockPos, to: BlockPos) -> OpenWaterType {
-        let mut iter = BlockPos::between_closed(from, to)
-            .map(|pos| self.get_open_water_type_for_block(pos));
+        let mut iter =
+            BlockPos::between_closed(from, to).map(|pos| self.get_open_water_type_for_block(pos));
 
         let Some(first) = iter.next() else {
             return OpenWaterType::Invalid;
@@ -128,7 +126,7 @@ impl FishingHook {
         }
     }
 
-    fn get_open_water_type_for_block() {}
+    fn get_open_water_type_for_block(&self, _pos: BlockPos) {}
     // fn is_open_water_fishing(){}
 
     // TODO: `rod` is needed for advancements and loot params

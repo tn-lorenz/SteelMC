@@ -3472,6 +3472,15 @@ pub trait Entity: EntityEventSource + ErasedType + Send + Sync + 'static {
     fn hurt(&self, world: &World, source: &DamageSource, amount: f32) -> bool {
         false
     }
+
+    // This already exists for structures and AABB whatever that might be, but I also need it for entities, I hope this is the right spot to put it.
+    fn distance_to_sqr(&self, pos: DVec3) -> f64 {
+        let dx = self.position().x - pos.x;
+        let dy = self.position().y - pos.y;
+        let dz = self.position().z - pos.z;
+
+        dx * dx + dy * dy + dz * dz
+    }
 }
 
 pub(crate) fn apply_entity_look_at(entity: &dyn Entity, from_anchor: EntityAnchor, target: DVec3) {
