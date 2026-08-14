@@ -1,8 +1,10 @@
 use crate::entity::entities::ItemEntity;
+use crate::entity::projectile::triangle_random;
 use crate::entity::{Entity, EntityBase, Projectile, ProjectileBase, RemovalReason, SharedEntity};
 use crate::player::Player;
-use crate::world::World;
+use crate::world::{LevelReader, World};
 use glam::{DVec3, IVec3};
+use rand::{RngExt, rng};
 use std::any::Any;
 use std::cmp::PartialEq;
 use std::ops::Add;
@@ -12,8 +14,10 @@ use steel_registry::blocks::block_state_ext::BlockStateExt;
 use steel_registry::entity_type::EntityTypeRef;
 use steel_registry::fluid::FluidStateExt;
 use steel_registry::item_stack::ItemStack;
+use steel_registry::particle_type::ParticleData;
 use steel_registry::vanilla_entity_data::FishingBobberEntityData;
-use steel_registry::{vanilla_blocks, vanilla_items};
+use steel_registry::vanilla_particle_types::{BUBBLE, FISHING};
+use steel_registry::{sound_events, vanilla_blocks, vanilla_items, vanilla_particle_types};
 use steel_utils::locks::SyncMutex;
 use steel_utils::types::InteractionHand;
 use steel_utils::{BlockPos, Downcast, DowncastType, DowncastTypeKey};
@@ -33,7 +37,7 @@ pub(crate) struct FishingHookState {
     nibble: i32,
     time_until_lured: i32,
     time_until_hooked: i32,
-    fish_angle: f32,
+    fish_angle: f64,
     open_water: bool,
     current_state: FishHookState,
     hooked_in: Option<SharedEntity>,
@@ -126,16 +130,134 @@ impl FishingHook {
         }
     }
 
-    fn catching_fish() {}
+    fn catching_fish(&self, pos: BlockPos) {
+        let mut fishing_speed = 1;
+        let above = pos.above();
 
-    fn calculate_open_water(&self, pos: BlockPos, world: &Arc<World>) -> bool {
+        let Some(world) = self.level() else {
+            return;
+        };
+
+        if rng.random() < 0.25 && world.is_raining_at(above) {
+            fishing_speed += 1;
+        }
+
+        if rng.random() < 0.5 && world.can_see_sky(above) {
+            fishing_speed -= 1;
+        }
+
+        let mut state = self.hook_state.lock();
+
+        if state.nibble > 0 {
+            state.nibble -= 1;
+
+            if state.nibble <= 0 {
+                state.time_until_lured = 0;
+                state.time_until_hooked = 0;
+                // TODO: `fishing_hook_mut()` or `fishing_hook` ?
+                self.entity_data.lock().fishing_hook_mut().biting.set(false);
+            }
+        } else if state.time_until_hooked > 0 {
+            state.time_until_hooked -= fishing_speed;
+
+            if state.time_until_hooked > 0 {
+                state.fish_angle = state.fish_angle + triangle_random(0.0, 9.188);
+
+                let angle = state.fish_angle * std::f64::consts::PI / 180.0;
+                let angle_sin = angle.sin();
+                let angle_cos = angle.cos();
+
+                let fish_x =
+                    self.position().x + angle_sin * f64::from(state.time_until_hooked) * 0.1;
+                let fish_y = self.position().y.floor() + 1.0;
+                let fish_z =
+                    self.position().z + angle_cos * f64::from(state.time_until_hooked) * 0.1;
+
+                let Some(world) = self.level() else {
+                    return;
+                };
+
+                let splash_block_state =
+                    world.get_block_state(BlockPos::containing(fish_x, fish_y - 1.0, fish_z));
+
+                if splash_block_state.get_block() == &vanilla_blocks::WATER {
+                    if rng.random() < 0.15 {
+                        world.send_particles(
+                            ParticleData::simple(&BUBBLE),
+                            DVec3::new(fish_x, fish_y - 0.1, fish_z),
+                            1,
+                            DVec3::new(angle_sin, 0.1, angle_cos),
+                            0.0,
+                        );
+                    }
+
+                    let particle_x_mov = angle_sin * 0.04;
+                    let particle_z_mov = angle_cos * 0.04;
+
+                    // Yes, according to the src, x and z are swapped in the second `DVec3`
+                    world.send_particles(
+                        ParticleData::simple(&FISHING),
+                        DVec3::new(fish_x, fish_y, fish_z),
+                        0,
+                        DVec3::new(particle_z_mov, 0.01, -particle_x_mov),
+                        1.0,
+                    );
+                    world.send_particles(
+                        ParticleData::simple(&FISHING),
+                        DVec3::new(fish_x, fish_y, fish_z),
+                        0,
+                        DVec3::new(-particle_z_mov, 0.01, particle_x_mov),
+                        1.0,
+                    );
+                }
+            } else {
+                // I check for the world here first, because we don't need to invoke `y` (the only call using `world` is the one using `y` through `particle_pos`) if it doesn't exist
+                let Some(world) = self.level() else {
+                    return;
+                };
+
+                self.play_sound(
+                    &sound_events::ENTITY_FISHING_BOBBER_SPLASH,
+                    0.25,
+                    1.0 + (rng.random() - rng.random()) * 0.4,
+                );
+
+                let bb_width = self.bounding_box().width();
+                let y = self.position().y + 0.5;
+                let particle_pos = DVec3::new(self.position().x, y, self.position().z);
+                let particle_count = (1.0 + bb_width * 20.0) as i32;
+                let particle_spread = DVec3::new(bb_width, 0.0, bb_width);
+
+                world.send_particles(
+                    ParticleData::simple(&BUBBLE),
+                    particle_pos,
+                    particle_count,
+                    particle_spread,
+                    0.2,
+                );
+                world.send_particles(
+                    ParticleData::simple(&FISHING),
+                    particle_pos,
+                    particle_count,
+                    particle_spread,
+                    0.2,
+                );
+
+                state.nibble = rng().random_range(20..=40);
+                // TODO: `fishing_hook_mut()` or `fishing_hook` ?
+                self.entity_data.lock().fishing_hook_mut().biting.set(true);
+            }
+        }
+    }
+
+    fn calculate_open_water(&self, pos: BlockPos) -> bool {
         let mut prev_layer = OpenWaterType::Invalid;
 
         for y in -1..=2 {
-            let offset_from = BlockPos::new(pos.x() - 2 , y, pos.z() - 2);
+            let offset_from = BlockPos::new(pos.x() - 2, y, pos.z() - 2);
             let offset_to = BlockPos::new(pos.x() + 2, y, pos.z() + 2);
 
-            let layer = self.get_open_water_type_for_area(offset_from, offset_to, world);
+            let layer = self.get_open_water_type_for_area(offset_from, offset_to);
 
             match layer {
                 OpenWaterType::AboveWater => {
@@ -159,14 +281,9 @@ impl FishingHook {
         true
     }
 
-    fn get_open_water_type_for_area(
-        &self,
-        from: BlockPos,
-        to: BlockPos,
-        world: &Arc<World>,
-    ) -> OpenWaterType {
-        let mut iter = BlockPos::between_closed(from, to)
-            .map(|pos| self.get_open_water_type_for_block(pos, world));
+    fn get_open_water_type_for_area(&self, from: BlockPos, to: BlockPos) -> OpenWaterType {
+        let mut iter =
+            BlockPos::between_closed(from, to).map(|pos| self.get_open_water_type_for_block(pos));
 
         let Some(first) = iter.next() else {
             return OpenWaterType::Invalid;
@@ -179,7 +296,11 @@ impl FishingHook {
         }
     }
 
-    fn get_open_water_type_for_block(&self, pos: BlockPos, world: &Arc<World>) -> OpenWaterType {
+    fn get_open_water_type_for_block(&self, pos: BlockPos) -> OpenWaterType {
+        let Some(world) = self.level() else {
+            return OpenWaterType::Invalid; // This is a bit weird ... am I doing this right?
+        };
+
         let state = world.get_block_state(pos);
 
         if (!state.is_air() && !state.get_block() == &vanilla_blocks::LILY_PAD) {
