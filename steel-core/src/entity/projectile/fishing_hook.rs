@@ -3,9 +3,8 @@ use crate::entity::projectile::triangle_random;
 use crate::entity::{Entity, EntityBase, Projectile, ProjectileBase, RemovalReason, SharedEntity};
 use crate::player::Player;
 use crate::world::{LevelReader, World};
-use glam::{DVec3, IVec3};
+use glam::DVec3;
 use rand::{RngExt, rng};
-use std::any::Any;
 use std::cmp::PartialEq;
 use std::ops::Add;
 use std::sync::{Arc, Weak};
@@ -17,7 +16,7 @@ use steel_registry::item_stack::ItemStack;
 use steel_registry::particle_type::ParticleData;
 use steel_registry::vanilla_entity_data::FishingBobberEntityData;
 use steel_registry::vanilla_particle_types::{BUBBLE, FISHING, SPLASH};
-use steel_registry::{sound_events, vanilla_blocks, vanilla_items, vanilla_particle_types};
+use steel_registry::{sound_events, vanilla_blocks, vanilla_items};
 use steel_utils::locks::SyncMutex;
 use steel_utils::types::InteractionHand;
 use steel_utils::{BlockPos, Downcast, DowncastType, DowncastTypeKey};
@@ -119,7 +118,7 @@ impl FishingHook {
         let mut hook_state = self.hook_state.lock();
         hook_state.hooked_in = hooked;
 
-        if let Some(hooked_entity) = self.hook_state.lock().hooked_in {
+        if let Some(hooked_entity) = hook_state.hooked_in.as_ref() {
             self.entity_data
                 .lock()
                 .fishing_hook
@@ -138,11 +137,11 @@ impl FishingHook {
             return;
         };
 
-        if rng.random() < 0.25 && world.is_raining_at(above) {
+        if rng().random::<f64>() < 0.25 && world.is_raining_at(above) {
             fishing_speed += 1;
         }
 
-        if rng.random() < 0.5 && world.can_see_sky(above) {
+        if rng().random::<f64>() < 0.5 && world.can_see_sky(above) {
             fishing_speed -= 1;
         }
 
@@ -181,7 +180,7 @@ impl FishingHook {
                     world.get_block_state(BlockPos::containing(fish_x, fish_y - 1.0, fish_z));
 
                 if splash_block_state.get_block() == &vanilla_blocks::WATER {
-                    if rng.random() < 0.15 {
+                    if rng().random::<f64>() < 0.15 {
                         world.send_particles(
                             ParticleData::simple(&BUBBLE),
                             DVec3::new(fish_x, fish_y - 0.1, fish_z),
@@ -219,7 +218,7 @@ impl FishingHook {
                 self.play_sound(
                     &sound_events::ENTITY_FISHING_BOBBER_SPLASH,
                     0.25,
-                    1.0 + (rng.random() - rng.random()) * 0.4,
+                    1.0 + (rng().random::<f32>() - rng().random::<f32>()) * 0.4,
                 );
 
                 let bb_width = self.bounding_box().width();
@@ -264,18 +263,18 @@ impl FishingHook {
                 _ => {}
             }
 
-            if rng.random() < tease_chance {
+            if rng().random::<f64>() < tease_chance {
                 // same reason to call this early in here as well: no need to calculate the rest if there is no world to spawn the particle in.
                 let Some(world) = self.level() else {
                     return;
                 };
 
-                let angle = rng().random_range(0.0..=360.0) * *std::f64::consts::PI / 180.0;
+                let angle: f64 = rng().random_range(0.0..=360.0) * std::f64::consts::PI / 180.0;
                 let dist = rng().random_range(25.0..=60.0);
 
-                let fish_x = self.position().x + angle.sin() * dist * 0.1;
+                let fish_x: f64 = self.position().x + angle.sin() * dist * 0.1;
                 let fish_y = self.position().y.floor() + 1.0;
-                let fish_z = self.posoition().z + angle.cos() * dist * 0.1;
+                let fish_z: f64 = self.position().z + angle.cos() * dist * 0.1;
 
                 let splash_block_state =
                     world.get_block_state(BlockPos::containing(fish_x, fish_y - 1.0, fish_z));
@@ -312,12 +311,12 @@ impl FishingHook {
 
             match layer {
                 OpenWaterType::AboveWater => {
-                    if (prev_layer == OpenWaterType::Invalid) {
+                    if prev_layer == OpenWaterType::Invalid {
                         return false;
                     }
                 }
                 OpenWaterType::InsideWater => {
-                    if (prev_layer == OpenWaterType::AboveWater) {
+                    if prev_layer == OpenWaterType::AboveWater {
                         return false;
                     }
                 }
@@ -354,10 +353,10 @@ impl FishingHook {
 
         let state = world.get_block_state(pos);
 
-        if (!state.is_air() && !state.get_block() == &vanilla_blocks::LILY_PAD) {
+        if !state.is_air() && !(state.get_block() == &vanilla_blocks::LILY_PAD) {
             let fluid_state = state.get_fluid_state();
             // TODO: normally I'd need to check if the collision shape (`get_collision_shape()`) at the position `pos` is empty, idk how to do that from the `fluid_state` (like in vanilla) tho
-            if (fluid_state.is_water() && fluid_state.is_source() && fluid_state.is_empty()) {
+            if fluid_state.is_water() && fluid_state.is_source() && fluid_state.is_empty() {
                 OpenWaterType::InsideWater
             } else {
                 OpenWaterType::Invalid
