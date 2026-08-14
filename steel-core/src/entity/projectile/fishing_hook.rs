@@ -6,10 +6,13 @@ use glam::DVec3;
 use std::ops::Add;
 use std::sync::{Arc, Weak};
 use steel_macros::entity_behavior;
+use steel_protocol::packets::game::SoundSource::Blocks;
+use steel_registry::blocks::block_state_ext::BlockStateExt;
 use steel_registry::entity_type::EntityTypeRef;
+use steel_registry::fluid::FluidStateExt;
 use steel_registry::item_stack::ItemStack;
 use steel_registry::vanilla_entity_data::FishingBobberEntityData;
-use steel_registry::vanilla_items;
+use steel_registry::{vanilla_blocks, vanilla_fluid_tags, vanilla_items};
 use steel_utils::locks::SyncMutex;
 use steel_utils::types::InteractionHand;
 use steel_utils::{BlockPos, Downcast, DowncastType, DowncastTypeKey};
@@ -111,9 +114,14 @@ impl FishingHook {
     fn catching_fish() {}
     fn calculate_open_water() {}
 
-    fn get_open_water_type_for_area(&self, from: BlockPos, to: BlockPos) -> OpenWaterType {
-        let mut iter =
-            BlockPos::between_closed(from, to).map(|pos| self.get_open_water_type_for_block(pos));
+    fn get_open_water_type_for_area(
+        &self,
+        from: BlockPos,
+        to: BlockPos,
+        world: &Arc<World>,
+    ) -> OpenWaterType {
+        let mut iter = BlockPos::between_closed(from, to)
+            .map(|pos| self.get_open_water_type_for_block(pos, world));
 
         let Some(first) = iter.next() else {
             return OpenWaterType::Invalid;
@@ -126,7 +134,21 @@ impl FishingHook {
         }
     }
 
-    fn get_open_water_type_for_block(&self, _pos: BlockPos) {}
+    fn get_open_water_type_for_block(&self, pos: BlockPos, world: &Arc<World>) -> OpenWaterType {
+        let state = world.get_block_state(pos);
+
+        if (!state.is_air() && !state.get_block() == &vanilla_blocks::LILY_PAD) {
+            let fluid_state = state.get_fluid_state();
+            // TODO: normally I'd need to check if the collision shape (`get_collision_shape()`) at the position `pos` is empty, idk how to do that from the `fluid_state` (like in vanilla) tho
+            if (fluid_state.is_water() && fluid_state.is_source() && fluid_state.is_empty()) {
+                OpenWaterType::InsideWater
+            } else {
+                OpenWaterType::Invalid
+            }
+        } else {
+            OpenWaterType::AboveWater
+        }
+    }
     // fn is_open_water_fishing(){}
 
     // TODO: `rod` is needed for advancements and loot params
@@ -178,7 +200,7 @@ impl FishingHook {
     }
 
     fn update_owner_info() {}
-    // fn get_player_owner(){}
+    // fn get_player_owner(){} we have get_owner() from the projectile trait (SharedEntity)
     // fn get_hooked_in(){}
 }
 
