@@ -415,8 +415,17 @@ impl FishingHook {
         }
     }
 
-    fn update_owner_info() {}
-    // fn get_player_owner(){} we have get_owner() from the projectile trait (SharedEntity)
+    fn update_owner_info(&self, hook: Option<FishingHook>) {
+        let Some(owner) = self.get_owner() else {
+            return;
+        };
+        let Some(player) = owner.as_player() else {
+            return;
+        };
+
+        *player.fishing.lock() = hook;
+    }
+    //we have get_owner() from the projectile trait (SharedEntity)
     // fn get_hooked_in(){}
 }
 

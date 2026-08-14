@@ -1,6 +1,6 @@
 use crate::behavior::{InteractionResult, ItemBehavior, UseItemContext};
 use crate::entity::projectile::fishing_hook::{FishingHook, FishingHookState};
-use crate::entity::{next_entity_id, Entity, Projectile, SharedEntity};
+use crate::entity::{Entity, Projectile, SharedEntity, next_entity_id};
 use glam::DVec3;
 use rand::{RngExt, rng};
 use std::sync::Arc;
@@ -24,7 +24,7 @@ impl ItemBehavior for FishingRodItem {
 
         let pitch = 0.4 / (rng().random::<f32>() * 0.4 + 0.8);
 
-        if let Some(fishing) = &player.fishing {
+        if let Some(fishing) = player.fishing.lock().as_ref() {
             context.inv.with_item(|item| {
                 let damage = fishing.retrieve(item);
                 item.hurt_and_break(damage, infinite_materials);
@@ -52,13 +52,13 @@ impl ItemBehavior for FishingRodItem {
             let player_pos = player.position();
             let spawn_pos = DVec3::new(player_pos.x, player.get_eye_y() - 0.1, player_pos.z);
 
-            let hook = FishingHook::new(
+            let hook = Arc::new(FishingHook::new(
                 &vanilla_entities::FISHING_BOBBER,
                 next_entity_id(),
                 spawn_pos,
                 Arc::downgrade(world),
                 SyncMutex::new(FishingHookState::new(0, 0)),
-            );
+            ));
 
             if let Some(owner) = world.players.get_by_uuid(&player.gameprofile.id) {
                 let owner: SharedEntity = owner;
@@ -70,6 +70,12 @@ impl ItemBehavior for FishingRodItem {
 
             let (yaw, player_pitch) = player.rotation();
             hook.shoot_from_rotation(player, player_pitch, yaw, 0.0, SHOOT_POWER, 1.0);
+
+            let entity: SharedEntity = hook;
+            if let Err(error) = world.try_add_entity(entity.clone()) {
+                log::debug!("failed to spawn fishing hook: {error}");
+                return InteractionResult::Fail;
+            }
             // TODO: award stat
             // TODO: vibration
         }

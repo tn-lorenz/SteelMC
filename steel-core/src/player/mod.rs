@@ -255,7 +255,7 @@ pub struct Player {
     /// with the player and re-spawn on login (vanilla `ServerPlayer.enderPearls`).
     ender_pearls: SyncMutex<Vec<Weak<dyn Entity>>>,
 
-    pub fishing: Option<FishingHook>,
+    pub fishing: SyncMutex<Option<FishingHook>>,
 }
 
 // SAFETY: This key is owned by Steel and uniquely identifies `Player`.
@@ -534,7 +534,7 @@ impl Player {
             chunk_send_epoch: SyncMutex::new(0),
             residence: SyncMutex::new(PlayerResidenceState::new()),
             ender_pearls: SyncMutex::new(Vec::new()),
-            fishing: None,
+            fishing: SyncMutex::new(None),
         }
     }
 
