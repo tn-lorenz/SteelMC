@@ -2,7 +2,7 @@ use crate::entity::entities::ItemEntity;
 use crate::entity::{Entity, EntityBase, Projectile, ProjectileBase, RemovalReason, SharedEntity};
 use crate::player::Player;
 use crate::world::World;
-use glam::DVec3;
+use glam::{DVec3, IVec3};
 use std::any::Any;
 use std::cmp::PartialEq;
 use std::ops::Add;
@@ -127,7 +127,37 @@ impl FishingHook {
     }
 
     fn catching_fish() {}
-    fn calculate_open_water() {}
+
+    fn calculate_open_water(&self, pos: BlockPos, world: &Arc<World>) -> bool {
+        let mut prev_layer = OpenWaterType::Invalid;
+
+        for y in -1..=2 {
+            let offset_from = BlockPos::new(pos.x() - 2 , y, pos.z() - 2);
+            let offset_to = BlockPos::new(pos.x() + 2, y, pos.z() + 2);
+
+            let layer = self.get_open_water_type_for_area(offset_from, offset_to, world);
+
+            match layer {
+                OpenWaterType::AboveWater => {
+                    if (prev_layer == OpenWaterType::Invalid) {
+                        return false;
+                    }
+                }
+                OpenWaterType::InsideWater => {
+                    if (prev_layer == OpenWaterType::AboveWater) {
+                        return false;
+                    }
+                }
+
+                OpenWaterType::Invalid => {
+                    return false;
+                }
+            }
+            prev_layer = layer;
+        }
+
+        true
+    }
 
     fn get_open_water_type_for_area(
         &self,
