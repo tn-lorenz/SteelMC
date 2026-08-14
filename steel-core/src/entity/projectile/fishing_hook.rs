@@ -1,12 +1,16 @@
 use crate::entity::entities::ItemEntity;
 use crate::entity::projectile::triangle_random;
-use crate::entity::{Entity, EntityBase, Projectile, ProjectileBase, RemovalReason, SharedEntity};
+use crate::entity::{
+    Entity, EntityBase, Projectile, ProjectileBase, RemovalReason, SharedEntity,
+    ThrowableProjectile,
+};
+use crate::physics::MoverType;
 use crate::player::Player;
 use crate::world::{LevelReader, World};
 use glam::DVec3;
 use rand::{RngExt, rng};
 use std::cmp::PartialEq;
-use std::ops::Add;
+use std::ops::{Add, Mul};
 use std::sync::{Arc, Weak};
 use steel_macros::entity_behavior;
 use steel_registry::blocks::block_state_ext::BlockStateExt;
@@ -437,6 +441,132 @@ impl Entity for FishingHook {
     fn entity_type(&self) -> EntityTypeRef {
         self.entity_type
     }
+
+    fn tick(&self) {
+        if let Some(owner) = self.get_owner()
+            && let Some(player) = owner.as_player()
+            && !self.should_stop_fishing(player)
+        {
+            let mut state = self.hook_state.lock();
+
+            if self.on_ground() {
+                state.life += 1;
+
+                if state.life >= 1200 {
+                    // TODO: discard
+                }
+            } else {
+                state.life = 0;
+            }
+
+            let mut liquid_height: f32 = 0.0;
+            let pos = BlockPos::from(self.base.position());
+
+            if let Some(world) = self.level() {
+                let block_state = world.get_block_state(pos);
+                let fluid_state = block_state.get_fluid_state();
+
+                if fluid_state.is_water() {
+                    liquid_height = fluid_state.own_height(); // TODO: is this correct?
+                }
+
+                let is_in_water = liquid_height > 0.5;
+
+                if state.current_state == FishHookState::Flying {
+                    if Some(state.hooked_in.as_ref()) {
+                        self.base.set_velocity(DVec3::ZERO);
+                        state.current_state = FishHookState::HookedInEntity;
+                        return;
+                    }
+
+                    if is_in_water {
+                        self.base
+                            .set_velocity(self.base.velocity() * DVec3::new(0.3, 0.2, 0.3));
+                        state.current_state = FishHookState::Bobbing;
+                        return;
+                    }
+
+                    self.check_collision();
+                } else {
+                    if state.current_state == FishHookState::HookedInEntity {
+                        if state.hooked_in.is_some() {
+                            let hooked = state.hooked_in.unwrap();
+                            // TODO: && this.hookedIn.level().dimension() == this.level().dimension()
+                            if !hooked.is_removed() && hooked.can_interact_with_level() {
+                                self.try_set_position(hooked.position() * DVec3::new(1.0, 0.8, 1.0)).expect("error: due to dubious reasons, steel couldn't teleport the fishing hook to the hooked entity.");
+                            } else {
+                                self.set_hooked_entity(None);
+                                state.current_state = FishHookState::Flying;
+                            }
+                        }
+                        return;
+                    }
+
+                    if state.current_state == FishHookState::Bobbing {
+                        let velocity = self.base.velocity();
+                        let mut force: f64 = self.position().x + velocity.y
+                            - f64::from(pos.y())
+                            - f64::from(liquid_height);
+
+                        if force.abs() < 0.01 {
+                            force += force.signum() * 0.1;
+                        }
+
+                        self.base.set_velocity(DVec3::new(
+                            velocity.x * 0.9,
+                            velocity.y - force * rng().random::<f64>() * 0.2,
+                            velocity.z * 0.9,
+                        ));
+
+                        if state.nibble <= 0 && state.time_until_hooked <= 0 {
+                            state.open_water = true;
+                        } else {
+                            state.open_water = state.open_water
+                                && state.out_of_water_time < 10
+                                && self.calculate_open_water(pos);
+                        }
+
+                        if is_in_water {
+                            state.out_of_water_time = (state.out_of_water_time - 1).max(0);
+                            // TODO: `fishing_hook_mut()` or `fishing_hook` ?
+                            if self.entity_data.lock().fishing_hook_mut().biting {
+                                // TODO: -0.1 * this.syncronizedRandom.nextFloat() * this.syncronizedRandom.nextFloat()
+                                self.base.velocity().add(DVec3::new(0.0, -0.1, 0.0));
+                            }
+
+                            self.catching_fish(pos);
+                        } else {
+                            state.out_of_water_time = (state.out_of_water_time + 1).min(10);
+                        }
+                    }
+                }
+
+                if !fluid_state.is_water() && !self.base.on_ground() && state.hooked_in.is_some() {
+                    self.base
+                        .set_velocity(self.base.velocity().add(DVec3::new(0.0, -0.03, 0.0)));
+                }
+
+                self.move_entity(MoverType::SelfMovement, self.base.velocity());
+                self.apply_effects_from_blocks();
+                self.update_rotation();
+
+                if state.current_state == FishHookState::Flying
+                    && (self.base.on_ground() || self.base.horizontal_collision())
+                {
+                    self.base.set_velocity(DVec3::ZERO);
+                }
+
+                let inertia: f64 = 0.92;
+                self.base.velocity() * inertia;
+                // TODO: this.reapplyPosition();
+                //self.base.set_old_position(DVec3::ZERO);
+                self.base.set_old_position_to_current();
+            }
+        } else {
+            return;
+            // TODO: discard
+        }
+    }
 }
 
 impl Projectile for FishingHook {
@@ -444,6 +574,8 @@ impl Projectile for FishingHook {
         &self.projectile_base
     }
 }
+
+impl ThrowableProjectile for FishingHook {}
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
 enum FishHookState {
