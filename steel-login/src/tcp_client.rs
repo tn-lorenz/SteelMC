@@ -255,22 +255,6 @@ impl JavaTcpClient {
         network_writer.lock().await.take();
     }
 
-    /// Encodes and queues a packet to be sent.
-    pub fn send_bare_packet<P: ClientPacket>(&self, packet: P) -> Result<(), PacketError> {
-        let compression = self.compression.load();
-        let protocol = self.protocol.load();
-        let packet = EncodedPacket::from_bare(packet, compression, protocol)?;
-        self.outgoing_queue
-            .send(OutboundPacket::Packet(packet))
-            .map_err(|e| {
-                PacketError::SendError(format!(
-                    "Failed to send packet to client {}: {}",
-                    self.id, e
-                ))
-            })?;
-        Ok(())
-    }
-
     /// Queues an already encoded packet to be sent.
     pub fn send_packet(&self, packet: EncodedPacket) -> Result<(), PacketError> {
         self.outgoing_queue
@@ -507,7 +491,7 @@ impl JavaTcpClient {
 
     /// Handles a handshake packet.
     pub async fn handle_handshake(&self, packet: RawPacket) -> Result<(), PacketError> {
-        let data = &mut Cursor::new(packet.payload.as_slice());
+        let data = &mut Cursor::new(packet.payload());
 
         match packet.id {
             handshake::S_INTENTION => {
@@ -543,7 +527,7 @@ impl JavaTcpClient {
 
     /// Handles a status packet.
     pub async fn handle_status(&self, packet: RawPacket) -> Result<(), PacketError> {
-        let data = &mut Cursor::new(packet.payload.as_slice());
+        let data = &mut Cursor::new(packet.payload());
 
         match packet.id {
             status::S_STATUS_REQUEST => {
@@ -563,7 +547,7 @@ impl JavaTcpClient {
         &self,
         packet: RawPacket,
     ) -> Result<ConnectionAction, PacketError> {
-        let data = &mut Cursor::new(packet.payload.as_slice());
+        let data = &mut Cursor::new(packet.payload());
 
         match packet.id {
             login_packets::S_HELLO => Ok(self.handle_hello(SHello::read_packet(data)?).await),
@@ -581,7 +565,7 @@ impl JavaTcpClient {
         &self,
         packet: RawPacket,
     ) -> Result<ConnectionAction, PacketError> {
-        let data = &mut Cursor::new(packet.payload.as_slice());
+        let data = &mut Cursor::new(packet.payload());
 
         match packet.id {
             config::S_CUSTOM_PAYLOAD => {

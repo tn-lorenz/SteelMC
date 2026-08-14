@@ -3,6 +3,7 @@
 use std::sync::{Arc, Weak};
 
 use glam::DVec3;
+use rand::rngs::ThreadRng;
 use smallvec::SmallVec;
 use steel_registry::block_entity_type::BlockEntityTypeRef;
 use steel_registry::blocks::BlockRef;
@@ -12,15 +13,19 @@ use steel_registry::blocks::shapes::{
     BooleanOp, ShapeChannel, SupportType, VoxelShape, is_block_local_face_sturdy,
     is_shape_full_block, join_unoptimized_boxes,
 };
+use steel_registry::enchantment_effect::EnchantmentEffectComponent;
 use steel_registry::entity_type::EntityTypeRef;
 use steel_registry::fluid::{FluidRef, FluidState};
 use steel_registry::item_stack::ItemStack;
+use steel_registry::loot_table::{LootContext, LootTableRef};
 use steel_registry::sound_event::SoundEventRef;
 use steel_registry::vanilla_block_tags::BlockTag;
 use steel_registry::vanilla_entities;
 use steel_registry::{REGISTRY, RegistryEntry, RegistryExt, sound_events, vanilla_blocks};
 use steel_registry::{vanilla_damage_types, vanilla_items};
+use steel_utils::random::legacy_random::LegacyRandom;
 use steel_utils::types::{GameType, InteractionHand, UpdateFlags};
+use steel_utils::value_providers::IntProvider;
 use steel_utils::{BlockLocalAabb, BlockPos, BlockStateId, Identifier, WorldAabb, axis::Axis};
 
 use crate::behavior::BLOCK_BEHAVIORS;
@@ -30,7 +35,7 @@ use crate::behavior::{InventoryAccess, PlacementSource};
 use crate::block_entity::{BlockEntity, BlockEntityTicker, SharedBlockEntity};
 use crate::entity::ai::path::PathComputationType;
 use crate::entity::projectile::Projectile;
-use crate::entity::{Entity, InsideBlockEffectCollector, damage::DamageSource};
+use crate::entity::{Entity, InsideBlockEffectCollector, damage::DamageSource, entity_loot_ref};
 use crate::fluid::is_water_fluid;
 use crate::physics::collide;
 use crate::player::Player;
@@ -52,6 +57,53 @@ pub(crate) fn default_can_be_replaced(
         })
 }
 
+/// Gets random loot from a given loot table reference and other factors, and returns
+/// each item from it in a [`Vec`].
+#[must_use]
+pub(crate) fn drop_from_block_interact_loot_table(
+    key: LootTableRef,
+    interacted_block_state: BlockStateId,
+    _interacted_block_entity: Option<SharedBlockEntity>,
+    tool: Option<&ItemStack>,
+    interacting_entity: Option<&dyn Entity>,
+    rng: &mut ThreadRng,
+) -> Vec<ItemStack> {
+    let mut ctx = LootContext::new(rng).with_block_state(interacted_block_state);
+
+    // TODO: Add the block entity to the context when it can be done.
+
+    if let Some(interacting_entity) = interacting_entity {
+        ctx = ctx.with_interacting_entity(entity_loot_ref(interacting_entity));
+    }
+
+    if let Some(tool) = tool {
+        ctx = ctx.with_tool(tool);
+    }
+
+    key.get_random_items(&mut ctx)
+}
+
+/// Samples and applies enchantment effects to a block experience drop.
+///
+/// Mirrors vanilla `Block.tryDropExperience`. Mining experience is incidental
+/// live-gameplay randomness, so Steel samples it from an unseeded runtime source.
+pub(crate) fn try_drop_experience(
+    world: &Arc<World>,
+    pos: BlockPos,
+    tool: &ItemStack,
+    experience: &IntProvider,
+) {
+    let mut random = LegacyRandom::from_seed(rand::random());
+    let base_experience = experience.sample(&mut random);
+    let experience = tool.apply_unconditional_enchantment_value_effects(
+        EnchantmentEffectComponent::BlockExperience,
+        base_experience as f32,
+    ) as i32;
+    if experience > 0 {
+        world.pop_experience(pos, experience);
+    }
+}
+
 mod context;
 
 pub use context::{
@@ -59,6 +111,17 @@ pub use context::{
     EntityFallDamage, EntityFallOnContext, EntityFallOnFacts, EntityLandingContext, PickupResult,
     RailBehavior,
 };
+
+/// Data exposed by blocks that support vanilla archaeology brushing.
+#[derive(Clone, Copy, Debug)]
+pub struct BrushableData {
+    /// Block produced after brushing completes.
+    pub turns_into: BlockRef,
+    /// Sound played during a successful brush stroke.
+    pub brush_sound: SoundEventRef,
+    /// Sound played when brushing completes.
+    pub brush_completed_sound: SoundEventRef,
+}
 
 mod waterlogging;
 
@@ -155,6 +218,11 @@ pub trait BlockBehavior: Send + Sync {
     /// (torches, buttons, candles, cactus, etc.).
     fn can_survive(&self, _state: BlockStateId, _world: &dyn LevelReader, _pos: BlockPos) -> bool {
         true
+    }
+
+    /// Returns whether this block can be occupied by a forced respawn position
+    fn is_possible_to_respawn_in_this(&self, state: BlockStateId) -> bool {
+        !state.is_solid() && !state.get_block().config.liquid
     }
 
     /// Returns whether this block can be replaced by the held item during placement.
@@ -535,6 +603,11 @@ pub trait BlockBehavior: Send + Sync {
             }
             PathComputationType::Water => is_water_fluid(state.get_fluid_state().fluid_id),
         }
+    }
+
+    /// Returns whether this behavior implements `BedBlock`
+    fn is_bed(&self) -> bool {
+        false
     }
 
     /// Mirrors vanilla `DoorBlock.isWoodenDoor`.
@@ -1007,6 +1080,14 @@ pub trait BlockBehavior: Send + Sync {
                 && new_block.has_tag(&BlockTag::COPPER_CHESTS))
                 || (old_block.has_tag(&BlockTag::COPPER_GOLEM_STATUES)
                     && new_block.has_tag(&BlockTag::COPPER_GOLEM_STATUES)))
+    }
+
+    /// Returns brushable-block data for archaeology brushing
+    ///
+    /// Vanilla keeps this on `BrushableBlock`; exposing it through block behavior lets
+    /// `BrushItem` stay generic without matching concrete vanilla blocks
+    fn brushable_data(&self, _state: BlockStateId) -> Option<BrushableData> {
+        None
     }
 
     /// Returns whether this block can provide an analog output signal to comparators.

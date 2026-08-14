@@ -19,6 +19,7 @@ use steel_core::player::player_data_storage::GlobalPlayerData;
 use steel_core::player::player_inventory::MenuRemovalStatus;
 use steel_core::server::Server;
 use steel_utils::text::DisplayResolutor;
+use steel_utils::threading::worker_threads_for_available;
 use text_components::fmt::set_display_resolutor;
 use tokio::runtime::{Builder, Runtime};
 use tokio_util::{sync::CancellationToken, task::TaskTracker};
@@ -190,18 +191,6 @@ fn available_worker_threads() -> usize {
     thread::available_parallelism().map_or(4, NonZero::get)
 }
 
-fn worker_threads_for_available(
-    configured_threads: Option<usize>,
-    available_threads: usize,
-) -> usize {
-    let available_threads = available_threads.max(1);
-    if let Some(configured_threads) = configured_threads.filter(|&threads| threads > 0) {
-        return configured_threads.min(available_threads);
-    }
-
-    ((available_threads / 2).max(2)).min(available_threads)
-}
-
 async fn main_async(chunk_runtime: Arc<Runtime>, steel_config: config::SteelConfig) {
     let cancel_token = CancellationToken::new();
 
@@ -326,7 +315,9 @@ async fn wait_for_shutdown_signal() -> io::Result<&'static str> {
 
 #[cfg(not(unix))]
 async fn wait_for_shutdown_signal() -> io::Result<&'static str> {
-    tokio::signal::ctrl_c().await?;
+    use tokio::signal::ctrl_c;
+
+    ctrl_c().await?;
     Ok("Ctrl-C")
 }
 
@@ -468,22 +459,4 @@ async fn shutdown_worlds(server: &Arc<Server>) {
         }
     }
     log::info!("Saved {saved} players");
-}
-
-#[cfg(test)]
-mod tests {
-    use super::worker_threads_for_available;
-
-    #[test]
-    fn configured_worker_threads_are_capped_to_available_threads() {
-        assert_eq!(worker_threads_for_available(Some(16), 8), 8);
-        assert_eq!(worker_threads_for_available(Some(4), 8), 4);
-    }
-
-    #[test]
-    fn zero_worker_threads_uses_auto_default() {
-        assert_eq!(worker_threads_for_available(Some(0), 8), 4);
-        assert_eq!(worker_threads_for_available(None, 8), 4);
-        assert_eq!(worker_threads_for_available(None, 1), 1);
-    }
 }

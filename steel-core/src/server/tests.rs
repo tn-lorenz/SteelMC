@@ -61,12 +61,11 @@ use super::{
     KnownPlayers, Notify, PacketProcessor, PersistentEnderPearl, PersistentEntity,
     PersistentPlayerData, PersistentRootVehicle, PlayerDataStorage, PlayerDisconnectQueue,
     PlayerJoinQueue, PlayerMap, PreparedSpawn, RegistryCache, RootVehicleRestoreJob, Server,
-    ServerJobQueue, SyncMutex, SyncRwLock, TabListTickStats, TickRateManager,
+    ServerJobQueue, ServiceKeyStore, SyncMutex, SyncRwLock, TabListTickStats, TickRateManager,
     UnpreparedDomainPlayerData, UnpreparedDomainPlayerState, WorldMap,
     can_entity_return_from_end_to_overworld, cap_positive_thread_count,
     create_registered_dispatcher, is_allowed_to_enter_portal_target, is_end_return_transition,
-    offline_uuid, packet_workers_for_available, portal_entity_still_valid,
-    validate_player_permission_group_update,
+    offline_uuid, portal_entity_still_valid, validate_player_permission_group_update,
 };
 
 struct TestConnection {
@@ -146,6 +145,7 @@ fn test_runtime_config() -> Arc<RuntimeConfig> {
         online_mode: false,
         auth_server: None,
         profile_server: None,
+        services_server: None,
         encryption: false,
         allow_flight: false,
         motd: String::new(),
@@ -253,6 +253,9 @@ async fn test_server_with_worlds(
         known_players: SyncMutex::new(KnownPlayerCacheState::new(KnownPlayers::new())),
         known_player_save_idle: Notify::new(),
         profile_lookup_client: reqwest::Client::new(),
+        service_keys: Arc::new(
+            ServiceKeyStore::new(None).expect("test services key store should initialize"),
+        ),
         pending_player_joins: PlayerJoinQueue::new(),
         pending_player_disconnects: PlayerDisconnectQueue::new(),
         pending_world_changes: SyncMutex::new(Vec::new()),
@@ -2489,19 +2492,6 @@ fn positive_thread_count_is_capped_to_available_threads() {
 fn zero_thread_count_keeps_pool_default() {
     assert_eq!(cap_positive_thread_count(Some(0), 8), None);
     assert_eq!(cap_positive_thread_count(None, 8), None);
-}
-
-#[test]
-fn packet_worker_count_uses_the_configured_cap() {
-    assert_eq!(packet_workers_for_available(Some(16), 8), 8);
-    assert_eq!(packet_workers_for_available(Some(4), 8), 4);
-}
-
-#[test]
-fn packet_worker_count_uses_the_automatic_default() {
-    assert_eq!(packet_workers_for_available(Some(0), 8), 4);
-    assert_eq!(packet_workers_for_available(None, 8), 4);
-    assert_eq!(packet_workers_for_available(None, 1), 1);
 }
 
 #[test]

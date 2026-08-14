@@ -336,7 +336,19 @@ pub trait Mob: LivingEntity {
 
     fn set_mob_flags(&self, flags: i8);
 
+    /// Returns vanilla `Mob.isSaddled`.
+    fn is_saddled(&self) -> bool {
+        let mut is_saddled = false;
+        self.with_equipment_slot(EquipmentSlot::Saddle, &mut |item_stack| {
+            is_saddled = self.is_equippable_in_slot(item_stack, EquipmentSlot::Saddle);
+        });
+        is_saddled
+    }
+
     fn custom_server_ai_step(&self) {}
+
+    /// Runs vanilla `Mob.ate`, invoked after an eating goal resolves a block.
+    fn ate(&self) {}
 
     fn tick_goal_selectors(&self) {}
 
@@ -526,8 +538,9 @@ pub trait Mob: LivingEntity {
         // TODO: Apply USE_REMAINDER components once item use-remainder support exists.
     }
 
-    fn remove_when_far_away(&self, _dist_sqr: f64) -> bool {
-        true
+    fn remove_when_far_away(&self, dist_sqr: f64) -> bool {
+        self.as_animal()
+            .is_none_or(|animal| animal.remove_when_far_away_animal(dist_sqr))
     }
 
     fn requires_custom_persistence(&self) -> bool {
