@@ -16,7 +16,7 @@ use steel_registry::fluid::FluidStateExt;
 use steel_registry::item_stack::ItemStack;
 use steel_registry::particle_type::ParticleData;
 use steel_registry::vanilla_entity_data::FishingBobberEntityData;
-use steel_registry::vanilla_particle_types::{BUBBLE, FISHING};
+use steel_registry::vanilla_particle_types::{BUBBLE, FISHING, SPLASH};
 use steel_registry::{sound_events, vanilla_blocks, vanilla_items, vanilla_particle_types};
 use steel_utils::locks::SyncMutex;
 use steel_utils::types::InteractionHand;
@@ -247,6 +247,57 @@ impl FishingHook {
                 // TODO: `fishing_hook_mut()` or `fishing_hook` ?
                 self.entity_data.lock().fishing_hook_mut().biting.set(true);
             }
+        } else if state.time_until_lured > 0 {
+            state.time_until_lured -= fishing_speed;
+            let mut tease_chance = 0.15;
+
+            match state.time_until_lured {
+                0..20 => {
+                    tease_chance += f64::from(20 - state.time_until_lured) * 0.05;
+                }
+                20..40 => {
+                    tease_chance += f64::from(40 - state.time_until_lured) * 0.02;
+                }
+                40..60 => {
+                    tease_chance += f64::from(60 - state.time_until_lured) * 0.01;
+                }
+                _ => {}
+            }
+
+            if rng.random() < tease_chance {
+                // same reason to call this early in here as well: no need to calculate the rest if there is no world to spawn the particle in.
+                let Some(world) = self.level() else {
+                    return;
+                };
+
+                let angle = rng().random_range(0.0..=360.0) * *std::f64::consts::PI / 180.0;
+                let dist = rng().random_range(25.0..=60.0);
+
+                let fish_x = self.position().x + angle.sin() * dist * 0.1;
+                let fish_y = self.position().y.floor() + 1.0;
+                let fish_z = self.posoition().z + angle.cos() * dist * 0.1;
+
+                let splash_block_state =
+                    world.get_block_state(BlockPos::containing(fish_x, fish_y - 1.0, fish_z));
+
+                if splash_block_state.get_block() == &vanilla_blocks::WATER {
+                    world.send_particles(
+                        ParticleData::simple(&SPLASH),
+                        DVec3::new(fish_x, fish_y, fish_z),
+                        2 + rng().random_range(0..=2),
+                        DVec3::new(0.1, 0.0, 0.1),
+                        0.0,
+                    );
+                }
+            }
+
+            if state.time_until_lured <= 0 {
+                state.fish_angle = rng().random_range(0.0..=360.0);
+                state.time_until_hooked = rng().random_range(20..=80);
+            }
+        } else {
+            state.time_until_lured = rng().random_range(100..=600);
+            state.time_until_lured = state.time_until_lured - state.lure_speed;
         }
     }
 
