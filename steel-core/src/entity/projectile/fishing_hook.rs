@@ -3,6 +3,7 @@ use crate::entity::{Entity, EntityBase, Projectile, ProjectileBase, RemovalReaso
 use crate::player::Player;
 use crate::world::World;
 use glam::DVec3;
+use std::any::Any;
 use std::cmp::PartialEq;
 use std::ops::Add;
 use std::sync::{Arc, Weak};
@@ -116,7 +117,21 @@ impl FishingHook {
         }
     }
 
-    fn set_hooked_entity() {}
+    fn set_hooked_entity(&self, hooked: Option<SharedEntity>) {
+        let mut hook_state = self.hook_state.lock();
+        hook_state.hooked_in = hooked;
+        
+        if let Some(hooked_entity) = self.hook_state.lock().hooked_in {
+            self.entity_data
+                .lock()
+                .fishing_hook
+                .hooked_entity
+                .set(hooked_entity.base().id() + 1);
+        } else {
+            self.entity_data.lock().fishing_hook.hooked_entity.set(0);
+        }
+    }
+
     fn catching_fish() {}
     fn calculate_open_water() {}
 
