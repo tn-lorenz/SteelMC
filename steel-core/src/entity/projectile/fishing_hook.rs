@@ -3,16 +3,16 @@ use crate::entity::{Entity, EntityBase, Projectile, ProjectileBase, RemovalReaso
 use crate::player::Player;
 use crate::world::World;
 use glam::DVec3;
+use std::cmp::PartialEq;
 use std::ops::Add;
 use std::sync::{Arc, Weak};
 use steel_macros::entity_behavior;
-use steel_protocol::packets::game::SoundSource::Blocks;
 use steel_registry::blocks::block_state_ext::BlockStateExt;
 use steel_registry::entity_type::EntityTypeRef;
 use steel_registry::fluid::FluidStateExt;
 use steel_registry::item_stack::ItemStack;
 use steel_registry::vanilla_entity_data::FishingBobberEntityData;
-use steel_registry::{vanilla_blocks, vanilla_fluid_tags, vanilla_items};
+use steel_registry::{vanilla_blocks, vanilla_items};
 use steel_utils::locks::SyncMutex;
 use steel_utils::types::InteractionHand;
 use steel_utils::{BlockPos, Downcast, DowncastType, DowncastTypeKey};
@@ -60,6 +60,12 @@ impl FishingHookState {
 
 unsafe impl DowncastType for FishingHook {
     const TYPE_KEY: DowncastTypeKey = DowncastTypeKey::new("steel:entity/fishing_hook");
+}
+
+impl PartialEq for OpenWaterType {
+    fn eq(&self, other: &Self) -> bool {
+        todo!()
+    }
 }
 
 impl FishingHook {
