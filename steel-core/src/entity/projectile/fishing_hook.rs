@@ -63,12 +63,6 @@ unsafe impl DowncastType for FishingHook {
     const TYPE_KEY: DowncastTypeKey = DowncastTypeKey::new("steel:entity/fishing_hook");
 }
 
-impl PartialEq for OpenWaterType {
-    fn eq(&self, other: &Self) -> bool {
-        todo!()
-    }
-}
-
 impl FishingHook {
     pub const MAX_OUT_OF_WATER_TIME: i32 = 10;
     pub(crate) fn new(
@@ -120,7 +114,7 @@ impl FishingHook {
     fn set_hooked_entity(&self, hooked: Option<SharedEntity>) {
         let mut hook_state = self.hook_state.lock();
         hook_state.hooked_in = hooked;
-        
+
         if let Some(hooked_entity) = self.hook_state.lock().hooked_in {
             self.entity_data
                 .lock()
@@ -248,6 +242,7 @@ enum FishHookState {
     Bobbing,
 }
 
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
 enum OpenWaterType {
     AboveWater,
     InsideWater,
