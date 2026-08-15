@@ -552,24 +552,26 @@ impl Entity for FishingHook {
 
                 match current_state {
                     FishHookState::Flying => {
-                        let should_check_collision = {
+                        let action = {
                             let mut state = self.hook_state.lock();
 
                             if state.hooked_in.is_some() {
                                 self.base.set_velocity(DVec3::ZERO);
                                 state.current_state = FishHookState::HookedInEntity;
-                                false
-                            } else if is_in_water {
+                                return;
+                            }
+
+                            if is_in_water {
                                 self.base
                                     .set_velocity(self.base.velocity() * DVec3::new(0.3, 0.2, 0.3));
                                 state.current_state = FishHookState::Bobbing;
-                                false
-                            } else {
-                                true
+                                return;
                             }
+
+                            true
                         };
 
-                        if should_check_collision {
+                        if action {
                             self.check_collision();
                         }
                     }
@@ -688,9 +690,9 @@ impl Projectile for FishingHook {
         &self.projectile_base
     }
 
-    fn can_hit_entity(&self, _entity: &dyn Entity) -> bool {
+    /*fn can_hit_entity(&self, _entity: &dyn Entity) -> bool {
         todo!()
-    }
+    }*/
 
     fn on_hit_entity(&self, entity: &SharedEntity, _location: DVec3) {
         let mut damage =
