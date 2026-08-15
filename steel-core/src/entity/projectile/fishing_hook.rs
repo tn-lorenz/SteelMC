@@ -467,7 +467,7 @@ impl Entity for FishingHook {
                 state.life += 1;
 
                 if state.life >= 1200 {
-                    // TODO: discard
+                    self.set_removed(RemovalReason::Discarded);
                 }
             } else {
                 state.life = 0;
@@ -557,7 +557,7 @@ impl Entity for FishingHook {
                     }
                 }
 
-                if !fluid_state.is_water() && !self.base.on_ground() && state.hooked_in.is_some() {
+                if !fluid_state.is_water() && !self.base.on_ground() && state.hooked_in.is_none() {
                     self.base
                         .set_velocity(self.base.velocity().add(DVec3::new(0.0, -0.03, 0.0)));
                 }
@@ -574,8 +574,6 @@ impl Entity for FishingHook {
 
                 let inertia: f64 = 0.92;
                 self.base.set_velocity(self.base.velocity() * inertia);
-                // TODO: this.reapplyPosition();
-                //self.base.set_old_position(DVec3::ZERO);
                 self.base.set_old_position_to_current();
             }
         } else {
