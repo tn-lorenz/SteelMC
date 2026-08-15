@@ -518,7 +518,7 @@ impl Entity for FishingHook {
 
                     if state.current_state == FishHookState::Bobbing {
                         let velocity = self.base.velocity();
-                        let mut force: f64 = self.position().x + velocity.y
+                        let mut force: f64 = self.position().y + velocity.y
                             - f64::from(pos.y())
                             - f64::from(liquid_height);
 
