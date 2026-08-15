@@ -484,7 +484,7 @@ impl Entity for FishingHook {
                     liquid_height = fluid_state.own_height(); // TODO: is this correct?
                 }
 
-                let is_in_water = liquid_height > 0.5;
+                let is_in_water = liquid_height > 0.0;
 
                 if state.current_state == FishHookState::Flying {
                     if state.hooked_in.is_some() {
