@@ -16,7 +16,6 @@ use steel_macros::entity_behavior;
 use steel_registry::blocks::block_state_ext::BlockStateExt;
 use steel_registry::entity_type::EntityTypeRef;
 use steel_registry::fluid::FluidStateExt;
-use steel_registry::item_stack::ItemStack;
 use steel_registry::particle_type::ParticleData;
 use steel_registry::vanilla_entity_data::FishingBobberEntityData;
 use steel_registry::vanilla_particle_types::{BUBBLE, FISHING, SPLASH};
@@ -379,8 +378,8 @@ impl FishingHook {
     }
     // fn is_open_water_fishing(){}
 
-    // TODO: `rod` is needed for advancements and loot params
-    pub fn retrieve(&self, _rod: &ItemStack) -> i32 {
+    // TODO: The rod is needed for advancements and loot params.
+    pub fn retrieve(&self) -> i32 {
         let mut damage = 0;
 
         if let Some(owner) = self.get_owner()
@@ -611,6 +610,7 @@ enum OpenWaterType {
 
 #[cfg(test)]
 mod tests {
+    use steel_registry::item_stack::ItemStack;
     use steel_registry::vanilla_entities;
     use uuid::Uuid;
 
@@ -682,10 +682,7 @@ mod tests {
         let hook = test_hook(&world, 51);
         hook.set_owner(&owner);
 
-        assert_eq!(
-            hook.retrieve(&ItemStack::new(&vanilla_items::FISHING_ROD)),
-            0
-        );
+        assert_eq!(hook.retrieve(), 0);
         assert!(hook.is_removed());
         assert!(player.fishing_hook().is_none());
     }

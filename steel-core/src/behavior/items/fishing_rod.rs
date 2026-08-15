@@ -25,8 +25,8 @@ impl ItemBehavior for FishingRodItem {
         let pitch = 0.4 / (rng().random::<f32>() * 0.4 + 0.8);
 
         if let Some(fishing) = player.fishing_hook() {
+            let damage = fishing.retrieve();
             context.inv.with_item(|item| {
-                let damage = fishing.retrieve(item);
                 item.hurt_and_break(damage, infinite_materials);
             });
 
@@ -82,5 +82,54 @@ impl ItemBehavior for FishingRodItem {
             // TODO: vibration
         }
         InteractionResult::Success
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use steel_registry::{item_stack::ItemStack, vanilla_items};
+    use steel_utils::types::InteractionHand;
+    use uuid::Uuid;
+
+    use super::*;
+    use crate::behavior::UseItemContext;
+    use crate::test_support::{TestPlayerBuilder, fresh_test_world};
+
+    #[test]
+    fn retrieving_grounded_hook_does_not_relock_inventory() {
+        let world = fresh_test_world("fishing_rod_grounded_retrieve");
+        let player =
+            TestPlayerBuilder::new(Arc::clone(&world), Uuid::from_u128(1), "Fisher", 1).build();
+        player
+            .inventory
+            .lock()
+            .set_selected_item(ItemStack::new(&vanilla_items::FISHING_ROD));
+
+        let player_owner = Arc::clone(&player);
+        let owner: SharedEntity = player_owner;
+        let hook = Arc::new(FishingHook::new(
+            &vanilla_entities::FISHING_BOBBER,
+            2,
+            DVec3::ZERO,
+            Arc::downgrade(&world),
+            SyncMutex::new(FishingHookState::new(0, 0)),
+        ));
+        hook.set_owner(&owner);
+        hook.set_on_ground(true);
+
+        let mut context = UseItemContext::new(
+            &player,
+            InteractionHand::MainHand,
+            &world,
+            Arc::clone(&player.inventory),
+        );
+
+        assert_eq!(
+            FishingRodItem.use_item(&mut context),
+            InteractionResult::Success
+        );
+        assert!(hook.is_removed());
+        assert!(player.fishing_hook().is_none());
+        assert_eq!(context.inv.with_item(|item| item.get_damage_value()), 2);
     }
 }
