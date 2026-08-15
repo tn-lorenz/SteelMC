@@ -140,7 +140,7 @@ impl FishingHook {
         }
     }
 
-    fn catching_fish(&self, pos: BlockPos) {
+    fn catching_fish(&self, pos: BlockPos, state: &mut FishingHookState) {
         let mut fishing_speed = 1;
         let above = pos.above();
 
@@ -155,8 +155,6 @@ impl FishingHook {
         if rng().random::<f64>() < 0.5 && world.can_see_sky(above) {
             fishing_speed -= 1;
         }
-
-        let mut state = self.hook_state.lock();
 
         if state.nibble > 0 {
             state.nibble -= 1;
@@ -552,7 +550,7 @@ impl Entity for FishingHook {
                                 );
                             }
 
-                            self.catching_fish(pos);
+                            self.catching_fish(pos, &mut state);
                         } else {
                             state.out_of_water_time = (state.out_of_water_time + 1).min(10);
                         }
