@@ -66,6 +66,7 @@ impl FishingHookState {
     }
 }
 
+// SAFETY: This key is owned by Steel and uniquely identifies `FishingHook`.
 unsafe impl DowncastType for FishingHook {
     const TYPE_KEY: DowncastTypeKey = DowncastTypeKey::new("steel:entity/fishing_hook");
 }
@@ -88,9 +89,16 @@ impl FishingHook {
         }
     }
 
+    /// Sets the projectile owner and mirrors vanilla's `Player.fishing` update.
+    pub(crate) fn set_owner(self: &Arc<Self>, owner: &SharedEntity) {
+        self.set_owner_entity(Some(owner));
+        if let Some(player) = owner.as_player() {
+            player.set_fishing_hook(self);
+        }
+    }
+
     fn should_stop_fishing(&self, owner: &Player) -> bool {
         if !owner.can_interact_with_level() {
-            // TODO: does this actually discard the entity?
             self.set_removed(RemovalReason::Discarded);
             return true;
         }
@@ -375,7 +383,7 @@ impl FishingHook {
     pub fn retrieve(&self, _rod: &ItemStack) -> i32 {
         let mut damage = 0;
 
-        if let Some(owner) = self.projectile_owner()
+        if let Some(owner) = self.get_owner()
             && let Some(player) = owner.as_player()
             && !Self::should_stop_fishing(self, player)
         {
@@ -399,10 +407,12 @@ impl FishingHook {
             }
 
             if self.base.on_ground() {
-                damage = 2
+                damage = 2;
             }
+
+            self.set_removed(RemovalReason::Discarded);
         } else {
-            damage = 0
+            damage = 0;
         }
         damage
     }
@@ -419,7 +429,7 @@ impl FishingHook {
         }
     }
 
-    fn update_owner_info(&self, hook: Option<FishingHook>) {
+    fn clear_owner_info(&self) {
         let Some(owner) = self.get_owner() else {
             return;
         };
@@ -427,10 +437,8 @@ impl FishingHook {
             return;
         };
 
-        *player.fishing.lock() = hook;
+        player.clear_fishing_hook(self);
     }
-    //we have get_owner() from the projectile trait (SharedEntity)
-    // fn get_hooked_in(){}
 }
 
 impl Entity for FishingHook {
@@ -440,6 +448,15 @@ impl Entity for FishingHook {
 
     fn entity_type(&self) -> EntityTypeRef {
         self.entity_type
+    }
+
+    fn spawn_data(&self) -> i32 {
+        self.get_owner().map_or(self.id(), |owner| owner.id())
+    }
+
+    fn set_removed(&self, reason: RemovalReason) {
+        self.clear_owner_info();
+        self.base.set_removed(reason);
     }
 
     fn tick(&self) {
@@ -531,7 +548,9 @@ impl Entity for FishingHook {
                             // TODO: `fishing_hook_mut()` or `fishing_hook` ?
                             if *self.entity_data.lock().fishing_hook_mut().biting.get() {
                                 // TODO: -0.1 * this.syncronizedRandom.nextFloat() * this.syncronizedRandom.nextFloat()
-                                self.base.set_velocity(self.base.velocity().add(DVec3::new(0.0, -0.1, 0.0)));
+                                self.base.set_velocity(
+                                    self.base.velocity().add(DVec3::new(0.0, -0.1, 0.0)),
+                                );
                             }
 
                             self.catching_fish(pos);
@@ -563,8 +582,7 @@ impl Entity for FishingHook {
                 self.base.set_old_position_to_current();
             }
         } else {
-            return;
-            // TODO: discard
+            self.set_removed(RemovalReason::Discarded);
         }
     }
 }
@@ -589,4 +607,86 @@ enum OpenWaterType {
     AboveWater,
     InsideWater,
     Invalid,
+}
+
+#[cfg(test)]
+mod tests {
+    use steel_registry::vanilla_entities;
+    use uuid::Uuid;
+
+    use super::*;
+    use crate::test_support::{TestPlayerBuilder, fresh_test_world};
+
+    fn test_hook(world: &Arc<World>, id: i32) -> Arc<FishingHook> {
+        Arc::new(FishingHook::new(
+            &vanilla_entities::FISHING_BOBBER,
+            id,
+            DVec3::ZERO,
+            Arc::downgrade(world),
+            SyncMutex::new(FishingHookState::new(0, 0)),
+        ))
+    }
+
+    #[test]
+    fn spawn_data_identifies_the_owning_player() {
+        let world = fresh_test_world("fishing_hook_spawn_data");
+        let player =
+            TestPlayerBuilder::new(Arc::clone(&world), Uuid::from_u128(1), "Fisher", 37).build();
+        let owner: SharedEntity = player;
+        let hook = test_hook(&world, 38);
+        hook.set_owner_entity(Some(&owner));
+
+        assert_eq!(hook.spawn_data(), owner.id());
+    }
+
+    #[test]
+    fn removal_only_clears_the_matching_active_hook() {
+        let world = fresh_test_world("fishing_hook_owner_lifecycle");
+        let player =
+            TestPlayerBuilder::new(Arc::clone(&world), Uuid::from_u128(2), "Fisher", 40).build();
+        let player_owner = Arc::clone(&player);
+        let owner: SharedEntity = player_owner;
+        let first = test_hook(&world, 41);
+        let second = test_hook(&world, 42);
+
+        first.set_owner(&owner);
+        assert!(
+            player
+                .fishing_hook()
+                .is_some_and(|active| Arc::ptr_eq(&active, &first))
+        );
+
+        second.set_owner(&owner);
+        first.set_removed(RemovalReason::Discarded);
+        assert!(
+            player
+                .fishing_hook()
+                .is_some_and(|active| Arc::ptr_eq(&active, &second))
+        );
+
+        second.set_removed(RemovalReason::Discarded);
+        assert!(player.fishing_hook().is_none());
+    }
+
+    #[test]
+    fn retrieving_discards_the_active_hook() {
+        let world = fresh_test_world("fishing_hook_retrieve_lifecycle");
+        let player =
+            TestPlayerBuilder::new(Arc::clone(&world), Uuid::from_u128(3), "Fisher", 50).build();
+        player
+            .inventory
+            .lock()
+            .set_selected_item(ItemStack::new(&vanilla_items::FISHING_ROD));
+        let player_owner = Arc::clone(&player);
+        let owner: SharedEntity = player_owner;
+        let hook = test_hook(&world, 51);
+        hook.set_owner(&owner);
+
+        assert_eq!(
+            hook.retrieve(&ItemStack::new(&vanilla_items::FISHING_ROD)),
+            0
+        );
+        assert!(hook.is_removed());
+        assert!(player.fishing_hook().is_none());
+    }
 }

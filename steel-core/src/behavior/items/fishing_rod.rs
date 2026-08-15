@@ -1,6 +1,6 @@
 use crate::behavior::{InteractionResult, ItemBehavior, UseItemContext};
 use crate::entity::projectile::fishing_hook::{FishingHook, FishingHookState};
-use crate::entity::{Entity, Projectile, SharedEntity, next_entity_id};
+use crate::entity::{Entity, Projectile, RemovalReason, SharedEntity, next_entity_id};
 use glam::DVec3;
 use rand::{RngExt, rng};
 use std::sync::Arc;
@@ -24,7 +24,7 @@ impl ItemBehavior for FishingRodItem {
 
         let pitch = 0.4 / (rng().random::<f32>() * 0.4 + 0.8);
 
-        if let Some(fishing) = player.fishing.lock().as_ref() {
+        if let Some(fishing) = player.fishing_hook() {
             context.inv.with_item(|item| {
                 let damage = fishing.retrieve(item);
                 item.hurt_and_break(damage, infinite_materials);
@@ -62,9 +62,10 @@ impl ItemBehavior for FishingRodItem {
 
             if let Some(owner) = world.players.get_by_uuid(&player.gameprofile.id) {
                 let owner: SharedEntity = owner;
-                hook.set_owner_entity(Some(&owner));
+                hook.set_owner(&owner);
             } else {
                 hook.set_owner_uuid(Some(player.gameprofile.id));
+                player.set_fishing_hook(&hook);
             }
             //hook.set_item_clamped(thrown_item);
 
@@ -72,7 +73,8 @@ impl ItemBehavior for FishingRodItem {
             hook.shoot_from_rotation(player, player_pitch, yaw, 0.0, SHOOT_POWER, 1.0);
 
             let entity: SharedEntity = hook;
-            if let Err(error) = world.try_add_entity(entity.clone()) {
+            if let Err(error) = world.try_add_entity(Arc::clone(&entity)) {
+                entity.set_removed(RemovalReason::Discarded);
                 log::debug!("failed to spawn fishing hook: {error}");
                 return InteractionResult::Fail;
             }
