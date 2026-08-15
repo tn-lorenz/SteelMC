@@ -489,7 +489,7 @@ impl Entity for FishingHook {
                 let is_in_water = liquid_height > 0.5;
 
                 if state.current_state == FishHookState::Flying {
-                    if Some(state.hooked_in.as_ref()).is_some() {
+                    if state.hooked_in.is_some() {
                         self.base.set_velocity(DVec3::ZERO);
                         state.current_state = FishHookState::HookedInEntity;
                         return;
