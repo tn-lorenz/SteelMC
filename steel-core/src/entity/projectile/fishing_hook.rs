@@ -1,3 +1,4 @@
+use crate::entity::damage::DamageSource;
 use crate::entity::entities::ItemEntity;
 use crate::entity::projectile::triangle_random;
 use crate::entity::{
@@ -19,7 +20,7 @@ use steel_registry::fluid::FluidStateExt;
 use steel_registry::particle_type::ParticleData;
 use steel_registry::vanilla_entity_data::FishingBobberEntityData;
 use steel_registry::vanilla_particle_types::{BUBBLE, FISHING, SPLASH};
-use steel_registry::{sound_events, vanilla_blocks, vanilla_items};
+use steel_registry::{sound_events, vanilla_blocks, vanilla_damage_types, vanilla_items};
 use steel_utils::locks::SyncMutex;
 use steel_utils::types::InteractionHand;
 use steel_utils::{BlockPos, Downcast, DowncastType, DowncastTypeKey};
@@ -125,7 +126,7 @@ impl FishingHook {
         }
     }
 
-    fn set_hooked_entity(&self, hooked: Option<SharedEntity>) {
+    /*fn set_hooked_entity(&self, hooked: Option<SharedEntity>) {
         let mut hook_state = self.hook_state.lock();
         hook_state.hooked_in = hooked;
 
@@ -138,6 +139,62 @@ impl FishingHook {
         } else {
             self.entity_data.lock().fishing_hook.hooked_entity.set(0);
         }
+    }*/
+    /*fn set_hooked_entity(&self, hooked: Option<SharedEntity>) {
+        let hooked_entity_id = hooked
+            .as_ref()
+            .map(|entity| entity.base().id() + 1)
+            .unwrap_or(0);
+
+        {
+            let mut hook_state = self.hook_state.lock();
+            hook_state.hooked_in = hooked;
+        }
+
+        self.entity_data
+            .lock()
+            .fishing_hook
+            .hooked_entity
+            .set(hooked_entity_id);
+    }*/
+    fn set_hooked_entity(&self, hooked: Option<SharedEntity>) {
+        log::info!("SET_HOOK: entered");
+
+        let hooked_entity_id = hooked
+            .as_ref()
+            .map(|entity| {
+                log::info!("SET_HOOK: before base().id()");
+                let id = entity.base().id();
+                log::info!("SET_HOOK: after base().id() = {}", id);
+                id + 1
+            })
+            .unwrap_or(0);
+
+        log::info!("SET_HOOK: before hook_state.lock()");
+
+        {
+            let mut hook_state = self.hook_state.lock();
+
+            log::info!("SET_HOOK: after hook_state.lock()");
+
+            hook_state.hooked_in = hooked;
+
+            log::info!("SET_HOOK: after hooked_in assignment");
+        }
+
+        log::info!("SET_HOOK: hook_state unlocked");
+        log::info!("SET_HOOK: before entity_data.lock()");
+
+        let mut entity_data = self.entity_data.lock();
+
+        log::info!("SET_HOOK: after entity_data.lock()");
+
+        entity_data
+            .fishing_hook
+            .hooked_entity
+            .set(hooked_entity_id);
+
+        log::info!("SET_HOOK: after hooked_entity.set()");
     }
 
     fn catching_fish(&self, pos: BlockPos, state: &mut FishingHookState) {
@@ -461,16 +518,18 @@ impl Entity for FishingHook {
             && let Some(player) = owner.as_player()
             && !self.should_stop_fishing(player)
         {
-            let mut state = self.hook_state.lock();
-
             if self.on_ground() {
-                state.life += 1;
+                let should_remove = {
+                    let mut state = self.hook_state.lock();
+                    state.life += 1;
+                    state.life >= 1200
+                };
 
-                if state.life >= 1200 {
+                if should_remove {
                     self.set_removed(RemovalReason::Discarded);
                 }
             } else {
-                state.life = 0;
+                self.hook_state.lock().life = 0;
             }
 
             let mut liquid_height: f32 = 0.0;
@@ -481,43 +540,75 @@ impl Entity for FishingHook {
                 let fluid_state = block_state.get_fluid_state();
 
                 if fluid_state.is_water() {
-                    liquid_height = fluid_state.own_height(); // TODO: is this correct?
+                    liquid_height = fluid_state.own_height();
                 }
 
                 let is_in_water = liquid_height > 0.0;
 
-                if state.current_state == FishHookState::Flying {
-                    if state.hooked_in.is_some() {
-                        self.base.set_velocity(DVec3::ZERO);
-                        state.current_state = FishHookState::HookedInEntity;
-                        return;
-                    }
+                let current_state = {
+                    let state = self.hook_state.lock();
+                    state.current_state
+                };
 
-                    if is_in_water {
-                        self.base
-                            .set_velocity(self.base.velocity() * DVec3::new(0.3, 0.2, 0.3));
-                        state.current_state = FishHookState::Bobbing;
-                        return;
-                    }
+                match current_state {
+                    FishHookState::Flying => {
+                        let should_check_collision = {
+                            let mut state = self.hook_state.lock();
 
-                    self.check_collision();
-                } else {
-                    if state.current_state == FishHookState::HookedInEntity {
-                        if state.hooked_in.is_some() {
-                            let hooked = state.hooked_in.as_ref().unwrap();
-                            // TODO: && this.hookedIn.level().dimension() == this.level().dimension()
-                            if !hooked.is_removed() && hooked.can_interact_with_level() {
-                                self.try_set_position(hooked.position() * DVec3::new(1.0, 0.8, 1.0)).expect("error: due to dubious reasons, steel couldn't teleport the fishing hook to the hooked entity.");
+                            if state.hooked_in.is_some() {
+                                self.base.set_velocity(DVec3::ZERO);
+                                state.current_state = FishHookState::HookedInEntity;
+                                false
+                            } else if is_in_water {
+                                self.base
+                                    .set_velocity(self.base.velocity() * DVec3::new(0.3, 0.2, 0.3));
+                                state.current_state = FishHookState::Bobbing;
+                                false
                             } else {
-                                self.set_hooked_entity(None);
-                                state.current_state = FishHookState::Flying;
+                                true
                             }
+                        };
+
+                        if should_check_collision {
+                            self.check_collision();
                         }
+                    }
+
+                    FishHookState::HookedInEntity => {
+                        let hooked = {
+                            let state = self.hook_state.lock();
+                            state.hooked_in.clone()
+                        };
+
+                        let Some(hooked) = hooked else {
+                            let mut state = self.hook_state.lock();
+                            state.current_state = FishHookState::Flying;
+                            return;
+                        };
+
+                        let removed = hooked.is_removed();
+                        let can_interact = hooked.can_interact_with_level();
+
+                        if !removed && can_interact {
+                            self.try_set_position(
+                                hooked.position() * DVec3::new(1.0, 0.8, 1.0),
+                            )
+                                .expect("...");
+                        } else {
+                            self.set_hooked_entity(None);
+
+                            let mut state = self.hook_state.lock();
+                            state.current_state = FishHookState::Flying;
+                        }
+
                         return;
                     }
 
-                    if state.current_state == FishHookState::Bobbing {
+                    FishHookState::Bobbing => {
+                        let mut state = self.hook_state.lock();
+
                         let velocity = self.base.velocity();
+
                         let mut force: f64 = self.position().y + velocity.y
                             - f64::from(pos.y())
                             - f64::from(liquid_height);
@@ -557,7 +648,12 @@ impl Entity for FishingHook {
                     }
                 }
 
-                if !fluid_state.is_water() && !self.base.on_ground() && state.hooked_in.is_none() {
+                let hooked_in = {
+                    let state = self.hook_state.lock();
+                    state.hooked_in.is_some()
+                };
+
+                if !fluid_state.is_water() && !self.base.on_ground() && !hooked_in {
                     self.base
                         .set_velocity(self.base.velocity().add(DVec3::new(0.0, -0.03, 0.0)));
                 }
@@ -566,9 +662,14 @@ impl Entity for FishingHook {
                 self.apply_effects_from_blocks();
                 self.update_rotation();
 
-                if state.current_state == FishHookState::Flying
-                    && (self.base.on_ground() || self.base.horizontal_collision())
-                {
+                let should_stop = {
+                    let state = self.hook_state.lock();
+
+                    state.current_state == FishHookState::Flying
+                        && (self.base.on_ground() || self.base.horizontal_collision())
+                };
+
+                if should_stop  {
                     self.base.set_velocity(DVec3::ZERO);
                 }
 
@@ -585,6 +686,26 @@ impl Entity for FishingHook {
 impl Projectile for FishingHook {
     fn projectile_base(&self) -> &ProjectileBase {
         &self.projectile_base
+    }
+
+    fn can_hit_entity(&self, _entity: &dyn Entity) -> bool {
+        todo!()
+    }
+
+    fn on_hit_entity(&self, entity: &SharedEntity, _location: DVec3) {
+        let mut damage =
+            DamageSource::environment(&vanilla_damage_types::THROWN)
+                .with_direct_entity(self.id());
+
+        if let Some(owner) = self.get_owner() {
+            damage = damage.with_causing_entity(owner.id());
+        }
+
+        if let Some(world) = entity.level() {
+            entity.hurt(&world, &damage, 0.0);
+        }
+
+        self.set_hooked_entity(Some(Arc::clone(entity)));
     }
 }
 
