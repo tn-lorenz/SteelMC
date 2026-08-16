@@ -127,7 +127,6 @@ impl FishingHook {
     }
 
     fn set_hooked_entity(&self, hooked: Option<SharedEntity>) {
-
         let hooked_entity_id = hooked
             .as_ref()
             .map(|entity| {
@@ -143,10 +142,7 @@ impl FishingHook {
 
         let mut entity_data = self.entity_data.lock();
 
-        entity_data
-            .fishing_hook
-            .hooked_entity
-            .set(hooked_entity_id);
+        entity_data.fishing_hook.hooked_entity.set(hooked_entity_id);
     }
 
     fn catching_fish(&self, pos: BlockPos, state: &mut FishingHookState) {
@@ -544,9 +540,10 @@ impl Entity for FishingHook {
                         let can_interact = hooked.can_interact_with_level();
 
                         if !removed && can_interact {
-                            self.try_set_position(
-                                hooked.position() * DVec3::new(1.0, 0.8, 1.0),
-                            )
+                            let pos = hooked.position();
+                            let height = hooked.bounding_box().height();
+
+                            self.try_set_position(DVec3::new(pos.x, pos.y + height * 0.8, pos.z))
                                 .expect("...");
                         } else {
                             self.set_hooked_entity(None);
@@ -623,7 +620,7 @@ impl Entity for FishingHook {
                         && (self.base.on_ground() || self.base.horizontal_collision())
                 };
 
-                if should_stop  {
+                if should_stop {
                     self.base.set_velocity(DVec3::ZERO);
                 }
 
@@ -648,8 +645,7 @@ impl Projectile for FishingHook {
 
     fn on_hit_entity(&self, entity: &SharedEntity, _location: DVec3) {
         let mut damage =
-            DamageSource::environment(&vanilla_damage_types::THROWN)
-                .with_direct_entity(self.id());
+            DamageSource::environment(&vanilla_damage_types::THROWN).with_direct_entity(self.id());
 
         if let Some(owner) = self.get_owner() {
             damage = damage.with_causing_entity(owner.id());
