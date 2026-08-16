@@ -426,7 +426,7 @@ impl FishingHook {
                 base.position().x - self.base.position().x,
                 base.position().y - self.base.position().y,
                 base.position().z - self.base.position().z,
-            );
+            ) * 0.1 ;
             entity.set_velocity(entity.velocity().add(delta));
         }
     }
