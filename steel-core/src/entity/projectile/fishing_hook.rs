@@ -126,75 +126,27 @@ impl FishingHook {
         }
     }
 
-    /*fn set_hooked_entity(&self, hooked: Option<SharedEntity>) {
-        let mut hook_state = self.hook_state.lock();
-        hook_state.hooked_in = hooked;
-
-        if let Some(hooked_entity) = hook_state.hooked_in.as_ref() {
-            self.entity_data
-                .lock()
-                .fishing_hook
-                .hooked_entity
-                .set(hooked_entity.base().id() + 1);
-        } else {
-            self.entity_data.lock().fishing_hook.hooked_entity.set(0);
-        }
-    }*/
-    /*fn set_hooked_entity(&self, hooked: Option<SharedEntity>) {
-        let hooked_entity_id = hooked
-            .as_ref()
-            .map(|entity| entity.base().id() + 1)
-            .unwrap_or(0);
-
-        {
-            let mut hook_state = self.hook_state.lock();
-            hook_state.hooked_in = hooked;
-        }
-
-        self.entity_data
-            .lock()
-            .fishing_hook
-            .hooked_entity
-            .set(hooked_entity_id);
-    }*/
     fn set_hooked_entity(&self, hooked: Option<SharedEntity>) {
-        log::info!("SET_HOOK: entered");
 
         let hooked_entity_id = hooked
             .as_ref()
             .map(|entity| {
-                log::info!("SET_HOOK: before base().id()");
                 let id = entity.base().id();
-                log::info!("SET_HOOK: after base().id() = {}", id);
                 id + 1
             })
             .unwrap_or(0);
 
-        log::info!("SET_HOOK: before hook_state.lock()");
-
         {
             let mut hook_state = self.hook_state.lock();
-
-            log::info!("SET_HOOK: after hook_state.lock()");
-
             hook_state.hooked_in = hooked;
-
-            log::info!("SET_HOOK: after hooked_in assignment");
         }
 
-        log::info!("SET_HOOK: hook_state unlocked");
-        log::info!("SET_HOOK: before entity_data.lock()");
-
         let mut entity_data = self.entity_data.lock();
-
-        log::info!("SET_HOOK: after entity_data.lock()");
 
         entity_data
             .fishing_hook
             .hooked_entity
             .set(hooked_entity_id);
-
-        log::info!("SET_HOOK: after hooked_entity.set()");
     }
 
     fn catching_fish(&self, pos: BlockPos, state: &mut FishingHookState) {
@@ -552,7 +504,7 @@ impl Entity for FishingHook {
 
                 match current_state {
                     FishHookState::Flying => {
-                        let action = {
+                        let should_check_collision = {
                             let mut state = self.hook_state.lock();
 
                             if state.hooked_in.is_some() {
@@ -571,7 +523,7 @@ impl Entity for FishingHook {
                             true
                         };
 
-                        if action {
+                        if should_check_collision {
                             self.check_collision();
                         }
                     }
