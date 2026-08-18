@@ -3476,6 +3476,14 @@ pub trait Entity: EntityEventSource + ErasedType + Send + Sync + 'static {
     }
 
     // This already exists for structures and AABB whatever that might be, but I also need it for entities, I hope this is the right spot to put it.
+    
+    /// Calculates the squared Euclidean distance from this entity's position to the given position.
+    ///
+    /// # Arguments
+    ///
+    /// * `pos` - The position to calculate the distance to.
+    /// 
+    /// The squared Euclidean distance between this entity's position and `pos`.
     fn distance_to_sqr(&self, pos: DVec3) -> f64 {
         let dx = self.position().x - pos.x;
         let dy = self.position().y - pos.y;
