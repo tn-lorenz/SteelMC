@@ -11,8 +11,8 @@ use crate::world::{LevelReader, World};
 use glam::DVec3;
 use rand::{RngExt, rng};
 use std::cmp::PartialEq;
-use std::ops::Add;
 use std::f64::consts::PI;
+use std::ops::Add;
 use std::sync::{Arc, Weak};
 use steel_macros::entity_behavior;
 use steel_registry::blocks::block_state_ext::BlockStateExt;
@@ -74,6 +74,16 @@ unsafe impl DowncastType for FishingHook {
 
 pub const MAX_OUT_OF_WATER_TIME: i32 = 10;
 
+const DEGREE_180: f64 = 180.0;
+const DEGREE_360: f64 = 360.0;
+
+const ONE_SECOND: i32 = 20;
+const TWO_SECONDS: i32 = 40;
+const THREE_SECONDS: i32 = 60;
+const FOUR_SECONDS: i32 = 80;
+const FIVE_SECONDS: i32 = 100;
+const THIRTY_SECONDS: i32 = 600;
+
 impl FishingHook {
     pub(crate) fn new(
         entity_type: EntityTypeRef,
@@ -129,12 +139,10 @@ impl FishingHook {
     }
 
     fn set_hooked_entity(&self, hooked: Option<SharedEntity>) {
-        let hooked_entity_id = hooked
-            .as_ref()
-            .map_or(0, |entity| {
-                let id = entity.base().id();
-                id + 1
-            });
+        let hooked_entity_id = hooked.as_ref().map_or(0, |entity| {
+            let id = entity.base().id();
+            id + 1
+        });
 
         {
             let mut hook_state = self.hook_state.lock();
@@ -146,7 +154,11 @@ impl FishingHook {
         entity_data.fishing_hook.hooked_entity.set(hooked_entity_id);
     }
 
-    #[expect(clippy::too_many_lines, reason = "Logic that belongs together is being kept together.")]
+    #[expect(
+        clippy::too_many_lines,
+        clippy::similar_names,
+        reason = "Logic that belongs together is being kept together + X and Z movement components intentionally have similar names"
+    )]
     fn catching_fish(&self, pos: BlockPos, state: &mut FishingHookState) {
         let mut fishing_speed = 1;
         let above = pos.above();
@@ -169,7 +181,6 @@ impl FishingHook {
             if state.nibble <= 0 {
                 state.time_until_lured = 0;
                 state.time_until_hooked = 0;
-                // TODO: `fishing_hook_mut()` or `fishing_hook` ?
                 self.entity_data.lock().fishing_hook_mut().biting.set(false);
             }
         } else if state.time_until_hooked > 0 {
@@ -206,9 +217,7 @@ impl FishingHook {
                         );
                     }
 
-                    #[expect(clippy::similar_names,  reason = "X and Z movement components intentionally have similar names")]
                     let particle_x_mov = angle_sin * 0.04;
-                    #[expect(clippy::similar_names,  reason = "X and Z movement components intentionally have similar names")]
                     let particle_z_mov = angle_cos * 0.04;
 
                     // Yes, according to the src, x and z are swapped in the second `DVec3`
@@ -260,8 +269,7 @@ impl FishingHook {
                     0.2,
                 );
 
-                state.nibble = rng().random_range(20..=40);
-                // TODO: `fishing_hook_mut()` or `fishing_hook` ?
+                state.nibble = rng().random_range(ONE_SECOND..=TWO_SECONDS);
                 self.entity_data.lock().fishing_hook_mut().biting.set(true);
             }
         } else if state.time_until_lured > 0 {
@@ -269,14 +277,14 @@ impl FishingHook {
             let mut tease_chance = 0.15;
 
             match state.time_until_lured {
-                0..20 => {
-                    tease_chance += f64::from(20 - state.time_until_lured) * 0.05;
+                0..ONE_SECOND => {
+                    tease_chance += f64::from(ONE_SECOND - state.time_until_lured) * 0.05;
                 }
-                20..40 => {
-                    tease_chance += f64::from(40 - state.time_until_lured) * 0.02;
+                ONE_SECOND..TWO_SECONDS => {
+                    tease_chance += f64::from(TWO_SECONDS - state.time_until_lured) * 0.02;
                 }
-                40..60 => {
-                    tease_chance += f64::from(60 - state.time_until_lured) * 0.01;
+                TWO_SECONDS..THREE_SECONDS => {
+                    tease_chance += f64::from(THREE_SECONDS - state.time_until_lured) * 0.01;
                 }
                 _ => {}
             }
@@ -287,7 +295,7 @@ impl FishingHook {
                     return;
                 };
 
-                let angle: f64 = rng().random_range(0.0..=360.0) * PI / 180.0;
+                let angle: f64 = rng().random_range(0.0..=DEGREE_360) * PI / DEGREE_180;
                 let dist = rng().random_range(25.0..=60.0);
 
                 let fish_x: f64 = self.position().x + angle.sin() * dist * 0.1;
@@ -309,11 +317,11 @@ impl FishingHook {
             }
 
             if state.time_until_lured <= 0 {
-                state.fish_angle = rng().random_range(0.0..=360.0);
-                state.time_until_hooked = rng().random_range(20..=80);
+                state.fish_angle = rng().random_range(0.0..=DEGREE_360);
+                state.time_until_hooked = rng().random_range(ONE_SECOND..=FOUR_SECONDS);
             }
         } else {
-            state.time_until_lured = rng().random_range(100..=600);
+            state.time_until_lured = rng().random_range(FIVE_SECONDS..=THIRTY_SECONDS);
             state.time_until_lured -= state.lure_speed;
         }
     }
@@ -465,7 +473,10 @@ impl Entity for FishingHook {
         self.base.set_removed(reason);
     }
 
-    #[expect(clippy::too_many_lines, reason = "Logic that belongs together is being kept together.")]
+    #[expect(
+        clippy::too_many_lines,
+        reason = "Logic that belongs together is being kept together."
+    )]
     fn tick(&self) {
         if let Some(owner) = self.get_owner()
             && let Some(player) = owner.as_player()
@@ -589,9 +600,9 @@ impl Entity for FishingHook {
 
                         if is_in_water {
                             state.out_of_water_time = (state.out_of_water_time - 1).max(0);
-                            // TODO: `fishing_hook_mut()` or `fishing_hook` ?
-                            if *self.entity_data.lock().fishing_hook_mut().biting.get() {
-                                // TODO: -0.1 * this.syncronizedRandom.nextFloat() * this.syncronizedRandom.nextFloat()
+                            if *self.entity_data.lock().fishing_hook().biting.get() {
+                                // If you don't find this random thing in the src, remove the "h", I had to correct this speeling mistake due to lint
+                                // TODO: -0.1 * this.synchronizedRandom.nextFloat() * this.synchronizedRandom.nextFloat()
                                 self.base.set_velocity(
                                     self.base.velocity().add(DVec3::new(0.0, -0.1, 0.0)),
                                 );
@@ -599,7 +610,8 @@ impl Entity for FishingHook {
 
                             self.catching_fish(pos, &mut state);
                         } else {
-                            state.out_of_water_time = (state.out_of_water_time + 1).min(MAX_OUT_OF_WATER_TIME);
+                            state.out_of_water_time =
+                                (state.out_of_water_time + 1).min(MAX_OUT_OF_WATER_TIME);
                         }
                     }
                 }

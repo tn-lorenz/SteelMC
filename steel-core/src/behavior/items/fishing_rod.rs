@@ -67,7 +67,6 @@ impl ItemBehavior for FishingRodItem {
                 hook.set_owner_uuid(Some(player.gameprofile.id));
                 player.set_fishing_hook(&hook);
             }
-            //hook.set_item_clamped(thrown_item);
 
             let (yaw, player_pitch) = player.rotation();
             hook.shoot_from_rotation(player, player_pitch, yaw, 0.0, SHOOT_POWER, 1.0);
