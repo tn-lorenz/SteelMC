@@ -601,7 +601,7 @@ impl Entity for FishingHook {
                         if is_in_water {
                             state.out_of_water_time = (state.out_of_water_time - 1).max(0);
                             if *self.entity_data.lock().fishing_hook().biting.get() {
-                                // If you don't find this random thing in the src, remove the "h", I had to correct this speeling mistake due to lint
+                                // If you don't find this random thing in the src, remove the "h", I had to correct this spelling mistake due to lint
                                 // TODO: -0.1 * this.synchronizedRandom.nextFloat() * this.synchronizedRandom.nextFloat()
                                 self.base.set_velocity(
                                     self.base.velocity().add(DVec3::new(0.0, -0.1, 0.0)),
