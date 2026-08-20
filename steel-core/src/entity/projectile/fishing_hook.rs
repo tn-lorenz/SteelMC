@@ -660,11 +660,7 @@ impl Projectile for FishingHook {
 
     fn can_hit_entity(&self, entity: &dyn Entity) -> bool {
         Projectile::can_hit_entity(self, entity)
-            || if entity.as_any().downcast_ref::<ItemEntity>().is_some() {
-                entity.is_alive()
-            } else {
-                false
-            }
+            || (entity.is_alive() && entity.as_ref().is::<ItemEntity>())
     }
 
     fn on_hit_entity(&self, entity: &SharedEntity, _location: DVec3) {
