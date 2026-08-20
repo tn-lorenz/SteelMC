@@ -658,9 +658,9 @@ impl Projectile for FishingHook {
         &self.projectile_base
     }
 
-    // TODO: somehow fix recursion
     fn can_hit_entity(&self, entity: &dyn Entity) -> bool {
-        Projectile::can_hit_entity(self, entity) || (entity.is_alive() && entity.is::<ItemEntity>())
+        self.base_can_hit_entity(entity)
+            || (entity.is_alive() && entity.is::<ItemEntity>())
     }
 
     fn on_hit_entity(&self, entity: &SharedEntity, _location: DVec3) {
