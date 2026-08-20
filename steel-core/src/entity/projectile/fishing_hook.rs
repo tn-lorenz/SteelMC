@@ -73,7 +73,7 @@ unsafe impl DowncastType for FishingHook {
 }
 
 pub const MAX_OUT_OF_WATER_TIME: i32 = 10;
-const MAX_DISTANCE_SQR: f64 = f64::from(32 * 32);
+const MAX_DISTANCE_SQR: f64 = 32.0 * 32.0;
 
 const DEGREE_180: f64 = 180.0;
 const DEGREE_360: f64 = 360.0;
@@ -658,9 +658,9 @@ impl Projectile for FishingHook {
         &self.projectile_base
     }
 
+    // TODO: somehow fix recursion
     fn can_hit_entity(&self, entity: &dyn Entity) -> bool {
-        Projectile::can_hit_entity(self, entity)
-            || (entity.is_alive() && entity.as_ref().is::<ItemEntity>())
+        Projectile::can_hit_entity(self, entity) || (entity.is_alive() && entity.is::<ItemEntity>())
     }
 
     fn on_hit_entity(&self, entity: &SharedEntity, _location: DVec3) {
