@@ -1,5 +1,5 @@
 use crate::behavior::{InteractionResult, ItemBehavior, UseItemContext};
-use crate::entity::projectile::fishing_hook::{FishingHook, FishingHookState};
+use crate::entity::entities::objects::projectiles::{FishingHookEntity, FishingHookState};
 use crate::entity::{Entity, Projectile, RemovalReason, SharedEntity, next_entity_id};
 use glam::DVec3;
 use rand::{RngExt, rng};
@@ -52,12 +52,11 @@ impl ItemBehavior for FishingRodItem {
             let player_pos = player.position();
             let spawn_pos = DVec3::new(player_pos.x, player.get_eye_y() - 0.1, player_pos.z);
 
-            let hook = Arc::new(FishingHook::new(
+            let hook = Arc::new(FishingHookEntity::new(
                 &vanilla_entities::FISHING_BOBBER,
                 next_entity_id(),
                 spawn_pos,
                 Arc::downgrade(world),
-                SyncMutex::new(FishingHookState::new(0, 0)),
             ));
 
             if let Some(owner) = world.players.get_by_uuid(&player.gameprofile.id) {
@@ -106,12 +105,11 @@ mod tests {
 
         let player_owner = Arc::clone(&player);
         let owner: SharedEntity = player_owner;
-        let hook = Arc::new(FishingHook::new(
+        let hook = Arc::new(FishingHookEntity::new(
             &vanilla_entities::FISHING_BOBBER,
             2,
             DVec3::ZERO,
             Arc::downgrade(&world),
-            SyncMutex::new(FishingHookState::new(0, 0)),
         ));
         hook.set_owner(&owner);
         hook.set_on_ground(true);

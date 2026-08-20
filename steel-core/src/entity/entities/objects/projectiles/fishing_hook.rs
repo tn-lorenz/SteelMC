@@ -2,7 +2,7 @@ use crate::entity::damage::DamageSource;
 use crate::entity::entities::ItemEntity;
 use crate::entity::projectile::triangle_random;
 use crate::entity::{
-    Entity, EntityBase, Projectile, ProjectileBase, RemovalReason, SharedEntity,
+    Entity, EntityBase, EntityBaseLoad, Projectile, ProjectileBase, RemovalReason, SharedEntity,
     ThrowableProjectile,
 };
 use crate::physics::MoverType;
@@ -26,8 +26,8 @@ use steel_utils::locks::SyncMutex;
 use steel_utils::types::InteractionHand;
 use steel_utils::{BlockPos, Downcast, DowncastType, DowncastTypeKey};
 
-#[entity_behavior]
-pub struct FishingHook {
+#[entity_behavior(class = "FishingHook")]
+pub struct FishingHookEntity {
     base: EntityBase,
     entity_type: EntityTypeRef,
     entity_data: SyncMutex<FishingBobberEntityData>,
@@ -35,7 +35,7 @@ pub struct FishingHook {
     hook_state: SyncMutex<FishingHookState>,
 }
 
-pub(crate) struct FishingHookState {
+pub struct FishingHookState {
     out_of_water_time: i32,
     life: i32,
     nibble: i32,
@@ -67,13 +67,17 @@ impl FishingHookState {
     }
 }
 
-// SAFETY: This key is owned by Steel and uniquely identifies `FishingHook`.
-unsafe impl DowncastType for FishingHook {
+// SAFETY: This key is owned by Steel and uniquely identifies `FishingHookEntity`.
+unsafe impl DowncastType for FishingHookEntity {
     const TYPE_KEY: DowncastTypeKey = DowncastTypeKey::new("steel:entity/fishing_hook");
 }
 
 pub const MAX_OUT_OF_WATER_TIME: i32 = 10;
 const MAX_DISTANCE_SQR: f64 = 32.0 * 32.0;
+
+const DMG_DEFAULT: i32 = 5;
+const DMG_ITEM_ENTITY: i32 = 3;
+const DMG_ON_GROUND: i32 = 2;
 
 const DEGREE_180: f64 = 180.0;
 const DEGREE_360: f64 = 360.0;
@@ -86,20 +90,29 @@ const FIVE_SECONDS: i32 = 100;
 const THIRTY_SECONDS: i32 = 600;
 const ONE_MINUTE: i32 = 1200;
 
-impl FishingHook {
+impl FishingHookEntity {
     pub(crate) fn new(
         entity_type: EntityTypeRef,
         id: i32,
         position: DVec3,
         world: Weak<World>,
-        hook_state: SyncMutex<FishingHookState>,
     ) -> Self {
         Self {
             base: EntityBase::new(id, position, entity_type.dimensions, world),
             entity_type,
             entity_data: SyncMutex::new(FishingBobberEntityData::new()),
             projectile_base: ProjectileBase::new(),
-            hook_state,
+            hook_state: SyncMutex::new(FishingHookState::new(0, 0)),
+        }
+    }
+
+    pub fn from_saved(entity_type: EntityTypeRef, load: EntityBaseLoad) -> Self {
+        Self {
+            base: EntityBase::from_load(load, entity_type.dimensions),
+            entity_type,
+            entity_data: SyncMutex::new(FishingBobberEntityData::new()),
+            projectile_base: ProjectileBase::new(),
+            hook_state: SyncMutex::new(FishingHookState::new(0, 0)),
         }
     }
 
@@ -192,7 +205,7 @@ impl FishingHook {
             if state.time_until_hooked > 0 {
                 state.fish_angle += triangle_random(0.0, 9.188);
 
-                let angle = state.fish_angle * PI / 180.0;
+                let angle = state.fish_angle * PI / DEGREE_180;
                 let angle_sin = angle.sin();
                 let angle_cos = angle.cos();
 
@@ -412,9 +425,9 @@ impl FishingHook {
                 self.pull_entity(&hooked_in);
                 // TODO: criteria triggers (advancements)
                 damage = if hooked_in.as_ref().is::<ItemEntity>() {
-                    3
+                    DMG_ITEM_ENTITY
                 } else {
-                    5
+                    DMG_DEFAULT
                 };
             } else if self.hook_state.lock().nibble > 0 {
                 // TODO: Looting
@@ -423,7 +436,7 @@ impl FishingHook {
             }
 
             if self.base.on_ground() {
-                damage = 2;
+                damage = DMG_ON_GROUND;
             }
 
             self.set_removed(RemovalReason::Discarded);
@@ -457,7 +470,7 @@ impl FishingHook {
     }
 }
 
-impl Entity for FishingHook {
+impl Entity for FishingHookEntity {
     fn base(&self) -> &EntityBase {
         &self.base
     }
@@ -653,14 +666,13 @@ impl Entity for FishingHook {
     }
 }
 
-impl Projectile for FishingHook {
+impl Projectile for FishingHookEntity {
     fn projectile_base(&self) -> &ProjectileBase {
         &self.projectile_base
     }
 
     fn can_hit_entity(&self, entity: &dyn Entity) -> bool {
-        self.base_can_hit_entity(entity)
-            || (entity.is_alive() && entity.is::<ItemEntity>())
+        self.base_can_hit_entity(entity) || (entity.is_alive() && entity.is::<ItemEntity>())
     }
 
     fn on_hit_entity(&self, entity: &SharedEntity, _location: DVec3) {
@@ -679,7 +691,7 @@ impl Projectile for FishingHook {
     }
 }
 
-impl ThrowableProjectile for FishingHook {}
+impl ThrowableProjectile for FishingHookEntity {}
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
 enum FishHookState {
@@ -704,13 +716,12 @@ mod tests {
     use super::*;
     use crate::test_support::{TestPlayerBuilder, fresh_test_world};
 
-    fn test_hook(world: &Arc<World>, id: i32) -> Arc<FishingHook> {
-        Arc::new(FishingHook::new(
+    fn test_hook(world: &Arc<World>, id: i32) -> Arc<FishingHookEntity> {
+        Arc::new(FishingHookEntity::new(
             &vanilla_entities::FISHING_BOBBER,
             id,
             DVec3::ZERO,
             Arc::downgrade(world),
-            SyncMutex::new(FishingHookState::new(0, 0)),
         ))
     }
 

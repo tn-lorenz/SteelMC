@@ -9,7 +9,6 @@
 //!
 //! The block + entity move-vector raycast mirrors `ProjectileUtil`.
 
-pub(crate) mod fishing_hook;
 mod throwable;
 mod throwable_item;
 
@@ -44,7 +43,7 @@ const SHOOT_INACCURACY_SCALE: f64 = 0.0172_275;
 const MAX_ENTITY_HIT_MARGIN: f64 = 0.3;
 
 /// Mirrors vanilla `RandomSource.triangle(mode, deviation)`.
-fn triangle_random(mode: f64, deviation: f64) -> f64 {
+pub fn triangle_random(mode: f64, deviation: f64) -> f64 {
     mode + deviation * (rand::random::<f64>() - rand::random::<f64>())
 }
 

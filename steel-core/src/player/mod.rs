@@ -135,7 +135,7 @@ use crate::inventory::container::Container;
 const RESPAWN_SEARCH_READY_CANDIDATE_BUDGET: usize = 8;
 
 use crate::chunk::player_chunk_view::PlayerChunkView;
-use crate::entity::projectile::fishing_hook::FishingHook;
+use crate::entity::entities::objects::projectiles::FishingHookEntity;
 use crate::player::chunk_sender::ChunkSender;
 use crate::portal::{
     PortalTicketTarget, TeleportPostAction, TeleportPostTransition, TeleportTransition,
@@ -256,7 +256,7 @@ pub struct Player {
     ender_pearls: SyncMutex<Vec<Weak<dyn Entity>>>,
 
     /// Active fishing hook, kept weakly because the world owns live entities.
-    fishing: SyncMutex<Option<Weak<FishingHook>>>,
+    fishing: SyncMutex<Option<Weak<FishingHookEntity>>>,
 }
 
 // SAFETY: This key is owned by Steel and uniquely identifies `Player`.
@@ -540,7 +540,7 @@ impl Player {
     }
 
     /// Returns the active fishing hook, clearing a stale reference after removal.
-    pub(crate) fn fishing_hook(&self) -> Option<Arc<FishingHook>> {
+    pub(crate) fn fishing_hook(&self) -> Option<Arc<FishingHookEntity>> {
         let mut fishing = self.fishing.lock();
         let hook = fishing.as_ref().and_then(Weak::upgrade);
         if hook.is_none() {
@@ -550,12 +550,12 @@ impl Player {
     }
 
     /// Records the hook currently owned by this player.
-    pub(crate) fn set_fishing_hook(&self, hook: &Arc<FishingHook>) {
+    pub(crate) fn set_fishing_hook(&self, hook: &Arc<FishingHookEntity>) {
         *self.fishing.lock() = Some(Arc::downgrade(hook));
     }
 
     /// Clears `hook` if it is still this player's active fishing hook.
-    pub(crate) fn clear_fishing_hook(&self, hook: &FishingHook) {
+    pub(crate) fn clear_fishing_hook(&self, hook: &FishingHookEntity) {
         let mut fishing = self.fishing.lock();
         if fishing
             .as_ref()
