@@ -73,6 +73,7 @@ unsafe impl DowncastType for FishingHook {
 }
 
 pub const MAX_OUT_OF_WATER_TIME: i32 = 10;
+const MAX_DISTANCE_SQR: f64 = f64::from(32 * 32);
 
 const DEGREE_180: f64 = 180.0;
 const DEGREE_360: f64 = 360.0;
@@ -83,6 +84,7 @@ const THREE_SECONDS: i32 = 60;
 const FOUR_SECONDS: i32 = 80;
 const FIVE_SECONDS: i32 = 100;
 const THIRTY_SECONDS: i32 = 600;
+const ONE_MINUTE: i32 = 1200;
 
 impl FishingHook {
     pub(crate) fn new(
@@ -123,7 +125,8 @@ impl FishingHook {
         let mainhand_fishing = mainhand_item.is(&vanilla_items::FISHING_ROD);
         let offhand_fishing = offhand_item.is(&vanilla_items::FISHING_ROD);
 
-        if (mainhand_fishing || offhand_fishing) && self.distance_to_sqr(owner.position()) <= 1024.0
+        if (mainhand_fishing || offhand_fishing)
+            && self.distance_to_sqr(owner.position()) <= MAX_DISTANCE_SQR
         {
             return false;
         }
@@ -374,7 +377,7 @@ impl FishingHook {
 
     fn get_open_water_type_for_block(&self, pos: BlockPos) -> OpenWaterType {
         let Some(world) = self.level() else {
-            return OpenWaterType::Invalid; // This is a bit weird ... am I doing this right?
+            return OpenWaterType::Invalid;
         };
 
         let state = world.get_block_state(pos);
@@ -391,7 +394,6 @@ impl FishingHook {
             OpenWaterType::AboveWater
         }
     }
-    // fn is_open_water_fishing(){}
 
     // TODO: The rod is needed for advancements and loot params.
     pub fn retrieve(&self) -> i32 {
@@ -486,7 +488,7 @@ impl Entity for FishingHook {
                 let should_remove = {
                     let mut state = self.hook_state.lock();
                     state.life += 1;
-                    state.life >= 1200
+                    state.life >= ONE_MINUTE
                 };
 
                 if should_remove {
@@ -656,9 +658,13 @@ impl Projectile for FishingHook {
         &self.projectile_base
     }
 
-    /*fn can_hit_entity(&self, _entity: &dyn Entity) -> bool {
-        todo!()
-    }*/
+    fn can_hit_entity(&self, entity: &dyn Entity) -> bool {
+        if entity.as_any().downcast_ref::<ItemEntity>().is_some() {
+            Projectile::can_hit_entity(self, entity) || entity.is_alive()
+        } else {
+            false
+        }
+    }
 
     fn on_hit_entity(&self, entity: &SharedEntity, _location: DVec3) {
         let mut damage =
