@@ -26,6 +26,7 @@ use steel_utils::locks::SyncMutex;
 use steel_utils::types::InteractionHand;
 use steel_utils::{BlockPos, Downcast, DowncastType, DowncastTypeKey};
 
+/// A fishing hook.
 #[entity_behavior(class = "FishingHook")]
 pub struct FishingHookEntity {
     base: EntityBase,
@@ -35,6 +36,7 @@ pub struct FishingHookEntity {
     hook_state: SyncMutex<FishingHookState>,
 }
 
+/// This struct holds entity specific state information per fishing hook entity.
 pub struct FishingHookState {
     out_of_water_time: i32,
     life: i32,
@@ -50,6 +52,7 @@ pub struct FishingHookState {
 }
 
 impl FishingHookState {
+    #[must_use]
     pub fn new(lure_speed: i32, luck: i32) -> Self {
         Self {
             out_of_water_time: 0,
@@ -91,6 +94,8 @@ const THIRTY_SECONDS: i32 = 600;
 const ONE_MINUTE: i32 = 1200;
 
 impl FishingHookEntity {
+    /// Creates a fishing hook entity.
+    #[must_use]
     pub(crate) fn new(
         entity_type: EntityTypeRef,
         id: i32,
@@ -106,6 +111,8 @@ impl FishingHookEntity {
         }
     }
 
+    /// Creates an fishing hook entity from saved base data.
+    #[must_use]
     pub fn from_saved(entity_type: EntityTypeRef, load: EntityBaseLoad) -> Self {
         Self {
             base: EntityBase::from_load(load, entity_type.dimensions),
@@ -409,6 +416,8 @@ impl FishingHookEntity {
     }
 
     // TODO: The rod is needed for advancements and loot params.
+    /// Retrieves the entity caught by this fishing hook and returns the resulting damage value.
+    /// Mirrors vanilla's `FishingHook.retrieve()`.
     pub fn retrieve(&self) -> i32 {
         let mut damage = 0;
 

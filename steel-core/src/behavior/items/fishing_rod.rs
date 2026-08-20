@@ -1,5 +1,5 @@
 use crate::behavior::{InteractionResult, ItemBehavior, UseItemContext};
-use crate::entity::entities::objects::projectiles::{FishingHookEntity, FishingHookState};
+use crate::entity::entities::objects::projectiles::FishingHookEntity;
 use crate::entity::{Entity, Projectile, RemovalReason, SharedEntity, next_entity_id};
 use glam::DVec3;
 use rand::{RngExt, rng};
@@ -8,7 +8,6 @@ use steel_macros::item_behavior;
 use steel_protocol::packets::game::SoundSource;
 use steel_registry::sound_events::{ENTITY_FISHING_BOBBER_RETRIEVE, ENTITY_FISHING_BOBBER_THROW};
 use steel_registry::vanilla_entities;
-use steel_utils::locks::SyncMutex;
 
 const SHOOT_POWER: f32 = 1.5;
 
