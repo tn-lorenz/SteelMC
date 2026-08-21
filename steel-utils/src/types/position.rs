@@ -528,25 +528,6 @@ impl BlockPos {
         )
         .find(|pos| predicate(*pos))
     }
-
-    pub fn between_closed(from: BlockPos, to: BlockPos) -> impl Iterator<Item = BlockPos> {
-        let width = to.x() - from.x() + 1;
-        let height = to.y() - from.y() + 1;
-        let depth = to.z() - from.z() + 1;
-
-        debug_assert!(width > 0 && height > 0 && depth > 0);
-
-        let end = i64::from(width) * i64::from(height) * i64::from(depth);
-
-        (0..end).map(move |index| {
-            let x = (index % i64::from(width)) as i32;
-            let slice = index / i64::from(width);
-            let y = (slice % i64::from(height)) as i32;
-            let z = (slice / i64::from(height)) as i32;
-
-            BlockPos::new(from.x() + x, from.y() + y, from.z() + z)
-        })
-    }
 }
 
 /// Iterator returned by [`BlockPos::within_manhattan`].
