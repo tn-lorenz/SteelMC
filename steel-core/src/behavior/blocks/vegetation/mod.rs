@@ -135,6 +135,7 @@ pub use lily_pad_block::LilyPadBlock;
 pub use mangrove_propagule_block::MangrovePropaguleBlock;
 pub use mossy_carpet_block::MossyCarpetBlock;
 pub use multiface_block::MultifaceBlock;
+pub(crate) use multiface_block::{MultifaceSpreadPos, MultifaceSpreadType, multiface_spread_pos};
 pub use mushroom_block::MushroomBlock;
 pub use mycelium_block::MyceliumBlock;
 pub use nether_fungus_block::NetherFungusBlock;
