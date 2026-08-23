@@ -36,6 +36,7 @@ mod throwable_potion;
 mod tipped_arrow;
 
 mod flint_and_steel;
+mod lead;
 
 pub use air::AirItem;
 pub use axe::AxeItem;
@@ -55,6 +56,7 @@ pub use food_on_a_stick::FoodOnAStickItem;
 pub use hoe::HoeItem;
 pub use honeycomb::HoneycombItem;
 pub use ink_sac::{GlowInkSacItem, InkSacItem};
+pub use lead::LeadItem;
 pub use mace::MaceItem;
 pub use name_tag::NameTagItem;
 pub use place_on_water_block_item::PlaceOnWaterBlockItem;
