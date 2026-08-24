@@ -256,10 +256,10 @@ pub struct Player {
     /// In-flight ender pearls thrown by this player, kept weakly so they persist
     /// with the player and re-spawn on login (vanilla `ServerPlayer.enderPearls`).
     ender_pearls: SyncMutex<Vec<Weak<dyn Entity>>>,
-  
+
     /// Active fishing hook, kept weakly because the world owns live entities.
     fishing: SyncMutex<Option<Weak<FishingHookEntity>>>,
-  
+
     /// The counter keeping track of this player's statistics.
     stats: SyncMutex<StatsCounter>,
 }
