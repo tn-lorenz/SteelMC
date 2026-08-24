@@ -738,8 +738,7 @@ mod tests {
     #[test]
     fn spawn_data_identifies_the_owning_player() {
         let world = fresh_test_world("fishing_hook_spawn_data");
-        let player =
-            TestPlayerBuilder::new(Arc::clone(&world), Uuid::from_u128(1), 37).build();
+        let player = TestPlayerBuilder::new(Arc::clone(&world), Uuid::from_u128(1), 37).build();
         let owner: SharedEntity = player;
         let hook = test_hook(&world, 38);
         hook.set_owner_entity(Some(&owner));
@@ -750,8 +749,7 @@ mod tests {
     #[test]
     fn removal_only_clears_the_matching_active_hook() {
         let world = fresh_test_world("fishing_hook_owner_lifecycle");
-        let player =
-            TestPlayerBuilder::new(Arc::clone(&world), Uuid::from_u128(2), 40).build();
+        let player = TestPlayerBuilder::new(Arc::clone(&world), Uuid::from_u128(2), 40).build();
         let player_owner = Arc::clone(&player);
         let owner: SharedEntity = player_owner;
         let first = test_hook(&world, 41);
@@ -779,8 +777,7 @@ mod tests {
     #[test]
     fn retrieving_discards_the_active_hook() {
         let world = fresh_test_world("fishing_hook_retrieve_lifecycle");
-        let player =
-            TestPlayerBuilder::new(Arc::clone(&world), Uuid::from_u128(3), 50).build();
+        let player = TestPlayerBuilder::new(Arc::clone(&world), Uuid::from_u128(3), 50).build();
         player
             .inventory
             .lock()

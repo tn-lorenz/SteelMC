@@ -95,8 +95,7 @@ mod tests {
     #[test]
     fn retrieving_grounded_hook_does_not_relock_inventory() {
         let world = fresh_test_world("fishing_rod_grounded_retrieve");
-        let player =
-            TestPlayerBuilder::new(Arc::clone(&world), Uuid::from_u128(1), 1).build();
+        let player = TestPlayerBuilder::new(Arc::clone(&world), Uuid::from_u128(1), 1).build();
         player
             .inventory
             .lock()
