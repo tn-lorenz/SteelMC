@@ -27,8 +27,12 @@ impl ItemBehavior for FishingRodItem {
         let pitch = 0.4 / (rng().random::<f32>() * 0.4 + 0.8);
 
         if let Some(fishing) = player.fishing_hook() {
-            let inventory = player.inventory.lock();
-            let rod = inventory.get_item_in_hand(InteractionHand::MainHand);
+            let rod = {
+                let inventory = player.inventory.lock();
+                inventory
+                    .get_item_in_hand(InteractionHand::MainHand)
+                    .clone()
+            };
 
             if rod.is(&vanilla_items::FISHING_ROD) {
                 let damage = fishing.retrieve(&rod);
