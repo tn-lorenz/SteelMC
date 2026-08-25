@@ -11,7 +11,7 @@ use crate::world::{LevelReader, World};
 use glam::DVec3;
 use rand::{RngExt, rng};
 use std::cmp::PartialEq;
-use std::f64::consts::PI;
+use std::f32::consts::PI;
 use std::ops::Add;
 use std::sync::{Arc, Weak};
 use steel_macros::entity_behavior;
@@ -48,7 +48,7 @@ pub struct FishingHookState {
     nibble: i32,
     time_until_lured: i32,
     time_until_hooked: i32,
-    fish_angle: f64,
+    fish_angle: f32,
     open_water: bool,
     current_state: FishHookState,
     hooked_in: Option<SharedEntity>,
@@ -89,8 +89,8 @@ const DMG_ITEM_ENTITY: i32 = 3;
 const DMG_ON_GROUND: i32 = 2;
 const DMG_CAUGHT: i32 = 1;
 
-const DEGREE_180: f64 = 180.0;
-const DEGREE_360: f64 = 360.0;
+const DEGREE_180: f32 = 180.0;
+const DEGREE_360: f32 = 360.0;
 
 const ONE_SECOND: i32 = 20;
 const TWO_SECONDS: i32 = 40;
@@ -217,17 +217,17 @@ impl FishingHookEntity {
             state.time_until_hooked -= fishing_speed;
 
             if state.time_until_hooked > 0 {
-                state.fish_angle += triangle_random(0.0, 9.188);
+                state.fish_angle += triangle_random(0.0, 9.188) as f32;
 
-                let angle = state.fish_angle * PI / DEGREE_180;
+                let angle = state.fish_angle * PI / 180.0;
                 let angle_sin = angle.sin();
                 let angle_cos = angle.cos();
 
-                let fish_x =
-                    self.position().x + angle_sin * f64::from(state.time_until_hooked) * 0.1;
+                let fish_x = self.position().x
+                    + f64::from(angle_sin) * f64::from(state.time_until_hooked) * 0.1;
                 let fish_y = self.position().y.floor() + 1.0;
-                let fish_z =
-                    self.position().z + angle_cos * f64::from(state.time_until_hooked) * 0.1;
+                let fish_z = self.position().z
+                    + f64::from(angle_cos) * f64::from(state.time_until_hooked) * 0.1;
 
                 let Some(world) = self.level() else {
                     return;
@@ -237,12 +237,12 @@ impl FishingHookEntity {
                     world.get_block_state(BlockPos::containing(fish_x, fish_y - 1.0, fish_z));
 
                 if splash_block_state.get_block() == &vanilla_blocks::WATER {
-                    if rng().random::<f64>() < 0.15 {
+                    if rng().random::<f32>() < 0.15 {
                         world.send_particles(
                             ParticleData::simple(&BUBBLE),
                             DVec3::new(fish_x, fish_y - 0.1, fish_z),
                             1,
-                            DVec3::new(angle_sin, 0.1, angle_cos),
+                            DVec3::new(angle_sin.into(), 0.1, angle_cos.into()),
                             0.0,
                         );
                     }
@@ -255,14 +255,14 @@ impl FishingHookEntity {
                         ParticleData::simple(&FISHING),
                         DVec3::new(fish_x, fish_y, fish_z),
                         0,
-                        DVec3::new(particle_z_mov, 0.01, -particle_x_mov),
+                        DVec3::new(particle_z_mov.into(), 0.01, -f64::from(particle_x_mov)),
                         1.0,
                     );
                     world.send_particles(
                         ParticleData::simple(&FISHING),
                         DVec3::new(fish_x, fish_y, fish_z),
                         0,
-                        DVec3::new(-particle_z_mov, 0.01, particle_x_mov),
+                        DVec3::new(-f64::from(particle_z_mov), 0.01, particle_x_mov.into()),
                         1.0,
                     );
                 }
@@ -304,33 +304,33 @@ impl FishingHookEntity {
             }
         } else if state.time_until_lured > 0 {
             state.time_until_lured -= fishing_speed;
-            let mut tease_chance = 0.15;
+            let mut tease_chance: f32 = 0.15;
 
             match state.time_until_lured {
                 0..ONE_SECOND => {
-                    tease_chance += f64::from(ONE_SECOND - state.time_until_lured) * 0.05;
+                    tease_chance += (ONE_SECOND - state.time_until_lured) as f32 * 0.05;
                 }
                 ONE_SECOND..TWO_SECONDS => {
-                    tease_chance += f64::from(TWO_SECONDS - state.time_until_lured) * 0.02;
+                    tease_chance += (TWO_SECONDS - state.time_until_lured) as f32 * 0.02;
                 }
                 TWO_SECONDS..THREE_SECONDS => {
-                    tease_chance += f64::from(THREE_SECONDS - state.time_until_lured) * 0.01;
+                    tease_chance += (THREE_SECONDS - state.time_until_lured) as f32 * 0.01;
                 }
                 _ => {}
             }
 
-            if rng().random::<f64>() < tease_chance {
+            if rng().random::<f32>() < tease_chance {
                 // same reason to call this early in here as well: no need to calculate the rest if there is no world to spawn the particle in.
                 let Some(world) = self.level() else {
                     return;
                 };
 
-                let angle: f64 = rng().random_range(0.0..=DEGREE_360) * PI / DEGREE_180;
+                let angle = rng().random_range(0.0..=DEGREE_360) * PI / DEGREE_180;
                 let dist = rng().random_range(25.0..=60.0);
 
-                let fish_x: f64 = self.position().x + angle.sin() * dist * 0.1;
+                let fish_x = self.position().x + f64::from(angle.sin()) * dist * 0.1;
                 let fish_y = self.position().y.floor() + 1.0;
-                let fish_z: f64 = self.position().z + angle.cos() * dist * 0.1;
+                let fish_z = self.position().z + f64::from(angle.cos()) * dist * 0.1;
 
                 let splash_block_state =
                     world.get_block_state(BlockPos::containing(fish_x, fish_y - 1.0, fish_z));
