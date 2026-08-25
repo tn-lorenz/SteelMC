@@ -1,9 +1,9 @@
 use crate::entity::damage::DamageSource;
-use crate::entity::entities::ItemEntity;
+use crate::entity::entities::{ItemEntity, RawEntity};
 use crate::entity::projectile::triangle_random;
 use crate::entity::{
     Entity, EntityBase, EntityBaseLoad, Projectile, ProjectileBase, RemovalReason, SharedEntity,
-    ThrowableProjectile,
+    ThrowableProjectile, entity_loot_ref, next_entity_id,
 };
 use crate::physics::MoverType;
 use crate::player::Player;
@@ -18,11 +18,17 @@ use steel_macros::entity_behavior;
 use steel_registry::blocks::block_state_ext::BlockStateExt;
 use steel_registry::entity_type::EntityTypeRef;
 use steel_registry::fluid::FluidStateExt;
+use steel_registry::item_stack::ItemStack;
+use steel_registry::loot_table::{EntityRef, LootContext};
 use steel_registry::particle_type::ParticleData;
+use steel_registry::stat::vanilla_stat_types;
 use steel_registry::vanilla_entity_data::FishingBobberEntityData;
 use steel_registry::vanilla_particle_types::{BUBBLE, FISHING, SPLASH};
-use steel_registry::{sound_events, vanilla_blocks, vanilla_damage_types, vanilla_items};
-use steel_utils::locks::SyncMutex;
+use steel_registry::{
+    sound_events, vanilla_blocks, vanilla_damage_types, vanilla_entities, vanilla_item_tags,
+    vanilla_items, vanilla_loot_tables,
+};
+use steel_utils::locks::{IntoShared, SyncMutex};
 use steel_utils::types::InteractionHand;
 use steel_utils::{BlockPos, Downcast, DowncastType, DowncastTypeKey};
 
@@ -47,7 +53,7 @@ pub struct FishingHookState {
     open_water: bool,
     current_state: FishHookState,
     hooked_in: Option<SharedEntity>,
-    _luck: i32,
+    luck: i32,
     lure_speed: i32,
 }
 
@@ -65,7 +71,7 @@ impl FishingHookState {
             open_water: false,
             current_state: FishHookState::Flying,
             hooked_in: None,
-            _luck: luck.max(0),
+            luck: luck.max(0),
             lure_speed: lure_speed.max(0),
         }
     }
@@ -82,6 +88,7 @@ const MAX_DISTANCE_SQR: f64 = 32.0 * 32.0;
 const DMG_DEFAULT: i32 = 5;
 const DMG_ITEM_ENTITY: i32 = 3;
 const DMG_ON_GROUND: i32 = 2;
+const DMG_CAUGHT: i32 = 1;
 
 const DEGREE_180: f64 = 180.0;
 const DEGREE_360: f64 = 360.0;
@@ -419,7 +426,7 @@ impl FishingHookEntity {
     // TODO: The rod is needed for advancements and loot params.
     /// Retrieves the entity caught by this fishing hook and returns the resulting damage value.
     /// Mirrors vanilla's `FishingHook.retrieve()`.
-    pub fn retrieve(&self) -> i32 {
+    pub fn retrieve(&self, rod: &ItemStack) -> i32 {
         let mut damage = 0;
 
         if let Some(owner) = self.get_owner()
@@ -439,10 +446,24 @@ impl FishingHookEntity {
                 } else {
                     DMG_DEFAULT
                 };
-            } else if self.hook_state.lock().nibble > 0 {
-                // TODO: Looting
+            } else if { self.hook_state.lock().nibble > 0 } {
+                let state = self.hook_state.lock();
+                let mut rng = rng();
+
+                // This is equivalent to `LootParams params`
+                let mut loot_ctx = LootContext::new(&mut rng)
+                    .with_origin(self.position().x, self.position().y, self.position().z)
+                    .with_tool(rod)
+                    .with_this_entity(entity_loot_ref(self))
+                    .with_luck(state.luck as f32);
+
+                let items = vanilla_loot_tables::GAMEPLAY_FISHING.get_random_items(&mut loot_ctx);
+
+                self.loop_items_award_stat(items, self.level().unwrap());
                 // TODO: criteria triggers (advancements)
                 // TODO: award stat when catching fish
+
+                damage = DMG_CAUGHT;
             }
 
             if self.base.on_ground() {
@@ -477,6 +498,50 @@ impl FishingHookEntity {
         };
 
         player.clear_fishing_hook(self);
+    }
+
+    // I added this fn because I thought it would be cleaner this way, it's not in the vanilla src, but how I use it ensures vanilla behavior
+    fn loop_items_award_stat(&self, items: Vec<ItemStack>, world: Arc<World>) {
+        for item_stack in items {
+            if let Some(owner) = self.get_owner() {
+                let xa = owner.position().x - self.position().x;
+                let ya = owner.position().y - self.position().y;
+                let za = owner.position().z - self.position().z;
+
+                const SPEED: f64 = 0.1;
+                const INVERSE_CUBE: f64 = 0.08;
+
+                let vel = DVec3::new(
+                    xa * SPEED,
+                    ya * SPEED + (xa * xa + ya * ya + za * za).sqrt().sqrt() * INVERSE_CUBE,
+                    za * SPEED,
+                );
+
+                World::spawn_item_with_velocity(
+                    &world,
+                    self.position(),
+                    item_stack,
+                    vel,
+                );
+
+                /*let entity = ItemEntity::with_item_and_velocity(
+                    &vanilla_entities::ITEM,
+                    next_entity_id(),
+                    DVec3::from(self.position()),
+                    item_stack,
+                    vel,
+                    Arc::downgrade(&world),
+                );
+
+                world
+                    .try_add_entity(Arc::clone(&Arc::new(entity)))
+                    .expect("something went wrong idk");*/
+
+                // TODO: Spawn ExperienceOrb
+                // TODO: apparently we lack the ItemTag `FISHES` so I can't even check ...
+                // TODO: wait for stat type `FIGH_CAUGHT` so I can actually award it ...
+            }
+        }
     }
 }
 
@@ -786,8 +851,9 @@ mod tests {
         let owner: SharedEntity = player_owner;
         let hook = test_hook(&world, 51);
         hook.set_owner(&owner);
+        let rod = ItemStack::new(&vanilla_items::FISHING_ROD);
 
-        assert_eq!(hook.retrieve(), 0);
+        assert_eq!(hook.retrieve(&rod), 0);
         assert!(hook.is_removed());
         assert!(player.fishing_hook().is_none());
     }

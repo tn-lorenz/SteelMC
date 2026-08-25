@@ -6,8 +6,11 @@ use rand::{RngExt, rng};
 use std::sync::Arc;
 use steel_macros::item_behavior;
 use steel_protocol::packets::game::SoundSource;
+use steel_registry::items::Item;
 use steel_registry::sound_events::{ENTITY_FISHING_BOBBER_RETRIEVE, ENTITY_FISHING_BOBBER_THROW};
-use steel_registry::vanilla_entities;
+use steel_registry::stat::vanilla_stat_types;
+use steel_registry::{vanilla_entities, vanilla_items};
+use steel_utils::types::InteractionHand;
 
 const SHOOT_POWER: f32 = 1.5;
 
@@ -24,10 +27,16 @@ impl ItemBehavior for FishingRodItem {
         let pitch = 0.4 / (rng().random::<f32>() * 0.4 + 0.8);
 
         if let Some(fishing) = player.fishing_hook() {
-            let damage = fishing.retrieve();
-            context.inv.with_item(|item| {
-                item.hurt_and_break(damage, infinite_materials);
-            });
+            let inventory = player.inventory.lock();
+            let rod = inventory.get_item_in_hand(InteractionHand::MainHand);
+
+            if rod.is(&vanilla_items::FISHING_ROD) {
+                let damage = fishing.retrieve(&rod);
+
+                context.inv.with_item(|item| {
+                    item.hurt_and_break(damage, infinite_materials);
+                });
+            }
 
             world.play_sound_at(
                 &ENTITY_FISHING_BOBBER_RETRIEVE,
@@ -75,7 +84,11 @@ impl ItemBehavior for FishingRodItem {
                 log::debug!("failed to spawn fishing hook: {error}");
                 return InteractionResult::Fail;
             }
-            // TODO: award stat
+
+            let inventory = player.inventory.lock();
+            let rod = inventory.get_item_in_hand(InteractionHand::MainHand);
+            player.award_stat(&vanilla_stat_types::ITEM_USED, rod.item())
+
             // TODO: vibration
         }
         InteractionResult::Success
