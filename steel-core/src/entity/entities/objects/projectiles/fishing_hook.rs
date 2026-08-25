@@ -1,9 +1,9 @@
 use crate::entity::damage::DamageSource;
-use crate::entity::entities::{ItemEntity, RawEntity};
+use crate::entity::entities::ItemEntity;
 use crate::entity::projectile::triangle_random;
 use crate::entity::{
     Entity, EntityBase, EntityBaseLoad, LivingEntity, Projectile, ProjectileBase, RemovalReason,
-    SharedEntity, ThrowableProjectile, entity_loot_ref, next_entity_id,
+    SharedEntity, ThrowableProjectile, entity_loot_ref,
 };
 use crate::physics::MoverType;
 use crate::player::Player;
@@ -19,16 +19,14 @@ use steel_registry::blocks::block_state_ext::BlockStateExt;
 use steel_registry::entity_type::EntityTypeRef;
 use steel_registry::fluid::FluidStateExt;
 use steel_registry::item_stack::ItemStack;
-use steel_registry::loot_table::{EntityRef, LootContext};
+use steel_registry::loot_table::LootContext;
 use steel_registry::particle_type::ParticleData;
-use steel_registry::stat::vanilla_stat_types;
 use steel_registry::vanilla_entity_data::FishingBobberEntityData;
 use steel_registry::vanilla_particle_types::{BUBBLE, FISHING, SPLASH};
 use steel_registry::{
-    sound_events, vanilla_blocks, vanilla_damage_types, vanilla_entities, vanilla_item_tags,
-    vanilla_items, vanilla_loot_tables,
+    sound_events, vanilla_blocks, vanilla_damage_types, vanilla_items, vanilla_loot_tables,
 };
-use steel_utils::locks::{IntoShared, SyncMutex};
+use steel_utils::locks::SyncMutex;
 use steel_utils::types::InteractionHand;
 use steel_utils::{BlockPos, Downcast, DowncastType, DowncastTypeKey};
 
@@ -521,12 +519,12 @@ impl FishingHookEntity {
         owner: Arc<dyn Entity>,
     ) {
         for item_stack in items {
+            const SPEED: f64 = 0.1;
+            const INVERSE_CUBE: f64 = 0.08;
+
             let xa = owner.position().x - self.position().x;
             let ya = owner.position().y - self.position().y;
             let za = owner.position().z - self.position().z;
-
-            const SPEED: f64 = 0.1;
-            const INVERSE_CUBE: f64 = 0.08;
 
             let vel = DVec3::new(
                 xa * SPEED,

@@ -6,7 +6,6 @@ use rand::{RngExt, rng};
 use std::sync::Arc;
 use steel_macros::item_behavior;
 use steel_protocol::packets::game::SoundSource;
-use steel_registry::items::Item;
 use steel_registry::sound_events::{ENTITY_FISHING_BOBBER_RETRIEVE, ENTITY_FISHING_BOBBER_THROW};
 use steel_registry::stat::vanilla_stat_types;
 use steel_registry::{vanilla_entities, vanilla_items};
@@ -91,7 +90,7 @@ impl ItemBehavior for FishingRodItem {
 
             let inventory = player.inventory.lock();
             let rod = inventory.get_item_in_hand(InteractionHand::MainHand);
-            player.award_stat(&vanilla_stat_types::ITEM_USED, rod.item())
+            player.award_stat(&vanilla_stat_types::ITEM_USED, rod.item());
 
             // TODO: vibration
         }
