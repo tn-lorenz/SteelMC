@@ -1,9 +1,9 @@
 use crate::entity::damage::DamageSource;
-use crate::entity::entities::ItemEntity;
+use crate::entity::entities::{ExperienceOrbEntity, ItemEntity};
 use crate::entity::projectile::triangle_random;
 use crate::entity::{
     Entity, EntityBase, EntityBaseLoad, LivingEntity, Projectile, ProjectileBase, RemovalReason,
-    SharedEntity, ThrowableProjectile, entity_loot_ref,
+    SharedEntity, ThrowableProjectile, entity_loot_ref, next_entity_id,
 };
 use crate::physics::MoverType;
 use crate::player::Player;
@@ -24,7 +24,8 @@ use steel_registry::particle_type::ParticleData;
 use steel_registry::vanilla_entity_data::FishingBobberEntityData;
 use steel_registry::vanilla_particle_types::{BUBBLE, FISHING, SPLASH};
 use steel_registry::{
-    sound_events, vanilla_blocks, vanilla_damage_types, vanilla_items, vanilla_loot_tables,
+    sound_events, vanilla_blocks, vanilla_damage_types, vanilla_entities, vanilla_items,
+    vanilla_loot_tables,
 };
 use steel_utils::locks::SyncMutex;
 use steel_utils::types::InteractionHand;
@@ -468,10 +469,31 @@ impl FishingHookEntity {
                         return damage;
                     };
 
-                    self.loop_items_award_stat(items, world, owner);
+                    self.loop_items_award_stat(items, world.clone(), owner.clone());
+
+                    let orb_pos = DVec3::new(
+                        player.position().x,
+                        player.position().y + 0.5,
+                        player.position().z + 0.5,
+                    );
+
+                    let orb = ExperienceOrbEntity::new(
+                        &vanilla_entities::EXPERIENCE_ORB,
+                        next_entity_id(),
+                        orb_pos,
+                        Arc::downgrade(&world),
+                    );
+
+                    orb.set_value(rand::random_range(1..=6));
+
+                    let entity: SharedEntity = Arc::new(orb);
+
+                    if let Err(error) = world.try_add_entity(Arc::clone(&entity)) {
+                        log::debug!("failed to spawn experience orb: {error}");
+                    }
 
                     // TODO: criteria triggers (advancements)
-                    // TODO: award stat when catching fish
+                    // TODO: award stat when catching fish (we currently lack this stat)
 
                     damage = DMG_CAUGHT;
                 }
