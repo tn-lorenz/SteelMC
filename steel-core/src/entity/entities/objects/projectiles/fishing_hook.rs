@@ -139,6 +139,7 @@ impl FishingHookEntity {
         }
     }
 
+    /// Determines if the player should stop fishing and removes the entity if so.
     fn should_stop_fishing(&self, owner: &Player) -> bool {
         if !owner.can_interact_with_level() {
             self.set_removed(RemovalReason::Discarded);
@@ -163,12 +164,14 @@ impl FishingHookEntity {
         true
     }
 
+    /// Determines if the fishing hook should hit a target or be deflected.
     fn check_collision(&self) {
         if let Some(hit_result) = self.get_hit_result_on_move_vector() {
             self.hit_target_or_deflect_self(&hit_result);
         }
     }
 
+    /// Stores the currently hooked entity inside `entity_data`.
     fn set_hooked_entity(&self, hooked: Option<SharedEntity>) {
         let hooked_entity_id = hooked.as_ref().map_or(0, |entity| {
             let id = entity.base().id();
@@ -185,12 +188,16 @@ impl FishingHookEntity {
         entity_data.fishing_hook.hooked_entity.set(hooked_entity_id);
     }
 
+    /// Runs catching fish logic
     #[expect(
         clippy::too_many_lines,
         clippy::similar_names,
         reason = "Logic that belongs together is being kept together + X and Z movement components intentionally have similar names"
     )]
     fn catching_fish(&self, pos: BlockPos, state: &mut FishingHookState) {
+        const RAINING_BONUS_PROBABILITY: f64 = 0.25;
+        const CLEAR_SKY_NERF_PROBABILITY: f64 = 0.5;
+
         let mut fishing_speed = 1;
         let above = pos.above();
 
@@ -198,11 +205,11 @@ impl FishingHookEntity {
             return;
         };
 
-        if rng().random::<f64>() < 0.25 && world.is_raining_at(above) {
+        if rng().random::<f64>() < RAINING_BONUS_PROBABILITY && world.is_raining_at(above) {
             fishing_speed += 1;
         }
 
-        if rng().random::<f64>() < 0.5 && world.can_see_sky(above) {
+        if rng().random::<f64>() < CLEAR_SKY_NERF_PROBABILITY && world.can_see_sky(above) {
             fishing_speed -= 1;
         }
 
@@ -357,6 +364,7 @@ impl FishingHookEntity {
         }
     }
 
+    /// Calculates if the area the player is currently fishing in is open water.
     fn calculate_open_water(&self, pos: BlockPos) -> bool {
         let mut prev_layer = OpenWaterType::Invalid;
 
@@ -388,6 +396,7 @@ impl FishingHookEntity {
         true
     }
 
+    /// Returns an `OpenWaterType` for a given area.
     fn get_open_water_type_for_area(&self, from: BlockPos, to: BlockPos) -> OpenWaterType {
         let mut iter =
             BlockPos::between_closed(from, to).map(|pos| self.get_open_water_type_for_block(pos));
@@ -403,6 +412,7 @@ impl FishingHookEntity {
         }
     }
 
+    /// Returns an `OpenWaterType` for a given block.
     fn get_open_water_type_for_block(&self, pos: BlockPos) -> OpenWaterType {
         let Some(world) = self.level() else {
             return OpenWaterType::Invalid;
@@ -424,7 +434,6 @@ impl FishingHookEntity {
     }
 
     /// Retrieves the entity caught by this fishing hook and returns the resulting damage value.
-    /// Mirrors vanilla's `FishingHook.retrieve()`.
     pub fn retrieve(&self, rod: &ItemStack) -> i32 {
         let mut damage = 0;
 
@@ -455,8 +464,7 @@ impl FishingHookEntity {
                 if let Some(luck) = luck {
                     let mut rng = rng();
 
-                    // This is equivalent to `LootParams params`
-                    // TODO: in java owner.getLuck() is hook.luck + player.luck
+                    // This is equivalent to `LootParams params` in the java src.
                     let mut loot_ctx = LootContext::new(&mut rng)
                         .with_origin(self.position().x, self.position().y, self.position().z)
                         .with_tool(rod)
@@ -472,7 +480,7 @@ impl FishingHookEntity {
                         return damage;
                     };
 
-                    self.loop_items_award_stat(items, world.clone(), owner.clone());
+                    self.spawn_loot(items, world.clone(), owner.clone());
 
                     let orb_pos = DVec3::new(
                         player.position().x,
@@ -514,6 +522,7 @@ impl FishingHookEntity {
         damage
     }
 
+    /// Modifies the hooked entities velocity in order to simulate a pulling motion.
     fn pull_entity(&self, entity: &Arc<dyn Entity>) {
         if let Some(owner) = self.get_owner() {
             let base = owner.base();
@@ -526,6 +535,7 @@ impl FishingHookEntity {
         }
     }
 
+    /// Clears owner info of this `FishingHookEntity`
     fn clear_owner_info(&self) {
         let Some(owner) = self.get_owner() else {
             return;
@@ -538,12 +548,8 @@ impl FishingHookEntity {
     }
 
     // I added this fn because I thought it would be cleaner this way, it's not in the vanilla src, but how I use it ensures vanilla behavior
-    fn loop_items_award_stat(
-        &self,
-        items: Vec<ItemStack>,
-        world: Arc<World>,
-        owner: Arc<dyn Entity>,
-    ) {
+    /// Loops through a `vec` of `ItemStack`s (the fishing loot) and spawns them as `ItemEntity`s in the world.
+    fn spawn_loot(&self, items: Vec<ItemStack>, world: Arc<World>, owner: Arc<dyn Entity>) {
         for item_stack in items {
             const SPEED: f64 = 0.1;
             const INVERSE_CUBE: f64 = 0.08;
@@ -559,10 +565,6 @@ impl FishingHookEntity {
             );
 
             World::spawn_item_with_velocity(&world, self.position(), item_stack, vel);
-
-            // TODO: Spawn ExperienceOrb
-            // TODO: apparently we lack the ItemTag `FISHES` so I can't even check ...
-            // TODO: wait for stat type `FIGH_CAUGHT` so I can actually award it ...
         }
     }
 }
@@ -576,15 +578,7 @@ impl Entity for FishingHookEntity {
         self.entity_type
     }
 
-    fn spawn_data(&self) -> i32 {
-        self.get_owner().map_or(self.id(), |owner| owner.id())
-    }
-
-    fn set_removed(&self, reason: RemovalReason) {
-        self.clear_owner_info();
-        self.base.set_removed(reason);
-    }
-
+    /// Responsible for all state-changes.
     #[expect(
         clippy::too_many_lines,
         reason = "Logic that belongs together is being kept together."
@@ -761,17 +755,31 @@ impl Entity for FishingHookEntity {
             self.set_removed(RemovalReason::Discarded);
         }
     }
+
+    /// Marks entity as removed and clears owner info.
+    fn set_removed(&self, reason: RemovalReason) {
+        self.clear_owner_info();
+        self.base.set_removed(reason);
+    }
+
+    /// Returns the ID of the owner, or of this `FishingHookEntity`, if it has no owner.
+    fn spawn_data(&self) -> i32 {
+        self.get_owner().map_or(self.id(), |owner| owner.id())
+    }
 }
 
 impl Projectile for FishingHookEntity {
+    /// Returns this `FishingHook`s `ProjectileBase`.
     fn projectile_base(&self) -> &ProjectileBase {
         &self.projectile_base
     }
 
+    /// Determines if it's possible to hit an entity.
     fn can_hit_entity(&self, entity: &dyn Entity) -> bool {
         self.base_can_hit_entity(entity) || (entity.is_alive() && entity.is::<ItemEntity>())
     }
 
+    /// Ticks damage to the hit entity and stores it inside `hooked_in`.
     fn on_hit_entity(&self, entity: &SharedEntity, _location: DVec3) {
         let mut damage =
             DamageSource::environment(&vanilla_damage_types::THROWN).with_direct_entity(self.id());
@@ -790,6 +798,7 @@ impl Projectile for FishingHookEntity {
 
 impl ThrowableProjectile for FishingHookEntity {}
 
+/// Collection of possible states the `FishingHookEntity` can take on.
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
 enum FishHookState {
     Flying,
@@ -797,6 +806,7 @@ enum FishHookState {
     Bobbing,
 }
 
+/// Collection of possible types associated with open water.
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
 enum OpenWaterType {
     AboveWater,

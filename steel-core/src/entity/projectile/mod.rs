@@ -339,12 +339,14 @@ pub trait Projectile: Entity + ProjectileEventSource {
         true
     }
 
-    /// Returns vanilla `Projectile.canHitEntity`. Use this if you don't need to override.
+    /// Returns vanilla `Projectile.canHitEntity`.
+    /// Use this if you don't need to override.
     fn can_hit_entity(&self, entity: &dyn Entity) -> bool {
         self.base_can_hit_entity(entity)
     }
 
-    /// Returns vanilla `Projectile.canHitEntity`. We had to split this up, because Rust doesn't allow for calling super trait fns (without causing unbounded recursion) for overrides, so otherwise vanilla behaviour would not be achievable.
+    /// Returns vanilla `Projectile.canHitEntity`.
+    /// We had to split this up, because Rust doesn't allow for calling super trait fns (without causing unbounded recursion) for overrides, so otherwise vanilla behavior would not be achievable.
     fn base_can_hit_entity(&self, entity: &dyn Entity) -> bool {
         if !entity.can_be_hit_by_projectile() {
             return false;
