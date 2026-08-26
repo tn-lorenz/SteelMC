@@ -22,10 +22,11 @@ use steel_registry::item_stack::ItemStack;
 use steel_registry::loot_table::LootContext;
 use steel_registry::particle_type::ParticleData;
 use steel_registry::vanilla_entity_data::FishingBobberEntityData;
+use steel_registry::vanilla_item_tags::ItemTag;
 use steel_registry::vanilla_particle_types::{BUBBLE, FISHING, SPLASH};
 use steel_registry::{
-    sound_events, vanilla_blocks, vanilla_damage_types, vanilla_entities, vanilla_items,
-    vanilla_loot_tables,
+    sound_events, vanilla_blocks, vanilla_custom_stats, vanilla_damage_types, vanilla_entities,
+    vanilla_items, vanilla_loot_tables,
 };
 use steel_utils::locks::SyncMutex;
 use steel_utils::types::InteractionHand;
@@ -465,6 +466,8 @@ impl FishingHookEntity {
                     let items =
                         vanilla_loot_tables::GAMEPLAY_FISHING.get_random_items(&mut loot_ctx);
 
+                    // TODO: criteria triggers (advancements)
+
                     let Some(world) = self.level() else {
                         return damage;
                     };
@@ -492,8 +495,9 @@ impl FishingHookEntity {
                         log::debug!("failed to spawn experience orb: {error}");
                     }
 
-                    // TODO: criteria triggers (advancements)
-                    // TODO: award stat when catching fish (we currently lack this stat)
+                    if rod.item().has_tag(&ItemTag::FISHES) {
+                        player.award_custom_stat(&vanilla_custom_stats::FISH_CAUGHT);
+                    }
 
                     damage = DMG_CAUGHT;
                 }
