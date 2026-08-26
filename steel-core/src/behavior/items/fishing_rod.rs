@@ -9,7 +9,6 @@ use steel_protocol::packets::game::SoundSource;
 use steel_registry::sound_events::{ENTITY_FISHING_BOBBER_RETRIEVE, ENTITY_FISHING_BOBBER_THROW};
 use steel_registry::stat::vanilla_stat_types;
 use steel_registry::{vanilla_entities, vanilla_items};
-use steel_utils::types::InteractionHand;
 
 const SHOOT_POWER: f32 = 1.5;
 
@@ -21,6 +20,7 @@ impl ItemBehavior for FishingRodItem {
     fn use_item(&self, context: &mut UseItemContext) -> InteractionResult {
         let player = context.player;
         let world = context.world;
+        let hand = context.hand;
         let infinite_materials = context.player.has_infinite_materials();
 
         let pitch = 0.4 / (rng().random::<f32>() * 0.4 + 0.8);
@@ -28,9 +28,7 @@ impl ItemBehavior for FishingRodItem {
         if let Some(fishing) = player.fishing_hook() {
             let rod = {
                 let inventory = player.inventory.lock();
-                inventory
-                    .get_item_in_hand(InteractionHand::MainHand)
-                    .clone()
+                inventory.get_item_in_hand(hand).clone()
             };
 
             if rod.is(&vanilla_items::FISHING_ROD) {
@@ -89,7 +87,7 @@ impl ItemBehavior for FishingRodItem {
             }
 
             let inventory = player.inventory.lock();
-            let rod = inventory.get_item_in_hand(InteractionHand::MainHand);
+            let rod = inventory.get_item_in_hand(hand);
             player.award_stat(&vanilla_stat_types::ITEM_USED, rod.item());
 
             // TODO: vibration
