@@ -1,10 +1,7 @@
 use crate::entity::damage::DamageSource;
 use crate::entity::entities::{ExperienceOrbEntity, ItemEntity};
 use crate::entity::projectile::triangle_random;
-use crate::entity::{
-    Entity, EntityBase, EntityBaseLoad, LivingEntity, Projectile, ProjectileBase, RemovalReason,
-    SharedEntity, ThrowableProjectile, entity_loot_ref, next_entity_id,
-};
+use crate::entity::{Entity, EntityBase, EntityBaseLoad, LivingEntity, Projectile, ProjectileBase, RemovalReason, SharedEntity, ThrowableProjectile, entity_loot_ref, next_entity_id, EntitySyncedData};
 use crate::physics::MoverType;
 use crate::player::Player;
 use crate::world::{LevelReader, World};
@@ -754,6 +751,10 @@ impl Entity for FishingHookEntity {
         } else {
             self.set_removed(RemovalReason::Discarded);
         }
+    }
+
+    fn synced_data(&self) -> Option<&dyn EntitySyncedData> {
+        Some(&self.entity_data)
     }
 
     /// Marks entity as removed and clears owner info.
