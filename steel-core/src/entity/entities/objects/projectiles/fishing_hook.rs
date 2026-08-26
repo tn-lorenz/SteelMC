@@ -779,19 +779,8 @@ impl Projectile for FishingHookEntity {
         self.base_can_hit_entity(entity) || (entity.is_alive() && entity.is::<ItemEntity>())
     }
 
-    /// Ticks damage to the hit entity and stores it inside `hooked_in`.
+    /// Stores the hit entity inside `hooked_in`.
     fn on_hit_entity(&self, entity: &SharedEntity, _location: DVec3) {
-        let mut damage =
-            DamageSource::environment(&vanilla_damage_types::THROWN).with_direct_entity(self.id());
-
-        if let Some(owner) = self.get_owner() {
-            damage = damage.with_causing_entity(owner.id());
-        }
-
-        if let Some(world) = entity.level() {
-            entity.hurt(&world, &damage, 0.0);
-        }
-
         self.set_hooked_entity(Some(Arc::clone(entity)));
     }
 }
