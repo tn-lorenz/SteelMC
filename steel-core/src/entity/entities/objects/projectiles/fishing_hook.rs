@@ -1,6 +1,9 @@
 use crate::entity::entities::{ExperienceOrbEntity, ItemEntity};
 use crate::entity::projectile::triangle_random;
-use crate::entity::{Entity, EntityBase, EntityBaseLoad, LivingEntity, Projectile, ProjectileBase, RemovalReason, SharedEntity, ThrowableProjectile, entity_loot_ref, next_entity_id, EntitySyncedData};
+use crate::entity::{
+    Entity, EntityBase, EntityBaseLoad, EntitySyncedData, LivingEntity, Projectile, ProjectileBase,
+    RemovalReason, SharedEntity, ThrowableProjectile, entity_loot_ref, next_entity_id,
+};
 use crate::physics::MoverType;
 use crate::player::Player;
 use crate::world::{LevelReader, World};
@@ -21,8 +24,8 @@ use steel_registry::vanilla_entity_data::FishingBobberEntityData;
 use steel_registry::vanilla_item_tags::ItemTag;
 use steel_registry::vanilla_particle_types::{BUBBLE, FISHING, SPLASH};
 use steel_registry::{
-    sound_events, vanilla_blocks, vanilla_custom_stats, vanilla_entities,
-    vanilla_items, vanilla_loot_tables,
+    sound_events, vanilla_blocks, vanilla_custom_stats, vanilla_entities, vanilla_items,
+    vanilla_loot_tables,
 };
 use steel_utils::locks::SyncMutex;
 use steel_utils::types::InteractionHand;
