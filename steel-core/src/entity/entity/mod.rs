@@ -3619,6 +3619,23 @@ pub trait Entity: EntityEventSource + ErasedType + Send + Sync + 'static {
 
         dx * dx + dy * dy + dz * dz
     }
+
+    /// Sets position and rotation, matching vanilla `Entity.snapTo`.
+    ///
+    /// # Panics
+    ///
+    /// Panics if the active world entity manager rejects the snap position. This is an invariant
+    /// failure for loaded raw entities.
+    fn snap_to(&self, position: DVec3, yaw: f32, pitch: f32) {
+        if let Err(error) = self.try_set_position(position) {
+            panic!(
+                "failed to commit entity {} snap position: {error}",
+                self.id()
+            );
+        }
+        self.set_rotation((yaw, pitch));
+        self.set_old_position_to_current();
+    }
 }
 
 /// Repositions a direct passenger from the vehicle's attachment point.

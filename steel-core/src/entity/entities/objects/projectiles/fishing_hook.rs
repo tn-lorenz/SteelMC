@@ -120,31 +120,31 @@ impl FishingHookEntity {
         }
     }
 
-    /// Mimics Java's `FishingHook(Player, Level, int, int)` constructor.
-    pub fn shoot_from_player(
-        self: &Arc<Self>,
-        player: Player,
-        level: Arc<World>,
-        luck: i32,
-        lure_speed: i32,
-    ) {
-        const MAGIC_OFFSET: f64 = 0.0103365;
+    /// Mimics Java's `FishingHook(Player, Level, int, int)` constructor. (But we don't need `level` here)
+    pub fn shoot_from_player(self: &Arc<Self>, player: &Arc<Player>, luck: i32, lure_speed: i32) {
+        const MAGIC_OFFSET: f64 = 0.010_336_5;
+
+        {
+            let mut state = self.hook_state.lock();
+            state.luck = luck.max(0);
+            state.lure_speed = lure_speed.max(0);
+        }
 
         let (x_rot, y_rot) = player.rotation();
-        let player_shared: SharedEntity = Arc::new(player);
+        let player_shared: SharedEntity = player.clone();
 
         self.set_owner(&player_shared);
 
         let y_cos = (-y_rot * (PI / DEGREE_180) - PI).cos();
         let y_sin = (-y_rot * (PI / DEGREE_180) - PI).sin();
-        let x_cos = (-x_rot * (PI / DEGREE_360)).cos();
+        let x_cos = -(-x_rot * (PI / DEGREE_360)).cos();
         let x_sin = (-x_rot * (PI / DEGREE_360)).sin();
 
         let x = player_shared.position().x - f64::from(y_sin) * 0.3;
         let y = player_shared.get_eye_y();
         let z = player_shared.position().z - f64::from(y_cos) * 0.3;
 
-        // FIXME: `snap_to` currently only exists for `RawEntity` and as far as I can tell, there is no way to obtain it from `EntityBase`
+        self.snap_to(DVec3::new(x, y, z), x_rot, y_rot);
 
         let mut new_movement = DVec3::new(
             -f64::from(y_sin),
@@ -171,6 +171,7 @@ impl FishingHookEntity {
 
         self.set_rotation((y_rot_new, x_rot_new));
 
+        self.base().set_old_rotation_to_current();
         // TODO: this.yRotO = this.getYRot(); and this.xRotO = this.getXRot();
     }
 
@@ -194,6 +195,7 @@ impl FishingHookEntity {
         if let Some(player) = owner.as_player() {
             player.set_fishing_hook(self);
         }
+        self.update_owner_info(self.into());
     }
 
     /// Determines if the player should stop fishing and removes the entity if so.

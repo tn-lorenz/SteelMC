@@ -1,6 +1,6 @@
 use crate::behavior::{InteractionResult, ItemBehavior, UseItemContext};
 use crate::entity::entities::objects::projectiles::FishingHookEntity;
-use crate::entity::{Entity, Projectile, RemovalReason, SharedEntity, next_entity_id};
+use crate::entity::{Entity, RemovalReason, SharedEntity, next_entity_id};
 use glam::DVec3;
 use rand::{RngExt, rng};
 use std::sync::Arc;
@@ -61,6 +61,10 @@ impl ItemBehavior for FishingRodItem {
             let player_pos = player.position();
             let spawn_pos = DVec3::new(player_pos.x, player.get_eye_y() - 0.1, player_pos.z);
 
+            // FIXME: we don't have enchantments yet, so I can't get the current `luck` or `lure_speed` of `rod`
+            let luck = 0;
+            let lure_speed = 0;
+
             let hook = Arc::new(FishingHookEntity::new(
                 &vanilla_entities::FISHING_BOBBER,
                 next_entity_id(),
@@ -68,7 +72,14 @@ impl ItemBehavior for FishingRodItem {
                 Arc::downgrade(world),
             ));
 
-            if let Some(owner) = world.players.get_by_uuid(&player.gameprofile.id) {
+            let player_arc = world
+                .players
+                .get_by_uuid(&player.gameprofile.id)
+                .expect("player must be registered in the world");
+
+            hook.shoot_from_player(&player_arc, luck, lure_speed);
+
+            /*if let Some(owner) = world.players.get_by_uuid(&player.gameprofile.id) {
                 let owner: SharedEntity = owner;
                 hook.set_owner(&owner);
             } else {
@@ -77,7 +88,7 @@ impl ItemBehavior for FishingRodItem {
             }
 
             let (yaw, player_pitch) = player.rotation();
-            hook.shoot_from_rotation(player, player_pitch, yaw, 0.0, SHOOT_POWER, 1.0);
+            hook.shoot_from_rotation(player, player_pitch, yaw, 0.0, SHOOT_POWER, 1.0);*/
 
             let entity: SharedEntity = hook;
             if let Err(error) = world.try_add_entity(Arc::clone(&entity)) {
