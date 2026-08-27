@@ -13,6 +13,7 @@ use std::cmp::PartialEq;
 use std::f32::consts::PI;
 use std::ops::Add;
 use std::sync::{Arc, Weak};
+use crossbeam::channel::tick;
 use steel_macros::entity_behavior;
 use steel_registry::blocks::block_state_ext::BlockStateExt;
 use steel_registry::entity_type::EntityTypeRef;
@@ -595,6 +596,7 @@ impl Entity for FishingHookEntity {
         reason = "Logic that belongs together is being kept together."
     )]
     fn tick(&self) {
+        self.projectile_base_tick();
         if let Some(owner) = self.get_owner()
             && let Some(player) = owner.as_player()
         {
