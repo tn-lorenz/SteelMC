@@ -120,6 +120,7 @@ impl FishingHookEntity {
         }
     }
 
+    // TODO: as soon as we have enchantments: use `luck` and `lure_speed` as input
     /// Mimics Java's `FishingHook(Player, Level, int, int)` constructor. (But we don't need `level` here)
     pub fn shoot_from_player(self: &Arc<Self>, player: &Arc<Player>, luck: i32, lure_speed: i32) {
         const MAGIC_OFFSET: f64 = 0.010_336_5;
@@ -172,7 +173,6 @@ impl FishingHookEntity {
         self.set_rotation((y_rot_new, x_rot_new));
 
         self.base().set_old_rotation_to_current();
-        // TODO: this.yRotO = this.getYRot(); and this.xRotO = this.getXRot();
     }
 
     /// Creates a fishing hook entity from saved base data.

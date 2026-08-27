@@ -77,17 +77,6 @@ impl ItemBehavior for FishingRodItem {
 
             hook.shoot_from_player(&player_arc, luck, lure_speed);
 
-            /*if let Some(owner) = world.players.get_by_uuid(&player.gameprofile.id) {
-                let owner: SharedEntity = owner;
-                hook.set_owner(&owner);
-            } else {
-                hook.set_owner_uuid(Some(player.gameprofile.id));
-                player.set_fishing_hook(&hook);
-            }
-
-            let (yaw, player_pitch) = player.rotation();
-            hook.shoot_from_rotation(player, player_pitch, yaw, 0.0, SHOOT_POWER, 1.0);*/
-
             let entity: SharedEntity = hook;
             if let Err(error) = world.try_add_entity(Arc::clone(&entity)) {
                 entity.set_removed(RemovalReason::Discarded);
