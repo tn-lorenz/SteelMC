@@ -370,9 +370,9 @@ impl FishingHookEntity {
     fn calculate_open_water(&self, pos: BlockPos) -> bool {
         let mut prev_layer = OpenWaterType::Invalid;
 
-        for _ in -1..=2 {
-            let offset_from = BlockPos::new(pos.x() - 2, pos.y() + 2, pos.z() - 2);
-            let offset_to = BlockPos::new(pos.x() + 2, pos.y() + 2, pos.z() + 2);
+        for y in -1..=2 {
+            let offset_from = BlockPos::new(pos.x() - 2, pos.y() + y, pos.z() - 2);
+            let offset_to = BlockPos::new(pos.x() + 2, pos.y() + y, pos.z() + 2);
 
             let layer = self.get_open_water_type_for_area(offset_from, offset_to);
 
