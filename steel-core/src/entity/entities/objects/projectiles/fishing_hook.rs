@@ -511,7 +511,7 @@ impl FishingHookEntity {
                         let entity: SharedEntity = Arc::new(orb);
 
                         if let Err(error) = world.try_add_entity(Arc::clone(&entity)) {
-                            log::debug!("failed to spawn experience orb: {error}");
+                            log::error!("Failed to spawn experience orb: {error}");
                         }
 
                         damage = DMG_CAUGHT;
@@ -702,16 +702,25 @@ impl Entity for FishingHookEntity {
                             let removed = hooked.is_removed();
                             let can_interact = hooked.can_interact_with_level();
 
-                            if !removed && can_interact {
+                            // locks hooked.base.world
+                            let same_dimension = if let Some(hooked_world) = hooked.level() {
+                                world.dimension_type == hooked_world.dimension_type
+                            } else {
+                                false
+                            };
+
+                            if !removed && can_interact && same_dimension {
                                 let pos = hooked.position();
                                 let height = hooked.bounding_box().height();
 
-                                self.try_set_position(DVec3::new(
+                                if let Err(error) = self.try_set_position(DVec3::new(
                                     pos.x,
                                     pos.y + height * 0.8,
                                     pos.z,
-                                ))
-                                .expect("...");
+                                )) {
+                                    self.set_removed(RemovalReason::Discarded);
+                                    log::error!("Failed to set position of fishing hook: {error}");
+                                }
                             } else {
                                 self.set_hooked_entity(None);
 
