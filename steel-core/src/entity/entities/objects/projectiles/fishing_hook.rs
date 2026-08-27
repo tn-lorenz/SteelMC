@@ -58,7 +58,7 @@ pub struct FishingHookState {
 
 impl FishingHookState {
     #[must_use]
-    /// returns a new `FishingHookState` with the given lure speed and luck values.
+    /// Returns a new `FishingHookState` with the given lure speed and luck values.
     pub fn new(lure_speed: i32, luck: i32) -> Self {
         Self {
             out_of_water_time: 0,
