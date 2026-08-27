@@ -27,6 +27,7 @@ use steel_registry::{
     sound_events, vanilla_blocks, vanilla_custom_stats, vanilla_entities, vanilla_items,
     vanilla_loot_tables,
 };
+use steel_utils::entity_events::EntityStatus;
 use steel_utils::locks::SyncMutex;
 use steel_utils::random::Random;
 use steel_utils::random::legacy_random::LegacyRandom;
@@ -457,6 +458,7 @@ impl FishingHookEntity {
                 if let Some(hooked_in) = hooked_in {
                     self.pull_entity(&hooked_in);
                     // TODO: criteria triggers (advancements)
+                    self.broadcast_entity_event(EntityStatus::FishingRodReelIn);
                     damage = if hooked_in.as_ref().is::<ItemEntity>() {
                         DMG_ITEM_ENTITY
                     } else {
@@ -752,8 +754,10 @@ impl Entity for FishingHookEntity {
                                     let mut synchronized_random = self.synchronized_random.lock();
                                     self.base.set_velocity(self.base.velocity().add(DVec3::new(
                                         0.0,
-                                        f64::from(-0.1
-                                            * synchronized_random.next_f32() * synchronized_random.next_f32()),
+                                        f64::from(
+                                            -0.1 * synchronized_random.next_f32()
+                                                * synchronized_random.next_f32(),
+                                        ),
                                         0.0,
                                     )));
                                 }
