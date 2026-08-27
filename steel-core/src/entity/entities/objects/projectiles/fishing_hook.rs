@@ -602,173 +602,187 @@ impl Entity for FishingHookEntity {
     fn tick(&self) {
         if let Some(owner) = self.get_owner()
             && let Some(player) = owner.as_player()
-            && !self.should_stop_fishing(player)
         {
-            if self.on_ground() {
-                let should_remove = {
-                    let mut state = self.hook_state.lock();
-                    state.life += 1;
-                    state.life >= ONE_MINUTE
-                };
+            let can_fish = {
+                let inventory = player.inventory.lock();
+                let mainhand_item = inventory.get_item_in_hand(InteractionHand::MainHand);
+                let offhand_item = inventory.get_offhand_item();
 
-                if should_remove {
-                    self.set_removed(RemovalReason::Discarded);
-                }
-            } else {
-                self.hook_state.lock().life = 0;
-            }
+                !self.should_stop_fishing(player, mainhand_item, offhand_item)
+            };
 
-            let mut liquid_height: f32 = 0.0;
-            let pos = BlockPos::from(self.base.position());
+            if can_fish {
+                if self.on_ground() {
+                    let should_remove = {
+                        let mut state = self.hook_state.lock();
+                        state.life += 1;
+                        state.life >= ONE_MINUTE
+                    };
 
-            if let Some(world) = self.level() {
-                let block_state = world.get_block_state(pos);
-                let fluid_state = block_state.get_fluid_state();
-
-                if fluid_state.is_water() {
-                    liquid_height = fluid_state.own_height();
+                    if should_remove {
+                        self.set_removed(RemovalReason::Discarded);
+                    }
+                } else {
+                    self.hook_state.lock().life = 0;
                 }
 
-                let is_in_water = liquid_height > 0.0;
+                let mut liquid_height: f32 = 0.0;
+                let pos = BlockPos::from(self.base.position());
 
-                let current_state = {
-                    let state = self.hook_state.lock();
-                    state.bobber_state
-                };
+                if let Some(world) = self.level() {
+                    let block_state = world.get_block_state(pos);
+                    let fluid_state = block_state.get_fluid_state();
 
-                match current_state {
-                    BobberState::Flying => {
-                        let should_check_collision = {
+                    if fluid_state.is_water() {
+                        liquid_height = fluid_state.own_height();
+                    }
+
+                    let is_in_water = liquid_height > 0.0;
+
+                    let bobber_state = {
+                        let state = self.hook_state.lock();
+                        state.bobber_state
+                    };
+
+                    match bobber_state {
+                        BobberState::Flying => {
+                            let should_check_collision = {
+                                let mut state = self.hook_state.lock();
+
+                                if state.hooked_entity.is_some() {
+                                    self.base.set_velocity(DVec3::ZERO);
+                                    state.bobber_state = BobberState::HookedInEntity;
+                                    return;
+                                }
+
+                                if is_in_water {
+                                    self.base.set_velocity(
+                                        self.base.velocity() * DVec3::new(0.3, 0.2, 0.3),
+                                    );
+                                    state.bobber_state = BobberState::Bobbing;
+                                    return;
+                                }
+
+                                true
+                            };
+
+                            if should_check_collision {
+                                self.check_collision();
+                            }
+                        }
+
+                        BobberState::HookedInEntity => {
+                            let hooked = {
+                                let state = self.hook_state.lock();
+                                state.hooked_entity.clone()
+                            };
+
+                            let Some(hooked) = hooked else {
+                                let mut state = self.hook_state.lock();
+                                state.bobber_state = BobberState::Flying;
+                                return;
+                            };
+
+                            let removed = hooked.is_removed();
+                            let can_interact = hooked.can_interact_with_level();
+
+                            if !removed && can_interact {
+                                let pos = hooked.position();
+                                let height = hooked.bounding_box().height();
+
+                                self.try_set_position(DVec3::new(
+                                    pos.x,
+                                    pos.y + height * 0.8,
+                                    pos.z,
+                                ))
+                                .expect("...");
+                            } else {
+                                self.set_hooked_entity(None);
+
+                                let mut state = self.hook_state.lock();
+                                state.bobber_state = BobberState::Flying;
+                            }
+
+                            return;
+                        }
+
+                        BobberState::Bobbing => {
                             let mut state = self.hook_state.lock();
 
-                            if state.hooked_entity.is_some() {
-                                self.base.set_velocity(DVec3::ZERO);
-                                state.bobber_state = BobberState::HookedInEntity;
-                                return;
+                            let velocity = self.base.velocity();
+
+                            let mut force: f64 = self.position().y + velocity.y
+                                - f64::from(pos.y())
+                                - f64::from(liquid_height);
+
+                            if force.abs() < 0.01 {
+                                force += force.signum() * 0.1;
+                            }
+
+                            self.base.set_velocity(DVec3::new(
+                                velocity.x * 0.9,
+                                velocity.y - force * rng().random::<f64>() * 0.2,
+                                velocity.z * 0.9,
+                            ));
+
+                            if state.nibble <= 0 && state.time_until_hooked <= 0 {
+                                state.open_water = true;
+                            } else {
+                                state.open_water = state.open_water
+                                    && state.out_of_water_time < MAX_OUT_OF_WATER_TIME
+                                    && self.calculate_open_water(pos);
                             }
 
                             if is_in_water {
-                                self.base
-                                    .set_velocity(self.base.velocity() * DVec3::new(0.3, 0.2, 0.3));
-                                state.bobber_state = BobberState::Bobbing;
-                                return;
+                                state.out_of_water_time = (state.out_of_water_time - 1).max(0);
+                                if *self.entity_data.lock().fishing_hook().biting.get() {
+                                    // If you don't find this random thing in the src, remove the "h", I had to correct this spelling mistake due to lint
+                                    // TODO: -0.1 * this.synchronizedRandom.nextFloat() * this.synchronizedRandom.nextFloat()
+                                    self.base.set_velocity(
+                                        self.base.velocity().add(DVec3::new(0.0, -0.1, 0.0)),
+                                    );
+                                }
+
+                                self.catching_fish(pos, &mut state);
+                            } else {
+                                state.out_of_water_time =
+                                    (state.out_of_water_time + 1).min(MAX_OUT_OF_WATER_TIME);
                             }
-
-                            true
-                        };
-
-                        if should_check_collision {
-                            self.check_collision();
                         }
                     }
 
-                    BobberState::HookedInEntity => {
-                        let hooked = {
-                            let state = self.hook_state.lock();
-                            state.hooked_entity.clone()
-                        };
+                    let hooked_in = {
+                        let state = self.hook_state.lock();
+                        state.hooked_entity.is_some()
+                    };
 
-                        let Some(hooked) = hooked else {
-                            let mut state = self.hook_state.lock();
-                            state.bobber_state = BobberState::Flying;
-                            return;
-                        };
-
-                        let removed = hooked.is_removed();
-                        let can_interact = hooked.can_interact_with_level();
-
-                        if !removed && can_interact {
-                            let pos = hooked.position();
-                            let height = hooked.bounding_box().height();
-
-                            self.try_set_position(DVec3::new(pos.x, pos.y + height * 0.8, pos.z))
-                                .expect("...");
-                        } else {
-                            self.set_hooked_entity(None);
-
-                            let mut state = self.hook_state.lock();
-                            state.bobber_state = BobberState::Flying;
-                        }
-
-                        return;
+                    if !fluid_state.is_water() && !self.base.on_ground() && !hooked_in {
+                        self.base
+                            .set_velocity(self.base.velocity().add(DVec3::new(0.0, -0.03, 0.0)));
                     }
 
-                    BobberState::Bobbing => {
-                        let mut state = self.hook_state.lock();
+                    self.move_entity(MoverType::SelfMovement, self.base.velocity());
+                    self.apply_effects_from_blocks();
+                    self.update_rotation();
 
-                        let velocity = self.base.velocity();
+                    let should_stop = {
+                        let state = self.hook_state.lock();
 
-                        let mut force: f64 = self.position().y + velocity.y
-                            - f64::from(pos.y())
-                            - f64::from(liquid_height);
+                        state.bobber_state == BobberState::Flying
+                            && (self.base.on_ground() || self.base.horizontal_collision())
+                    };
 
-                        if force.abs() < 0.01 {
-                            force += force.signum() * 0.1;
-                        }
-
-                        self.base.set_velocity(DVec3::new(
-                            velocity.x * 0.9,
-                            velocity.y - force * rng().random::<f64>() * 0.2,
-                            velocity.z * 0.9,
-                        ));
-
-                        if state.nibble <= 0 && state.time_until_hooked <= 0 {
-                            state.open_water = true;
-                        } else {
-                            state.open_water = state.open_water
-                                && state.out_of_water_time < MAX_OUT_OF_WATER_TIME
-                                && self.calculate_open_water(pos);
-                        }
-
-                        if is_in_water {
-                            state.out_of_water_time = (state.out_of_water_time - 1).max(0);
-                            if *self.entity_data.lock().fishing_hook().biting.get() {
-                                // If you don't find this random thing in the src, remove the "h", I had to correct this spelling mistake due to lint
-                                // TODO: -0.1 * this.synchronizedRandom.nextFloat() * this.synchronizedRandom.nextFloat()
-                                self.base.set_velocity(
-                                    self.base.velocity().add(DVec3::new(0.0, -0.1, 0.0)),
-                                );
-                            }
-
-                            self.catching_fish(pos, &mut state);
-                        } else {
-                            state.out_of_water_time =
-                                (state.out_of_water_time + 1).min(MAX_OUT_OF_WATER_TIME);
-                        }
+                    if should_stop {
+                        self.base.set_velocity(DVec3::ZERO);
                     }
+
+                    let inertia: f64 = 0.92;
+                    self.base.set_velocity(self.base.velocity() * inertia);
+                    self.base.set_old_position_to_current();
                 }
-
-                let hooked_in = {
-                    let state = self.hook_state.lock();
-                    state.hooked_entity.is_some()
-                };
-
-                if !fluid_state.is_water() && !self.base.on_ground() && !hooked_in {
-                    self.base
-                        .set_velocity(self.base.velocity().add(DVec3::new(0.0, -0.03, 0.0)));
-                }
-
-                self.move_entity(MoverType::SelfMovement, self.base.velocity());
-                self.apply_effects_from_blocks();
-                self.update_rotation();
-
-                let should_stop = {
-                    let state = self.hook_state.lock();
-
-                    state.bobber_state == BobberState::Flying
-                        && (self.base.on_ground() || self.base.horizontal_collision())
-                };
-
-                if should_stop {
-                    self.base.set_velocity(DVec3::ZERO);
-                }
-
-                let inertia: f64 = 0.92;
-                self.base.set_velocity(self.base.velocity() * inertia);
-                self.base.set_old_position_to_current();
+            } else {
+                self.set_removed(RemovalReason::Discarded);
             }
-        } else {
-            self.set_removed(RemovalReason::Discarded);
         }
     }
 
