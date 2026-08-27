@@ -34,6 +34,25 @@ use steel_utils::random::legacy_random::LegacyRandom;
 use steel_utils::types::InteractionHand;
 use steel_utils::{BlockPos, Downcast, DowncastType, DowncastTypeKey};
 
+pub const MAX_OUT_OF_WATER_TIME: i32 = 10;
+const MAX_DISTANCE_SQR: f64 = 32.0 * 32.0;
+
+const DMG_DEFAULT: i32 = 5;
+const DMG_ITEM_ENTITY: i32 = 3;
+const DMG_ON_GROUND: i32 = 2;
+const DMG_CAUGHT: i32 = 1;
+
+const DEGREE_180: f32 = 180.0;
+const DEGREE_360: f32 = 360.0;
+
+const ONE_SECOND: i32 = 20;
+const TWO_SECONDS: i32 = 40;
+const THREE_SECONDS: i32 = 60;
+const FOUR_SECONDS: i32 = 80;
+const FIVE_SECONDS: i32 = 100;
+const THIRTY_SECONDS: i32 = 600;
+const ONE_MINUTE: i32 = 1200;
+
 /// A fishing hook.
 #[entity_behavior(class = "FishingHook")]
 pub struct FishingHookEntity {
@@ -85,25 +104,6 @@ impl FishingHookState {
 unsafe impl DowncastType for FishingHookEntity {
     const TYPE_KEY: DowncastTypeKey = DowncastTypeKey::new("steel:entity/fishing_hook");
 }
-
-pub const MAX_OUT_OF_WATER_TIME: i32 = 10;
-const MAX_DISTANCE_SQR: f64 = 32.0 * 32.0;
-
-const DMG_DEFAULT: i32 = 5;
-const DMG_ITEM_ENTITY: i32 = 3;
-const DMG_ON_GROUND: i32 = 2;
-const DMG_CAUGHT: i32 = 1;
-
-const DEGREE_180: f32 = 180.0;
-const DEGREE_360: f32 = 360.0;
-
-const ONE_SECOND: i32 = 20;
-const TWO_SECONDS: i32 = 40;
-const THREE_SECONDS: i32 = 60;
-const FOUR_SECONDS: i32 = 80;
-const FIVE_SECONDS: i32 = 100;
-const THIRTY_SECONDS: i32 = 600;
-const ONE_MINUTE: i32 = 1200;
 
 impl FishingHookEntity {
     /// Creates a fishing hook entity.
