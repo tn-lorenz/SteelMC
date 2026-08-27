@@ -163,14 +163,14 @@ impl FishingHookEntity {
 
         self.set_velocity(new_movement);
 
-        let y_rot_new = new_movement.x.atan2(new_movement.z).to_degrees() as f32;
+        let yaw_new = new_movement.x.atan2(new_movement.z).to_degrees() as f32;
 
         let horizontal_distance =
             (new_movement.x * new_movement.x + new_movement.z * new_movement.z).sqrt();
 
-        let x_rot_new = new_movement.y.atan2(horizontal_distance).to_degrees() as f32;
+        let pitch_new = new_movement.y.atan2(horizontal_distance).to_degrees() as f32;
 
-        self.set_rotation((y_rot_new, x_rot_new));
+        self.set_rotation((yaw_new, pitch_new));
 
         self.base().set_old_rotation_to_current();
     }
