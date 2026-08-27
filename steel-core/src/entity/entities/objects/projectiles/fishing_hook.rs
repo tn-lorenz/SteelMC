@@ -195,7 +195,7 @@ impl FishingHookEntity {
     )]
     fn catching_fish(&self, pos: BlockPos, state: &mut FishingHookState) {
         const RAINING_BONUS_PROBABILITY: f64 = 0.25;
-        const CLEAR_SKY_NERF_PROBABILITY: f64 = 0.5;
+        const SKY_OBSTRUCTION_NERF_PROBABILITY: f64 = 0.5;
 
         let mut fishing_speed = 1;
         let above = pos.above();
@@ -208,7 +208,7 @@ impl FishingHookEntity {
             fishing_speed += 1;
         }
 
-        if rng().random::<f64>() < CLEAR_SKY_NERF_PROBABILITY && world.can_see_sky(above) {
+        if rng().random::<f64>() < SKY_OBSTRUCTION_NERF_PROBABILITY && !world.can_see_sky(above) {
             fishing_speed -= 1;
         }
 
