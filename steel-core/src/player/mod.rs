@@ -576,7 +576,7 @@ impl Player {
     }
 
     /// Returns the active fishing hook, clearing a stale reference after removal.
-    pub(crate) fn fishing_hook(&self) -> Option<Arc<FishingHookEntity>> {
+    pub fn fishing_hook(&self) -> Option<Arc<FishingHookEntity>> {
         let mut fishing = self.fishing.lock();
         let hook = fishing.as_ref().and_then(Weak::upgrade);
         if hook.is_none() {
@@ -586,12 +586,12 @@ impl Player {
     }
 
     /// Records the hook currently owned by this player.
-    pub(crate) fn set_fishing_hook(&self, hook: &Arc<FishingHookEntity>) {
+    pub fn set_fishing_hook(&self, hook: &Arc<FishingHookEntity>) {
         *self.fishing.lock() = Some(Arc::downgrade(hook));
     }
 
     /// Clears `hook` if it is still this player's active fishing hook.
-    pub(crate) fn clear_fishing_hook(&self, hook: &FishingHookEntity) {
+    pub fn clear_fishing_hook(&self, hook: &FishingHookEntity) {
         let mut fishing = self.fishing.lock();
         if fishing
             .as_ref()
