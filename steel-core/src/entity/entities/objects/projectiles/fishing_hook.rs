@@ -50,8 +50,9 @@ pub struct FishingHookState {
     time_until_hooked: i32,
     fish_angle: f32,
     open_water: bool,
-    current_state: FishHookState,
-    hooked_in: Option<SharedEntity>,
+    /// Equivalent to Java's `currentState`
+    bobber_state: BobberState,
+    hooked_entity: Option<SharedEntity>,
     luck: i32,
     lure_speed: i32,
 }
@@ -68,8 +69,8 @@ impl FishingHookState {
             time_until_hooked: 0,
             fish_angle: 0.0,
             open_water: false,
-            current_state: FishHookState::Flying,
-            hooked_in: None,
+            bobber_state: BobberState::Flying,
+            hooked_entity: None,
             luck: luck.max(0),
             lure_speed: lure_speed.max(0),
         }
@@ -103,12 +104,7 @@ const ONE_MINUTE: i32 = 1200;
 impl FishingHookEntity {
     /// Creates a fishing hook entity.
     #[must_use]
-    pub(crate) fn new(
-        entity_type: EntityTypeRef,
-        id: i32,
-        position: DVec3,
-        world: Weak<World>,
-    ) -> Self {
+    pub fn new(entity_type: EntityTypeRef, id: i32, position: DVec3, world: Weak<World>) -> Self {
         Self {
             base: EntityBase::new(id, position, entity_type.dimensions, world),
             entity_type,
@@ -139,7 +135,12 @@ impl FishingHookEntity {
     }
 
     /// Determines if the player should stop fishing and removes the entity if so.
-    fn should_stop_fishing(&self, owner: &Player) -> bool {
+    fn should_stop_fishing(
+        &self,
+        owner: &Player,
+        mainhand_item: &ItemStack,
+        offhand_item: &ItemStack,
+    ) -> bool {
         if !owner.can_interact_with_level() {
             self.set_removed(RemovalReason::Discarded);
             return true;
@@ -147,8 +148,8 @@ impl FishingHookEntity {
 
         let inventory = owner.inventory.lock();
 
-        let mainhand_item = inventory.get_item_in_hand(InteractionHand::MainHand);
-        let offhand_item = inventory.get_offhand_item();
+        //let mainhand_item = inventory.get_item_in_hand(InteractionHand::MainHand);
+        //let offhand_item = inventory.get_offhand_item();
 
         let mainhand_fishing = mainhand_item.is(&vanilla_items::FISHING_ROD);
         let offhand_fishing = offhand_item.is(&vanilla_items::FISHING_ROD);
@@ -179,7 +180,7 @@ impl FishingHookEntity {
 
         {
             let mut hook_state = self.hook_state.lock();
-            hook_state.hooked_in = hooked;
+            hook_state.hooked_entity = hooked;
         }
 
         let mut entity_data = self.entity_data.lock();
@@ -438,81 +439,88 @@ impl FishingHookEntity {
 
         if let Some(owner) = self.get_owner()
             && let Some(player) = owner.as_player()
-            && !Self::should_stop_fishing(self, player)
         {
-            let hooked_in = {
-                let hook_state = self.hook_state.lock();
-                hook_state.hooked_in.clone()
+            let can_retrieve = {
+                let inventory = player.inventory.lock();
+                let mainhand_item = inventory.get_item_in_hand(InteractionHand::MainHand);
+                let offhand_item = inventory.get_offhand_item();
+
+                Self::should_stop_fishing(self, player, mainhand_item, offhand_item)
             };
 
-            if let Some(hooked_in) = hooked_in {
-                self.pull_entity(&hooked_in);
-                // TODO: criteria triggers (advancements)
-                damage = if hooked_in.as_ref().is::<ItemEntity>() {
-                    DMG_ITEM_ENTITY
-                } else {
-                    DMG_DEFAULT
-                };
-            } else {
-                let luck = {
-                    let state = self.hook_state.lock();
-
-                    (state.nibble > 0).then_some(state.luck)
+            if can_retrieve {
+                let hooked_in = {
+                    let hook_state = self.hook_state.lock();
+                    hook_state.hooked_entity.clone()
                 };
 
-                if let Some(luck) = luck {
-                    let mut rng = rng();
-
-                    // This is equivalent to `LootParams params` in the java src.
-                    let mut loot_ctx = LootContext::new(&mut rng)
-                        .with_origin(self.position().x, self.position().y, self.position().z)
-                        .with_tool(rod)
-                        .with_this_entity(entity_loot_ref(self))
-                        .with_luck(luck as f32 + player.get_luck());
-
-                    let items =
-                        vanilla_loot_tables::GAMEPLAY_FISHING.get_random_items(&mut loot_ctx);
-
+                if let Some(hooked_in) = hooked_in {
+                    self.pull_entity(&hooked_in);
                     // TODO: criteria triggers (advancements)
+                    damage = if hooked_in.as_ref().is::<ItemEntity>() {
+                        DMG_ITEM_ENTITY
+                    } else {
+                        DMG_DEFAULT
+                    };
+                } else {
+                    let luck = {
+                        let state = self.hook_state.lock();
 
-                    let Some(world) = self.level() else {
-                        return damage;
+                        (state.nibble > 0).then_some(state.luck)
                     };
 
-                    self.spawn_loot_award_stat(items, world.clone(), owner.clone());
+                    if let Some(luck) = luck {
+                        let mut rng = rng();
 
-                    let orb_pos = DVec3::new(
-                        player.position().x,
-                        player.position().y + 0.5,
-                        player.position().z + 0.5,
-                    );
+                        // This is equivalent to `LootParams params` in the java src.
+                        let mut loot_ctx = LootContext::new(&mut rng)
+                            .with_origin(self.position().x, self.position().y, self.position().z)
+                            .with_tool(rod)
+                            .with_this_entity(entity_loot_ref(self))
+                            .with_luck(luck as f32 + player.get_luck());
 
-                    let orb = ExperienceOrbEntity::new(
-                        &vanilla_entities::EXPERIENCE_ORB,
-                        next_entity_id(),
-                        orb_pos,
-                        Arc::downgrade(&world),
-                    );
+                        let items =
+                            vanilla_loot_tables::GAMEPLAY_FISHING.get_random_items(&mut loot_ctx);
 
-                    orb.set_value(rand::random_range(1..=6));
+                        // TODO: criteria triggers (advancements)
 
-                    let entity: SharedEntity = Arc::new(orb);
+                        let Some(world) = self.level() else {
+                            return damage;
+                        };
 
-                    if let Err(error) = world.try_add_entity(Arc::clone(&entity)) {
-                        log::debug!("failed to spawn experience orb: {error}");
+                        self.spawn_loot_award_stat(items, world.clone(), owner.clone());
+
+                        let orb_pos = DVec3::new(
+                            player.position().x,
+                            player.position().y + 0.5,
+                            player.position().z + 0.5,
+                        );
+
+                        let orb = ExperienceOrbEntity::new(
+                            &vanilla_entities::EXPERIENCE_ORB,
+                            next_entity_id(),
+                            orb_pos,
+                            Arc::downgrade(&world),
+                        );
+
+                        orb.set_value(rand::random_range(1..=6));
+
+                        let entity: SharedEntity = Arc::new(orb);
+
+                        if let Err(error) = world.try_add_entity(Arc::clone(&entity)) {
+                            log::debug!("failed to spawn experience orb: {error}");
+                        }
+
+                        damage = DMG_CAUGHT;
                     }
-
-                    damage = DMG_CAUGHT;
                 }
-            }
 
-            if self.base.on_ground() {
-                damage = DMG_ON_GROUND;
-            }
+                if self.base.on_ground() {
+                    damage = DMG_ON_GROUND;
+                }
 
-            self.set_removed(RemovalReason::Discarded);
-        } else {
-            damage = 0;
+                self.set_removed(RemovalReason::Discarded);
+            }
         }
         damage
     }
@@ -625,24 +633,24 @@ impl Entity for FishingHookEntity {
 
                 let current_state = {
                     let state = self.hook_state.lock();
-                    state.current_state
+                    state.bobber_state
                 };
 
                 match current_state {
-                    FishHookState::Flying => {
+                    BobberState::Flying => {
                         let should_check_collision = {
                             let mut state = self.hook_state.lock();
 
-                            if state.hooked_in.is_some() {
+                            if state.hooked_entity.is_some() {
                                 self.base.set_velocity(DVec3::ZERO);
-                                state.current_state = FishHookState::HookedInEntity;
+                                state.bobber_state = BobberState::HookedInEntity;
                                 return;
                             }
 
                             if is_in_water {
                                 self.base
                                     .set_velocity(self.base.velocity() * DVec3::new(0.3, 0.2, 0.3));
-                                state.current_state = FishHookState::Bobbing;
+                                state.bobber_state = BobberState::Bobbing;
                                 return;
                             }
 
@@ -654,15 +662,15 @@ impl Entity for FishingHookEntity {
                         }
                     }
 
-                    FishHookState::HookedInEntity => {
+                    BobberState::HookedInEntity => {
                         let hooked = {
                             let state = self.hook_state.lock();
-                            state.hooked_in.clone()
+                            state.hooked_entity.clone()
                         };
 
                         let Some(hooked) = hooked else {
                             let mut state = self.hook_state.lock();
-                            state.current_state = FishHookState::Flying;
+                            state.bobber_state = BobberState::Flying;
                             return;
                         };
 
@@ -679,13 +687,13 @@ impl Entity for FishingHookEntity {
                             self.set_hooked_entity(None);
 
                             let mut state = self.hook_state.lock();
-                            state.current_state = FishHookState::Flying;
+                            state.bobber_state = BobberState::Flying;
                         }
 
                         return;
                     }
 
-                    FishHookState::Bobbing => {
+                    BobberState::Bobbing => {
                         let mut state = self.hook_state.lock();
 
                         let velocity = self.base.velocity();
@@ -732,7 +740,7 @@ impl Entity for FishingHookEntity {
 
                 let hooked_in = {
                     let state = self.hook_state.lock();
-                    state.hooked_in.is_some()
+                    state.hooked_entity.is_some()
                 };
 
                 if !fluid_state.is_water() && !self.base.on_ground() && !hooked_in {
@@ -747,7 +755,7 @@ impl Entity for FishingHookEntity {
                 let should_stop = {
                     let state = self.hook_state.lock();
 
-                    state.current_state == FishHookState::Flying
+                    state.bobber_state == BobberState::Flying
                         && (self.base.on_ground() || self.base.horizontal_collision())
                 };
 
@@ -799,9 +807,10 @@ impl Projectile for FishingHookEntity {
 
 impl ThrowableProjectile for FishingHookEntity {}
 
-/// Collection of possible states the `FishingHookEntity` can take on.
+/// Collection of possible states the fishing bobber of the `FishingHookEntity` can take on.
+/// Equivalent to Java's `FishingHook.FishHookState` (we renamed for clarity)
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
-enum FishHookState {
+enum BobberState {
     Flying,
     HookedInEntity,
     Bobbing,

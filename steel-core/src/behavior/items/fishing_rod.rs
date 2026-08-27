@@ -12,7 +12,7 @@ use steel_registry::{vanilla_entities, vanilla_items};
 
 const SHOOT_POWER: f32 = 1.5;
 
-/// literally self-explanatory
+/// Behavior for the fishing rod item.
 #[item_behavior]
 pub struct FishingRodItem;
 
