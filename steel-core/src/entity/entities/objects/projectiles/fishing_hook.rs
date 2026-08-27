@@ -146,11 +146,6 @@ impl FishingHookEntity {
             return true;
         }
 
-        let inventory = owner.inventory.lock();
-
-        //let mainhand_item = inventory.get_item_in_hand(InteractionHand::MainHand);
-        //let offhand_item = inventory.get_offhand_item();
-
         let mainhand_fishing = mainhand_item.is(&vanilla_items::FISHING_ROD);
         let offhand_fishing = offhand_item.is(&vanilla_items::FISHING_ROD);
 
