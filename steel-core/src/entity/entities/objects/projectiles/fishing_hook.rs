@@ -127,6 +127,7 @@ impl FishingHookEntity {
             entity_type,
             entity_data: SyncMutex::new(FishingBobberEntityData::new()),
             projectile_base: ProjectileBase::new(),
+            // FIXME: `lure_speed` and `luck` are taken from the existing rod, but auto generation fails when doing this, refer to: https://mcsrc.dev/2/26.2/net/minecraft/world/entity/projectile/FishingHook#L75
             hook_state: SyncMutex::new(FishingHookState::new(0, 0)),
             synchronized_random: SyncMutex::new(LegacyRandom::from_seed(0)),
         }
