@@ -130,21 +130,21 @@ impl FishingHookEntity {
             state.lure_speed = lure_speed.max(0);
         }
 
-        let (x_rot, y_rot) = player.rotation();
+        let (yaw, pitch) = player.rotation();
         let player_shared: SharedEntity = player.clone();
 
         self.set_owner(&player_shared);
 
-        let y_cos = (-y_rot * (PI / DEGREE_180) - PI).cos();
-        let y_sin = (-y_rot * (PI / DEGREE_180) - PI).sin();
-        let x_cos = -(-x_rot * (PI / DEGREE_180)).cos();
-        let x_sin = (-x_rot * (PI / DEGREE_180)).sin();
+        let y_cos = (-yaw * (PI / DEGREE_180) - PI).cos();
+        let y_sin = (-yaw * (PI / DEGREE_180) - PI).sin();
+        let x_cos = -(-pitch * (PI / DEGREE_180)).cos();
+        let x_sin = (-pitch * (PI / DEGREE_180)).sin();
 
         let x = player_shared.position().x - f64::from(y_sin) * 0.3;
         let y = player_shared.get_eye_y();
         let z = player_shared.position().z - f64::from(y_cos) * 0.3;
 
-        self.snap_to(DVec3::new(x, y, z), x_rot, y_rot);
+        self.snap_to(DVec3::new(x, y, z), yaw, pitch);
 
         let mut new_movement = DVec3::new(
             -f64::from(y_sin),
