@@ -82,7 +82,7 @@ impl ItemBehavior for FishingRodItem {
             let entity: SharedEntity = hook;
             if let Err(error) = world.try_add_entity(Arc::clone(&entity)) {
                 entity.set_removed(RemovalReason::Discarded);
-                log::debug!("failed to spawn fishing hook: {error}");
+                log::error!("failed to spawn fishing hook: {error}");
                 return InteractionResult::Fail;
             }
 
