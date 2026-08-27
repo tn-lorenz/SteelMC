@@ -261,7 +261,7 @@ pub struct Player {
     ender_pearls: SyncMutex<Vec<Weak<dyn Entity>>>,
 
     /// Active fishing hook, kept weakly because the world owns live entities.
-    fishing: SyncMutex<Option<Weak<FishingHookEntity>>>,
+    pub(crate) fishing: SyncMutex<Option<Weak<FishingHookEntity>>>,
 
     /// The counter keeping track of this player's statistics.
     stats: SyncMutex<StatsCounter>,

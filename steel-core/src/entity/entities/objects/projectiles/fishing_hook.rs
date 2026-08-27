@@ -107,6 +107,7 @@ const ONE_MINUTE: i32 = 1200;
 
 impl FishingHookEntity {
     /// Creates a fishing hook entity.
+    /// We keep both this generic constructor and `shoot_from_player` in order to ensure future-proofing in terms of a future plugin API.
     #[must_use]
     pub fn new(entity_type: EntityTypeRef, id: i32, position: DVec3, world: Weak<World>) -> Self {
         Self {
@@ -119,7 +120,61 @@ impl FishingHookEntity {
         }
     }
 
-    /// Creates an fishing hook entity from saved base data.
+    /// Mimics Java's `FishingHook(Player, Level, int, int)` constructor.
+    pub fn shoot_from_player(
+        self: &Arc<Self>,
+        player: Player,
+        level: Arc<World>,
+        luck: i32,
+        lure_speed: i32,
+    ) {
+        const MAGIC_OFFSET: f64 = 0.0103365;
+
+        let (x_rot, y_rot) = player.rotation();
+        let player_shared: SharedEntity = Arc::new(player);
+
+        self.set_owner(&player_shared);
+
+        let y_cos = (-y_rot * (PI / DEGREE_180) - PI).cos();
+        let y_sin = (-y_rot * (PI / DEGREE_180) - PI).sin();
+        let x_cos = (-x_rot * (PI / DEGREE_360)).cos();
+        let x_sin = (-x_rot * (PI / DEGREE_360)).sin();
+
+        let x = player_shared.position().x - f64::from(y_sin) * 0.3;
+        let y = player_shared.get_eye_y();
+        let z = player_shared.position().z - f64::from(y_cos) * 0.3;
+
+        // FIXME: `snap_to` currently only exists for `RawEntity` and as far as I can tell, there is no way to obtain it from `EntityBase`
+
+        let mut new_movement = DVec3::new(
+            -f64::from(y_sin),
+            f64::from((-(x_sin / x_cos)).clamp(-5.0, 5.0)),
+            -f64::from(y_cos),
+        );
+
+        let distance = new_movement.length();
+
+        new_movement *= DVec3::new(
+            0.6 / distance + triangle_random(0.5, MAGIC_OFFSET),
+            0.6 / distance + triangle_random(0.5, MAGIC_OFFSET),
+            0.6 / distance + triangle_random(0.5, MAGIC_OFFSET),
+        );
+
+        self.set_velocity(new_movement);
+
+        let y_rot_new = new_movement.x.atan2(new_movement.z).to_degrees() as f32;
+
+        let horizontal_distance =
+            (new_movement.x * new_movement.x + new_movement.z * new_movement.z).sqrt();
+
+        let x_rot_new = new_movement.y.atan2(horizontal_distance).to_degrees() as f32;
+
+        self.set_rotation((y_rot_new, x_rot_new));
+
+        // TODO: this.yRotO = this.getYRot(); and this.xRotO = this.getXRot();
+    }
+
+    /// Creates a fishing hook entity from saved base data.
     #[must_use]
     pub fn from_saved(entity_type: EntityTypeRef, load: EntityBaseLoad) -> Self {
         Self {
@@ -551,6 +606,18 @@ impl FishingHookEntity {
         };
 
         player.clear_fishing_hook(self);
+    }
+
+    /// Clears owner info if `hook` is `None` and stores it, if it is `Some`
+    fn update_owner_info(&self, hook: Option<&Arc<FishingHookEntity>>) {
+        if let Some(owner) = self.get_owner()
+            && let Some(player) = owner.as_player()
+        {
+            match hook {
+                Some(hook) => player.set_fishing_hook(hook),
+                None => player.clear_fishing_hook(self),
+            }
+        }
     }
 
     // I added this fn because I thought it would be cleaner this way, it's not in the vanilla src, but how I use it ensures vanilla behavior
