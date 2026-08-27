@@ -7,7 +7,6 @@ use crate::entity::{
 use crate::physics::MoverType;
 use crate::player::Player;
 use crate::world::{LevelReader, World};
-use crossbeam::channel::tick;
 use glam::DVec3;
 use rand::{RngExt, rng};
 use std::cmp::PartialEq;
@@ -753,10 +752,8 @@ impl Entity for FishingHookEntity {
                                     let mut synchronized_random = self.synchronized_random.lock();
                                     self.base.set_velocity(self.base.velocity().add(DVec3::new(
                                         0.0,
-                                        (-0.1
-                                            * synchronized_random.next_f32()
-                                            * synchronized_random.next_f32())
-                                            as f64,
+                                        f64::from(-0.1
+                                            * synchronized_random.next_f32() * synchronized_random.next_f32()),
                                         0.0,
                                     )));
                                 }
