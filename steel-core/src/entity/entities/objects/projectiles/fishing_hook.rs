@@ -479,7 +479,7 @@ impl FishingHookEntity {
                         return damage;
                     };
 
-                    self.spawn_loot(items, world.clone(), owner.clone());
+                    self.spawn_loot_award_stat(items, world.clone(), owner.clone());
 
                     let orb_pos = DVec3::new(
                         player.position().x,
@@ -500,10 +500,6 @@ impl FishingHookEntity {
 
                     if let Err(error) = world.try_add_entity(Arc::clone(&entity)) {
                         log::debug!("failed to spawn experience orb: {error}");
-                    }
-
-                    if rod.item().has_tag(&ItemTag::FISHES) {
-                        player.award_custom_stat(&vanilla_custom_stats::FISH_CAUGHT);
                     }
 
                     damage = DMG_CAUGHT;
@@ -547,23 +543,36 @@ impl FishingHookEntity {
     }
 
     // I added this fn because I thought it would be cleaner this way, it's not in the vanilla src, but how I use it ensures vanilla behavior
-    /// Loops through a `vec` of `ItemStack`s (the fishing loot) and spawns them as `ItemEntity`s in the world.
-    fn spawn_loot(&self, items: Vec<ItemStack>, world: Arc<World>, owner: Arc<dyn Entity>) {
+    /// Loops through a `vec` of `ItemStack`s (the fishing loot), spawns them as `ItemEntity`s in the world and awards the stat `FISH_CAUGHT`
+    fn spawn_loot_award_stat(
+        &self,
+        items: Vec<ItemStack>,
+        world: Arc<World>,
+        owner: Arc<dyn Entity>,
+    ) {
         for item_stack in items {
             const SPEED: f64 = 0.1;
             const INVERSE_CUBE: f64 = 0.08;
 
-            let xa = owner.position().x - self.position().x;
-            let ya = owner.position().y - self.position().y;
-            let za = owner.position().z - self.position().z;
+            if let Some(player) = owner.as_player() {
+                let xa = player.position().x - self.position().x;
+                let ya = player.position().y - self.position().y;
+                let za = player.position().z - self.position().z;
 
-            let vel = DVec3::new(
-                xa * SPEED,
-                ya * SPEED + (xa * xa + ya * ya + za * za).sqrt().sqrt() * INVERSE_CUBE,
-                za * SPEED,
-            );
+                let vel = DVec3::new(
+                    xa * SPEED,
+                    ya * SPEED + (xa * xa + ya * ya + za * za).sqrt().sqrt() * INVERSE_CUBE,
+                    za * SPEED,
+                );
 
-            World::spawn_item_with_velocity(&world, self.position(), item_stack, vel);
+                World::spawn_item_with_velocity(&world, self.position(), item_stack.clone(), vel);
+
+                if item_stack.item().has_tag(&ItemTag::FISHES) {
+                    player.award_custom_stat(&vanilla_custom_stats::FISH_CAUGHT);
+                }
+            } else {
+                return;
+            }
         }
     }
 }
