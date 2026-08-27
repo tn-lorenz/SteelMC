@@ -7,13 +7,13 @@ use crate::entity::{
 use crate::physics::MoverType;
 use crate::player::Player;
 use crate::world::{LevelReader, World};
+use crossbeam::channel::tick;
 use glam::DVec3;
 use rand::{RngExt, rng};
 use std::cmp::PartialEq;
 use std::f32::consts::PI;
 use std::ops::Add;
 use std::sync::{Arc, Weak};
-use crossbeam::channel::tick;
 use steel_macros::entity_behavior;
 use steel_registry::blocks::block_state_ext::BlockStateExt;
 use steel_registry::entity_type::EntityTypeRef;
@@ -29,6 +29,8 @@ use steel_registry::{
     vanilla_loot_tables,
 };
 use steel_utils::locks::SyncMutex;
+use steel_utils::random::Random;
+use steel_utils::random::legacy_random::LegacyRandom;
 use steel_utils::types::InteractionHand;
 use steel_utils::{BlockPos, Downcast, DowncastType, DowncastTypeKey};
 
@@ -40,6 +42,7 @@ pub struct FishingHookEntity {
     entity_data: SyncMutex<FishingBobberEntityData>,
     projectile_base: ProjectileBase,
     hook_state: SyncMutex<FishingHookState>,
+    synchronized_random: SyncMutex<LegacyRandom>,
 }
 
 /// This struct holds entity specific state information per fishing hook entity.
@@ -112,6 +115,7 @@ impl FishingHookEntity {
             entity_data: SyncMutex::new(FishingBobberEntityData::new()),
             projectile_base: ProjectileBase::new(),
             hook_state: SyncMutex::new(FishingHookState::new(0, 0)),
+            synchronized_random: SyncMutex::new(LegacyRandom::from_seed(0)),
         }
     }
 
@@ -124,6 +128,7 @@ impl FishingHookEntity {
             entity_data: SyncMutex::new(FishingBobberEntityData::new()),
             projectile_base: ProjectileBase::new(),
             hook_state: SyncMutex::new(FishingHookState::new(0, 0)),
+            synchronized_random: SyncMutex::new(LegacyRandom::from_seed(0)),
         }
     }
 
@@ -596,6 +601,18 @@ impl Entity for FishingHookEntity {
         reason = "Logic that belongs together is being kept together."
     )]
     fn tick(&self) {
+        {
+            let mut synchronized_random = self.synchronized_random.lock();
+            let least_significant_bits = self.uuid().as_u64_pair().1;
+
+            if let Some(world) = self.level() {
+                let game_time = world.game_time();
+                let seed = least_significant_bits as i64 ^ game_time;
+
+                synchronized_random.set_seed(seed);
+            }
+        }
+
         self.projectile_base_tick();
         if let Some(owner) = self.get_owner()
             && let Some(player) = owner.as_player()
@@ -733,11 +750,15 @@ impl Entity for FishingHookEntity {
                             if is_in_water {
                                 state.out_of_water_time = (state.out_of_water_time - 1).max(0);
                                 if *self.entity_data.lock().fishing_hook().biting.get() {
-                                    // If you don't find this random thing in the src, remove the "h", I had to correct this spelling mistake due to lint
-                                    // TODO: -0.1 * this.synchronizedRandom.nextFloat() * this.synchronizedRandom.nextFloat()
-                                    self.base.set_velocity(
-                                        self.base.velocity().add(DVec3::new(0.0, -0.1, 0.0)),
-                                    );
+                                    let mut synchronized_random = self.synchronized_random.lock();
+                                    self.base.set_velocity(self.base.velocity().add(DVec3::new(
+                                        0.0,
+                                        (-0.1
+                                            * synchronized_random.next_f32()
+                                            * synchronized_random.next_f32())
+                                            as f64,
+                                        0.0,
+                                    )));
                                 }
 
                                 self.catching_fish(pos, &mut state);
