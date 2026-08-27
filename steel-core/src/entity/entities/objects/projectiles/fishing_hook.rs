@@ -420,12 +420,12 @@ impl FishingHookEntity {
             return OpenWaterType::Invalid;
         };
 
-        let state = world.get_block_state(pos);
+        let block_state = world.get_block_state(pos);
+        let collision_shape = block_state.get_collision_shape_at(pos);
 
-        if !state.is_air() && !(state.get_block() == &vanilla_blocks::LILY_PAD) {
-            let fluid_state = state.get_fluid_state();
-            // TODO: normally I'd need to check if the collision shape (`get_collision_shape()`) at the position `pos` is empty, idk how to do that from the `fluid_state` (like in vanilla) tho
-            if fluid_state.is_water() && fluid_state.is_source() && fluid_state.is_empty() {
+        if !block_state.is_air() && !(block_state.get_block() == &vanilla_blocks::LILY_PAD) {
+            let fluid_state = block_state.get_fluid_state();
+            if fluid_state.is_water() && fluid_state.is_source() && collision_shape.is_empty() {
                 OpenWaterType::InsideWater
             } else {
                 OpenWaterType::Invalid
