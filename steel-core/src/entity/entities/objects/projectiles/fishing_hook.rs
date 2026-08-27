@@ -137,8 +137,8 @@ impl FishingHookEntity {
 
         let y_cos = (-y_rot * (PI / DEGREE_180) - PI).cos();
         let y_sin = (-y_rot * (PI / DEGREE_180) - PI).sin();
-        let x_cos = -(-x_rot * (PI / DEGREE_360)).cos();
-        let x_sin = (-x_rot * (PI / DEGREE_360)).sin();
+        let x_cos = -(-x_rot * (PI / DEGREE_180)).cos();
+        let x_sin = (-x_rot * (PI / DEGREE_180)).sin();
 
         let x = player_shared.position().x - f64::from(y_sin) * 0.3;
         let y = player_shared.get_eye_y();

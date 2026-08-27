@@ -10,8 +10,6 @@ use steel_registry::sound_events::{ENTITY_FISHING_BOBBER_RETRIEVE, ENTITY_FISHIN
 use steel_registry::stat::vanilla_stat_types;
 use steel_registry::{vanilla_entities, vanilla_items};
 
-const SHOOT_POWER: f32 = 1.5;
-
 /// Behavior for the fishing rod item.
 #[item_behavior]
 pub struct FishingRodItem;
