@@ -39,6 +39,8 @@ mod tipped_arrow;
 
 mod flint_and_steel;
 mod lead;
+mod empty_map;
+mod map_item;
 
 pub use air::AirItem;
 pub use axe::AxeItem;
@@ -73,3 +75,4 @@ pub use spyglass::SpyglassItem;
 pub use standing_and_wall_block_item::StandingAndWallBlockItem;
 pub use throwable_potion::{LingeringPotionItem, SplashPotionItem};
 pub use tipped_arrow::TippedArrowItem;
+pub use empty_map::EmptyMapItem;
