@@ -3641,7 +3641,7 @@ pub trait Entity: EntityEventSource + ErasedType + Send + Sync + 'static {
         self.set_rotation((yaw, pitch));
         self.set_old_position_to_current();
     }
-  
+
     /// Runs when this entity causes another entity to die.
     /// The entity provided is the entity who was killed.
     fn killed_entity(
