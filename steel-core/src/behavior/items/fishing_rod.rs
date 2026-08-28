@@ -17,20 +17,15 @@ pub struct FishingRodItem;
 impl ItemBehavior for FishingRodItem {
     fn use_item(&self, context: &mut UseItemContext) -> InteractionResult {
         let player = context.player;
-        let world = context.world;
-        let hand = context.hand;
         let infinite_materials = context.player.has_infinite_materials();
+        let world = context.world;
+        let item = context.inv.with_item(|item| item.clone());
 
         let pitch = 0.4 / (rng().random::<f32>() * 0.4 + 0.8);
 
         if let Some(fishing) = player.fishing_hook() {
-            let rod = {
-                let inventory = player.inventory.lock();
-                inventory.get_item_in_hand(hand).clone()
-            };
-
-            if rod.is(&vanilla_items::FISHING_ROD) {
-                let damage = fishing.retrieve(&rod);
+            if item.is(&vanilla_items::FISHING_ROD) {
+                let damage = fishing.retrieve(&item);
 
                 context.inv.with_item(|item| {
                     item.hurt_and_break(damage, infinite_materials);
@@ -73,20 +68,19 @@ impl ItemBehavior for FishingRodItem {
             let player_arc = world
                 .players
                 .get_by_uuid(&player.gameprofile.id)
-                .expect("player must be registered in the world");
+                .expect("Failed to obtain `player_arc` for launching fishing hook: `player` must be registered in the world.");
 
             hook.shoot_from_player(&player_arc, luck, lure_speed);
 
             let entity: SharedEntity = hook;
+
             if let Err(error) = world.try_add_entity(Arc::clone(&entity)) {
                 entity.set_removed(RemovalReason::Discarded);
-                log::error!("failed to spawn fishing hook: {error}");
+                log::error!("Failed to spawn fishing hook: {error}");
                 return InteractionResult::Fail;
             }
 
-            let inventory = player.inventory.lock();
-            let rod = inventory.get_item_in_hand(hand);
-            player.award_stat(&vanilla_stat_types::ITEM_USED, rod.item());
+            player.award_stat(&vanilla_stat_types::ITEM_USED, item.item());
 
             // TODO: vibration
         }
