@@ -3630,7 +3630,7 @@ pub trait Entity: EntityEventSource + ErasedType + Send + Sync + 'static {
     /// # Panics
     ///
     /// Panics if the active world entity manager rejects the snap position. This is an invariant
-    /// failure for loaded raw entities.
+    /// failure for loaded entities.
     fn snap_to(&self, position: DVec3, yaw: f32, pitch: f32) {
         if let Err(error) = self.try_set_position(position) {
             panic!(
