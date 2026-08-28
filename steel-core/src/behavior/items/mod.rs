@@ -40,7 +40,7 @@ mod tipped_arrow;
 mod flint_and_steel;
 mod lead;
 mod empty_map;
-mod map_item;
+mod map;
 
 pub use air::AirItem;
 pub use axe::AxeItem;
