@@ -40,7 +40,13 @@ impl ItemBehavior for FishingRodItem {
                 pitch,
                 None,
             );
-            // TODO: vibration
+            // TODO: add vibration (Java equivalent: `ItemStack.causeVibration()`)
+            // Problem: `ItemStack` in steel currently doesn't implement any fn that elicits this behaviour
+            // Possibility: Re-Use the bone-meal exclusive implementation the bone-meal PR introduced
+            //
+            // Another Problem: If we were to do that, we'd run into a circular dependency; the existing implementation for bone-meal uses `UseItemOnContext`
+            // (better would be `UseItemContext`, if we were to re-use this for all `ItemStacks`), which resides inside `steel-core`, but `ItemStack` resides inside
+            // `steel-registry` and `steel-core` depends on `steel-registry` (I think, lmao)
         } else {
             world.play_sound_at(
                 &ENTITY_FISHING_BOBBER_THROW,
@@ -82,7 +88,7 @@ impl ItemBehavior for FishingRodItem {
 
             player.award_stat(&vanilla_stat_types::ITEM_USED, item.item());
 
-            // TODO: vibration
+            // TODO: add vibration, see above TODO
         }
         InteractionResult::Success
     }
