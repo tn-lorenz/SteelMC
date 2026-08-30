@@ -1,3 +1,4 @@
+use crate::entity::Entity;
 use super::*;
 
 pub(super) fn generate_water_box(
