@@ -16,7 +16,11 @@ use steel_utils::random::{PositionalRandom, Random};
 use steel_utils::{BlockPos, BlockStateId, BoundingBox, Direction, Rotation, types::UpdateFlags};
 
 use crate::chunk::heightmap::HeightmapType;
-use crate::entity::{entities::{ItemFrameEntity, RawEntity}, next_entity_id, Entity};
+use crate::entity::{
+    Entity,
+    entities::{ItemFrameEntity, RawEntity},
+    next_entity_id,
+};
 use crate::fluid::FluidStateExt as _;
 use crate::worldgen::region::WorldGenRegion;
 use crate::worldgen::template::{
