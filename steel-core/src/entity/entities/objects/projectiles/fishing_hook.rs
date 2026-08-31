@@ -133,122 +133,26 @@ impl FishingHookEntity {
         }
 
         let (yaw, pitch) = player.rotation();
-
-        println!(
-            "[PlayerRotation DEBUG] yaw={:?}, pitch={:?}",
-            yaw,
-            pitch
-        );
-
         let player_shared: SharedEntity = player.clone();
 
         self.set_owner(&player_shared);
 
-        println!(
-            "[FishingHook] Player rotation: yaw={:?}, pitch={:?}",
-            yaw,
-            pitch
-        );
-
         let deg_to_rad = f64::from(PI / DEGREE_180);
+
         let y_cos = trig::cos(-f64::from(yaw) * deg_to_rad - std::f64::consts::PI);
         let y_sin = trig::sin(-f64::from(yaw) * deg_to_rad - std::f64::consts::PI);
         let x_cos = -trig::cos(-f64::from(pitch) * deg_to_rad);
         let x_sin = trig::sin(-f64::from(pitch) * deg_to_rad);
 
-        println!(
-            "[FishingHook] Trig values: y_cos={:?}, y_sin={:?}, x_cos={:?}, x_sin={:?}",
-            y_cos,
-            y_sin,
-            x_cos,
-            x_sin
-        );
-
-        println!(
-            "[FishingHook] YAW DEBUG: movement direction before Y component: x={:?}, z={:?}",
-            -f64::from(y_sin),
-            -f64::from(y_cos)
-        );
-
-        println!(
-            "[FishingHook] YAW DEBUG: resulting horizontal yaw from current formula={:?}°",
-            (-f64::from(y_sin))
-                .atan2(-f64::from(y_cos))
-                .to_degrees()
-        );
-
-        println!(
-            "[FishingHook] YAW DEBUG: player yaw={:?}°, difference={:?}°",
-            yaw,
-            (-f64::from(y_sin))
-                .atan2(-f64::from(y_cos))
-                .to_degrees()
-                - f64::from(yaw)
-        );
-
-        // Besonders interessant bei pitch == +/-90°:
-        // +0.0 und -0.0 führen bei der Division zu unterschiedlichen Infinity-Vorzeichen.
-        if x_cos == 0.0 {
-            println!(
-                "[FishingHook] x_cos is ZERO! x_cos={:?}, sign_negative={}, pitch={:?}",
-                x_cos,
-                x_cos.is_sign_negative(),
-                pitch
-            );
-        }
-
-        let raw_y = -(x_sin / x_cos);
-
-        println!(
-            "[FishingHook] Raw vertical movement: -(x_sin / x_cos) = {:?} (x_sin={:?}, x_cos={:?})",
-            raw_y,
-            x_sin,
-            x_cos
-        );
-
-        if raw_y.is_infinite() {
-            println!(
-                "[FishingHook] Raw vertical movement is INFINITE! value={:?}, x_cos={:?}, x_cos_sign_negative={}",
-                raw_y,
-                x_cos,
-                x_cos.is_sign_negative()
-            );
-        }
-
-        if raw_y.is_nan() {
-            println!(
-                "[FishingHook] Raw vertical movement is NaN! x_sin={:?}, x_cos={:?}",
-                x_sin,
-                x_cos
-            );
-        }
-
         let x = player_shared.position().x - f64::from(y_sin) * 0.3;
         let y = player_shared.get_eye_y();
         let z = player_shared.position().z - f64::from(y_cos) * 0.3;
-
-        println!(
-            "[FishingHook] Spawn position: x={:?}, y={:?}, z={:?}",
-            x,
-            y,
-            z
-        );
 
         self.snap_to(DVec3::new(x, y, z), yaw, pitch);
 
         let clamped_y = f64::from((-(x_sin / x_cos)).clamp(-5.0, 5.0));
 
-        println!("[FishingHook] Clamped vertical movement: {:?}", clamped_y);
-
         let mut new_movement = DVec3::new(-f64::from(y_sin), clamped_y, -f64::from(y_cos));
-
-        println!(
-            "[FishingHook] Movement before random velocity: x={:?}, y={:?}, z={:?}, length={:?}",
-            new_movement.x,
-            new_movement.y,
-            new_movement.z,
-            new_movement.length()
-        );
 
         let distance = new_movement.length();
 
@@ -256,33 +160,11 @@ impl FishingHookEntity {
         let random_y = triangle_random(0.5, MAGIC_OFFSET);
         let random_z = triangle_random(0.5, MAGIC_OFFSET);
 
-        println!(
-            "[FishingHook] Random velocity offsets: x={:?}, y={:?}, z={:?}",
-            random_x,
-            random_y,
-            random_z
-        );
-
         let factor_x = 0.6 / distance + random_x;
         let factor_y = 0.6 / distance + random_y;
         let factor_z = 0.6 / distance + random_z;
 
-        println!(
-            "[FishingHook] Velocity factors: x={:?}, y={:?}, z={:?}",
-            factor_x,
-            factor_y,
-            factor_z
-        );
-
         new_movement *= DVec3::new(factor_x, factor_y, factor_z);
-
-        println!(
-            "[FishingHook] Final velocity: x={:?}, y={:?}, z={:?}, length={:?}",
-            new_movement.x,
-            new_movement.y,
-            new_movement.z,
-            new_movement.length()
-        );
 
         self.set_velocity(new_movement);
 
@@ -293,28 +175,8 @@ impl FishingHookEntity {
 
         let pitch_new = new_movement.y.atan2(horizontal_distance).to_degrees() as f32;
 
-        println!(
-            "[FishingHook] Calculated rotation: yaw={:?}, pitch={:?}, horizontal_distance={:?}",
-            yaw_new,
-            pitch_new,
-            horizontal_distance
-        );
-
         self.set_rotation((yaw_new, pitch_new));
-
-        println!(
-            "[FishingHook] [BEFORE UPDATE] yaw: {:?}, pitch: {:?}",
-            yaw_new,
-            pitch_new
-        );
-
         self.base().set_old_rotation_to_current();
-
-        println!(
-            "[FishingHook] [AFTER UPDATE] yaw: {:?}, pitch: {:?}",
-            yaw_new,
-            pitch_new
-        );
     }
 
     /// Creates a fishing hook entity from saved base data.
