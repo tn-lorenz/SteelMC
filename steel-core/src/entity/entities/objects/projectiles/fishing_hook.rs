@@ -106,6 +106,17 @@ unsafe impl DowncastType for FishingHookEntity {
 }
 
 impl FishingHookEntity {
+    fn owner_is_in_another_world(&self, owner: &dyn Entity) -> bool {
+        let Some(hook_world) = self.level() else {
+            return false;
+        };
+        let Some(owner_world) = owner.level() else {
+            return false;
+        };
+
+        !Arc::ptr_eq(&hook_world, &owner_world)
+    }
+
     /// Creates a fishing hook entity.
     /// We keep both this generic constructor and `shoot_from_player` in order to ensure future-proofing in terms of a future plugin API.
     #[must_use]
@@ -672,6 +683,14 @@ impl Entity for FishingHookEntity {
         reason = "Logic that belongs together is being kept together."
     )]
     fn tick(&self) {
+        let owner = self.get_owner();
+        if owner
+            .as_ref()
+            .is_some_and(|owner| self.owner_is_in_another_world(owner.as_ref()))
+        {
+            return;
+        }
+
         {
             let mut synchronized_random = self.synchronized_random.lock();
             let least_significant_bits = self.uuid().as_u64_pair().1;
@@ -685,7 +704,7 @@ impl Entity for FishingHookEntity {
         }
 
         self.projectile_base_tick();
-        if let Some(owner) = self.get_owner()
+        if let Some(owner) = owner
             && let Some(player) = owner.as_player()
         {
             let can_fish = {
