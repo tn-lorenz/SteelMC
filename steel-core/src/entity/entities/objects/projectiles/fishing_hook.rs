@@ -861,7 +861,7 @@ impl Entity for FishingHookEntity {
                     let fluid_state = block_state.get_fluid_state();
 
                     if fluid_state.is_water() {
-                        liquid_height = fluid_state.own_height();
+                        liquid_height = crate::fluid::get_height(&world, pos, fluid_state);
                     }
 
                     let is_in_water = liquid_height > 0.0;
@@ -890,7 +890,7 @@ impl Entity for FishingHookEntity {
                                     return;
                                 }
 
-                                true
+                                !self.on_ground()
                             };
 
                             if should_check_collision {
