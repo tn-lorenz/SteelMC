@@ -139,4 +139,35 @@ mod tests {
         assert!(player.fishing_hook().is_none());
         assert_eq!(context.inv.with_item(|item| item.get_damage_value()), 2);
     }
+
+    #[test]
+    fn casting_fishing_rod_spawns_and_links_hook() {
+        use crate::test_support::insert_ready_full_chunk;
+        use steel_utils::ChunkPos;
+
+        let world = fresh_test_world("fishing_rod_cast");
+        insert_ready_full_chunk(&world, ChunkPos::new(0, 0));
+        let player = TestPlayerBuilder::new(Arc::clone(&world), Uuid::from_u128(2), 10).build();
+        player
+            .try_set_position(DVec3::new(8.0, 64.0, 8.0))
+            .expect("should position player in center of chunk");
+        world.players.insert(Arc::clone(&player));
+        player
+            .inventory
+            .lock()
+            .set_selected_item(ItemStack::new(&vanilla_items::FISHING_ROD));
+
+        let mut context = UseItemContext::new(
+            &player,
+            InteractionHand::MainHand,
+            &world,
+            Arc::clone(&player.inventory),
+        );
+
+        assert_eq!(
+            FishingRodItem.use_item(&mut context),
+            InteractionResult::Success
+        );
+        assert!(player.fishing_hook().is_some());
+    }
 }
