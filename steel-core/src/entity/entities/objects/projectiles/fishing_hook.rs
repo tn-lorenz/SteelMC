@@ -4,6 +4,7 @@ use crate::entity::{
     Entity, EntityBase, EntityBaseLoad, EntitySyncedData, LivingEntity, Projectile, ProjectileBase,
     RemovalReason, SharedEntity, ThrowableProjectile, entity_loot_ref, next_entity_id,
 };
+use crate::fluid::get_height;
 use crate::physics::MoverType;
 use crate::player::Player;
 use crate::world::{LevelReader, World};
@@ -137,12 +138,12 @@ impl FishingHookEntity {
 
         self.set_owner(&player_shared);
 
-        let deg_to_rad = f64::from(PI / DEGREE_180);
+        let deg_to_rad = PI / DEGREE_180;
 
-        let y_cos = trig::cos(-f64::from(yaw) * deg_to_rad - std::f64::consts::PI);
-        let y_sin = trig::sin(-f64::from(yaw) * deg_to_rad - std::f64::consts::PI);
-        let x_cos = -trig::cos(-f64::from(pitch) * deg_to_rad);
-        let x_sin = trig::sin(-f64::from(pitch) * deg_to_rad);
+        let y_cos = trig::cos(f64::from(-yaw * deg_to_rad - PI));
+        let y_sin = trig::sin(f64::from(-yaw * deg_to_rad - PI));
+        let x_cos = -trig::cos(f64::from(-pitch * deg_to_rad));
+        let x_sin = trig::sin(f64::from(-pitch * deg_to_rad));
 
         let x = player_shared.position().x - f64::from(y_sin) * 0.3;
         let y = player_shared.get_eye_y();
@@ -723,7 +724,7 @@ impl Entity for FishingHookEntity {
                     let fluid_state = block_state.get_fluid_state();
 
                     if fluid_state.is_water() {
-                        liquid_height = crate::fluid::get_height(&world, pos, fluid_state);
+                        liquid_height = get_height(&world, pos, fluid_state);
                     }
 
                     let is_in_water = liquid_height > 0.0;
