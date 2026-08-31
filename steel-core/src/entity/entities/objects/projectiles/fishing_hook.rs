@@ -291,9 +291,9 @@ impl FishingHookEntity {
             if state.time_until_hooked > 0 {
                 state.fish_angle += triangle_random(0.0, 9.188) as f32;
 
-                let angle = state.fish_angle * PI / 180.0;
-                let angle_sin = angle.sin();
-                let angle_cos = angle.cos();
+                let angle = state.fish_angle * PI / DEGREE_180;
+                let angle_sin = trig::sin(f64::from(angle));
+                let angle_cos = trig::cos(f64::from(angle));
 
                 let fish_x = self.position().x
                     + f64::from(angle_sin) * f64::from(state.time_until_hooked) * 0.1;
@@ -400,9 +400,11 @@ impl FishingHookEntity {
                 let angle = rng().random_range(0.0..=DEGREE_360) * PI / DEGREE_180;
                 let dist = rng().random_range(25.0..=60.0);
 
-                let fish_x = self.position().x + f64::from(angle.sin()) * dist * 0.1;
+                let fish_x =
+                    self.position().x + f64::from(trig::sin(f64::from(angle))) * dist * 0.1;
                 let fish_y = self.position().y.floor() + 1.0;
-                let fish_z = self.position().z + f64::from(angle.cos()) * dist * 0.1;
+                let fish_z =
+                    self.position().z + f64::from(trig::cos(f64::from(angle))) * dist * 0.1;
 
                 let splash_block_state =
                     world.get_block_state(BlockPos::containing(fish_x, fish_y - 1.0, fish_z));
