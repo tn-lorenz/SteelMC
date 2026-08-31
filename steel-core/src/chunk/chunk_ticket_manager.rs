@@ -101,7 +101,7 @@ impl ChunkTicketLevel {
     }
 
     #[must_use]
-    const fn with_distance(self, distance: u8) -> Option<Self> {
+    pub(crate) const fn with_distance(self, distance: u8) -> Option<Self> {
         let level = self.0.saturating_add(distance);
         Self::new(level)
     }
@@ -112,7 +112,7 @@ impl ChunkTicketLevel {
     }
 
     #[must_use]
-    const fn distance_to_block_ticking(self) -> u8 {
+    pub(crate) const fn distance_to_block_ticking(self) -> u8 {
         ChunkTicketLevel::BLOCK_TICKING_CHUNK
             .0
             .saturating_sub(self.0)
@@ -188,11 +188,14 @@ impl ChunkTicket {
         }
     }
 
-    /// Creates a player ticket with Vanilla's two-chunk loading moat.
+    /// Creates the former combined player loading and simulation ticket.
     ///
-    /// Loading is entity-ticking through `view_distance`, block-ticking one
-    /// chunk farther, and full one chunk beyond that. Simulation is capped to
-    /// the view distance.
+    /// Steel's player lifecycle now mirrors Vanilla's separate loading and
+    /// synchronous simulation trackers. This remains for source compatibility
+    /// with callers that explicitly need the old combined ticket.
+    #[deprecated(
+        note = "player simulation is tracked separately; use player_loading for player loading"
+    )]
     #[must_use]
     pub const fn player(view_distance: u8, simulation_radius: u8) -> Self {
         let simulation_radius = if simulation_radius > view_distance {
@@ -207,6 +210,12 @@ impl ChunkTicket {
                 simulation_radius,
             )),
         }
+    }
+
+    /// Creates Vanilla's loading-only player ticket.
+    #[must_use]
+    pub const fn player_loading(view_distance: u8) -> Self {
+        Self::loading(ChunkTicketLevel::for_entity_ticking_radius(view_distance))
     }
 
     #[must_use]
@@ -1190,10 +1199,10 @@ mod tests {
     }
 
     #[test]
-    fn player_ticket_keeps_full_loading_moat_and_caps_simulation_radius() {
+    fn player_loading_ticket_keeps_full_loading_moat() {
         let mut manager = ChunkTicketManager::new();
         let center = ChunkPos::new(0, 0);
-        manager.add_ticket(center, ChunkTicket::player(1, 3));
+        manager.add_ticket(center, ChunkTicket::player_loading(1));
         manager.run_all_updates();
 
         assert!(is_entity_ticking(manager.get_level(center)));
@@ -1210,31 +1219,18 @@ mod tests {
             Some(ChunkTicketLevel::FULL_CHUNK)
         );
 
-        assert!(is_entity_ticking(manager.get_simulation_level(center)));
-        assert!(is_entity_ticking(
-            manager.get_simulation_level(ChunkPos::new(1, 0))
-        ));
-        assert!(is_block_ticking(
-            manager.get_simulation_level(ChunkPos::new(2, 0))
-        ));
-        assert!(!is_entity_ticking(
-            manager.get_simulation_level(ChunkPos::new(2, 0))
-        ));
-        assert_eq!(manager.get_simulation_level(ChunkPos::new(3, 0)), None);
+        assert_eq!(manager.get_simulation_level(center), None);
     }
 
     #[test]
     fn maximum_player_view_distance_fits_ticket_level() {
-        let ticket = ChunkTicket::player(MAX_SUPPORTED_VIEW_DISTANCE, MAX_SUPPORTED_VIEW_DISTANCE);
+        let ticket = ChunkTicket::player_loading(MAX_SUPPORTED_VIEW_DISTANCE);
 
         assert_eq!(ChunkTicketLevel::ENTITY_TICKING_CHUNK.raw(), 128);
         assert_eq!(ChunkTicketLevel::BLOCK_TICKING_CHUNK.raw(), 129);
         assert_eq!(ChunkTicketLevel::FULL_CHUNK.raw(), 130);
         assert_eq!(ticket.load_level().raw(), 0);
-        assert_eq!(
-            ticket.simulation_level().map(ChunkTicketLevel::raw),
-            Some(0)
-        );
+        assert_eq!(ticket.simulation_level(), None);
     }
 
     #[test]

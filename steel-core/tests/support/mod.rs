@@ -43,6 +43,19 @@ pub(crate) fn fresh_test_world(key: &'static str) -> Arc<World> {
     create_test_world(key)
 }
 
+pub(crate) fn fresh_test_world_with_distances(
+    key: &'static str,
+    view_distance: u8,
+    simulation_distance: u8,
+) -> Arc<World> {
+    create_test_world_with_key_and_distances(
+        Identifier::vanilla_static(key),
+        Difficulty::Normal,
+        view_distance,
+        simulation_distance,
+    )
+}
+
 pub(crate) fn fresh_test_world_in_domain(domain: &'static str, key: &'static str) -> Arc<World> {
     create_test_world_with_key(Identifier::new_static(domain, key), Difficulty::Normal)
 }
@@ -159,6 +172,15 @@ fn create_test_world_with_difficulty(key: &'static str, difficulty: Difficulty) 
 }
 
 fn create_test_world_with_key(key: Identifier, difficulty: Difficulty) -> Arc<World> {
+    create_test_world_with_key_and_distances(key, difficulty, 2, 2)
+}
+
+fn create_test_world_with_key_and_distances(
+    key: Identifier,
+    difficulty: Difficulty,
+    view_distance: u8,
+    simulation_distance: u8,
+) -> Arc<World> {
     init_vanilla_registry();
     let resources = test_world_resources();
     let generator = Arc::new(ChunkGeneratorType::Empty(EmptyChunkGenerator::new()));
@@ -183,8 +205,8 @@ fn create_test_world_with_key(key: Identifier, difficulty: Difficulty) -> Arc<Wo
                 level_data_path: None,
                 generator,
                 generation_settings,
-                view_distance: 2,
-                simulation_distance: 2,
+                view_distance,
+                simulation_distance,
                 max_chained_neighbor_updates: 1_000_000,
                 compression: None,
                 is_flat: false,

@@ -58,6 +58,7 @@ use crate::chunk::light::{
     propagate_sky_light_changes_with_empty_sections,
 };
 use crate::chunk::player_chunk_view::PlayerChunkView;
+use crate::chunk::player_simulation_tracker::PlayerSimulationTracker;
 use crate::chunk::{
     Chunk,
     chunk_generation_task::ChunkGenerationTask,
@@ -229,6 +230,8 @@ pub struct ChunkMap {
     pub task_tracker: TaskTracker,
     /// Ordered ticket ingress and background scheduling epoch handoff.
     scheduling: ChunkSchedulingCoordinator,
+    /// Player simulation-distance state applied synchronously at tick boundaries.
+    player_simulation: SyncMutex<PlayerSimulationTracker>,
     /// Full status completions awaiting lifecycle-boundary reconciliation.
     full_publications: Arc<FullPublicationQueue>,
     /// Incremental radius-1/radius-2 Full-neighborhood state.
@@ -369,6 +372,7 @@ impl ChunkMap {
             pending_generation_tasks: SyncMutex::new(Vec::new()),
             task_tracker: TaskTracker::new(),
             scheduling: ChunkSchedulingCoordinator::new(chunk_tickets),
+            player_simulation: SyncMutex::new(PlayerSimulationTracker::default()),
             full_publications,
             full_neighborhood: SyncMutex::new(FullNeighborhoodIndex::default()),
             ticking_chunks: ArcSwap::from_pointee(TickingChunkSnapshot::default()),
@@ -968,22 +972,66 @@ impl ChunkMap {
     /// snapshot from before that commit.
     #[instrument(level = "trace", skip(self), name = "advance_chunk_scheduling")]
     pub fn advance_scheduling(self: &Arc<Self>) -> ChunkMapSchedulingTimings {
-        match self.scheduling.take_boundary_step() {
-            ChunkSchedulingBoundaryStep::Running => ChunkMapSchedulingTimings::default(),
+        let player_simulation_start = Instant::now();
+        let rebuild_player_simulation_snapshot = self.apply_player_simulation_updates();
+        let player_simulation_updates = player_simulation_start.elapsed();
+
+        let (mut timings, rebuild_ticking_snapshot) = match self.scheduling.take_boundary_step() {
+            ChunkSchedulingBoundaryStep::Running => (
+                ChunkMapSchedulingTimings::default(),
+                rebuild_player_simulation_snapshot,
+            ),
             ChunkSchedulingBoundaryStep::Start {
                 ticket_manager,
                 applied_revision,
             } => {
                 self.spawn_scheduling_epoch(ticket_manager, applied_revision, Vec::new());
-                ChunkMapSchedulingTimings::default()
+                (
+                    ChunkMapSchedulingTimings::default(),
+                    rebuild_player_simulation_snapshot,
+                )
             }
-            ChunkSchedulingBoundaryStep::Commit(epoch) => self.commit_scheduling_epoch(epoch),
+            ChunkSchedulingBoundaryStep::Commit(epoch) => (
+                self.commit_scheduling_epoch(epoch, rebuild_player_simulation_snapshot),
+                false,
+            ),
+        };
+
+        timings.player_simulation_updates = player_simulation_updates;
+        if rebuild_ticking_snapshot {
+            let _span = tracing::trace_span!("ticking_snapshot_rebuild").entered();
+            let start = Instant::now();
+            timings.rebuilt_ticking_chunk_count = self.rebuild_ticking_chunk_snapshot();
+            timings.ticking_snapshot_rebuild = start.elapsed();
         }
+        timings
+    }
+
+    /// Applies player simulation changes queued after the scheduling boundary.
+    ///
+    /// The server calls this immediately before world workers start so
+    /// disconnects and commands from the current tick affect entity ticking.
+    pub(crate) fn flush_player_simulation(&self) -> ChunkMapSchedulingTimings {
+        let start = Instant::now();
+        let rebuild_ticking_snapshot = self.apply_player_simulation_updates();
+        let mut timings = ChunkMapSchedulingTimings {
+            player_simulation_updates: start.elapsed(),
+            ..ChunkMapSchedulingTimings::default()
+        };
+
+        if rebuild_ticking_snapshot {
+            let _span = tracing::trace_span!("ticking_snapshot_rebuild").entered();
+            let start = Instant::now();
+            timings.rebuilt_ticking_chunk_count = self.rebuild_ticking_chunk_snapshot();
+            timings.ticking_snapshot_rebuild = start.elapsed();
+        }
+        timings
     }
 
     fn commit_scheduling_epoch(
         self: &Arc<Self>,
         epoch: PreparedChunkSchedulingEpoch,
+        rebuild_player_simulation_snapshot: bool,
     ) -> ChunkMapSchedulingTimings {
         let PreparedChunkSchedulingEpoch {
             mut ticket_manager,
@@ -1008,7 +1056,8 @@ impl ChunkMap {
             let _span = tracing::trace_span!("readiness_demotions").entered();
             let start = Instant::now();
             let changed_positions = changes.iter().map(|change| change.pos).collect::<Vec<_>>();
-            let mut rebuild_ticking_snapshot = self.simulation_changes_ticking_snapshot(&changes);
+            let mut rebuild_ticking_snapshot = rebuild_player_simulation_snapshot
+                || self.simulation_changes_ticking_snapshot(&changes);
             let rebuild_readiness = match self.prepare_ticking_readiness_demotions(&changes) {
                 Ok(changed) => {
                     rebuild_ticking_snapshot |= changed;

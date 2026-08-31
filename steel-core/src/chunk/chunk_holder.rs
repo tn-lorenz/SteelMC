@@ -157,8 +157,10 @@ pub struct ChunkHolder {
     pos: ChunkPos,
     /// The current loading ticket level of the chunk.
     load_level: AtomicU8,
-    /// The current simulation ticket level of the chunk.
-    simulation_level: AtomicU8,
+    /// The current simulation level contributed by non-player tickets.
+    non_player_simulation_level: AtomicU8,
+    /// The current simulation level contributed by players.
+    player_simulation_level: AtomicU8,
     /// The highest status that has started work.
     started_work: AtomicUsize,
     /// Number of save dependencies that have not completed yet.
@@ -297,7 +299,8 @@ impl ChunkHolder {
             generation_task_target: AtomicU8::new(STATUS_NONE),
             pos,
             load_level: AtomicU8::new(load_level.raw()),
-            simulation_level: AtomicU8::new(optional_ticket_level_raw(simulation_level)),
+            non_player_simulation_level: AtomicU8::new(optional_ticket_level_raw(simulation_level)),
+            player_simulation_level: AtomicU8::new(NO_TICKET_LEVEL),
             started_work: AtomicUsize::new(usize::MAX),
             active_save_dependencies: AtomicUsize::new(0),
             save_lifecycle: AtomicU8::new(SAVE_LIFECYCLE_ACTIVE),
@@ -330,14 +333,37 @@ impl ChunkHolder {
         self.load_level.store(NO_TICKET_LEVEL, Ordering::Relaxed);
     }
 
-    /// Returns the current simulation ticket level.
+    /// Returns the strongest current simulation ticket level.
     pub fn simulation_level(&self) -> Option<ChunkTicketLevel> {
-        optional_ticket_level_from_raw(self.simulation_level.load(Ordering::Relaxed))
+        let non_player = optional_ticket_level_from_raw(
+            self.non_player_simulation_level.load(Ordering::Relaxed),
+        );
+        self.simulation_level_with_non_player(non_player)
     }
 
-    /// Stores the current simulation ticket level.
-    pub(crate) fn set_simulation_level(&self, level: Option<ChunkTicketLevel>) {
-        self.simulation_level
+    /// Returns the effective level for a proposed non-player contribution.
+    pub(crate) fn simulation_level_with_non_player(
+        &self,
+        non_player: Option<ChunkTicketLevel>,
+    ) -> Option<ChunkTicketLevel> {
+        let player =
+            optional_ticket_level_from_raw(self.player_simulation_level.load(Ordering::Relaxed));
+        match (non_player, player) {
+            (Some(non_player), Some(player)) => Some(non_player.min(player)),
+            (Some(level), None) | (None, Some(level)) => Some(level),
+            (None, None) => None,
+        }
+    }
+
+    /// Stores the current simulation level contributed by non-player tickets.
+    pub(crate) fn set_non_player_simulation_level(&self, level: Option<ChunkTicketLevel>) {
+        self.non_player_simulation_level
+            .store(optional_ticket_level_raw(level), Ordering::Relaxed);
+    }
+
+    /// Stores the current simulation level contributed by players.
+    pub(crate) fn set_player_simulation_level(&self, level: Option<ChunkTicketLevel>) {
+        self.player_simulation_level
             .store(optional_ticket_level_raw(level), Ordering::Relaxed);
     }
 

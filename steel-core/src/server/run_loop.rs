@@ -141,6 +141,7 @@ impl Server {
 
             self.tick_pending_command_executions(&mut pending_command_executions);
             self.tick_command_requests(&mut pending_command_executions);
+            self.flush_player_simulation();
             if let Err(error) = self
                 .tick_worlds_game(&world_tick_workers, tick_count, runs_normally)
                 .await
@@ -495,7 +496,8 @@ impl Server {
                 + timings.schedule_generation
                 + timings.run_generation
                 + timings.process_unloads;
-            let boundary_elapsed = timings.block_entity_unloads
+            let boundary_elapsed = timings.player_simulation_updates
+                + timings.block_entity_unloads
                 + timings.readiness_demotions
                 + timings.lifecycle_commit
                 + timings.readiness_reconcile
@@ -508,6 +510,7 @@ impl Server {
                     work_elapsed = ?work_elapsed,
                     background_elapsed = ?background_elapsed,
                     boundary_elapsed = ?boundary_elapsed,
+                    player_simulation_updates = ?timings.player_simulation_updates,
                     ticket_updates = ?timings.ticket_updates,
                     block_entity_unloads = ?timings.block_entity_unloads,
                     readiness_demotions = ?timings.readiness_demotions,
@@ -529,6 +532,23 @@ impl Server {
                     run_generation = ?timings.run_generation,
                     process_unloads = ?timings.process_unloads,
                     "Chunk scheduling epoch slow"
+                );
+            }
+        }
+    }
+
+    fn flush_player_simulation(&self) {
+        for (i, world) in self.worlds.values().enumerate() {
+            let timings = world.chunk_map.flush_player_simulation();
+            let elapsed = timings.player_simulation_updates + timings.ticking_snapshot_rebuild;
+            if elapsed >= SLOW_CHUNK_TICK_THRESHOLD {
+                tracing::warn!(
+                    world = i,
+                    elapsed = ?elapsed,
+                    player_simulation_updates = ?timings.player_simulation_updates,
+                    ticking_snapshot_rebuild = ?timings.ticking_snapshot_rebuild,
+                    rebuilt_ticking_chunk_count = timings.rebuilt_ticking_chunk_count,
+                    "Player simulation update slow"
                 );
             }
         }
