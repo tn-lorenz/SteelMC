@@ -950,6 +950,7 @@ mod tests {
     use uuid::Uuid;
 
     use super::*;
+    use crate::behavior::init_behaviors;
     use crate::test_support::{TestPlayerBuilder, fresh_test_world};
 
     fn test_hook(world: &Arc<World>, id: i32) -> Arc<FishingHookEntity> {
@@ -1075,7 +1076,7 @@ mod tests {
     #[test]
     fn grounded_hook_does_not_hook_owner_when_player_stands_on_it() {
         steel_registry::init_vanilla_registry();
-        crate::behavior::init_behaviors();
+        init_behaviors();
 
         let world = fresh_test_world("fishing_hook_grounded_owner");
         let player = TestPlayerBuilder::new(Arc::clone(&world), Uuid::from_u128(20), 200).build();
@@ -1110,7 +1111,7 @@ mod tests {
         use steel_utils::types::UpdateFlags;
 
         steel_registry::init_vanilla_registry();
-        crate::behavior::init_behaviors();
+        init_behaviors();
 
         let world = fresh_test_world("fishing_hook_buoyancy");
         insert_ready_full_chunk(&world, ChunkPos::new(0, 0));
@@ -1155,7 +1156,7 @@ mod tests {
         use steel_utils::types::UpdateFlags;
 
         steel_registry::init_vanilla_registry();
-        crate::behavior::init_behaviors();
+        init_behaviors();
 
         let world = fresh_test_world("fishing_hook_open_water");
         insert_ready_full_chunk(&world, ChunkPos::new(0, 0));
