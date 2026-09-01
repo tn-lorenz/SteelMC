@@ -142,14 +142,15 @@ impl ChunkMap {
                         self.world_gen_context.height(),
                         Arc::downgrade(&self.full_publications),
                     ));
-                    let _ = self.chunks.insert_sync(pos, holder.clone());
+                    let _ = self.chunks.insert_sync(pos, Arc::clone(&holder));
                     holder
                 }
             };
 
         if let Some(level) = new_level {
             let old = chunk_holder.swap_load_level(level);
-            chunk_holder.set_simulation_level(new_simulation_level);
+            chunk_holder.set_non_player_simulation_level(new_simulation_level);
+            chunk_holder.set_player_simulation_level(self.player_simulation.lock().get_level(pos));
             if old != Some(level) {
                 chunk_holder.update_highest_allowed_status(Some(level));
             }
@@ -172,7 +173,8 @@ impl ChunkMap {
             chunk_holder.begin_unloading();
             chunk_holder.cancel_generation_task();
             chunk_holder.clear_load_level();
-            chunk_holder.set_simulation_level(None);
+            chunk_holder.set_non_player_simulation_level(None);
+            chunk_holder.set_player_simulation_level(None);
             chunk_holder.update_highest_allowed_status(None);
             // Wake any await_chunk futures so generation tasks holding refs to
             // this chunk can detect the status is disallowed and exit.
@@ -376,8 +378,10 @@ impl ChunkMap {
             self.chunks
                 .read_sync(&change.pos, |_, holder| {
                     let readiness = holder.ticking_readiness_snapshot().readiness();
+                    let new_simulation_level =
+                        holder.simulation_level_with_non_player(change.new_simulation_level);
                     Self::ticking_snapshot_membership(readiness, holder.simulation_level())
-                        != Self::ticking_snapshot_membership(readiness, change.new_simulation_level)
+                        != Self::ticking_snapshot_membership(readiness, new_simulation_level)
                 })
                 .unwrap_or(false)
         })

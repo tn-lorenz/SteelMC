@@ -1,4 +1,7 @@
-use super::{CSetChunkCenter, ChunkMap, ChunkPos, ChunkTicket, Entity, Player, PlayerChunkView};
+use super::{
+    Arc, CSetChunkCenter, ChunkMap, ChunkPos, ChunkStatus, ChunkTicket, Entity, Player,
+    PlayerChunkView,
+};
 use crate::player::chunk_sender::ChunkSender;
 
 impl ChunkMap {
@@ -7,26 +10,24 @@ impl ChunkMap {
         let current_chunk_pos = ChunkPos::from_entity_pos(player.position());
         *player.last_chunk_pos.lock() = current_chunk_pos;
         let view_distance = player.view_distance();
+        let world = self.world_gen_context.world();
+        let player_loading_ticket = ChunkTicket::player_loading(world.view_distance);
 
         let new_view = PlayerChunkView::new(current_chunk_pos, view_distance);
-        let world = self.world_gen_context.world();
         let mut last_view_guard = player.last_tracking_view.lock();
 
         if last_view_guard.as_ref() != Some(&new_view) {
-            let new_ticket = ChunkTicket::player(new_view.view_distance, world.simulation_distance);
-
             if let Some(last_view) = last_view_guard.as_ref() {
-                if last_view.center != new_view.center
-                    || last_view.view_distance != new_view.view_distance
-                {
-                    let old_ticket =
-                        ChunkTicket::player(last_view.view_distance, world.simulation_distance);
+                if last_view.center != new_view.center {
                     self.replace_chunk_ticket(
                         last_view.center,
-                        old_ticket,
+                        player_loading_ticket,
                         new_view.center,
-                        new_ticket,
+                        player_loading_ticket,
                     );
+                    self.player_simulation
+                        .lock()
+                        .move_player(last_view.center, new_view.center);
 
                     player.send_packet(CSetChunkCenter {
                         x: new_view.center.0.x,
@@ -63,7 +64,8 @@ impl ChunkMap {
                     &removed_chunks,
                 );
             } else {
-                self.add_chunk_ticket(new_view.center, new_ticket);
+                self.add_chunk_ticket(new_view.center, player_loading_ticket);
+                self.player_simulation.lock().add_player(new_view.center);
 
                 // Send initial chunk cache center to client
                 player.send_packet(CSetChunkCenter {
@@ -111,8 +113,52 @@ impl ChunkMap {
 
         if let Some(last_view) = last_view {
             let world = self.world_gen_context.world();
-            let ticket = ChunkTicket::player(last_view.view_distance, world.simulation_distance);
+            let ticket = ChunkTicket::player_loading(world.view_distance);
             self.remove_chunk_ticket(last_view.center, ticket);
+            self.player_simulation
+                .lock()
+                .remove_player(last_view.center);
         }
+    }
+
+    /// Applies queued player simulation changes before the world's entity phase.
+    pub(super) fn apply_player_simulation_updates(&self) -> bool {
+        let changes = {
+            let mut player_simulation = self.player_simulation.lock();
+            if player_simulation.is_inactive() {
+                return false;
+            }
+            let simulation_distance = self.world_gen_context.world().simulation_distance;
+            player_simulation.run_all_updates(simulation_distance)
+        };
+        if changes.is_empty() {
+            return false;
+        }
+
+        let world = self.world_gen_context.world();
+        let mut rebuild_ticking_snapshot = false;
+        for change in changes {
+            let Some(holder) = self
+                .chunks
+                .read_sync(&change.pos, |_, holder| Arc::clone(holder))
+            else {
+                continue;
+            };
+            let old_level = holder.simulation_level();
+            let readiness = holder.ticking_readiness_snapshot().readiness();
+            holder.set_player_simulation_level(change.new_level);
+            let new_level = holder.simulation_level();
+            if old_level == new_level {
+                continue;
+            }
+
+            rebuild_ticking_snapshot |= Self::ticking_snapshot_membership(readiness, old_level)
+                != Self::ticking_snapshot_membership(readiness, new_level);
+            if holder.try_chunk(ChunkStatus::Empty).is_some() {
+                world.update_entity_chunk_visibility(change.pos, holder.entity_visibility());
+            }
+        }
+
+        rebuild_ticking_snapshot
     }
 }

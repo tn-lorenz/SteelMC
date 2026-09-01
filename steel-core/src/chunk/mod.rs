@@ -19,6 +19,7 @@ pub mod heightmap;
 pub mod light;
 /// Tracks the chunks that are visible to a player.
 pub mod player_chunk_view;
+mod player_simulation_tracker;
 
 pub mod full_chunk;
 pub mod paletted_container;

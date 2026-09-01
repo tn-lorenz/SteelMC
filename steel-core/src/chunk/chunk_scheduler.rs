@@ -14,6 +14,8 @@ use crate::chunk::gameplay_chunk_lookup_cache::GameplayChunkLookupCacheStats;
 /// Timing information for one background epoch and its boundary commit.
 #[derive(Debug, Default)]
 pub struct ChunkMapSchedulingTimings {
+    /// Time spent applying and propagating player simulation changes.
+    pub player_simulation_updates: Duration,
     /// Time spent applying queued ticket operations and propagating their levels.
     pub ticket_updates: Duration,
     /// Time spent finalizing block-entity unloads before the boundary commit.

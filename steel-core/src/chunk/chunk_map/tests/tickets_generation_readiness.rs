@@ -268,7 +268,7 @@ fn full_publications_drive_block_and_entity_readiness_incrementally() {
         "the pending entity transition should remain a save dependency"
     );
     assert_postprocessing_drained(&center);
-    center.set_simulation_level(None);
+    center.set_non_player_simulation_level(None);
     assert!(
         world
             .chunk_map
@@ -410,9 +410,9 @@ fn ticking_snapshot_preserves_scc_order_and_distinct_readiness_gates() {
 
     insert_ready_full_chunk(&world, block_only_pos);
     let random = insert_ready_full_chunk(&world, random_pos);
-    random.set_simulation_level(Some(ChunkTicketLevel::ENTITY_TICKING_CHUNK));
+    random.set_non_player_simulation_level(Some(ChunkTicketLevel::ENTITY_TICKING_CHUNK));
     let entity = insert_ready_full_chunk(&world, entity_pos);
-    entity.set_simulation_level(Some(ChunkTicketLevel::ENTITY_TICKING_CHUNK));
+    entity.set_non_player_simulation_level(Some(ChunkTicketLevel::ENTITY_TICKING_CHUNK));
     entity.transition_ticking_readiness(TickingReadiness::EntityTicking);
 
     world.chunk_map.rebuild_ticking_chunk_snapshot();

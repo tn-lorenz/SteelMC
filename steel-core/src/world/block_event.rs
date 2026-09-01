@@ -259,7 +259,7 @@ mod tests {
                 .is_cooling_down()
         );
 
-        holder.set_simulation_level(None);
+        holder.set_non_player_simulation_level(None);
         world.block_event(pos, &vanilla_blocks::END_GATEWAY, 1, 0);
         world.block_event(pos, &vanilla_blocks::END_GATEWAY, 1, 0);
         assert_eq!(world.block_events.lock().len(), 1);
@@ -272,7 +272,7 @@ mod tests {
                 .is_cooling_down()
         );
 
-        holder.set_simulation_level(Some(ChunkTicketLevel::BLOCK_TICKING_CHUNK));
+        holder.set_non_player_simulation_level(Some(ChunkTicketLevel::BLOCK_TICKING_CHUNK));
         world.run_block_events();
 
         assert_eq!(world.block_events.lock().len(), 0);
