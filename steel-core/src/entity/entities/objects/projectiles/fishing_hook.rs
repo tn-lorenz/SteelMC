@@ -801,6 +801,16 @@ impl FishingHookEntity {
             }
         }
     }
+
+    fn is_hooked_in(&self) -> bool {
+        let state = self.hook_state.lock();
+        state.hooked_entity.is_some()
+    }
+
+    fn bobber_state(&self) -> BobberState {
+        let state = self.hook_state.lock();
+        state.bobber_state
+    }
 }
 
 impl Entity for FishingHookEntity {
@@ -866,21 +876,11 @@ impl Entity for FishingHookEntity {
 
                     let is_in_water = liquid_height > 0.0;
 
-                    let bobber_state = {
-                        let state = self.hook_state.lock();
-                        state.bobber_state
-                    };
-
-                    if !self.tick_bobber(bobber_state, &world, is_in_water, pos, liquid_height) {
+                    if !self.tick_bobber(self.bobber_state(), &world, is_in_water, pos, liquid_height) {
                         return;
                     }
 
-                    let hooked_in = {
-                        let state = self.hook_state.lock();
-                        state.hooked_entity.is_some()
-                    };
-
-                    if !fluid_state.is_water() && !self.base.on_ground() && !hooked_in {
+                    if !fluid_state.is_water() && !self.base.on_ground() && !self.is_hooked_in() {
                         self.base
                             .set_velocity(self.base.velocity().add(DVec3::new(0.0, -0.03, 0.0)));
                     }
