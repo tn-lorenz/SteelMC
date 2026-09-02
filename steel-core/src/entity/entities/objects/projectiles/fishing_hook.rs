@@ -876,7 +876,13 @@ impl Entity for FishingHookEntity {
 
                     let is_in_water = liquid_height > 0.0;
 
-                    if !self.tick_bobber(self.bobber_state(), &world, is_in_water, pos, liquid_height) {
+                    if !self.tick_bobber(
+                        self.bobber_state(),
+                        &world,
+                        is_in_water,
+                        pos,
+                        liquid_height,
+                    ) {
                         return;
                     }
 
