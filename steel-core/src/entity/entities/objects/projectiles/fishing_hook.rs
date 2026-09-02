@@ -802,6 +802,22 @@ impl FishingHookEntity {
         }
     }
 
+    fn tick_life(&self) {
+        if self.on_ground() {
+            let should_remove = {
+                let mut state = self.hook_state.lock();
+                state.life += 1;
+                state.life >= ONE_MINUTE
+            };
+
+            if should_remove {
+                self.set_removed(RemovalReason::Discarded);
+            }
+        } else {
+            self.hook_state.lock().life = 0;
+        }
+    }
+
     fn is_hooked_in(&self) -> bool {
         let state = self.hook_state.lock();
         state.hooked_entity.is_some()
@@ -849,19 +865,7 @@ impl Entity for FishingHookEntity {
             };
 
             if can_fish {
-                if self.on_ground() {
-                    let should_remove = {
-                        let mut state = self.hook_state.lock();
-                        state.life += 1;
-                        state.life >= ONE_MINUTE
-                    };
-
-                    if should_remove {
-                        self.set_removed(RemovalReason::Discarded);
-                    }
-                } else {
-                    self.hook_state.lock().life = 0;
-                }
+                self.tick_life();
 
                 let mut liquid_height: f32 = 0.0;
                 let pos = BlockPos::from(self.base.position());
