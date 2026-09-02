@@ -674,11 +674,11 @@ impl FishingHookEntity {
     fn tick_bobber(
         &self,
         bobber_state: BobberState,
-        world: Arc<World>,
+        world: &World,
         is_in_water: bool,
         pos: BlockPos,
         liquid_height: f32,
-    ) {
+    ) -> bool {
         match bobber_state {
             BobberState::Flying => {
                 let should_check_collision = {
@@ -687,14 +687,14 @@ impl FishingHookEntity {
                     if state.hooked_entity.is_some() {
                         self.base.set_velocity(DVec3::ZERO);
                         state.bobber_state = BobberState::HookedInEntity;
-                        return;
+                        return false;
                     }
 
                     if is_in_water {
                         self.base
                             .set_velocity(self.base.velocity() * DVec3::new(0.3, 0.2, 0.3));
                         state.bobber_state = BobberState::Bobbing;
-                        return;
+                        return false;
                     }
 
                     !self.on_ground()
@@ -703,6 +703,8 @@ impl FishingHookEntity {
                 if should_check_collision {
                     self.check_collision();
                 }
+
+                true
             }
 
             BobberState::HookedInEntity => {
@@ -714,7 +716,7 @@ impl FishingHookEntity {
                 let Some(hooked) = hooked else {
                     let mut state = self.hook_state.lock();
                     state.bobber_state = BobberState::Flying;
-                    return;
+                    return false;
                 };
 
                 let removed = hooked.is_removed();
@@ -744,7 +746,7 @@ impl FishingHookEntity {
                     state.bobber_state = BobberState::Flying;
                 }
 
-                return;
+                false
             }
 
             BobberState::Bobbing => {
@@ -792,6 +794,8 @@ impl FishingHookEntity {
                     state.out_of_water_time =
                         (state.out_of_water_time + 1).min(MAX_OUT_OF_WATER_TIME);
                 }
+
+                true
             }
         }
     }
@@ -807,10 +811,6 @@ impl Entity for FishingHookEntity {
     }
 
     /// Responsible for all state-changes.
-    #[expect(
-        clippy::too_many_lines,
-        reason = "Logic that belongs together is being kept together."
-    )]
     fn tick(&self) {
         {
             let mut synchronized_random = self.synchronized_random.lock();
@@ -869,7 +869,9 @@ impl Entity for FishingHookEntity {
                         state.bobber_state
                     };
 
-                    self.tick_bobber(bobber_state, world, is_in_water, pos, liquid_height);
+                    if !self.tick_bobber(bobber_state, &world, is_in_water, pos, liquid_height) {
+                        return;
+                    }
 
                     let hooked_in = {
                         let state = self.hook_state.lock();
