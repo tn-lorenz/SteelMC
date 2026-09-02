@@ -662,6 +662,139 @@ impl FishingHookEntity {
             }
         }
     }
+
+    // TODO: check if passing a lock is better here
+    fn should_stop(&self) -> bool {
+        let state = self.hook_state.lock();
+
+        state.bobber_state == BobberState::Flying
+            && (self.base.on_ground() || self.base.horizontal_collision())
+    }
+
+    fn tick_bobber(
+        &self,
+        bobber_state: BobberState,
+        world: Arc<World>,
+        is_in_water: bool,
+        pos: BlockPos,
+        liquid_height: f32,
+    ) {
+        match bobber_state {
+            BobberState::Flying => {
+                let should_check_collision = {
+                    let mut state = self.hook_state.lock();
+
+                    if state.hooked_entity.is_some() {
+                        self.base.set_velocity(DVec3::ZERO);
+                        state.bobber_state = BobberState::HookedInEntity;
+                        return;
+                    }
+
+                    if is_in_water {
+                        self.base
+                            .set_velocity(self.base.velocity() * DVec3::new(0.3, 0.2, 0.3));
+                        state.bobber_state = BobberState::Bobbing;
+                        return;
+                    }
+
+                    !self.on_ground()
+                };
+
+                if should_check_collision {
+                    self.check_collision();
+                }
+            }
+
+            BobberState::HookedInEntity => {
+                let hooked = {
+                    let state = self.hook_state.lock();
+                    state.hooked_entity.clone()
+                };
+
+                let Some(hooked) = hooked else {
+                    let mut state = self.hook_state.lock();
+                    state.bobber_state = BobberState::Flying;
+                    return;
+                };
+
+                let removed = hooked.is_removed();
+                let can_interact = hooked.can_interact_with_level();
+
+                // locks hooked.base.world
+                let same_dimension = if let Some(hooked_world) = hooked.level() {
+                    world.dimension_type == hooked_world.dimension_type
+                } else {
+                    false
+                };
+
+                if !removed && can_interact && same_dimension {
+                    let pos = hooked.position();
+                    let height = hooked.bounding_box().height();
+
+                    if let Err(error) =
+                        self.try_set_position(DVec3::new(pos.x, pos.y + height * 0.8, pos.z))
+                    {
+                        self.set_removed(RemovalReason::Discarded);
+                        log::error!("Failed to set position of fishing hook: {error}");
+                    }
+                } else {
+                    self.set_hooked_entity(None);
+
+                    let mut state = self.hook_state.lock();
+                    state.bobber_state = BobberState::Flying;
+                }
+
+                return;
+            }
+
+            BobberState::Bobbing => {
+                let mut state = self.hook_state.lock();
+
+                let velocity = self.base.velocity();
+
+                let mut force: f64 =
+                    self.position().y + velocity.y - f64::from(pos.y()) - f64::from(liquid_height);
+
+                if force.abs() < 0.01 {
+                    force += force.signum() * 0.1;
+                }
+
+                self.base.set_velocity(DVec3::new(
+                    velocity.x * 0.9,
+                    velocity.y - force * rng().random::<f64>() * 0.2,
+                    velocity.z * 0.9,
+                ));
+
+                if state.nibble <= 0 && state.time_until_hooked <= 0 {
+                    state.open_water = true;
+                } else {
+                    state.open_water = state.open_water
+                        && state.out_of_water_time < MAX_OUT_OF_WATER_TIME
+                        && self.calculate_open_water(pos);
+                }
+
+                if is_in_water {
+                    state.out_of_water_time = (state.out_of_water_time - 1).max(0);
+                    if *self.entity_data.lock().fishing_hook().biting.get() {
+                        let mut synchronized_random = self.synchronized_random.lock();
+                        self.base.set_velocity(self.base.velocity().add(DVec3::new(
+                            0.0,
+                            f64::from(
+                                -0.1 * synchronized_random.next_f32()
+                                    * synchronized_random.next_f32(),
+                            ),
+                            0.0,
+                        )));
+                    }
+
+                    self.catching_fish(pos, &mut state);
+                } else {
+                    state.out_of_water_time =
+                        (state.out_of_water_time + 1).min(MAX_OUT_OF_WATER_TIME);
+                }
+            }
+        }
+    }
 }
 
 impl Entity for FishingHookEntity {
@@ -736,125 +869,7 @@ impl Entity for FishingHookEntity {
                         state.bobber_state
                     };
 
-                    match bobber_state {
-                        BobberState::Flying => {
-                            let should_check_collision = {
-                                let mut state = self.hook_state.lock();
-
-                                if state.hooked_entity.is_some() {
-                                    self.base.set_velocity(DVec3::ZERO);
-                                    state.bobber_state = BobberState::HookedInEntity;
-                                    return;
-                                }
-
-                                if is_in_water {
-                                    self.base.set_velocity(
-                                        self.base.velocity() * DVec3::new(0.3, 0.2, 0.3),
-                                    );
-                                    state.bobber_state = BobberState::Bobbing;
-                                    return;
-                                }
-
-                                !self.on_ground()
-                            };
-
-                            if should_check_collision {
-                                self.check_collision();
-                            }
-                        }
-
-                        BobberState::HookedInEntity => {
-                            let hooked = {
-                                let state = self.hook_state.lock();
-                                state.hooked_entity.clone()
-                            };
-
-                            let Some(hooked) = hooked else {
-                                let mut state = self.hook_state.lock();
-                                state.bobber_state = BobberState::Flying;
-                                return;
-                            };
-
-                            let removed = hooked.is_removed();
-                            let can_interact = hooked.can_interact_with_level();
-
-                            // locks hooked.base.world
-                            let same_dimension = if let Some(hooked_world) = hooked.level() {
-                                world.dimension_type == hooked_world.dimension_type
-                            } else {
-                                false
-                            };
-
-                            if !removed && can_interact && same_dimension {
-                                let pos = hooked.position();
-                                let height = hooked.bounding_box().height();
-
-                                if let Err(error) = self.try_set_position(DVec3::new(
-                                    pos.x,
-                                    pos.y + height * 0.8,
-                                    pos.z,
-                                )) {
-                                    self.set_removed(RemovalReason::Discarded);
-                                    log::error!("Failed to set position of fishing hook: {error}");
-                                }
-                            } else {
-                                self.set_hooked_entity(None);
-
-                                let mut state = self.hook_state.lock();
-                                state.bobber_state = BobberState::Flying;
-                            }
-
-                            return;
-                        }
-
-                        BobberState::Bobbing => {
-                            let mut state = self.hook_state.lock();
-
-                            let velocity = self.base.velocity();
-
-                            let mut force: f64 = self.position().y + velocity.y
-                                - f64::from(pos.y())
-                                - f64::from(liquid_height);
-
-                            if force.abs() < 0.01 {
-                                force += force.signum() * 0.1;
-                            }
-
-                            self.base.set_velocity(DVec3::new(
-                                velocity.x * 0.9,
-                                velocity.y - force * rng().random::<f64>() * 0.2,
-                                velocity.z * 0.9,
-                            ));
-
-                            if state.nibble <= 0 && state.time_until_hooked <= 0 {
-                                state.open_water = true;
-                            } else {
-                                state.open_water = state.open_water
-                                    && state.out_of_water_time < MAX_OUT_OF_WATER_TIME
-                                    && self.calculate_open_water(pos);
-                            }
-
-                            if is_in_water {
-                                state.out_of_water_time = (state.out_of_water_time - 1).max(0);
-                                if *self.entity_data.lock().fishing_hook().biting.get() {
-                                    let mut synchronized_random = self.synchronized_random.lock();
-                                    self.base.set_velocity(self.base.velocity().add(DVec3::new(
-                                        0.0,
-                                        f64::from(
-                                            -0.1 * synchronized_random.next_f32()
-                                                * synchronized_random.next_f32(),
-                                        ),
-                                        0.0,
-                                    )));
-                                }
-
-                                self.catching_fish(pos, &mut state);
-                            } else {
-                                state.out_of_water_time =
-                                    (state.out_of_water_time + 1).min(MAX_OUT_OF_WATER_TIME);
-                            }
-                        }
-                    }
+                    self.tick_bobber(bobber_state, world, is_in_water, pos, liquid_height);
 
                     let hooked_in = {
                         let state = self.hook_state.lock();
@@ -883,14 +898,6 @@ impl Entity for FishingHookEntity {
                 self.set_removed(RemovalReason::Discarded);
             }
         }
-    }
-
-    // TODO: check if passing a lock is better here
-    fn should_stop(&self) -> bool {
-        let state = self.hook_state.lock();
-
-        state.bobber_state == BobberState::Flying
-            && (self.base.on_ground() || self.base.horizontal_collision())
     }
 
     fn synced_data(&self) -> Option<&dyn EntitySyncedData> {
