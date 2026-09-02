@@ -451,11 +451,11 @@ pub trait Projectile: Entity + ProjectileEventSource {
     /// Casts the move vector and returns the nearest block/entity hit (vanilla
     /// `ProjectileUtil.getHitResultOnMoveVector` with `this::canHitEntity`).
     fn get_hit_result_on_move_vector(&self) -> Option<ProjectileHit> {
-        const MAGIC_MINIMUM: f64 = 1.0e-12;
+        const EPSILON: f64 = 1.0e-12;
         let world = self.level()?;
         let from = self.position();
         let delta = self.velocity();
-        if delta.length_squared() < MAGIC_MINIMUM {
+        if delta.length_squared() < EPSILON {
             return None;
         }
         let to = from + delta;
