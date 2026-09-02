@@ -3657,6 +3657,7 @@ pub trait Entity: EntityEventSource + ErasedType + Send + Sync + 'static {
     fn award_kill_score(&self, _victim: &dyn Entity, _killing_blow: &DamageSource) {
         // TODO: Trigger advancement criterion ENTITY_KILLED_PLAYER if the victim is a player.
     }
+    fn should_stop(&self) -> bool;
 }
 
 /// Repositions a direct passenger from the vehicle's attachment point.

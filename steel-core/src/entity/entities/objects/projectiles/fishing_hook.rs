@@ -870,14 +870,8 @@ impl Entity for FishingHookEntity {
                     self.apply_effects_from_blocks();
                     self.update_rotation();
 
-                    let should_stop = {
-                        let state = self.hook_state.lock();
-
-                        state.bobber_state == BobberState::Flying
-                            && (self.base.on_ground() || self.base.horizontal_collision())
-                    };
-
-                    if should_stop {
+                    // TODO: check if passing a lock is better here
+                    if self.should_stop() {
                         self.base.set_velocity(DVec3::ZERO);
                     }
 
@@ -889,6 +883,14 @@ impl Entity for FishingHookEntity {
                 self.set_removed(RemovalReason::Discarded);
             }
         }
+    }
+
+    // TODO: check if passing a lock is better here
+    fn should_stop(&self) -> bool {
+        let state = self.hook_state.lock();
+
+        state.bobber_state == BobberState::Flying
+            && (self.base.on_ground() || self.base.horizontal_collision())
     }
 
     fn synced_data(&self) -> Option<&dyn EntitySyncedData> {
