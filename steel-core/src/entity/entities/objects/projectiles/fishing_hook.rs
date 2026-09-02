@@ -46,6 +46,7 @@ const DMG_CAUGHT: i32 = 1;
 
 const DEGREE_180: f32 = 180.0;
 const DEGREE_360: f32 = 360.0;
+const DEG_TO_RAD: f32 = PI / DEGREE_180;
 
 const ONE_SECOND: i32 = 20;
 const TWO_SECONDS: i32 = 40;
@@ -138,12 +139,10 @@ impl FishingHookEntity {
 
         self.set_owner(&player_shared);
 
-        let deg_to_rad = PI / DEGREE_180;
-
-        let y_cos = trig::cos(f64::from(-yaw * deg_to_rad - PI));
-        let y_sin = trig::sin(f64::from(-yaw * deg_to_rad - PI));
-        let x_cos = -trig::cos(f64::from(-pitch * deg_to_rad));
-        let x_sin = trig::sin(f64::from(-pitch * deg_to_rad));
+        let y_cos = trig::cos(f64::from(-yaw * DEG_TO_RAD - PI));
+        let y_sin = trig::sin(f64::from(-yaw * DEG_TO_RAD - PI));
+        let x_cos = -trig::cos(f64::from(-pitch * DEG_TO_RAD));
+        let x_sin = trig::sin(f64::from(-pitch * DEG_TO_RAD));
 
         let x = player_shared.position().x - f64::from(y_sin) * 0.3;
         let y = player_shared.get_eye_y();
@@ -291,7 +290,7 @@ impl FishingHookEntity {
             if state.time_until_hooked > 0 {
                 state.fish_angle += triangle_random(0.0, 9.188) as f32;
 
-                let angle = state.fish_angle * PI / DEGREE_180;
+                let angle = state.fish_angle * DEG_TO_RAD;
                 let angle_sin = trig::sin(f64::from(angle));
                 let angle_cos = trig::cos(f64::from(angle));
 
@@ -309,7 +308,8 @@ impl FishingHookEntity {
                     world.get_block_state(BlockPos::containing(fish_x, fish_y - 1.0, fish_z));
 
                 if splash_block_state.get_block() == &vanilla_blocks::WATER {
-                    if rng().random::<f32>() < 0.15 {
+                    const PARTICLE_CHANCE: f32 = 0.15;
+                    if rng().random::<f32>() < PARTICLE_CHANCE {
                         world.send_particles(
                             ParticleData::simple(&BUBBLE),
                             DVec3::new(fish_x, fish_y - 0.1, fish_z),
@@ -397,7 +397,7 @@ impl FishingHookEntity {
                     return;
                 };
 
-                let angle = rng().random_range(0.0..=DEGREE_360) * PI / DEGREE_180;
+                let angle = rng().random_range(0.0..=DEGREE_360) * DEG_TO_RAD;
                 let dist = rng().random_range(25.0..=60.0);
 
                 let fish_x =
