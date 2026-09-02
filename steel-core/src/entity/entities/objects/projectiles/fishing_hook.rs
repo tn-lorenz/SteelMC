@@ -664,6 +664,7 @@ impl FishingHookEntity {
     }
 
     // TODO: check if passing a lock is better here
+    /// Determines if the player should stop fishing.
     fn should_stop(&self) -> bool {
         let state = self.hook_state.lock();
 
@@ -671,6 +672,7 @@ impl FishingHookEntity {
             && (self.base.on_ground() || self.base.horizontal_collision())
     }
 
+    /// Bobber specific ticking logic. We return a `bool` here, so we can return early inside `tick`.
     fn tick_bobber(
         &self,
         bobber_state: BobberState,
