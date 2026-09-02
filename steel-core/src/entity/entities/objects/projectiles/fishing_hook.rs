@@ -308,8 +308,8 @@ impl FishingHookEntity {
                     world.get_block_state(BlockPos::containing(fish_x, fish_y - 1.0, fish_z));
 
                 if splash_block_state.get_block() == &vanilla_blocks::WATER {
-                    const PARTICLE_CHANCE: f32 = 0.15;
-                    if rng().random::<f32>() < PARTICLE_CHANCE {
+                    const PARTICLE_SPAWN_PROBABILITY: f32 = 0.15;
+                    if rng().random::<f32>() < PARTICLE_SPAWN_PROBABILITY {
                         world.send_particles(
                             ParticleData::simple(&BUBBLE),
                             DVec3::new(fish_x, fish_y - 0.1, fish_z),
