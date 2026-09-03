@@ -24,6 +24,7 @@ mod sleep;
 mod sleep_state;
 pub mod stats_counter;
 mod tick_state;
+mod title;
 
 pub use abilities::{Abilities, DEFAULT_FLYING_SPEED};
 use chat::ChatState;
