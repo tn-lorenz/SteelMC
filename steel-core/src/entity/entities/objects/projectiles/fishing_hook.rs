@@ -867,16 +867,19 @@ impl Entity for FishingHookEntity {
             if self.can_fish(player) {
                 self.tick_life();
 
-                let mut liquid_height: f32 = 0.0;
                 let pos = BlockPos::from(self.base.position());
 
                 if let Some(world) = self.level() {
                     let block_state = world.get_block_state(pos);
                     let fluid_state = block_state.get_fluid_state();
 
-                    if fluid_state.is_water() {
-                        liquid_height = get_height(&world, pos, fluid_state);
-                    }
+                    let liquid_height = {
+                        if fluid_state.is_water() {
+                            get_height(&world, pos, fluid_state)
+                        } else {
+                            0.0
+                        }
+                    };
 
                     let is_in_water = liquid_height > 0.0;
 
