@@ -827,6 +827,14 @@ impl FishingHookEntity {
         let state = self.hook_state.lock();
         state.bobber_state
     }
+
+    fn can_fish(&self, player: &Player) -> bool {
+        let inventory = player.inventory.lock();
+        let mainhand_item = inventory.get_item_in_hand(InteractionHand::MainHand);
+        let offhand_item = inventory.get_offhand_item();
+
+        !self.should_stop_fishing(player, mainhand_item, offhand_item)
+    }
 }
 
 impl Entity for FishingHookEntity {
@@ -856,15 +864,7 @@ impl Entity for FishingHookEntity {
         if let Some(owner) = self.get_owner()
             && let Some(player) = owner.as_player()
         {
-            let can_fish = {
-                let inventory = player.inventory.lock();
-                let mainhand_item = inventory.get_item_in_hand(InteractionHand::MainHand);
-                let offhand_item = inventory.get_offhand_item();
-
-                !self.should_stop_fishing(player, mainhand_item, offhand_item)
-            };
-
-            if can_fish {
+            if self.can_fish(player) {
                 self.tick_life();
 
                 let mut liquid_height: f32 = 0.0;
