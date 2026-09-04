@@ -2702,6 +2702,7 @@ dependencies = [
  "small-map",
  "steel-core",
  "steel-protocol",
+ "steel-utils",
  "uuid",
 ]
 

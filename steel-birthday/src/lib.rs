@@ -1,4 +1,4 @@
-// Birthday minigames for SteelMC -- gemacht mit LIEBE by mr raiden :3
+// Birthday minigames for SteelMC -- gemacht mit LIEBE -- by mr raiden :3
 
-mod api;
-mod games;
+pub mod api;
+pub mod games;
