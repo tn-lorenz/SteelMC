@@ -8,3 +8,6 @@ license.workspace = true
 [dependencies]
 steel-core.workspace = true
 steel-protocol.workspace = true
+rustc-hash.workspace = true
+small-map.workspace = true # falls du FxSmallMap für Teams nutzen willst
+uuid.workspace = true
