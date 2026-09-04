@@ -1,0 +1,10 @@
+[package]
+name = "steel-birthday"
+version.workspace = true
+edition.workspace = true
+authors.workspace = true
+license.workspace = true
+
+[dependencies]
+steel-core.workspace = true
+steel-protocol.workspace = true

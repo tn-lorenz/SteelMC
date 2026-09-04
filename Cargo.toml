@@ -12,6 +12,7 @@ members = [
     "steel-core",
     "steel-crypto",
     "steel-math",
+    "steel-birthday"
 ]
 
 [workspace.package]
@@ -31,6 +32,7 @@ steel-registry = { path = "steel-registry" }
 steel-utils = { path = "steel-utils" }
 steel-worldgen = { path = "steel-worldgen" }
 steel-math = { path = "steel-math" }
+steel-birthday = { path = "steel-birthday" }
 
 # Async runtime
 tokio = { version = "1.53.1", features = [

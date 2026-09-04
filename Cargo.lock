@@ -2695,6 +2695,14 @@ dependencies = [
 ]
 
 [[package]]
+name = "steel-birthday"
+version = "0.15.3+mc26.2"
+dependencies = [
+ "steel-core",
+ "steel-protocol",
+]
+
+[[package]]
 name = "steel-core"
 version = "0.15.3+mc26.2"
 dependencies = [
