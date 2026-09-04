@@ -1,10 +1,10 @@
-//! Wir machen einfach mal ein Spiel mit vier teams.
-//! Spieler können nur gegnerische Spieler vom Spielfeld kicken und müssen gleichzeitig darauf achten, nicht herunterzufallen.
+//! Let's make a game with four teams, for the sake of example.
+//! Players can hit only those who are not on their own team. Each player needs to be aware of not falling down. (The ground beneath them crumbles...)
 
 use small_map::FxSmallMap;
 use uuid::Uuid;
 
-use crate::api::{Game, GameBase, GameState, Team};
+use crate::api::{Game, GameBase, GameState, LobbyType, Objective, Team};
 
 pub struct TnTRunGame {
     base: GameBase,
@@ -24,7 +24,7 @@ impl TnTRunGame {
         }
 
         Self {
-            base: GameBase::new(),
+            base: GameBase::new(2, 32),
             teams,
             floor_level: 64,
         }
@@ -48,9 +48,17 @@ impl Game for TnTRunGame {
         self.base.state = GameState::Stopping;
     }
 
-    fn on_player_join(&mut self, _player: Uuid) {}
+    fn on_player_join(&mut self, player: Uuid) {
+        for lobby in &self.base.lobbies {
+            if lobby.lobby_type == LobbyType::GameWaitingLobby {
+                lobby.spawn_player(player);
+            }
+        }
+    }
 
     fn on_player_leave(&mut self, _player: Uuid) {}
+
+    fn on_player_obtain_objective(&mut self, _player: Uuid, _objective: Objective) {}
 
     fn state(&self) -> GameState {
         self.base.state
